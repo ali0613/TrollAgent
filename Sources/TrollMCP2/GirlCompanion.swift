@@ -5,12 +5,19 @@ import Combine
 // MARK: - 可爱助手 · 状态
 
 /// v4.5.0：可爱助手全局开关 + 角色（设置里可选开/关、切换角色，UserDefaults 持久化）
-/// 角色：小萝莉(girl_*) / 御姐兔女郎(rabit_*)
+/// 角色：小萝莉(girl_*) / 御姐兔女郎(rabit_*) / 猫娘(cat_*)
 enum GirlCharacter: String, CaseIterable, Identifiable {
     case loli = "小萝莉"
     case rabit = "御姐兔女郎"
+    case cat = "猫娘"
     var id: String { rawValue }
-    var iconPrefix: String { self == .loli ? "girl" : "rabit" }
+    var iconPrefix: String {
+        switch self {
+        case .loli: return "girl"
+        case .rabit: return "rabit"
+        case .cat: return "cat"
+        }
+    }
 }
 
 final class GirlCompanion: ObservableObject {

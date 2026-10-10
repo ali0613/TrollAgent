@@ -113,9 +113,11 @@ extern "C" const char *g_hud_char;
 
 - (instancetype)init {
     if (self = [super init]) {
-        // v6.0.7：按当前角色加载多帧图（girl_小萝莉 / rabit_御姐兔女郎，HUD bundle 内）
+        // v6.0.7：按当前角色加载多帧图（girl_小萝莉 / rabit_御姐兔女郎 / cat_猫娘，HUD bundle 内）
+        // v6.0.11：新增 cat 猫娘——21 帧动作集与 girl 同构（睁眼段→眯眼段→蹲坐段），moodNames 并集已覆盖全部帧名
+        BOOL isCat = (g_hud_char && strcmp(g_hud_char, "cat") == 0);
         BOOL isRabbit = (g_hud_char && strcmp(g_hud_char, "rabit") == 0);
-        NSString *prefix = isRabbit ? @"rabit" : @"girl";
+        NSString *prefix = isCat ? @"cat" : (isRabbit ? @"rabit" : @"girl");
         UIImage *idle  = [UIImage imageNamed:[NSString stringWithFormat:@"%@_idle", prefix]];
         UIImage *happy = [UIImage imageNamed:[NSString stringWithFormat:@"%@_happy", prefix]];
         UIImage *think = [UIImage imageNamed:[NSString stringWithFormat:@"%@_think", prefix]];
