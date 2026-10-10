@@ -34,7 +34,7 @@ struct GirlCharacterPickerView: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(c.rawValue)
                                     .font(.headline)
-                                Text(c == .loli ? "粉粉洛丽塔小萝莉" : "黑丝高马尾御姐兔女郎")
+                                Text(c == .loli ? "粉粉洛丽塔小萝莉" : (c == .rabit ? "黑丝高马尾兔娘" : "白色性感御姐猫娘"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }

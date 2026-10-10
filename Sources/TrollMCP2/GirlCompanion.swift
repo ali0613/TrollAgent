@@ -8,7 +8,7 @@ import Combine
 /// 角色：小萝莉(girl_*) / 御姐兔女郎(rabit_*) / 猫娘(cat_*)
 enum GirlCharacter: String, CaseIterable, Identifiable {
     case loli = "小萝莉"
-    case rabit = "御姐兔女郎"
+    case rabit = "兔娘"
     case cat = "猫娘"
     var id: String { rawValue }
     var iconPrefix: String {

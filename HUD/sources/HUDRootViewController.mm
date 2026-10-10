@@ -106,6 +106,12 @@ extern "C" const char *g_hud_char;
     CGPoint _dragOffset;
     int _emojiTimer;      // 点击表情显示计时
     NSUInteger _moodSeqIndex;  // v6.0.9：待机有序循环当前帧序号（不再随机挑帧）
+    CGFloat _charScale;        // v6.0.12：角色站姿放大系数（rabit 1.35 / cat 1.25 / girl 1.0）
+    NSArray<UIImage *> *_liftFrames;   // v6.0.12：拖起悬空挣扎帧（lift1/lift2，拖拽时交替显示）
+    NSArray<UIImage *> *_squatFrames;  // v6.0.12：蹲坐/跪姿帧集合（显示时按站姿缩小）
+    BOOL _lifting;             // 正在拖起悬空显示中
+    NSTimer *_liftTimer;       // 悬空挣扎交替计时器
+    int _liftIdx;              // 悬空帧交替序号
 }
 
 + (BOOL)passthroughMode { return _passthrough; }
@@ -118,6 +124,7 @@ extern "C" const char *g_hud_char;
         BOOL isCat = (g_hud_char && strcmp(g_hud_char, "cat") == 0);
         BOOL isRabbit = (g_hud_char && strcmp(g_hud_char, "rabit") == 0);
         NSString *prefix = isCat ? @"cat" : (isRabbit ? @"rabit" : @"girl");
+        _charScale = isCat ? 1.25f : (isRabbit ? 1.35f : 1.0f);   // v6.0.12：兔娘/猫娘身高修长，站姿放大到与萝莉协调
         UIImage *idle  = [UIImage imageNamed:[NSString stringWithFormat:@"%@_idle", prefix]];
         UIImage *happy = [UIImage imageNamed:[NSString stringWithFormat:@"%@_happy", prefix]];
         UIImage *think = [UIImage imageNamed:[NSString stringWithFormat:@"%@_think", prefix]];
@@ -130,6 +137,13 @@ extern "C" const char *g_hud_char;
         if (wall) _wallImage = _trimTransparentPadding(wall);   // v6.0.8：水平扒墙（顶/底边缘）
         UIImage *wallV = [UIImage imageNamed:[NSString stringWithFormat:@"%@_wall_v", prefix]];
         if (wallV) _wallImageV = _trimTransparentPadding(wallV);   // v6.0.8：竖直扒墙（左/右边缘）
+        // v6.0.12：拖起悬空挣扎帧（lift1/lift2）——拖拽角色时交替显示"被凭空提起、双手双腿挣扎"
+        NSMutableArray *lifts = [NSMutableArray array];
+        for (int li = 1; li <= 2; li++) {
+            UIImage *lf = [UIImage imageNamed:[NSString stringWithFormat:@"%@_lift%d", prefix, li]];
+            if (lf) [lifts addObject:_trimTransparentPadding(lf)];
+        }
+        if (lifts.count) _liftFrames = lifts;
         // v6.0.9：待机动作改为【有序循环】（用户要求：睁眼idle放第一 → 眯眼微笑帧穿插在睁眼后面 → 下蹲/坐姿 → 回睁眼，循环），不再随机挑帧。
         // 顺序即播放顺序：睁眼段(站立睁眼表情) → 眯眼段(闭眼微笑/弯月眼) → 蹲坐段(蹲/跪/坐/趴姿势)，播完回 idle 再从头循环。
         NSArray *moodNames = @[
@@ -139,10 +153,18 @@ extern "C" const char *g_hud_char;
             @"wave_sit", @"kneel_up", @"side_sit", @"squat_hold", @"prone", @"chin_sit"   // 蹲坐段
         ];
         NSMutableArray *mood = [NSMutableArray array];
+        NSArray *squatNames = @[@"squat", @"kneel", @"sit", @"side", @"hands", @"cross", @"lift",
+                                @"wave_sit", @"kneel_up", @"side_sit", @"squat_hold", @"prone", @"chin_sit"];
+        NSMutableArray *squats = [NSMutableArray array];
         for (NSString *mn in moodNames) {
             UIImage *m = [UIImage imageNamed:[NSString stringWithFormat:@"%@_%@", prefix, mn]];
-            if (m) [mood addObject:_trimTransparentPadding(m)];
+            if (m) {
+                [mood addObject:_trimTransparentPadding(m)];
+                // v6.0.12：蹲坐/跪姿帧单独分组，显示时按站姿缩小（不再比站姿大）
+                if ([squatNames containsObject:mn]) [squats addObject:_trimTransparentPadding(m)];
+            }
         }
+        if (squats.count) _squatFrames = squats;
         if (mood.count) _moodFrames = mood;
         if (!idle) {
             // 兜底：纯色圆（资源缺失时仍可见）
@@ -171,7 +193,7 @@ extern "C" const char *g_hud_char;
     _girlView.userInteractionEnabled = YES;
     [self.view addSubview:_girlView];
 
-    CGFloat size = (CGFloat)g_hud_size;   // 悬浮小女孩显示尺寸（v6.0.7 可调，默认 150）
+    CGFloat size = (CGFloat)g_hud_size * _charScale;   // 悬浮角色显示尺寸（v6.0.7 可调默认150；v6.0.12 乘角色放大系数：兔娘1.35/猫娘1.25）
     // v6.0.8：高固定 size、宽按裁剪后角色内容比例——aspectFit 填满、左右不留白，角色才能真正贴到屏幕边缘
     UIImage *idleImg = _idleFrames.firstObject;
     CGFloat aspect = (idleImg.size.height > 0) ? (idleImg.size.width / idleImg.size.height) : 1.0;
@@ -274,8 +296,16 @@ extern "C" const char *g_hud_char;
     if (g.state == UIGestureRecognizerStateBegan) {
         _isDragging = YES;
         _dragOffset = CGPointMake(p.x - _girlView.center.x, p.y - _girlView.center.y);
-        // v6.0.8：从吸附/扒墙状态开始拖动，先恢复待机图
-        if (_girlView.image != _idleFrames.firstObject && _idleFrames.firstObject) {
+        // v6.0.12：拖起角色→显示"被凭空提起、挣扎"悬空帧（lift1/lift2 交替），不再一直显示待机
+        if (_liftFrames.count) {
+            _lifting = YES; _liftIdx = 0;
+            [self _stopLiftTimer];
+            _girlView.image = _liftFrames.firstObject;
+            _girlView.transform = CGAffineTransformIdentity;
+            [self _setFrameForImage:_liftFrames.firstObject];
+            _liftTimer = [NSTimer scheduledTimerWithTimeInterval:0.55 target:self selector:@selector(_liftTick) userInfo:nil repeats:YES];
+        } else if (_girlView.image != _idleFrames.firstObject && _idleFrames.firstObject) {
+            // 无悬空帧：从吸附/扒墙状态开始拖动，先恢复待机图
             _girlView.image = _idleFrames.firstObject;
             _girlView.transform = CGAffineTransformIdentity;
             [self _setFrameForImage:_idleFrames.firstObject];
@@ -292,8 +322,27 @@ extern "C" const char *g_hud_char;
         _girlView.center = c;
     } else if (g.state == UIGestureRecognizerStateEnded || g.state == UIGestureRecognizerStateCancelled) {
         _isDragging = NO;
+        [self _stopLiftTimer];
+        // v6.0.12：拖完先恢复待机，再判断吸附/扒墙
+        if (_liftFrames.count && _idleFrames.firstObject) {
+            _girlView.image = _idleFrames.firstObject;
+            _girlView.transform = CGAffineTransformIdentity;
+            [self _setFrameForImage:_idleFrames.firstObject];
+        }
         [self _snapToEdge];   // v6.0.8：松手时靠近屏幕边缘则吸附并显示扒墙姿势
     }
+}
+
+// v6.0.12：悬空挣扎帧交替（被凭空提起、双手双腿挣扎的两帧循环）
+- (void)_liftTick {
+    if (!_lifting || _liftFrames.count < 2 || _isDragging == NO) return;
+    _liftIdx = (_liftIdx + 1) % (int)_liftFrames.count;
+    UIImage *lf = _liftFrames[_liftIdx];
+    if (lf) { _girlView.image = lf; [self _setFrameForImage:lf]; }
+}
+- (void)_stopLiftTimer {
+    [_liftTimer invalidate]; _liftTimer = nil;
+    _lifting = NO;
 }
 
 // v6.0.8：松手吸附到最近屏幕边缘（<threshold 才算）并切换扒墙姿势（企鹅趴墙探头）
@@ -301,10 +350,14 @@ extern "C" const char *g_hud_char;
 - (void)_snapToEdge {
     CGSize v = [UIScreen mainScreen].bounds.size;
     CGPoint c = _girlView.center;
-    CGFloat th = 50;
     CGFloat dL = c.x, dR = v.width - c.x, dT = c.y, dB = v.height - c.y;
     CGFloat minD = MIN(MIN(dL, dR), MIN(dT, dB));
-    if (minD > th) { _girlView.transform = CGAffineTransformIdentity; return; }   // 离四边都太远，不吸附（并清镜像）
+    // v6.0.12：修复底部/顶部趴墙从不触发——拖拽钳制让中心距边恒为 frame 半高(站姿150→75pt)>旧阈值50，永不吸附。
+    // 改为"贴边判定"：中心距边 ≤ 半高/半宽+容差即视为贴边（拖到底/顶/左右都应触发趴墙）。
+    CGFloat clampH = _girlView.frame.size.width / 2;
+    CGFloat clampV = _girlView.frame.size.height / 2;
+    CGFloat reach = MAX(clampV, clampH) + 10;
+    if (minD > reach) { _girlView.transform = CGAffineTransformIdentity; return; }   // 离四边都太远，不吸附（并清镜像）
     UIImage *wallImg = nil;
     if (minD == dL || minD == dR) wallImg = _wallImageV;   // 左/右：竖直墙沿图
     else                          wallImg = _wallImage;    // 顶/底：水平墙沿图
@@ -312,7 +365,7 @@ extern "C" const char *g_hud_char;
     _girlView.image = wallImg;
     // v6.0.9：趴墙缩小显示——角色以平时一半高度贴在边缘（原用全高 size 导致趴墙角色过大、girl 底部/左右趴墙不贴合）。
     // 先设缩小尺寸，再按缩小后尺寸吸附，角色中心放屏幕边缘线、半身探出（企鹅趴墙探头效果）。
-    CGFloat wallH = (CGFloat)g_hud_size * 0.5;   // 趴墙缩放系数（可调：0.5=平时一半）
+    CGFloat wallH = (CGFloat)g_hud_size * _charScale * 0.5;   // 趴墙缩放系数（v6.0.12 乘角色放大系数保持比例）
     CGFloat wa = (wallImg.size.height > 0) ? (wallImg.size.width / wallImg.size.height) : 1.0;
     _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
     // 吸附左缘→镜像面向左墙；右缘→正常面向右墙；上下→保持原方向
@@ -329,7 +382,9 @@ extern "C" const char *g_hud_char;
 - (void)_setFrameForImage:(UIImage *)img {
     if (!img || !_girlView) return;
     CGPoint center = _girlView.center;
-    CGFloat size = (CGFloat)g_hud_size;
+    CGFloat size = (CGFloat)g_hud_size * _charScale;   // v6.0.12：乘角色放大系数（兔娘1.35/猫娘1.25）
+    // v6.0.12：蹲坐/跪姿帧显示时按站姿缩小（不再比站姿大——用户要求蹲坐跪姿统一按站姿缩小）
+    if (_squatFrames && [_squatFrames containsObject:img]) size = size * 0.7f;
     CGFloat aspect = (img.size.height > 0) ? (img.size.width / img.size.height) : 1.0;
     CGFloat w = size * aspect;
     CGFloat h = size;
