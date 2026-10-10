@@ -309,7 +309,7 @@ extern "C" const char *g_hud_char;
             _girlView.image = _liftFrames.firstObject;
             _girlView.transform = CGAffineTransformIdentity;
             [self _setFrameForImage:_liftFrames.firstObject];
-            _liftTimer = [NSTimer scheduledTimerWithTimeInterval:0.18 target:self selector:@selector(_liftTick) userInfo:nil repeats:YES];
+            _liftTimer = [NSTimer scheduledTimerWithTimeInterval:0.55 target:self selector:@selector(_liftTick) userInfo:nil repeats:YES];
         } else if (_girlView.image != _idleFrames.firstObject && _idleFrames.firstObject) {
             // 无悬空帧：从吸附/扒墙状态开始拖动，先恢复待机图
             _girlView.image = _idleFrames.firstObject;
