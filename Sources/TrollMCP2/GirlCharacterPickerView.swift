@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// v4.5.1：可爱助手角色选择页——显示小萝莉/御姐兔女郎两个角色卡片（带形象图），点选即切换
+/// v4.5.1：可爱助手角色选择页——显示小萝莉/兔娘/猫娘三个角色卡片（带形象图），点选即切换
 /// 入口：设置 → 可爱助手 → 可爱助手角色
 struct GirlCharacterPickerView: View {
     @ObservedObject private var companion = GirlCompanion.shared

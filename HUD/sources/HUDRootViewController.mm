@@ -89,7 +89,7 @@ static void SpringBoardLockStatusChanged(CFNotificationCenterRef center, void *o
 
 // v6.0.7：悬浮小女孩显示尺寸（pt），由主 App 启动时 -size N 传入（HUDMain.mm 解析），默认 150
 extern "C" double g_hud_size;
-// v6.0.7：悬浮角色（girl=小萝莉 / rabit=御姐兔女郎），由主 App 启动时 -char 传入（HUDMain.mm 解析）
+// v6.0.7：悬浮角色（girl=小萝莉 / rabit=兔娘），由主 App 启动时 -char 传入（HUDMain.mm 解析）
 extern "C" const char *g_hud_char;
 
 @implementation HUDRootViewController {
@@ -106,7 +106,7 @@ extern "C" const char *g_hud_char;
     CGPoint _dragOffset;
     int _emojiTimer;      // 点击表情显示计时
     NSUInteger _moodSeqIndex;  // v6.0.9：待机有序循环当前帧序号（不再随机挑帧）
-    CGFloat _charScale;        // v6.0.12：角色站姿放大系数（rabit 1.35 / cat 1.25 / girl 1.0）
+    CGFloat _charScale;        // v6.0.12：角色站姿放大系数（rabit 1.4 / cat 1.2 / girl 1.0）
     NSArray<UIImage *> *_liftFrames;   // v6.0.12：拖起悬空挣扎帧（lift1/lift2，拖拽时交替显示）
     NSArray<UIImage *> *_squatFrames;  // v6.0.12：蹲坐/跪姿帧集合（显示时按站姿缩小）
     BOOL _lifting;             // 正在拖起悬空显示中
@@ -119,12 +119,14 @@ extern "C" const char *g_hud_char;
 
 - (instancetype)init {
     if (self = [super init]) {
-        // v6.0.7：按当前角色加载多帧图（girl_小萝莉 / rabit_御姐兔女郎 / cat_猫娘，HUD bundle 内）
+        // v6.0.7：按当前角色加载多帧图（girl_小萝莉 / rabit_兔娘 / cat_猫娘，HUD bundle 内）
         // v6.0.11：新增 cat 猫娘——21 帧动作集与 girl 同构（睁眼段→眯眼段→蹲坐段），moodNames 并集已覆盖全部帧名
         BOOL isCat = (g_hud_char && strcmp(g_hud_char, "cat") == 0);
         BOOL isRabbit = (g_hud_char && strcmp(g_hud_char, "rabit") == 0);
         NSString *prefix = isCat ? @"cat" : (isRabbit ? @"rabit" : @"girl");
-        _charScale = isCat ? 1.25f : (isRabbit ? 1.35f : 1.0f);   // v6.0.12：兔娘/猫娘身高修长，站姿放大到与萝莉协调
+        // v6.0.12：兔娘/猫娘身高修长，站姿放大到与萝莉【视觉面积相等】（同高150下内容宽：萝莉73/猫60/兔52，
+        // 用 s 放大后包围盒面积≈1.1万：rabit s=1.4(H210/W52)、cat s=1.2(H180/W60)、girl s=1.0(H150/W73)，三者面积差<1%）
+        _charScale = isCat ? 1.2f : (isRabbit ? 1.4f : 1.0f);
         UIImage *idle  = [UIImage imageNamed:[NSString stringWithFormat:@"%@_idle", prefix]];
         UIImage *happy = [UIImage imageNamed:[NSString stringWithFormat:@"%@_happy", prefix]];
         UIImage *think = [UIImage imageNamed:[NSString stringWithFormat:@"%@_think", prefix]];
@@ -159,9 +161,13 @@ extern "C" const char *g_hud_char;
         for (NSString *mn in moodNames) {
             UIImage *m = [UIImage imageNamed:[NSString stringWithFormat:@"%@_%@", prefix, mn]];
             if (m) {
-                [mood addObject:_trimTransparentPadding(m)];
-                // v6.0.12：蹲坐/跪姿帧单独分组，显示时按站姿缩小（不再比站姿大）
-                if ([squatNames containsObject:mn]) [squats addObject:_trimTransparentPadding(m)];
+                // Bug修复：裁剪只做一次，mood 与 squats 共用同一个 UIImage 对象。
+                // 不能两次分别调 _trimTransparentPadding——那会产出两个不同实例；UIImage 未重写 isEqual（按指针比较），
+                // 导致 _setFrameForImage 里 [_squatFrames containsObject:img] 永远 NO、蹲坐缩小完全不生效。
+                UIImage *t = _trimTransparentPadding(m);
+                [mood addObject:t];
+                // v6.0.12：蹲坐/跪姿帧单独分组（复用 mood 里同一对象），显示时按站姿缩小
+                if ([squatNames containsObject:mn]) [squats addObject:t];
             }
         }
         if (squats.count) _squatFrames = squats;
@@ -193,7 +199,7 @@ extern "C" const char *g_hud_char;
     _girlView.userInteractionEnabled = YES;
     [self.view addSubview:_girlView];
 
-    CGFloat size = (CGFloat)g_hud_size * _charScale;   // 悬浮角色显示尺寸（v6.0.7 可调默认150；v6.0.12 乘角色放大系数：兔娘1.35/猫娘1.25）
+    CGFloat size = (CGFloat)g_hud_size * _charScale;   // 悬浮角色显示尺寸（v6.0.7 可调默认150；v6.0.12 乘角色放大系数：兔娘1.4/猫娘1.2）
     // v6.0.8：高固定 size、宽按裁剪后角色内容比例——aspectFit 填满、左右不留白，角色才能真正贴到屏幕边缘
     UIImage *idleImg = _idleFrames.firstObject;
     CGFloat aspect = (idleImg.size.height > 0) ? (idleImg.size.width / idleImg.size.height) : 1.0;
@@ -361,6 +367,8 @@ extern "C" const char *g_hud_char;
     UIImage *wallImg = nil;
     if (minD == dL || minD == dR) wallImg = _wallImageV;   // 左/右：竖直墙沿图
     else                          wallImg = _wallImage;    // 顶/底：水平墙沿图
+    // v6.0.12 兜底：某一侧趴墙图资源缺失时，退回另一侧可用墙沿图——保证贴边松手仍吸附、不致角色悬空卡在半路
+    if (!wallImg) wallImg = _wallImage ?: _wallImageV;
     if (!wallImg) return;
     _girlView.image = wallImg;
     // v6.0.9：趴墙缩小显示——角色以平时一半高度贴在边缘（原用全高 size 导致趴墙角色过大、girl 底部/左右趴墙不贴合）。
@@ -382,7 +390,7 @@ extern "C" const char *g_hud_char;
 - (void)_setFrameForImage:(UIImage *)img {
     if (!img || !_girlView) return;
     CGPoint center = _girlView.center;
-    CGFloat size = (CGFloat)g_hud_size * _charScale;   // v6.0.12：乘角色放大系数（兔娘1.35/猫娘1.25）
+    CGFloat size = (CGFloat)g_hud_size * _charScale;   // v6.0.12：乘角色放大系数（兔娘1.4/猫娘1.2）
     // v6.0.12：蹲坐/跪姿帧显示时按站姿缩小（不再比站姿大——用户要求蹲坐跪姿统一按站姿缩小）
     if (_squatFrames && [_squatFrames containsObject:img]) size = size * 0.7f;
     CGFloat aspect = (img.size.height > 0) ? (img.size.width / img.size.height) : 1.0;

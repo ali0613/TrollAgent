@@ -5,7 +5,7 @@ import Combine
 // MARK: - 可爱助手 · 状态
 
 /// v4.5.0：可爱助手全局开关 + 角色（设置里可选开/关、切换角色，UserDefaults 持久化）
-/// 角色：小萝莉(girl_*) / 御姐兔女郎(rabit_*) / 猫娘(cat_*)
+/// 角色：小萝莉(girl_*) / 兔娘(rabit_*) / 猫娘(cat_*)
 enum GirlCharacter: String, CaseIterable, Identifiable {
     case loli = "小萝莉"
     case rabit = "兔娘"
@@ -20,6 +20,17 @@ enum GirlCharacter: String, CaseIterable, Identifiable {
     }
 }
 
+extension GirlCharacter {
+    /// v6.0.12：从 UserDefaults 读回角色的统一入口（GirlCompanion.init 与 HUDManager 共用）。
+    /// 枚举 rawValue 已由旧值"御姐兔女郎"更名为"兔娘"——老用户升级后本地仍存"御姐兔女郎"，
+    /// 直接 GirlCharacter(rawValue:) 会拿到 nil 静默回退 .loli，这里做一次旧值→.rabit 兼容映射。
+    static func stored(rawValue: String?) -> GirlCharacter {
+        guard let raw = rawValue, !raw.isEmpty else { return .loli }
+        if raw == "御姐兔女郎" { return .rabit }   // 旧 rawValue 迁移：御姐兔女郎 → 兔娘
+        return GirlCharacter(rawValue: raw) ?? .loli
+    }
+}
+
 final class GirlCompanion: ObservableObject {
     static let shared = GirlCompanion()
     @Published var enabled: Bool {
@@ -30,7 +41,7 @@ final class GirlCompanion: ObservableObject {
     }
     private init() {
         enabled = UserDefaults.standard.bool(forKey: "trollmcp2.girl_companion_enabled")
-        selectedCharacter = GirlCharacter(rawValue: UserDefaults.standard.string(forKey: "trollmcp2.girl_character") ?? "") ?? .loli
+        selectedCharacter = GirlCharacter.stored(rawValue: UserDefaults.standard.string(forKey: "trollmcp2.girl_character"))
     }
 }
 
@@ -41,7 +52,7 @@ enum GirlExpression: String {
     case happy   // 开心（点击）
     case think   // 思考
     case talk    // 说话口型（语音时）
-    /// 按角色取帧图名：小萝莉 girl_*，御姐兔女郎 rabit_*
+    /// 按角色取帧图名：小萝莉 girl_*，兔娘 rabit_*
     func imageName(for character: GirlCharacter) -> String {
         return "\(character.iconPrefix)_\(rawValue)"
     }
@@ -62,6 +73,16 @@ struct GirlCompanionView: View {
 
     private let frameHeight: CGFloat = 148    // 全身立绘显示高度（右下角悬浮，不宜过大）
 
+    // v6.0.12：与 HUD 完全一致的角色放大系数（girl 1.0 / rabit 1.4 / cat 1.2）——
+    // 兔娘/猫娘身高修长，同高 148 下比萝莉窄，按系数放大显示高度，保持右下角助手整体大小协调。
+    private var charScale: CGFloat {
+        switch companion.selectedCharacter {
+        case .rabit: return 1.4
+        case .cat: return 1.2
+        case .loli: return 1.0
+        }
+    }
+
     var body: some View {
         VStack(spacing: 6) {
             // 小女孩本体
@@ -70,7 +91,7 @@ struct GirlCompanionView: View {
                     Image(uiImage: img)
                         .resizable()
                         .scaledToFit()
-                        .frame(height: frameHeight)
+                        .frame(height: frameHeight * charScale)
                         .scaleEffect(breathing ? 1.03 : 0.99)
                         .offset(y: floating ? -7 : 7)
                         .animation(.easeInOut(duration: 2.4).repeatForever(autoreverses: true), value: breathing)

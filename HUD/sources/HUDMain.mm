@@ -35,7 +35,7 @@ static void hud_diag(const char *msg)
 
 // v6.0.7：悬浮小女孩显示尺寸（pt），由主 App 启动时 -size N 传入，默认 150
 double g_hud_size = 150.0;
-// v6.0.7：悬浮角色（girl=小萝莉 / rabit=御姐兔女郎 / cat=猫娘），由主 App 启动时 -char 传入，默认 girl
+// v6.0.7：悬浮角色（girl=小萝莉 / rabit=兔娘 / cat=猫娘），由主 App 启动时 -char 传入，默认 girl
 const char *g_hud_char = "girl";
 
 int main(int argc, char *argv[])
