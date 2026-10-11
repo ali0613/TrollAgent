@@ -112,6 +112,8 @@ extern "C" const char *g_hud_char;
     BOOL _lifting;             // 正在拖起悬空显示中
     NSTimer *_liftTimer;       // 悬空挣扎交替计时器
     int _liftIdx;              // 悬空帧交替序号
+    CGFloat _dragHalfW, _dragHalfH;   // v6.0.21：拖拽时帧的半宽/半高（吸附判定用拖拽帧尺寸，避免恢复待机后窄帧误判不贴边）
+    CALayer *_chestLayer;   // v6.0.21：胸部局部呼吸动效层（mask 只显示胸口条带，仅此处 scale 鼓起，不再整身缩放）
 }
 
 + (BOOL)passthroughMode { return _passthrough; }
@@ -245,7 +247,7 @@ extern "C" const char *g_hud_char;
 
 - (void)_startBreathing {
     [_girlView.layer removeAllAnimations];   // 防重复调用叠加动画
-    [self _setAnchorY:0.42f];   // v6.0.18：待机呼吸→胸部锚点（左右趴墙/悬浮不含）
+    [self _setAnchorY:0.5f];   // v6.0.21：整身不再缩放，锚点回归中心（胸部呼吸改用独立胸部条带层）
     // v6.0.18：上下漂浮加快（单程 0.7s，往返 1.4s——用户要求拖动悬浮时上下浮动加快）
     CABasicAnimation *anim = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
     anim.fromValue = @(0);
@@ -255,15 +257,44 @@ extern "C" const char *g_hud_char;
     anim.repeatCount = INFINITY;
     anim.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
     [_girlView.layer addAnimation:anim forKey:@"hudFloat"];
-    // v6.0.18：胸部呼吸动效——整体轻微缩放(放大↔缩小)循环，模拟胸口呼吸起伏；与上下飘(layer级)共存
+    // v6.0.21：胸部局部呼吸动效——独立胸部条带层 scale，只有胸口鼓起、身体其他部分不动（不再整身缩放）
+    [self _startChestBreath];
+}
+
+// v6.0.21：胸部局部呼吸——在 _girlView 上叠一个"只显示胸口条带"的图层，对条带做 scale 鼓起，
+// mask 固定条带位置，下层完整身体不动。用户要求"胸部锚点放大缩小、不要整个人缩放"。
+- (void)_startChestBreath {
+    [_chestLayer removeFromSuperlayer]; _chestLayer = nil;
+    if (!_girlView.image) return;
+    CGFloat W = _girlView.bounds.size.width;
+    CGFloat H = _girlView.bounds.size.height;
+    if (W < 1 || H < 1) return;
+    CALayer *cl = [CALayer layer];
+    cl.frame = _girlView.bounds;
+    cl.contents = (id)_girlView.image.CGImage;
+    cl.contentsGravity = kCAGravityResizeAspect;
+    CGFloat cy = H * 0.42f, band = H * 0.16f;   // 胸口条带：42% 锚点上下各8%高
+    CALayer *mask = [CALayer layer];
+    mask.frame = CGRectMake(0, cy - band/2, W, band);
+    mask.backgroundColor = [UIColor blackColor].CGColor;
+    cl.mask = mask;
+    // 缩放锚点=条带中心（胸口），设 position 补偿让条带仍铺满 bounds
+    cl.anchorPoint = CGPointMake(0.5, cy/H);
+    cl.position = CGPointMake(W/2, cy);
+    [_girlView.layer addSublayer:cl];
+    _chestLayer = cl;
     CABasicAnimation *breath = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
     breath.fromValue = @(1.0);
-    breath.toValue = @(1.06);   // v6.0.19：呼吸幅度加大(原1.035太弱看不出)，让胸口起伏明显可见
+    breath.toValue = @(1.08);   // 胸口局部鼓起幅度（视觉集中在胸口，不显整身）
     breath.duration = 2.6;
     breath.autoreverses = YES;
     breath.repeatCount = INFINITY;
     breath.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-    [_girlView.layer addAnimation:breath forKey:@"breathScale"];
+    [cl addAnimation:breath forKey:@"chestScale"];
+}
+
+- (void)_stopChestBreath {
+    [_chestLayer removeFromSuperlayer]; _chestLayer = nil;
 }
 
 // v6.0.9：待机自动切换表情——空闲时按 _moodFrames【顺序循环】取一帧显示约 1.2s（睁眼→眯眼→蹲坐→回睁眼），然后回 idle，再排下一次。
@@ -323,12 +354,12 @@ extern "C" const char *g_hud_char;
     if (g.state == UIGestureRecognizerStateBegan) {
         _isDragging = YES;
         [self _setAnchorY:0.5f];   // v6.0.18：拖拽/悬浮→中心锚点（悬浮不做胸部锚点）
-        [_girlView.layer removeAnimationForKey:@"breathScale"];   // v6.0.18：悬浮/拖拽停胸部呼吸缩放（仅保留上下飘）
+        [self _stopChestBreath];   // v6.0.21：拖拽/悬浮停胸部呼吸（移除条带层）
         _dragOffset = CGPointMake(p.x - _girlView.center.x, p.y - _girlView.center.y);
         // v6.0.12：拖起角色→显示"被凭空提起、挣扎"悬空帧（lift1/lift2 交替），不再一直显示待机
         if (_liftFrames.count) {
+            [self _stopLiftTimer];   // v6.0.21：先停旧定时器（其内部会置 _lifting=NO），避免覆盖下面的悬空态——这是悬空帧从不交替的根因
             _lifting = YES; _liftIdx = 0;
-            [self _stopLiftTimer];
             _girlView.image = _liftFrames.firstObject;
             _girlView.transform = CGAffineTransformIdentity;
             [self _setFrameForImage:_liftFrames.firstObject];
@@ -349,6 +380,7 @@ extern "C" const char *g_hud_char;
         // v6.0.7 修复：边界用显示尺寸（frame.size）而非图片固有尺寸（bounds 是 600×900）——
         // 旧代码用 bounds 导致角色拖不到屏幕边缘。改用 frame 后角色可紧贴屏幕边。
         CGSize gs = _girlView.frame.size;
+        _dragHalfW = gs.width/2; _dragHalfH = gs.height/2;   // v6.0.21：记录拖拽帧半尺寸，吸附判定据此（贴边钳制就是拖拽帧半宽）
         c.x = MAX(gs.width/2, MIN(c.x, v.width - gs.width/2));
         c.y = MAX(gs.height/2, MIN(c.y, v.height - gs.height/2));
         _girlView.center = c;
@@ -387,8 +419,10 @@ extern "C" const char *g_hud_char;
     CGFloat minD = MIN(MIN(dL, dR), MIN(dT, dB));
     // v6.0.12：修复底部/顶部趴墙从不触发——拖拽钳制让中心距边恒为 frame 半高(站姿150→75pt)>旧阈值50，永不吸附。
     // 改为"贴边判定"：中心距边 ≤ 半高/半宽+容差即视为贴边（拖到底/顶/左右都应触发趴墙）。
-    CGFloat clampH = _girlView.frame.size.width / 2;
-    CGFloat clampV = _girlView.frame.size.height / 2;
+    // v6.0.21：吸附判定改用【拖拽帧】半尺寸（拖到边缘钳制到 lift 帧手脚张开半宽），
+    // 不再用恢复待机后的窄站姿半宽——否则 lift 半宽>站姿半宽、minD>reach 永不吸附（问题：贴左右墙不吸附）。
+    CGFloat clampH = _dragHalfW > 0 ? _dragHalfW : _girlView.frame.size.width / 2;
+    CGFloat clampV = _dragHalfH > 0 ? _dragHalfH : _girlView.frame.size.height / 2;
     CGFloat reach = (minD == dL || minD == dR) ? clampH : clampV;   // v6.0.14：按方向用对应半尺寸（左右半宽/上下半高）、去掉+10容差——真正贴边才吸附，不提前虹吸
     if (minD > reach) { _girlView.transform = CGAffineTransformIdentity; [self _startBreathing]; return; }   // 未贴边：待机并确保漂浮在
     UIImage *wallImg = nil;
@@ -400,7 +434,10 @@ extern "C" const char *g_hud_char;
     _girlView.image = wallImg;
     // v6.0.9：趴墙缩小显示——角色以平时一半高度贴在边缘（原用全高 size 导致趴墙角色过大、girl 底部/左右趴墙不贴合）。
     // 先设缩小尺寸，再按缩小后尺寸吸附，角色中心放屏幕边缘线、半身探出（企鹅趴墙探头效果）。
-    CGFloat wallH = (CGFloat)g_hud_size * _charScale * 0.5;   // 趴墙缩放系数（v6.0.12 乘角色放大系数保持比例）
+    // v6.0.21：顶/底趴墙在原50%基础上再缩25%(→37.5%)；左/右趴墙保持50%（用户只要求底部缩小）
+    CGFloat wallH = (wallImg == _wallImage)
+        ? (CGFloat)g_hud_size * _charScale * 0.375
+        : (CGFloat)g_hud_size * _charScale * 0.5;
     CGFloat wa = (wallImg.size.height > 0) ? (wallImg.size.width / wallImg.size.height) : 1.0;
     _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
     // 吸附左缘→镜像面向左墙；右缘→正常面向右墙；上下→保持原方向
@@ -410,7 +447,7 @@ extern "C" const char *g_hud_char;
     else                 { c.y = v.height - _girlView.frame.size.height / 2; _girlView.transform = CGAffineTransformIdentity; }
     _girlView.center = c;
     [_girlView.layer removeAnimationForKey:@"hudFloat"];   // v6.0.14：趴墙停止上下漂浮——底部/侧趴墙不再上下起伏
-    [_girlView.layer removeAnimationForKey:@"breathScale"];   // v6.0.18：趴墙同时停胸部呼吸缩放
+    [self _stopChestBreath];   // v6.0.21：趴墙同时停胸部呼吸
 }
 
 // 点击切表情：开心→思考→待机
@@ -432,6 +469,7 @@ extern "C" const char *g_hud_char;
     if (w > size) { w = size; h = w / aspect; }
     _girlView.bounds = CGRectMake(0, 0, w, h);
     _girlView.center = center;   // 保持中心，切换时不跳
+    if (_chestLayer) [self _startChestBreath];   // v6.0.21：切帧后按新 bounds 重建胸部条带层
 }
 - (void)_tap:(UITapGestureRecognizer *)g {
     if (_isDragging) return;
