@@ -392,8 +392,9 @@ extern "C" const char *g_hud_char;
     if (!img || !_girlView) return;
     CGPoint center = _girlView.center;
     CGFloat size = (CGFloat)g_hud_size * _charScale;   // v6.0.12：乘角色放大系数（兔娘1.4/猫娘1.2）
-    // v6.0.12：蹲坐/跪姿帧显示时按站姿缩小（不再比站姿大——用户要求蹲坐跪姿统一按站姿缩小）
-    // v6.0.14：蹲坐/跪姿帧不再整体 ×0.7——头部/手臂面积与站姿保持一致
+    // v6.0.16：蹲坐/跪姿帧整体 ×0.9——蹲坐原图比站姿大太多(girl_squat面积0.52vs0.31、cat_squat 0.44vs0.24)，
+    // ×0.9 使头部/手臂显示面积≈站姿
+    if (_squatFrames && [_squatFrames containsObject:img]) size = size * 0.9f;
     if (_liftFrames && [_liftFrames containsObject:img]) size = size * 0.8f;   // v6.0.14：悬空帧手脚张开占画面大，缩小显示使头部/手臂面积≈站姿
     CGFloat aspect = (img.size.height > 0) ? (img.size.width / img.size.height) : 1.0;
     CGFloat w = size * aspect;
