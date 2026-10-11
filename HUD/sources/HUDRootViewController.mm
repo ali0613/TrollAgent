@@ -477,9 +477,12 @@ extern "C" const char *g_hud_char;
     // 不再用恢复待机后的窄站姿半宽——否则 lift 半宽>站姿半宽、minD>reach 永不吸附（问题：贴左右墙不吸附）。
     CGFloat clampH = _dragHalfW > 0 ? _dragHalfW : _girlView.frame.size.width / 2;
     CGFloat clampV = _dragHalfH > 0 ? _dragHalfH : _girlView.frame.size.height / 2;
-    // v6.0.27：吸附距离按角色独立配置（_snapReachH/_snapReachV，初始化时按角色分支赋值）——
-    // 与 lift 帧尺寸解耦，调 charScale/素材不再破坏吸附；clampH/clampV 仅保留用于诊断日志
-    CGFloat reach = (minD == dL || minD == dR) ? _snapReachH : _snapReachV;
+    // v6.0.27：吸附距离按角色独立配置（_snapReachH/_snapReachV，初始化时按角色分支赋值）。
+    // v6.0.28：reach 取 max(配置值, 拖拽帧半尺寸)——拖拽钳制下角色中心距边最小=lift半尺寸，
+    // 若配置值<lift半尺寸（如猫娘手脚张开lift半宽84>配置78）则永不吸附；MAX保证钳制贴边必吸附，配置值起提前吸附作用
+    CGFloat reach = (minD == dL || minD == dR)
+        ? MAX(_snapReachH, clampH) + 4.0f
+        : MAX(_snapReachV, clampV) + 4.0f;   // +4pt float 容差（避免 minD==reach 边界因 float 误差不触发）
     // v6.0.27：顶部不吸附趴墙——拖到顶部仅待机（用户要求去掉所有角色顶部趴墙）
     if (minD == dT) { _girlView.transform = CGAffineTransformIdentity; [self _startBreathing]; return; }
     // v6.0.25：吸附诊断日志（每次松手输出一行，连手机 log show 定位吸附根因）
