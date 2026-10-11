@@ -120,6 +120,10 @@ extern "C" const char *g_hud_char;
     CALayer *_chestLayerR;  // v6.0.23：右胸呼吸层（mask 只显示右胸条带，与左胸同步脉冲）
     UIImage *_fallImage;        // v6.0.25：松手掉落帧
     BOOL _falling;              // 正在掉落动画中
+    NSArray<UIImage *> *_climbFrames;  // v6.0.26：爬墙帧（左右边缘自动攀爬）
+    BOOL _isClimbing;           // 正在攀爬中
+    NSTimer *_climbTimer;        // 攀爬交替计时器
+    int _climbIdx;              // 攀爬帧序号
 }
 
 + (BOOL)passthroughMode { return _passthrough; }
@@ -164,6 +168,13 @@ extern "C" const char *g_hud_char;
         // v6.0.25：松手掉落帧
         UIImage *fall = [UIImage imageNamed:[NSString stringWithFormat:@"%@_fall", prefix]];
         if (fall) _fallImage = _trimTransparentPadding(fall);
+        // v6.0.26：爬墙帧（左右边缘自动攀爬）
+        NSMutableArray *climbs = [NSMutableArray array];
+        for (int ci = 1; ci <= 2; ci++) {
+            UIImage *cf = [UIImage imageNamed:[NSString stringWithFormat:@"%@_climb%d", prefix, ci]];
+            if (cf) [climbs addObject:_trimTransparentPadding(cf)];
+        }
+        if (climbs.count) _climbFrames = climbs;
         // v6.0.9：待机动作改为【有序循环】（用户要求：睁眼idle放第一 → 眯眼微笑帧穿插在睁眼后面 → 下蹲/坐姿 → 回睁眼，循环），不再随机挑帧。
         // 顺序即播放顺序：睁眼段(站立睁眼表情) → 眯眼段(闭眼微笑/弯月眼) → 蹲坐段(蹲/跪/坐/趴姿势)，播完回 idle 再从头循环。
         NSArray *moodNames = @[
@@ -561,6 +572,85 @@ extern "C" const char *g_hud_char;
     _girlView.center = c;
     [_girlView.layer removeAnimationForKey:@"hudFloat"];   // v6.0.14：趴墙停止上下漂浮——底部/侧趴墙不再上下起伏
     [self _stopChestBreath];   // v6.0.21：趴墙同时停胸部呼吸
+    
+    // v6.0.26：左右边缘趴墙时，随机启动自动攀爬（隔几秒爬一段，不是一直爬）
+    if ((minD == dL || minD == dR) && _climbFrames.count >= 2) {
+        [self _stopClimbTimer];
+        // 随机延迟3-8秒后开始攀爬
+        NSTimeInterval delay = 3.0 + arc4random_uniform(5000) / 1000.0;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self _startClimbing];
+        });
+    }
+}
+
+// v6.0.26：开始自动攀爬
+- (void)_startClimbing {
+    if (_isClimbing || _isDragging || _falling) return;
+    if (!_climbFrames.count) return;
+    
+    _isClimbing = YES;
+    _climbIdx = 0;
+    
+    // 用第一帧开始攀爬
+    UIImage *cf = _climbFrames[0];
+    _girlView.image = cf;
+    [self _setFrameForImage:cf];
+    
+    // 每隔0.4秒切换一次攀爬帧，同时往上移动一点
+    _climbTimer = [NSTimer scheduledTimerWithTimeInterval:0.4 repeats:YES block:^(NSTimer *t) {
+        _climbIdx++;
+        if (_climbIdx >= 4) {   // 爬4步就停，恢复趴墙
+            [self _stopClimbing];
+            return;
+        }
+        
+        // 切换攀爬帧
+        UIImage *nextFrame = _climbFrames[_climbIdx % 2];
+        _girlView.image = nextFrame;
+        [self _setFrameForImage:nextFrame];
+        
+        // 往上移动20pt
+        CGPoint c = _girlView.center;
+        c.y -= 20;
+        _girlView.center = c;
+    }];
+}
+
+// v6.0.26：停止攀爬，恢复趴墙
+- (void)_stopClimbing {
+    [_climbTimer invalidate];
+    _climbTimer = nil;
+    _isClimbing = NO;
+    
+    // 恢复原来的趴墙图
+    CGSize v = [UIScreen mainScreen].bounds.size;
+    CGPoint c = _girlView.center;
+    CGFloat dL = c.x, dR = v.width - c.x;
+    UIImage *wallImg = (dL < dR) ? _wallImageV : _wallImageV;
+    if (wallImg) {
+        _girlView.image = wallImg;
+        // 重新设置趴墙尺寸
+        CGFloat wallScale = MIN(_charScale, 1.2f);
+        CGFloat wallH = (CGFloat)g_hud_size * wallScale * 0.5;
+        CGFloat wa = (wallImg.size.height > 0) ? (wallImg.size.width / wallImg.size.height) : 1.0;
+        _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
+        // 重新吸附到边缘
+        if (dL < dR) {
+            c.x = _girlView.frame.size.width / 2;
+            _girlView.transform = CGAffineTransformMakeScale(-1, 1);
+        } else {
+            c.x = v.width - _girlView.frame.size.width / 2;
+            _girlView.transform = CGAffineTransformIdentity;
+        }
+        _girlView.center = c;
+    }
+}
+
+- (void)_stopClimbTimer {
+    [_climbTimer invalidate];
+    _climbTimer = nil;
+    _isClimbing = NO;
 }
 
 // 点击切表情：开心→思考→待机
