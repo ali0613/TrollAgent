@@ -460,10 +460,12 @@ extern "C" const char *g_hud_char;
         CGFloat topY = _girlView.frame.size.height / 2;   // 顶部边缘的Y坐标
         
         if (_fallImage && !_falling && c.y <= topY + 50) {
-            // ✅ 拖到顶部松手 → 掉落动画
+            // ✅ 拖到顶部松手 → 掉落动画，坠落帧缩小到85%
             _falling = YES;
             _girlView.image = _fallImage;
             [self _setFrameForImage:_fallImage];
+            // 坠落帧缩小到85%
+            _girlView.transform = CGAffineTransformMakeScale(0.85, 0.85);
             
             // 目标Y：屏幕底部
             CGPoint endC = _girlView.center;
@@ -473,8 +475,9 @@ extern "C" const char *g_hud_char;
             [UIView animateWithDuration:1.2 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
                 _girlView.center = endC;
             } completion:^(BOOL finished) {
-                // 恢复站立idle
+                // 恢复站立idle，把缩放改回1.0
                 if (_idleFrames.firstObject) {
+                    _girlView.transform = CGAffineTransformIdentity;
                     _girlView.image = _idleFrames.firstObject;
                     [self _setFrameForImage:_idleFrames.firstObject];
                     [self _startBreathing];   // 恢复胸部呼吸动效
