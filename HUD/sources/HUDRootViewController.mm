@@ -235,14 +235,24 @@ extern "C" const char *g_hud_char;
 // runloop 状态下可能不执行，导致解锁后悬浮在但不浮动；CABasicAnimation 直接操作 layer 更稳。
 - (void)_startBreathing {
     [_girlView.layer removeAllAnimations];   // 防重复调用叠加动画
+    // v6.0.18：上下漂浮加快（单程 0.7s，往返 1.4s——用户要求拖动悬浮时上下浮动加快）
     CABasicAnimation *anim = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
     anim.fromValue = @(0);
     anim.toValue = @(-14);
-    anim.duration = 1.3;       // 2.6s 往返 → 单程 1.3s
+    anim.duration = 0.7;
     anim.autoreverses = YES;
     anim.repeatCount = INFINITY;
     anim.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
     [_girlView.layer addAnimation:anim forKey:@"hudFloat"];
+    // v6.0.18：胸部呼吸动效——整体轻微缩放(放大↔缩小)循环，模拟胸口呼吸起伏；与上下飘(layer级)共存
+    CABasicAnimation *breath = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+    breath.fromValue = @(1.0);
+    breath.toValue = @(1.035);
+    breath.duration = 3.0;
+    breath.autoreverses = YES;
+    breath.repeatCount = INFINITY;
+    breath.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    [_girlView.layer addAnimation:breath forKey:@"breathScale"];
 }
 
 // v6.0.9：待机自动切换表情——空闲时按 _moodFrames【顺序循环】取一帧显示约 1.2s（睁眼→眯眼→蹲坐→回睁眼），然后回 idle，再排下一次。
@@ -383,6 +393,7 @@ extern "C" const char *g_hud_char;
     else                 { c.y = v.height - _girlView.frame.size.height / 2; _girlView.transform = CGAffineTransformIdentity; }
     _girlView.center = c;
     [_girlView.layer removeAnimationForKey:@"hudFloat"];   // v6.0.14：趴墙停止上下漂浮——底部/侧趴墙不再上下起伏
+    [_girlView.layer removeAnimationForKey:@"breathScale"];   // v6.0.18：趴墙同时停胸部呼吸缩放
 }
 
 // 点击切表情：开心→思考→待机
