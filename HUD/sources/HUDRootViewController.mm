@@ -126,7 +126,7 @@ extern "C" const char *g_hud_char;
         NSString *prefix = isCat ? @"cat" : (isRabbit ? @"rabit" : @"girl");
         // v6.0.12：兔娘/猫娘身高修长，站姿放大到与萝莉【视觉面积相等】（同高150下内容宽：萝莉73/猫60/兔52，
         // 用 s 放大后包围盒面积≈1.1万：rabit s=1.4(H210/W52)、cat s=1.2(H180/W60)、girl s=1.0(H150/W73)，三者面积差<1%）
-        _charScale = isCat ? 1.2f : (isRabbit ? 1.4f : 1.0f);
+        _charScale = isCat ? 1.2f : (isRabbit ? 1.5f : 1.0f);   // v6.0.14：兔娘1.5 高于 猫娘1.2
         UIImage *idle  = [UIImage imageNamed:[NSString stringWithFormat:@"%@_idle", prefix]];
         UIImage *happy = [UIImage imageNamed:[NSString stringWithFormat:@"%@_happy", prefix]];
         UIImage *think = [UIImage imageNamed:[NSString stringWithFormat:@"%@_think", prefix]];
@@ -362,8 +362,8 @@ extern "C" const char *g_hud_char;
     // 改为"贴边判定"：中心距边 ≤ 半高/半宽+容差即视为贴边（拖到底/顶/左右都应触发趴墙）。
     CGFloat clampH = _girlView.frame.size.width / 2;
     CGFloat clampV = _girlView.frame.size.height / 2;
-    CGFloat reach = MAX(clampV, clampH) + 10;
-    if (minD > reach) { _girlView.transform = CGAffineTransformIdentity; return; }   // 离四边都太远，不吸附（并清镜像）
+    CGFloat reach = (minD == dL || minD == dR) ? clampH : clampV;   // v6.0.14：按方向用对应半尺寸（左右半宽/上下半高）、去掉+10容差——真正贴边才吸附，不提前虹吸
+    if (minD > reach) { _girlView.transform = CGAffineTransformIdentity; [self _startBreathing]; return; }   // 未贴边：待机并确保漂浮在
     UIImage *wallImg = nil;
     if (minD == dL || minD == dR) wallImg = _wallImageV;   // 左/右：竖直墙沿图
     else                          wallImg = _wallImage;    // 顶/底：水平墙沿图
@@ -382,6 +382,7 @@ extern "C" const char *g_hud_char;
     else if (minD == dT) { c.y = _girlView.frame.size.height / 2; _girlView.transform = CGAffineTransformIdentity; }
     else                 { c.y = v.height - _girlView.frame.size.height / 2; _girlView.transform = CGAffineTransformIdentity; }
     _girlView.center = c;
+    [_girlView.layer removeAnimationForKey:@"hudFloat"];   // v6.0.14：趴墙停止上下漂浮——底部/侧趴墙不再上下起伏
 }
 
 // 点击切表情：开心→思考→待机
@@ -392,7 +393,8 @@ extern "C" const char *g_hud_char;
     CGPoint center = _girlView.center;
     CGFloat size = (CGFloat)g_hud_size * _charScale;   // v6.0.12：乘角色放大系数（兔娘1.4/猫娘1.2）
     // v6.0.12：蹲坐/跪姿帧显示时按站姿缩小（不再比站姿大——用户要求蹲坐跪姿统一按站姿缩小）
-    if (_squatFrames && [_squatFrames containsObject:img]) size = size * 0.7f;
+    // v6.0.14：蹲坐/跪姿帧不再整体 ×0.7——头部/手臂面积与站姿保持一致
+    if (_liftFrames && [_liftFrames containsObject:img]) size = size * 0.8f;   // v6.0.14：悬空帧手脚张开占画面大，缩小显示使头部/手臂面积≈站姿
     CGFloat aspect = (img.size.height > 0) ? (img.size.width / img.size.height) : 1.0;
     CGFloat w = size * aspect;
     CGFloat h = size;
@@ -409,6 +411,7 @@ extern "C" const char *g_hud_char;
         _girlView.image = _idleFrames.firstObject;
         _girlView.transform = CGAffineTransformIdentity;
         [self _setFrameForImage:_idleFrames.firstObject];
+        [self _startBreathing];   // v6.0.14：从趴墙恢复待机，重启漂浮
         return;
     }
     static int seq = 0;
