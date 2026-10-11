@@ -114,6 +114,7 @@ extern "C" const char *g_hud_char;
     int _liftIdx;              // 悬空帧交替序号
     CGFloat _dragHalfW, _dragHalfH;   // v6.0.21：拖拽时帧的半宽/半高（吸附判定用拖拽帧尺寸，避免恢复待机后窄帧误判不贴边）
     BOOL _enableChest;         // v6.0.24：是否启用胸部呼吸动效（仅兔娘 rabit / 猫娘 cat，萝莉 girl 不做）
+    BOOL _isCatChar;           // v6.0.25：当前角色是猫娘（身材最修长，胸乳位置更高，用于胸部动效定位）
     CALayer *_chestLayer;   // v6.0.21：左胸呼吸层（mask 只显示左胸条带，心跳式脉冲鼓起，不再整身缩放）
     CALayer *_chestLayerR;  // v6.0.23：右胸呼吸层（mask 只显示右胸条带，与左胸同步脉冲）
 }
@@ -132,6 +133,7 @@ extern "C" const char *g_hud_char;
         // 用 s 放大后包围盒面积≈1.1万：rabit s=1.4(H210/W52)、cat s=1.2(H180/W60)、girl s=1.0(H150/W73)，三者面积差<1%）
         _charScale = isRabbit ? 1.2f : (isCat ? 1.4f : 1.0f);   // v6.0.15：猫娘1.4 高于 兔娘1.2 高于 萝莉1.0
         _enableChest = (isCat || isRabbit);   // v6.0.24：胸部呼吸仅兔娘/猫娘（萝莉 girl 不做）
+        _isCatChar = isCat;                   // v6.0.25：标记猫娘（胸乳位置更高）
         UIImage *idle  = [UIImage imageNamed:[NSString stringWithFormat:@"%@_idle", prefix]];
         UIImage *happy = [UIImage imageNamed:[NSString stringWithFormat:@"%@_happy", prefix]];
         UIImage *think = [UIImage imageNamed:[NSString stringWithFormat:@"%@_think", prefix]];
@@ -278,7 +280,8 @@ extern "C" const char *g_hud_char;
     CGFloat W = _girlView.bounds.size.width;
     CGFloat H = _girlView.bounds.size.height;
     if (W < 1 || H < 1) return;
-    CGFloat cy = H * 0.35f;            // v6.0.24：胸乳中心（修长角色，原0.42偏低落到腰腹）
+    // v6.0.25：胸乳位置按角色——兔娘身材修长胸乳≈35%；猫娘最修长(1.4)胸乳更高≈30%（原0.35对猫娘仍落到肚子）
+    CGFloat cy = _isCatChar ? H * 0.30f : H * 0.35f;
     CGFloat r = H * 0.075f;            // 胸乳圆半径（圆形柔边直径=0.15H）
     // 左胸 / 右胸（各自圆形柔边 mask，缩放锚点=各自胸乳圆心）
     _chestLayer  = [self _makeChestLayer:CGPointMake(W * 0.32f, cy) radius:r];
@@ -460,6 +463,11 @@ extern "C" const char *g_hud_char;
     CGFloat clampH = _dragHalfW > 0 ? _dragHalfW : _girlView.frame.size.width / 2;
     CGFloat clampV = _dragHalfH > 0 ? _dragHalfH : _girlView.frame.size.height / 2;
     CGFloat reach = (minD == dL || minD == dR) ? clampH : clampV;   // v6.0.14：按方向用对应半尺寸（左右半宽/上下半高）、去掉+10容差——真正贴边才吸附，不提前虹吸
+    // v6.0.25：吸附诊断日志（每次松手输出一行，连手机 log show 定位吸附根因）
+    NSLog(@"[HUDsnap] screen=%@ charScale=%.2f size=%.1f lift=%lu dragHW=(%.1f,%.1f) center=(%.1f,%.1f) dL=%.1f dR=%.1f dT=%.1f dB=%.1f clampH=%.1f clampV=%.1f reach=%.1f minD=%.1f",
+          NSStringFromCGSize([UIScreen mainScreen].bounds.size), _charScale, (CGFloat)g_hud_size,
+          (unsigned long)_liftFrames.count, _dragHalfW, _dragHalfH, c.x, c.y,
+          dL, dR, dT, dB, clampH, clampV, reach, minD);
     if (minD > reach) { _girlView.transform = CGAffineTransformIdentity; [self _startBreathing]; return; }   // 未贴边：待机并确保漂浮在
     UIImage *wallImg = nil;
     if (minD == dL || minD == dR) wallImg = _wallImageV;   // 左/右：竖直墙沿图
@@ -476,9 +484,8 @@ extern "C" const char *g_hud_char;
         : (CGFloat)g_hud_size * _charScale * 0.5;
     CGFloat wa = (wallImg.size.height > 0) ? (wallImg.size.width / wallImg.size.height) : 1.0;
     _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
-    // v6.0.24：顶部/底部趴墙让 wall 图内容贴底对齐显示（rabit/cat 的 wall 图角色画在画面中部、手扒底缘，
-    // 默认 aspectFit 居中显示会"悬在屏底上方、没贴实"；Bottom 对齐让角色贴到屏幕底边、趴墙探头更实）
-    if (wallImg == _wallImage) _girlView.contentMode = UIViewContentModeBottom;
+    // v6.0.24 撤销：UIViewContentModeBottom 是"内容不缩放、底部对齐"，会让 wall 原图(1024×1536)按原尺寸贴底→放大数倍。
+    // 改用 aspectFit 默认居中显示（v6.0.23 行为）；贴底对齐改用下面 roto 显示不在此处理（吸附/尺寸已由 bounds 决定）。
     // 吸附左缘→镜像面向左墙；右缘→正常面向右墙；上下→保持原方向
     if (minD == dL)      { c.x = _girlView.frame.size.width / 2; _girlView.transform = CGAffineTransformMakeScale(-1, 1); }
     else if (minD == dR) { c.x = v.width - _girlView.frame.size.width / 2; _girlView.transform = CGAffineTransformIdentity; }
