@@ -248,17 +248,22 @@ extern "C" const char *g_hud_char;
 - (void)_startBreathing {
     [_girlView.layer removeAllAnimations];   // 防重复调用叠加动画
     [self _setAnchorY:0.5f];   // v6.0.21：整身不再缩放，锚点回归中心（胸部呼吸改用独立胸部条带层）
-    // v6.0.18：上下漂浮加快（单程 0.7s，往返 1.4s——用户要求拖动悬浮时上下浮动加快）
+    [self _startFloatWithDuration:1.3f];   // v6.0.21：待机漂浮放慢回原速(单程1.3s)——用户:站立太快,原先慢速就很好
+    // v6.0.21：胸部局部呼吸动效——独立胸部条带层 scale，只有胸口鼓起、身体其他部分不动（不再整身缩放）
+    [self _startChestBreath];
+}
+
+// v6.0.21：上下漂浮统一入口——待机用慢速(单程1.3s)，悬浮/拖拽用快速(0.5s)
+- (void)_startFloatWithDuration:(CGFloat)dur {
+    [_girlView.layer removeAnimationForKey:@"hudFloat"];
     CABasicAnimation *anim = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
     anim.fromValue = @(0);
     anim.toValue = @(-14);
-    anim.duration = 0.7;
+    anim.duration = dur;
     anim.autoreverses = YES;
     anim.repeatCount = INFINITY;
     anim.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
     [_girlView.layer addAnimation:anim forKey:@"hudFloat"];
-    // v6.0.21：胸部局部呼吸动效——独立胸部条带层 scale，只有胸口鼓起、身体其他部分不动（不再整身缩放）
-    [self _startChestBreath];
 }
 
 // v6.0.21：胸部局部呼吸——在 _girlView 上叠一个"只显示胸口条带"的图层，对条带做 scale 鼓起，
@@ -355,6 +360,7 @@ extern "C" const char *g_hud_char;
         _isDragging = YES;
         [self _setAnchorY:0.5f];   // v6.0.18：拖拽/悬浮→中心锚点（悬浮不做胸部锚点）
         [self _stopChestBreath];   // v6.0.21：拖拽/悬浮停胸部呼吸（移除条带层）
+        [self _startFloatWithDuration:0.5f];   // v6.0.21：悬浮/拖拽上下浮动加快到0.5s单程
         _dragOffset = CGPointMake(p.x - _girlView.center.x, p.y - _girlView.center.y);
         // v6.0.12：拖起角色→显示"被凭空提起、挣扎"悬空帧（lift1/lift2 交替），不再一直显示待机
         if (_liftFrames.count) {
