@@ -462,7 +462,12 @@ extern "C" const char *g_hud_char;
     // 不再用恢复待机后的窄站姿半宽——否则 lift 半宽>站姿半宽、minD>reach 永不吸附（问题：贴左右墙不吸附）。
     CGFloat clampH = _dragHalfW > 0 ? _dragHalfW : _girlView.frame.size.width / 2;
     CGFloat clampV = _dragHalfH > 0 ? _dragHalfH : _girlView.frame.size.height / 2;
-    CGFloat reach = (minD == dL || minD == dR) ? clampH : clampV;   // v6.0.14：按方向用对应半尺寸（左右半宽/上下半高）、去掉+10容差——真正贴边才吸附，不提前虹吸
+    CGFloat reach = (minD == dL || minD == dR) ? clampH : clampV;   // v6.0.14：按方向用对应半尺寸（左右半宽/上下半高）
+    // v6.0.27：吸附容差+8pt——lift帧内容在bounds内居中留白，用户拖到"可见内容贴边"时中心距边>半尺寸导致永不吸附
+    // （兔娘右缘/兔娘猫娘底部不吸附）；8pt容差只在贴边8pt内触发，不影响"不提前虹吸"
+    reach += 8.0f;
+    // v6.0.27：顶部不吸附趴墙——拖到顶部仅待机（用户要求去掉所有角色顶部趴墙）
+    if (minD == dT) { _girlView.transform = CGAffineTransformIdentity; [self _startBreathing]; return; }
     // v6.0.25：吸附诊断日志（每次松手输出一行，连手机 log show 定位吸附根因）
     NSLog(@"[HUDsnap] screen=%@ charScale=%.2f size=%.1f lift=%lu dragHW=(%.1f,%.1f) center=(%.1f,%.1f) dL=%.1f dR=%.1f dT=%.1f dB=%.1f clampH=%.1f clampV=%.1f reach=%.1f minD=%.1f",
           NSStringFromCGSize([UIScreen mainScreen].bounds.size), _charScale, (CGFloat)g_hud_size,
@@ -479,9 +484,11 @@ extern "C" const char *g_hud_char;
     // v6.0.9：趴墙缩小显示——角色以平时一半高度贴在边缘（原用全高 size 导致趴墙角色过大、girl 底部/左右趴墙不贴合）。
     // 先设缩小尺寸，再按缩小后尺寸吸附，角色中心放屏幕边缘线、半身探出（企鹅趴墙探头效果）。
     // v6.0.21：顶/底趴墙在原50%基础上再缩25%(→37.5%)；左/右趴墙保持50%（用户只要求底部缩小）
-    // v6.0.26：三款趴墙高度统一以萝莉为标准——wallScale 固定 1.0，不再随 charScale 放大；
+    // v6.0.26：三款底部趴墙高度统一以萝莉为标准——wallScale 固定 1.0，不再随 charScale 放大；
     // 素材侧 rabit_wall/cat_wall 内容已缩到与 girl_wall 一致（内容高47%贴底），站姿放大(1.4/1.2/1.0)不受影响
-    CGFloat wallScale = 1.0f;
+    // v6.0.27：左右趴墙按角色放大恢复（MIN(charScale,1.2)）——用户反馈 v6.0.26 统一后猫娘左右趴墙缩小太多；
+    // 底部趴墙保持统一 1.0；顶部趴墙已整体移除
+    CGFloat wallScale = (wallImg == _wallImage) ? 1.0f : MIN(_charScale, 1.2f);
     CGFloat wallH = (wallImg == _wallImage)
         ? (CGFloat)g_hud_size * wallScale * 0.375
         : (CGFloat)g_hud_size * wallScale * 0.5;
