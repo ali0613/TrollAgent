@@ -40,7 +40,7 @@ final class SystemPrompts {
         ),
         Prompt(
             id: "default",
-            name: "默认模式",
+            name: "综合模式",
             desc: "Balanced mode for daily use. Step-by-step tool calling, concise natural replies.",
                         content: """
             === DEFAULT MODE (COLLABORATION) ===
