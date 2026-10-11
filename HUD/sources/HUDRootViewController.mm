@@ -288,13 +288,14 @@ extern "C" const char *g_hud_char;
     cl.position = CGPointMake(W/2, cy);
     [_girlView.layer addSublayer:cl];
     _chestLayer = cl;
-    CABasicAnimation *breath = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
-    breath.fromValue = @(1.0);
-    breath.toValue = @(1.08);   // 胸口局部鼓起幅度（视觉集中在胸口，不显整身）
-    breath.duration = 2.6;
-    breath.autoreverses = YES;
+    // v6.0.23：放大镜式脉冲——快速放大到峰值→停顿→快速恢复原状→停顿，循环（替代平滑正弦起伏）
+    // 节奏：0~0.12快放大, 0.12~0.42保持鼓起, 0.42~0.52快恢复, 0.52~1.0保持原状
+    CAKeyframeAnimation *breath = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
+    breath.values = @[@1.0f, @1.09f, @1.09f, @1.0f, @1.0f];
+    breath.keyTimes = @[@0.0f, @0.12f, @0.42f, @0.52f, @1.0f];
+    breath.duration = 1.8;
     breath.repeatCount = INFINITY;
-    breath.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    breath.calculationMode = kCAAnimationCubic;
     [cl addAnimation:breath forKey:@"chestScale"];
 }
 
