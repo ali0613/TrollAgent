@@ -252,6 +252,10 @@ struct SettingsView: View {
                          subtitle: "工具调用 · 成功/失败 · 导出给 AI 查看",
                          icon: "list.bullet.rectangle", color: .tmIndigo,
                          destination: AnyView(AuditLogView())),
+            SettingsItem(title: L10n.t("row_crash"),
+                         subtitle: "\(CrashCatcher.list().count) 条闪退记录",
+                         icon: "exclamationmark.triangle.fill", color: .red,
+                         destination: AnyView(CrashLogView())),
             SettingsItem(title: L10n.t("row_workspace"),
                          subtitle: "点开浏览目录 · 预览 · 复制路径 · 分享",
                          icon: "folder", color: .blue,
@@ -280,10 +284,6 @@ struct SettingsView: View {
             SettingsItem(title: L10n.t("version"),
                          subtitle: ver, icon: "number.circle.fill", color: .gray,
                          destination: nil),
-            SettingsItem(title: L10n.t("row_crash"),
-                         subtitle: "\(CrashCatcher.list().count) 条闪退记录",
-                         icon: "exclamationmark.triangle.fill", color: .red,
-                         destination: AnyView(CrashLogView())),
             // v4.3.29：一键更新——单行点击即 检查GitHub最新→下载→调起TrollStore安装
             // v4.3.39：发现新版时行尾显示红点提醒
             SettingsItem(title: L10n.t("row_check_update"),
