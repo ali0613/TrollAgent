@@ -58,7 +58,7 @@ struct GirlCharacterPickerView: View {
                 VStack {
                     HStack {
                         Text("小")
-                        Slider(value: $companion.floatSize, in: 100...200, step: 4)
+                        Slider(value: $companion.floatSize, in: 170...300, step: 5)
                         Text("大")
                     }
                     Text("当前尺寸：\(Int(companion.floatSize)) pt")
