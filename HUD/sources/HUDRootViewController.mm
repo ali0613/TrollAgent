@@ -118,6 +118,8 @@ extern "C" const char *g_hud_char;
     BOOL _isCatChar;           // v6.0.25：当前角色是猫娘（身材最修长，胸乳位置更高，用于胸部动效定位）
     CALayer *_chestLayer;   // v6.0.21：左胸呼吸层（mask 只显示左胸条带，心跳式脉冲鼓起，不再整身缩放）
     CALayer *_chestLayerR;  // v6.0.23：右胸呼吸层（mask 只显示右胸条带，与左胸同步脉冲）
+    UIImage *_fallImage;        // v6.0.25：松手掉落帧
+    BOOL _falling;              // 正在掉落动画中
 }
 
 + (BOOL)passthroughMode { return _passthrough; }
@@ -159,6 +161,9 @@ extern "C" const char *g_hud_char;
             if (lf) [lifts addObject:_trimTransparentPadding(lf)];
         }
         if (lifts.count) _liftFrames = lifts;
+        // v6.0.25：松手掉落帧
+        UIImage *fall = [UIImage imageNamed:[NSString stringWithFormat:@"%@_fall", prefix]];
+        if (fall) _fallImage = _trimTransparentPadding(fall);
         // v6.0.9：待机动作改为【有序循环】（用户要求：睁眼idle放第一 → 眯眼微笑帧穿插在睁眼后面 → 下蹲/坐姿 → 回睁眼，循环），不再随机挑帧。
         // 顺序即播放顺序：睁眼段(站立睁眼表情) → 眯眼段(闭眼微笑/弯月眼) → 蹲坐段(蹲/跪/坐/趴姿势)，播完回 idle 再从头循环。
         NSArray *moodNames = @[
@@ -441,13 +446,39 @@ extern "C" const char *g_hud_char;
     } else if (g.state == UIGestureRecognizerStateEnded || g.state == UIGestureRecognizerStateCancelled) {
         _isDragging = NO;
         [self _stopLiftTimer];
-        // v6.0.12：拖完先恢复待机，再判断吸附/扒墙
-        if (_liftFrames.count && _idleFrames.firstObject) {
-            _girlView.image = _idleFrames.firstObject;
+        // v6.0.25：松手掉落动画——显示坠落帧 → 1.2s缓慢下坠到底部 → 恢复站立
+        if (_fallImage && !_falling) {
+            _falling = YES;
+            _girlView.image = _fallImage;
             _girlView.transform = CGAffineTransformIdentity;
-            [self _setFrameForImage:_idleFrames.firstObject];
+            [self _setFrameForImage:_fallImage];
+            
+            // 计算目标Y：屏幕底部
+            CGSize v = [UIScreen mainScreen].bounds.size;
+            CGPoint endC = _girlView.center;
+            endC.y = v.height - _girlView.frame.size.height / 2;
+            
+            // 1.2s重力缓动下坠（EaseIn，越掉越快）
+            [UIView animateWithDuration:1.2 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
+                _girlView.center = endC;
+            } completion:^(BOOL finished) {
+                // 恢复站立idle
+                if (_idleFrames.firstObject) {
+                    _girlView.image = _idleFrames.firstObject;
+                    [self _setFrameForImage:_idleFrames.firstObject];
+                    [self _startBreathing];   // 恢复胸部呼吸动效
+                }
+                _falling = NO;
+            }];
+        } else {
+            // 兜底：没有fall帧就走原来的贴边逻辑
+            if (_liftFrames.count && _idleFrames.firstObject) {
+                _girlView.image = _idleFrames.firstObject;
+                _girlView.transform = CGAffineTransformIdentity;
+                [self _setFrameForImage:_idleFrames.firstObject];
+            }
+            [self _snapToEdge];
         }
-        [self _snapToEdge];   // v6.0.8：松手时靠近屏幕边缘则吸附并显示扒墙姿势
     }
 }
 
