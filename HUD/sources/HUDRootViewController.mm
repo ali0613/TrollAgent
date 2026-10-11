@@ -479,9 +479,9 @@ extern "C" const char *g_hud_char;
     // v6.0.9：趴墙缩小显示——角色以平时一半高度贴在边缘（原用全高 size 导致趴墙角色过大、girl 底部/左右趴墙不贴合）。
     // 先设缩小尺寸，再按缩小后尺寸吸附，角色中心放屏幕边缘线、半身探出（企鹅趴墙探头效果）。
     // v6.0.21：顶/底趴墙在原50%基础上再缩25%(→37.5%)；左/右趴墙保持50%（用户只要求底部缩小）
-    // v6.0.25：趴墙高度按角色限幅——猫娘站姿1.4若直接乘会让趴墙(78.75pt)比萝莉(56.25)高40%、突兀；
-    // 限到兔娘级(1.2)，猫娘趴墙与兔娘一致(67.5pt/90pt)，站姿放大不受影响
-    CGFloat wallScale = MIN(_charScale, 1.2f);
+    // v6.0.26：三款趴墙高度统一以萝莉为标准——wallScale 固定 1.0，不再随 charScale 放大；
+    // 素材侧 rabit_wall/cat_wall 内容已缩到与 girl_wall 一致（内容高47%贴底），站姿放大(1.4/1.2/1.0)不受影响
+    CGFloat wallScale = 1.0f;
     CGFloat wallH = (wallImg == _wallImage)
         ? (CGFloat)g_hud_size * wallScale * 0.375
         : (CGFloat)g_hud_size * wallScale * 0.5;
