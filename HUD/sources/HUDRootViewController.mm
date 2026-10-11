@@ -124,6 +124,10 @@ extern "C" const char *g_hud_char;
     BOOL _isClimbing;           // 正在攀爬中
     NSTimer *_climbTimer;        // 攀爬交替计时器
     int _climbIdx;              // 攀爬帧序号
+    UILabel *_bubbleLabel;       // v6.0.27：侧边趴墙卡通聊天气泡
+    NSTimer *_bubbleTimer;       // 气泡定时弹出计时器
+    BOOL _onSideWall;           // 是否在左右侧边趴墙
+    NSString *_charPrefix;      // v6.0.27：当前角色前缀（rabit/girl/cat）
 }
 
 + (BOOL)passthroughMode { return _passthrough; }
@@ -136,6 +140,7 @@ extern "C" const char *g_hud_char;
         BOOL isCat = (g_hud_char && strcmp(g_hud_char, "cat") == 0);
         BOOL isRabbit = (g_hud_char && strcmp(g_hud_char, "rabit") == 0);
         NSString *prefix = isCat ? @"cat" : (isRabbit ? @"rabit" : @"girl");
+        _charPrefix = prefix;   // v6.0.27：保存角色前缀，用于气泡文案
         // v6.0.12：兔娘/猫娘身高修长，站姿放大到与萝莉【视觉面积相等】（同高150下内容宽：萝莉73/猫60/兔52，
         // 用 s 放大后包围盒面积≈1.1万：rabit s=1.4(H210/W52)、cat s=1.2(H180/W60)、girl s=1.0(H150/W73)，三者面积差<1%）
         _charScale = isRabbit ? 1.2f : (isCat ? 1.4f : 1.0f);   // v6.0.15：猫娘1.4 高于 兔娘1.2 高于 萝莉1.0
@@ -582,6 +587,117 @@ extern "C" const char *g_hud_char;
             [self _startClimbing];
         });
     }
+    
+    // v6.0.27：左右侧边趴墙时启动气泡，其他位置停止气泡
+    if (minD == dL || minD == dR) {
+        _onSideWall = YES;
+        [self _startBubbleTimer];
+    } else {
+        _onSideWall = NO;
+        [self _stopBubbleTimer];
+    }
+}
+
+// v6.0.27：启动气泡定时器
+- (void)_startBubbleTimer {
+    [self _stopBubbleTimer];
+    // 隔5-10秒弹一次气泡
+    NSTimeInterval interval = 5.0 + arc4random_uniform(5000) / 1000.0;
+    _bubbleTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *t) {
+        [self _showRandomBubble];
+    }];
+}
+
+- (void)_stopBubbleTimer {
+    [_bubbleTimer invalidate];
+    _bubbleTimer = nil;
+    [_bubbleLabel removeFromSuperview];
+    _bubbleLabel = nil;
+}
+
+// v6.0.27：显示随机气泡
+- (void)_showRandomBubble {
+    if (!_onSideWall || _isDragging || _isClimbing || _falling) return;
+    
+    // 按角色选文案
+    NSArray *messages;
+    if ([_charPrefix isEqualToString:@"rabit"]) {
+        messages = @[
+            @"趴墙好累... 有没有人扶我一把",
+            @"这个位置看风景还不错",
+            @"你在看什么呢？",
+            @"要吃点东西吗？我肚子饿了"
+        ];
+    } else if ([_charPrefix isEqualToString:@"cat"]) {
+        messages = @[
+            @"哼... 才不是故意趴在这的！",
+            @"别误会！我只是歇一会！",
+            @"你... 你要看多久啊！",
+            @"摸头的话... 也不是不行啦"
+        ];
+    } else {
+        messages = @[
+            @"趴高高！看得到好远！",
+            @"这里好凉好舒服~",
+            @"要一起玩吗？",
+            @"肚子饿了... 想吃蛋糕"
+        ];
+    }
+    
+    NSString *msg = messages[arc4random_uniform((uint32_t)messages.count)];
+    
+    // 创建卡通气泡
+    if (!_bubbleLabel) {
+        _bubbleLabel = [[UILabel alloc] init];
+        _bubbleLabel.backgroundColor = [UIColor whiteColor];
+        _bubbleLabel.textColor = [UIColor darkGrayColor];
+        _bubbleLabel.font = [UIFont systemFontOfSize:14];
+        _bubbleLabel.numberOfLines = 0;
+        _bubbleLabel.layer.cornerRadius = 10;
+        _bubbleLabel.layer.masksToBounds = YES;
+        _bubbleLabel.layer.borderWidth = 1;
+        _bubbleLabel.layer.borderColor = [UIColor systemPinkColor].CGColor;
+        _bubbleLabel.alpha = 0;
+    }
+    
+    _bubbleLabel.text = msg;
+    [_bubbleLabel sizeToFit];
+    
+    // 调整气泡大小，加内边距
+    CGRect f = _bubbleLabel.frame;
+    f.size.width += 20;
+    f.size.height += 12;
+    _bubbleLabel.frame = f;
+    
+    // 气泡位置：在角色旁边
+    CGPoint c = _girlView.center;
+    CGSize v = [UIScreen mainScreen].bounds.size;
+    CGFloat bubbleX;
+    if (c.x < v.width / 2) {
+        // 左边缘趴墙，气泡放右边
+        bubbleX = c.x + _girlView.frame.size.width / 2 + 10;
+    } else {
+        // 右边缘趴墙，气泡放左边
+        bubbleX = c.x - _girlView.frame.size.width / 2 - 10 - f.size.width;
+    }
+    CGFloat bubbleY = c.y - f.size.height / 2;
+    _bubbleLabel.center = CGPointMake(bubbleX + f.size.width/2, bubbleY + f.size.height/2);
+    
+    if (!_bubbleLabel.superview) {
+        [self.view addSubview:_bubbleLabel];
+    }
+    
+    // 淡入淡出
+    [UIView animateWithDuration:0.3 animations:^{
+        _bubbleLabel.alpha = 1.0;
+    } completion:^(BOOL finished) {
+        [UIView animateWithDuration:0.3 delay:2.0 options:0 animations:^{
+            _bubbleLabel.alpha = 0;
+        } completion:^(BOOL finished) {
+            [_bubbleLabel removeFromSuperview];
+            _bubbleLabel = nil;
+        }];
+    }];
 }
 
 // v6.0.26：开始自动攀爬
