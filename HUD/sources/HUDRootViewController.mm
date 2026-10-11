@@ -113,6 +113,7 @@ extern "C" const char *g_hud_char;
     NSTimer *_liftTimer;       // 悬空挣扎交替计时器
     int _liftIdx;              // 悬空帧交替序号
     CGFloat _dragHalfW, _dragHalfH;   // v6.0.21：拖拽时帧的半宽/半高（吸附判定用拖拽帧尺寸，避免恢复待机后窄帧误判不贴边）
+    BOOL _enableChest;         // v6.0.24：是否启用胸部呼吸动效（仅兔娘 rabit / 猫娘 cat，萝莉 girl 不做）
     CALayer *_chestLayer;   // v6.0.21：左胸呼吸层（mask 只显示左胸条带，心跳式脉冲鼓起，不再整身缩放）
     CALayer *_chestLayerR;  // v6.0.23：右胸呼吸层（mask 只显示右胸条带，与左胸同步脉冲）
 }
@@ -130,6 +131,7 @@ extern "C" const char *g_hud_char;
         // v6.0.12：兔娘/猫娘身高修长，站姿放大到与萝莉【视觉面积相等】（同高150下内容宽：萝莉73/猫60/兔52，
         // 用 s 放大后包围盒面积≈1.1万：rabit s=1.4(H210/W52)、cat s=1.2(H180/W60)、girl s=1.0(H150/W73)，三者面积差<1%）
         _charScale = isRabbit ? 1.2f : (isCat ? 1.4f : 1.0f);   // v6.0.15：猫娘1.4 高于 兔娘1.2 高于 萝莉1.0
+        _enableChest = (isCat || isRabbit);   // v6.0.24：胸部呼吸仅兔娘/猫娘（萝莉 girl 不做）
         UIImage *idle  = [UIImage imageNamed:[NSString stringWithFormat:@"%@_idle", prefix]];
         UIImage *happy = [UIImage imageNamed:[NSString stringWithFormat:@"%@_happy", prefix]];
         UIImage *think = [UIImage imageNamed:[NSString stringWithFormat:@"%@_think", prefix]];
@@ -267,39 +269,49 @@ extern "C" const char *g_hud_char;
     [_girlView.layer addAnimation:anim forKey:@"hudFloat"];
 }
 
-// v6.0.21：胸部局部呼吸——两胸分别做"快速鼓一下-缩回"的心跳式脉冲（用户要求：两胸、放大镜一下一下）。
-// 在 _girlView 上叠两层"只显示各自左/右胸条带"的图层，各自 scale 鼓起，身体其他部分不动。
+// v6.0.21：胸部呼吸动效——两胸分别做"快速鼓一下-缩回"的心跳式脉冲（用户要求：两胸、放大镜一下一下）。
+// v6.0.24：仅兔娘/猫娘（萝莉不做）、仅站立姿势触发；位置对准胸乳（原0.42落到肚子/腰），mask 改【圆形径向渐变柔边】（不再方形切割感）。
 - (void)_startChestBreath {
     [_chestLayer removeFromSuperlayer]; _chestLayer = nil;
     [_chestLayerR removeFromSuperlayer]; _chestLayerR = nil;
-    if (!_girlView.image) return;
+    if (!_enableChest || !_girlView.image) return;
     CGFloat W = _girlView.bounds.size.width;
     CGFloat H = _girlView.bounds.size.height;
     if (W < 1 || H < 1) return;
-    CGFloat cy = H * 0.42f, band = H * 0.18f;   // 胸部区域：42% 锚点上下各9%高
-    CAKeyframeAnimation *pulseL = [self _chestPulse];
-    CAKeyframeAnimation *pulseR = [self _chestPulse];
-    // 左胸（x 0~0.46，中间留乳沟缝）
-    _chestLayer = [self _makeChestLayer:CGRectMake(0, cy - band/2, W * 0.46, band)];
-    [_chestLayer addAnimation:pulseL forKey:@"chestScale"];
-    // 右胸（x 0.54~1.0）
-    _chestLayerR = [self _makeChestLayer:CGRectMake(W * 0.54, cy - band/2, W * 0.46, band)];
-    [_chestLayerR addAnimation:pulseR forKey:@"chestScale"];
+    CGFloat cy = H * 0.35f;            // v6.0.24：胸乳中心（修长角色，原0.42偏低落到腰腹）
+    CGFloat r = H * 0.075f;            // 胸乳圆半径（圆形柔边直径=0.15H）
+    // 左胸 / 右胸（各自圆形柔边 mask，缩放锚点=各自胸乳圆心）
+    _chestLayer  = [self _makeChestLayer:CGPointMake(W * 0.32f, cy) radius:r];
+    [_chestLayer  addAnimation:[self _chestPulse] forKey:@"chestScale"];
+    _chestLayerR  = [self _makeChestLayer:CGPointMake(W * 0.68f, cy) radius:r];
+    [_chestLayerR addAnimation:[self _chestPulse] forKey:@"chestScale"];
 }
 
-// v6.0.23：创建单个胸部脉冲层——mask 只显示 maskRect 条带，铺满 bounds、锚点=胸区中心，供 scale 鼓起
-- (CALayer *)_makeChestLayer:(CGRect)maskRect {
+// v6.0.24：创建单个胸部脉冲层——contents 铺满 bounds，mask 为【圆形径向渐变柔边】（中心黑不透明→边缘渐变透明），
+// 缩放锚点=胸乳圆心、position 补偿使层仍铺满 bounds；scale 时只把圆内胸乳内容鼓起，边缘柔和无方形切割。
+- (CALayer *)_makeChestLayer:(CGPoint)center radius:(CGFloat)r {
+    CGFloat W = _girlView.bounds.size.width;
+    CGFloat H = _girlView.bounds.size.height;
     CALayer *cl = [CALayer layer];
     cl.frame = _girlView.bounds;
     cl.contents = (id)_girlView.image.CGImage;
     cl.contentsGravity = kCAGravityResizeAspect;
+    CGFloat d = r * 2;
     CALayer *mask = [CALayer layer];
-    mask.frame = maskRect;
-    mask.backgroundColor = [UIColor blackColor].CGColor;
+    mask.frame = CGRectMake(center.x - r, center.y - r, d, d);
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(d, d), NO, 0);
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGFloat comps[8] = {0,0,0,1, 0,0,0,0};   // 黑(不透明)→透明
+    CGFloat locs[2] = {0, 1};
+    CGGradientRef g = CGGradientCreateWithColorComponents(cs, comps, locs, 2);
+    CGContextDrawRadialGradient(ctx, g, CGPointMake(d/2, d/2), r*0.35f, CGPointMake(d/2, d/2), r, 0);
+    UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
+    mask.contents = (id)img.CGImage;
+    CGColorSpaceRelease(cs); CGGradientRelease(g); UIGraphicsEndImageContext();
     cl.mask = mask;
-    CGFloat cy = _girlView.bounds.size.height * 0.42f;
-    cl.anchorPoint = CGPointMake(0.5, cy/_girlView.bounds.size.height);
-    cl.position = CGPointMake(_girlView.bounds.size.width/2, cy);
+    cl.anchorPoint = CGPointMake(center.x / W, center.y / H);
+    cl.position = center;   // 使层仍铺满 bounds（frame.origin 归零）
     [_girlView.layer addSublayer:cl];
     return cl;
 }
@@ -464,6 +476,9 @@ extern "C" const char *g_hud_char;
         : (CGFloat)g_hud_size * _charScale * 0.5;
     CGFloat wa = (wallImg.size.height > 0) ? (wallImg.size.width / wallImg.size.height) : 1.0;
     _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
+    // v6.0.24：顶部/底部趴墙让 wall 图内容贴底对齐显示（rabit/cat 的 wall 图角色画在画面中部、手扒底缘，
+    // 默认 aspectFit 居中显示会"悬在屏底上方、没贴实"；Bottom 对齐让角色贴到屏幕底边、趴墙探头更实）
+    if (wallImg == _wallImage) _girlView.contentMode = UIViewContentModeBottom;
     // 吸附左缘→镜像面向左墙；右缘→正常面向右墙；上下→保持原方向
     if (minD == dL)      { c.x = _girlView.frame.size.width / 2; _girlView.transform = CGAffineTransformMakeScale(-1, 1); }
     else if (minD == dR) { c.x = v.width - _girlView.frame.size.width / 2; _girlView.transform = CGAffineTransformIdentity; }
@@ -493,7 +508,14 @@ extern "C" const char *g_hud_char;
     if (w > size) { w = size; h = w / aspect; }
     _girlView.bounds = CGRectMake(0, 0, w, h);
     _girlView.center = center;   // 保持中心，切换时不跳
-    if (_chestLayer || _chestLayerR) [self _startChestBreath];   // v6.0.23：切帧后按新 bounds 重建双胸条带层
+    // v6.0.24：仅站立姿势保留胸部动效——蹲坐/悬空/趴墙帧时移除（用户只要站立有）；站立帧按新 bounds 重建
+    if (_chestLayer || _chestLayerR) {
+        BOOL nonStand = (img == _wallImage || img == _wallImageV)
+                     || (_liftFrames && [_liftFrames containsObject:img])
+                     || (_squatFrames && [_squatFrames containsObject:img]);
+        if (nonStand) [self _stopChestBreath];
+        else          [self _startChestBreath];
+    }
 }
 - (void)_tap:(UITapGestureRecognizer *)g {
     if (_isDragging) return;
