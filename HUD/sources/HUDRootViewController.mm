@@ -113,7 +113,8 @@ extern "C" const char *g_hud_char;
     NSTimer *_liftTimer;       // 悬空挣扎交替计时器
     int _liftIdx;              // 悬空帧交替序号
     CGFloat _dragHalfW, _dragHalfH;   // v6.0.21：拖拽时帧的半宽/半高（吸附判定用拖拽帧尺寸，避免恢复待机后窄帧误判不贴边）
-    CALayer *_chestLayer;   // v6.0.21：胸部局部呼吸动效层（mask 只显示胸口条带，仅此处 scale 鼓起，不再整身缩放）
+    CALayer *_chestLayer;   // v6.0.21：左胸呼吸层（mask 只显示左胸条带，心跳式脉冲鼓起，不再整身缩放）
+    CALayer *_chestLayerR;  // v6.0.23：右胸呼吸层（mask 只显示右胸条带，与左胸同步脉冲）
 }
 
 + (BOOL)passthroughMode { return _passthrough; }
@@ -266,41 +267,57 @@ extern "C" const char *g_hud_char;
     [_girlView.layer addAnimation:anim forKey:@"hudFloat"];
 }
 
-// v6.0.21：胸部局部呼吸——在 _girlView 上叠一个"只显示胸口条带"的图层，对条带做 scale 鼓起，
-// mask 固定条带位置，下层完整身体不动。用户要求"胸部锚点放大缩小、不要整个人缩放"。
+// v6.0.21：胸部局部呼吸——两胸分别做"快速鼓一下-缩回"的心跳式脉冲（用户要求：两胸、放大镜一下一下）。
+// 在 _girlView 上叠两层"只显示各自左/右胸条带"的图层，各自 scale 鼓起，身体其他部分不动。
 - (void)_startChestBreath {
     [_chestLayer removeFromSuperlayer]; _chestLayer = nil;
+    [_chestLayerR removeFromSuperlayer]; _chestLayerR = nil;
     if (!_girlView.image) return;
     CGFloat W = _girlView.bounds.size.width;
     CGFloat H = _girlView.bounds.size.height;
     if (W < 1 || H < 1) return;
+    CGFloat cy = H * 0.42f, band = H * 0.18f;   // 胸部区域：42% 锚点上下各9%高
+    CAKeyframeAnimation *pulseL = [self _chestPulse];
+    CAKeyframeAnimation *pulseR = [self _chestPulse];
+    // 左胸（x 0~0.46，中间留乳沟缝）
+    _chestLayer = [self _makeChestLayer:CGRectMake(0, cy - band/2, W * 0.46, band)];
+    [_chestLayer addAnimation:pulseL forKey:@"chestScale"];
+    // 右胸（x 0.54~1.0）
+    _chestLayerR = [self _makeChestLayer:CGRectMake(W * 0.54, cy - band/2, W * 0.46, band)];
+    [_chestLayerR addAnimation:pulseR forKey:@"chestScale"];
+}
+
+// v6.0.23：创建单个胸部脉冲层——mask 只显示 maskRect 条带，铺满 bounds、锚点=胸区中心，供 scale 鼓起
+- (CALayer *)_makeChestLayer:(CGRect)maskRect {
     CALayer *cl = [CALayer layer];
     cl.frame = _girlView.bounds;
     cl.contents = (id)_girlView.image.CGImage;
     cl.contentsGravity = kCAGravityResizeAspect;
-    CGFloat cy = H * 0.42f, band = H * 0.16f;   // 胸口条带：42% 锚点上下各8%高
     CALayer *mask = [CALayer layer];
-    mask.frame = CGRectMake(0, cy - band/2, W, band);
+    mask.frame = maskRect;
     mask.backgroundColor = [UIColor blackColor].CGColor;
     cl.mask = mask;
-    // 缩放锚点=条带中心（胸口），设 position 补偿让条带仍铺满 bounds
-    cl.anchorPoint = CGPointMake(0.5, cy/H);
-    cl.position = CGPointMake(W/2, cy);
+    CGFloat cy = _girlView.bounds.size.height * 0.42f;
+    cl.anchorPoint = CGPointMake(0.5, cy/_girlView.bounds.size.height);
+    cl.position = CGPointMake(_girlView.bounds.size.width/2, cy);
     [_girlView.layer addSublayer:cl];
-    _chestLayer = cl;
-    // v6.0.23：放大镜式脉冲——快速放大到峰值→停顿→快速恢复原状→停顿，循环（替代平滑正弦起伏）
-    // 节奏：0~0.12快放大, 0.12~0.42保持鼓起, 0.42~0.52快恢复, 0.52~1.0保持原状
-    CAKeyframeAnimation *breath = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
-    breath.values = @[@1.0f, @1.09f, @1.09f, @1.0f, @1.0f];
-    breath.keyTimes = @[@0.0f, @0.12f, @0.42f, @0.52f, @1.0f];
-    breath.duration = 1.8;
-    breath.repeatCount = INFINITY;
-    breath.calculationMode = kCAAnimationCubic;
-    [cl addAnimation:breath forKey:@"chestScale"];
+    return cl;
+}
+
+// v6.0.23：心跳式脉冲——快速鼓起到1.12、快速缩回，停顿后循环（放大镜一下一下）
+- (CAKeyframeAnimation *)_chestPulse {
+    CAKeyframeAnimation *b = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
+    b.values = @[@1.0f, @1.12f, @1.0f, @1.0f];
+    b.keyTimes = @[@0.0f, @0.14f, @0.32f, @1.0f];
+    b.duration = 0.6;
+    b.repeatCount = INFINITY;
+    b.calculationMode = kCAAnimationCubic;
+    return b;
 }
 
 - (void)_stopChestBreath {
     [_chestLayer removeFromSuperlayer]; _chestLayer = nil;
+    [_chestLayerR removeFromSuperlayer]; _chestLayerR = nil;
 }
 
 // v6.0.9：待机自动切换表情——空闲时按 _moodFrames【顺序循环】取一帧显示约 1.2s（睁眼→眯眼→蹲坐→回睁眼），然后回 idle，再排下一次。
@@ -476,7 +493,7 @@ extern "C" const char *g_hud_char;
     if (w > size) { w = size; h = w / aspect; }
     _girlView.bounds = CGRectMake(0, 0, w, h);
     _girlView.center = center;   // 保持中心，切换时不跳
-    if (_chestLayer) [self _startChestBreath];   // v6.0.21：切帧后按新 bounds 重建胸部条带层
+    if (_chestLayer || _chestLayerR) [self _startChestBreath];   // v6.0.23：切帧后按新 bounds 重建双胸条带层
 }
 - (void)_tap:(UITapGestureRecognizer *)g {
     if (_isDragging) return;
