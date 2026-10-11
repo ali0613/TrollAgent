@@ -208,6 +208,12 @@ extern "C" const char *g_hud_char;
                                  (self.view.bounds.size.height - size)/2,
                                  w, size);
 
+    // v6.0.18：胸部呼吸锚点——把定位/缩放锚点从几何中心(0.5)移到胸部(0.42)，呼吸缩放以胸部为轴心(只带动胸口起伏)，
+    // 并补偿 position 保持几何中心视觉位置不变（_setFrameForImage 用 center 定位，读/设同一 position 即稳定）
+    CGPoint idleC = _girlView.center;
+    _girlView.layer.anchorPoint = CGPointMake(0.5, 0.42f);
+    _girlView.center = CGPointMake(idleC.x, idleC.y - 0.08f * _girlView.bounds.size.height);
+
     // v6.0.7：注册锁屏/解锁监听（锁屏隐藏悬浮、解锁恢复，抄 TrollSpeed）
     [self registerNotifications];
 
