@@ -36,15 +36,16 @@ enum ShellDiag {
 final class ShellExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "shell.exec",
-        summary: "Run shell command (terminal/CLI). Params: command(必填), timeout(默认30s/max120). 自动路由: 装包/解包/工具链/复杂脚本→Alpine(自动apk add, bind /ios_workspace /ios_containers); 纯文件/系统/网络→iOS原生. Use for: file ops, system info, network, text processing.",
+        summary: "Run shell command (terminal/CLI). Params: command(必填), timeout(默认20s/max120), runtime(auto/ios/alpine). 自动路由(auto默认): 装包/解包/工具链/复杂脚本→Alpine(自动apk add, bind /ios_workspace /ios_containers); 纯文件/系统/网络→iOS原生. Use for: file ops, system info, network, text processing.",
         parameters: [
             "command": "Shell command to execute (required)",
-            "timeout": "Timeout seconds (default 30, max 120)",
+            "timeout": "Timeout seconds (default 20, max 120)",
+            "runtime": "Optional String: force execution environment. 'auto'(默认)=按命令类型自动判断；'ios'=强制iOS原生(FileManager直连整个文件系统)；'alpine'=强制Alpine Linux(完整工具链，只能访问绑定目录). 选择原则: ①读iOS文件/统计缓存/系统信息→ios; ②装包/解包/编译/复杂脚本→alpine; ③不确定就auto，结果里看runtime_actual字段确认实际环境.",
             "reset_cwd": "Optional Bool: reset working dir to default (default false)",
             "limit": "Optional Int: result string truncation cap (default 16000 chars——覆盖多数分析输出；仍不够用 full=true). If diagnostics output is trimmed and the body is invisible, pass limit=20000 或更大；full=true 则不截断返回完整结果",
             "full": "Optional Bool: true=返回完整结果不截断 (慎用，大输出占满上下文)",
             "offset": "Optional Int: skip first N chars of output before showing (default 0), combine with limit to read a middle slice",
-            "env": "已弃用/忽略：环境由系统按命令类型自动路由(装包/解包deb/复杂脚本走Alpine，其余默认iOS原生)。python3/python 首词自动走原生 ARM64 CPython(能跑 numpy)；要 Alpine 版 Python 用 sh -c 'python3 ...'。不要手动传 env 切环境——你无选择权，环境路由是系统的。若确实需强制某环境请说明需求(如'在Alpine里装python')。"
+            "env": "已弃用：请用 runtime 参数代替。环境由系统按命令类型自动路由(装包/解包deb/复杂脚本走Alpine，其余默认iOS原生)。python3/python 首词自动走原生 ARM64 CPython(能跑 numpy)；要 Alpine 版 Python 用 runtime='alpine' + sh -c 'python3 ...'。"
         ],
         verified: true
     )
@@ -98,6 +99,12 @@ final class ShellExecTool: MCPTool {
         // 约 13s CPU 即触发系统 watchdog(Elapsed CPU time 超限)→ panic/重启/闪退。收紧默认超时 + ISH kill 兜底。
         let timeout = min(max((params["timeout"] as? Double) ?? 20, 1), 120)
         
+        // v6.0.28: 显式 runtime 参数（auto/ios/alpine），解决自动路由不透明的问题
+        // auto（默认）：按命令类型自动判断；ios：强制原生；alpine：强制 Alpine Linux
+        let runtimeParam = (params["runtime"] as? String)?.lowercased() ?? "auto"
+        let forceAlpine = (runtimeParam == "alpine")
+        let forceNative = (runtimeParam == "ios")
+        
         // v3.1.32: iOS 原生命令拦截——直接用 iOS FileManager 执行，不经过 Alpine
         // 这样就能访问整个 iOS 文件系统了！
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -149,7 +156,9 @@ final class ShellExecTool: MCPTool {
         // P2 环境自动路由：不再由 agent 手动 env 指定切环境（横跳旋钮拆掉）。
         // 系统按命令类型自动判定：需 Alpine 工具(装包/解包/脚本/python) → Alpine；
         // 其余默认走 iOS 原生。agent 传的 env 参数被忽略(仅作弱提示，见 description)。
-        if ShellExecTool.autoRouteNeedsAlpine(trimmed) {
+        // v6.0.28: 支持显式 runtime 参数强制指定环境（forceAlpine/forceNative）
+        let needsAlpine = forceAlpine || (!forceNative && ShellExecTool.autoRouteNeedsAlpine(trimmed))
+        if needsAlpine {
             // v3.3.4: ta (Native Offload）是宿主能力，与 Alpine 沙盒无关——
             // 即使判定 Alpine，ta 也走宿主路由，杜绝"环境漂移"。
             if trimmed == "ta" || trimmed.hasPrefix("ta ") {
@@ -181,6 +190,7 @@ final class ShellExecTool: MCPTool {
                 "stdout": stdout,
                 "cwd": ISHEngine.cwd,
                 "ios_native": false,
+                "runtime_actual": "alpine",   // v6.0.28: 标明实际运行环境
                 "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Alpine Linux environment (auto-routed: needs full toolchain). 缺工具时系统已自动 apk add 安装并重试一次。"
             ]
             if finalTimed { result["timed_out"] = true }
@@ -634,6 +644,8 @@ final class ShellExecTool: MCPTool {
     /// v3.7.7: 命令会先经 autoBind（自动 bind 主流 iOS 目录并改写为 /ios_*）——改写后 iOS 路径消失，
     /// guard 扫描不到即放行；仅当 autoBind 未覆盖的 iOS 路径（非 /var/mobile、/var/containers、/System 顶层）
     /// 或 bind 失败时，guard 才检查其能否被 autoBridge 桥接(>2MB/不存在)并拦截。
+    /// v6.0.28: 修复假零结果——增加 autoBind 范围检查：路径在 iOS 存在但不在 autoBind 范围内，
+    /// 直接拦截报错（原来放行导致 Alpine 读不到文件返回空，AI 误判为 0 字节）。
     /// 复用与 autoBridge 同一套 iOS 路径识别正则，保证护栏与桥接兜底判定一致。
     static func alpineIOSPathGuard(_ command: String) -> String? {
         let fm = FileManager.default
@@ -643,6 +655,12 @@ final class ShellExecTool: MCPTool {
         guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
         let ns = command as NSString
         let maxBytes = 2 * 1024 * 1024
+        // v6.0.28: autoBind 实际绑定的范围（与 ISHEngine.autoBind 保持一致）
+        let bindableRoots = [
+            "/var/mobile/Documents/Workspace",
+            "/var/containers",
+            "/System"
+        ]
         var seen = Set<String>()
         var blocked: [String] = []
         for m in re.matches(in: command, options: [], range: NSRange(location: 0, length: ns.length)) where m.numberOfRanges >= 3 {
@@ -653,8 +671,21 @@ final class ShellExecTool: MCPTool {
             if norm.contains("/alpine-rootfs/") { continue }
             // 已桥接成功的路径(出现在 /tmp/_bridge_ 下)不受此护栏约束
             if norm.hasPrefix("/tmp/_bridge_") { continue }
+            // v6.0.28: 先检查路径在 iOS 里存不存在
             guard fm.fileExists(atPath: norm) else {
                 blocked.append("\(norm) 不存在"); continue
+            }
+            // v6.0.28: 关键检查——这个路径是不是在 autoBind 范围内？
+            var isBindable = false
+            for root in bindableRoots {
+                if norm.hasPrefix(root) {
+                    isBindable = true
+                    break
+                }
+            }
+            if !isBindable {
+                blocked.append("\(norm) 不在 Alpine 自动绑定范围内（Alpine 读不到，会返回空/假零）")
+                continue
             }
             guard (try? fm.attributesOfItem(atPath: norm)[.type]) as? FileAttributeType == .typeRegular else {
                 blocked.append("\(norm) 非普通文件"); continue
@@ -665,8 +696,8 @@ final class ShellExecTool: MCPTool {
             }
         }
         guard !blocked.isEmpty else { return nil }
-        return "该命令将走 Alpine，引用了 Alpine 未能自动 bind 的 iOS 文件：\n" + blocked.joined(separator: "\n") +
-               "\n(v3.7.7: 主流 iOS 目录已自动 bind 直读，>2MB 大文件可直读；此提示仅当 bind 失败或路径不在自动 bind 范围内时出现)。请：① 确认路径在工作区(/var/mobile/Documents/Workspace)、/var/containers、/System 下（会被自动 bind）；App 数据容器用 bind_app 绑定；② 若在别处，先用原生 shell 直接访问；③ 分析二进制用 binary.symbols。"
+        return "该命令将走 Alpine，但引用了 Alpine 读不到的 iOS 文件（v6.0.28 新增检查，防止假零结果）：\n" + blocked.joined(separator: "\n") +
+               "\n解决方法：① 确认路径在自动绑定范围内（/var/mobile/Documents/Workspace、/var/containers、/System）；② App 数据容器路径（/var/mobile/Containers/...）不要用 Alpine，直接用 iOS 原生命令（ls/cat/du/df）；③ 其他路径先 cp 到 Workspace 再走 Alpine 分析。"
     }
     
     /// 按管道/分号/逻辑符拆分命令 (尊重引号），返回 [(命令段, 连接符)]，连接符: | ; && ||
