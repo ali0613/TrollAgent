@@ -446,15 +446,26 @@ extern "C" const char *g_hud_char;
     } else if (g.state == UIGestureRecognizerStateEnded || g.state == UIGestureRecognizerStateCancelled) {
         _isDragging = NO;
         [self _stopLiftTimer];
-        // v6.0.25：松手掉落动画——显示坠落帧 → 1.2s缓慢下坠到底部 → 恢复站立
-        if (_fallImage && !_falling) {
+        
+        // v6.0.25：先恢复待机帧
+        if (_liftFrames.count && _idleFrames.firstObject) {
+            _girlView.image = _idleFrames.firstObject;
+            _girlView.transform = CGAffineTransformIdentity;
+            [self _setFrameForImage:_idleFrames.firstObject];
+        }
+        
+        // 判断：拖到屏幕顶部松手才触发掉落动画，其他位置走原来的贴边吸附
+        CGSize v = [UIScreen mainScreen].bounds.size;
+        CGPoint c = _girlView.center;
+        CGFloat topY = _girlView.frame.size.height / 2;   // 顶部边缘的Y坐标
+        
+        if (_fallImage && !_falling && c.y <= topY + 50) {
+            // ✅ 拖到顶部松手 → 掉落动画
             _falling = YES;
             _girlView.image = _fallImage;
-            _girlView.transform = CGAffineTransformIdentity;
             [self _setFrameForImage:_fallImage];
             
-            // 计算目标Y：屏幕底部
-            CGSize v = [UIScreen mainScreen].bounds.size;
+            // 目标Y：屏幕底部
             CGPoint endC = _girlView.center;
             endC.y = v.height - _girlView.frame.size.height / 2;
             
@@ -471,12 +482,7 @@ extern "C" const char *g_hud_char;
                 _falling = NO;
             }];
         } else {
-            // 兜底：没有fall帧就走原来的贴边逻辑
-            if (_liftFrames.count && _idleFrames.firstObject) {
-                _girlView.image = _idleFrames.firstObject;
-                _girlView.transform = CGAffineTransformIdentity;
-                [self _setFrameForImage:_idleFrames.firstObject];
-            }
+            // ✅ 其他位置 → 走原来的贴边吸附逻辑（保留左右趴墙、底部趴墙等所有原有功能）
             [self _snapToEdge];
         }
     }
