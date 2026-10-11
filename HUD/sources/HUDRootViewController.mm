@@ -597,7 +597,11 @@ extern "C" const char *g_hud_char;
     _girlView.image = cf;
     [self _setFrameForImage:cf];
     
-    // 每隔0.4秒切换一次攀爬帧，同时往上移动一点
+    // 随机选择向上或向下攀爬
+    BOOL climbUp = (arc4random_uniform(2) == 0);   // 50%概率向上，50%向下
+    CGFloat moveStep = climbUp ? -20 : 20;   // 向上y减，向下y加
+    
+    // 每隔0.4秒切换一次攀爬帧，同时移动
     _climbTimer = [NSTimer scheduledTimerWithTimeInterval:0.4 repeats:YES block:^(NSTimer *t) {
         _climbIdx++;
         if (_climbIdx >= 4) {   // 爬4步就停，恢复趴墙
@@ -610,9 +614,13 @@ extern "C" const char *g_hud_char;
         _girlView.image = nextFrame;
         [self _setFrameForImage:nextFrame];
         
-        // 往上移动20pt
+        // 随机方向移动20pt
         CGPoint c = _girlView.center;
-        c.y -= 20;
+        c.y += moveStep;
+        // 边界检查：不能超出屏幕顶部或底部
+        CGSize v = [UIScreen mainScreen].bounds.size;
+        CGFloat halfH = _girlView.frame.size.height / 2;
+        c.y = MAX(halfH, MIN(c.y, v.height - halfH));
         _girlView.center = c;
     }];
 }
