@@ -117,7 +117,11 @@ struct SettingsView: View {
             SettingsItem(title: L10n.t("row_sys_prompts"),
                          subtitle: SystemPrompts.shared.selected.name,
                          icon: "text.book.closed.fill", color: .purple,
-                         destination: AnyView(SystemPromptsView()))
+                         destination: AnyView(SystemPromptsView())),
+            SettingsItem(title: L10n.t("row_dev_instructions"),
+                         subtitle: devInstructionsSubtitle(),
+                         icon: "doc.text.magnifyingglass", color: .orange,
+                         destination: AnyView(DeveloperInstructionsView()))
         ]))
 
         // 网络与抓包（v3.3.1：独立分组，不依赖开发者模式——普通用户也能直接看到抓包入口）
@@ -210,10 +214,6 @@ struct SettingsView: View {
                              subtitle: "伪装机型 · 注入生效",
                              icon: "iphone.gen3.radiowaves.left.and.right", color: .pink,
                              destination: AnyView(FakeDeviceView())),
-                SettingsItem(title: L10n.t("row_dev_instructions"),
-                             subtitle: devInstructionsSubtitle(),
-                             icon: "doc.text.magnifyingglass", color: .orange,
-                             destination: AnyView(DeveloperInstructionsView())),
                 SettingsItem(title: L10n.t("row_tool_policy"),
                              subtitle: "工具权限 · 系统权限 · 自动化",
                              icon: "lock.shield.fill", color: .green,
