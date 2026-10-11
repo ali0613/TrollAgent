@@ -281,9 +281,6 @@ struct SettingsView: View {
                          subtitle: LanguageManager.shared.language.displayName,
                          icon: "globe", color: .purple,
                          action: { showLanguagePicker = true }),
-            SettingsItem(title: L10n.t("version"),
-                         subtitle: ver, icon: "number.circle.fill", color: .gray,
-                         destination: nil),
             // v4.3.29：一键更新——单行点击即 检查GitHub最新→下载→调起TrollStore安装
             // v4.3.39：发现新版时行尾显示红点提醒
             SettingsItem(title: L10n.t("row_check_update"),
@@ -300,7 +297,10 @@ struct SettingsView: View {
                          action: {
                              mirrorsText = UpdateManager.shared.mirrorsText
                              showMirrorEditor = true
-                         })
+                         }),
+            SettingsItem(title: L10n.t("version"),
+                         subtitle: ver, icon: "number.circle.fill", color: .gray,
+                         destination: nil)
         ]
         groups.append(SettingsGroup(header: L10n.t("sec_about"), items: aboutItems))
 
