@@ -287,12 +287,21 @@ extern "C" const char *g_hud_char;
     CGFloat H = _girlView.bounds.size.height;
     if (W < 1 || H < 1) return;
     // v6.0.25：胸乳位置按角色——兔娘身材修长胸乳≈35%；猫娘最修长(1.4)胸乳更高≈30%（原0.35对猫娘仍落到肚子）
-    CGFloat cy = _isCatChar ? H * 0.30f : H * 0.35f;
+    // v6.0.27：猫娘胸乳瞄点修正——猫娘窄身(内容宽仅0.49W)，原0.32/0.68水平对称导致右胸0.68W落在手臂、间距0.36W偏大；
+    // 按 cat_idle 像素实测：左胸≈0.40W、右胸≈0.60W（间距0.20W）、右胸略高(0.28H vs 左0.30H，姿态右肩微抬)
     CGFloat r = H * 0.075f;            // 胸乳圆半径（圆形柔边直径=0.15H）
+    CGFloat xL, xR, cyL, cyR;
+    if (_isCatChar) {
+        xL = W * 0.40f;  xR = W * 0.60f;
+        cyL = H * 0.30f; cyR = H * 0.28f;
+    } else {
+        xL = W * 0.32f;  xR = W * 0.68f;   // 兔娘保持原瞄点
+        cyL = cyR = H * 0.35f;
+    }
     // 左胸 / 右胸（各自圆形柔边 mask，缩放锚点=各自胸乳圆心）
-    _chestLayer  = [self _makeChestLayer:CGPointMake(W * 0.32f, cy) radius:r];
+    _chestLayer  = [self _makeChestLayer:CGPointMake(xL, cyL) radius:r];
     [_chestLayer  addAnimation:[self _chestPulse] forKey:@"chestScale"];
-    _chestLayerR  = [self _makeChestLayer:CGPointMake(W * 0.68f, cy) radius:r];
+    _chestLayerR  = [self _makeChestLayer:CGPointMake(xR, cyR) radius:r];
     [_chestLayerR addAnimation:[self _chestPulse] forKey:@"chestScale"];
 }
 
