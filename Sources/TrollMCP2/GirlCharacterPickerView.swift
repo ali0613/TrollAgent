@@ -54,7 +54,19 @@ struct GirlCharacterPickerView: View {
                     .buttonStyle(PlainButtonStyle())
                 }
             }
-            Section(footer: Text("切换后自动重启桌面悬浮，显示所选角色。")) {
+            Section(header: Text("悬浮尺寸")) {
+                VStack {
+                    HStack {
+                        Text("小")
+                        Slider(value: $companion.floatSize, in: 100...200, step: 4)
+                        Text("大")
+                    }
+                    Text("当前尺寸：\(Int(companion.floatSize)) pt")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            Section(footer: Text("切换角色或调整尺寸后自动重启桌面悬浮生效。")) {
                 EmptyView()
             }
         }

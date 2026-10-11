@@ -25,8 +25,8 @@ struct SettingsGroup {
 struct SettingsView: View {
     @Environment(\.presentationMode) var presentationMode
     // v2.9.72：开发者模式开关，开启后显示高级选项
-    // v2.9.234：@AppStorage 持久化——之前 @State 只在创建时读一次,view重建会读到旧值(开发者模式偶发自动关闭)
-    @AppStorage("developer_mode") private var developerMode = false
+    // v6.0.28：默认开启，去掉开关UI
+    @AppStorage("developer_mode") private var developerMode = true
     // v2.9.76：语言选择弹窗
     @State private var showLanguagePicker = false
     // v2.9.84：聊天框「在设置中管理模型」→ 打开设置并自动跳到模型 API 页
@@ -200,28 +200,10 @@ struct SettingsView: View {
             color: .pink,
             destination: AnyView(HudSizeSettingsView())
         ))
-        // v2.9.72：开发者模式开关（固定显示，控制下方"开发者"分组）
-        controlItems.append(SettingsItem(
-            title: L10n.t("row_dev_mode"),
-            subtitle: developerMode ? "显示全部高级选项" : "开启后显示开发者选项",
-            icon: "hammer.circle.fill",
-            color: developerMode ? .green : .gray,
-            isOn: { developerMode },
-            onToggle: { on in
-                developerMode = on
-                UserDefaults.standard.set(on, forKey: "developer_mode")
-            }
-        ))
         groups.append(SettingsGroup(header: L10n.t("sec_control"), items: controlItems))
 
-        // 开发者
-        if developerMode {
-            var devItems: [SettingsItem] = [
-                SettingsItem(title: L10n.t("task_notify"),
-                             subtitle: L10n.t("task_notify_sub"),
-                             icon: "bell.badge.fill", color: .blue,
-                             isOn: { TaskNotify.shared.enabled },
-                             onToggle: { TaskNotify.shared.enabled = $0 }),
+        // 开发者（v6.0.28：默认开启，去掉开关）
+        var devItems: [SettingsItem] = [
                 // v4.3.53：图标主题功能彻底移除（含 Resources 残留图标文件）。
                 // 侧载环境下动态图标注册可能干扰 MobileIcons 图标缓存（分享面板崩溃嫌疑项）。
                 SettingsItem(title: L10n.t("row_device_fake"),
@@ -263,7 +245,6 @@ struct SettingsView: View {
                              destination: AnyView(KnowledgeBaseView()))
             ]
             groups.append(SettingsGroup(header: L10n.t("sec_dev"), items: devItems))
-        }
 
         // 安全
         groups.append(SettingsGroup(header: L10n.t("sec_security"), items: [

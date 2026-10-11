@@ -39,9 +39,16 @@ final class GirlCompanion: ObservableObject {
     @Published var selectedCharacter: GirlCharacter {
         didSet { UserDefaults.standard.set(selectedCharacter.rawValue, forKey: "trollmcp2.girl_character") }
     }
+    // v6.0.28：悬浮尺寸可调
+    @Published var floatSize: Double {
+        didSet { UserDefaults.standard.set(floatSize, forKey: "trollmcp2.girl_float_size") }
+    }
     private init() {
         enabled = UserDefaults.standard.bool(forKey: "trollmcp2.girl_companion_enabled")
         selectedCharacter = GirlCharacter.stored(rawValue: UserDefaults.standard.string(forKey: "trollmcp2.girl_character"))
+        // 默认148，范围100-200
+        floatSize = UserDefaults.standard.double(forKey: "trollmcp2.girl_float_size")
+        if floatSize <= 0 { floatSize = 148 }
     }
 }
 
