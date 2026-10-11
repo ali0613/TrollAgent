@@ -102,22 +102,23 @@ struct ChatView: View {
                         }
                     } else {
                         HStack(spacing: 14) {
-                            // v4.4.18：全局朗读开关——开着时 AI 流式回复自动朗读（右上角喇叭）
-                            Button(action: { withAnimation { tts.speakerEnabled.toggle() } }) {
-                                Image(systemName: tts.speakerEnabled ? "speaker.wave.2.fill" : "speaker.wave.2")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(tts.speakerEnabled ? .tmCyan : .secondary)
-                            }
-                            Button(action: enterSelection) {
-                                Image(systemName: "checkmark.circle")
-                                    .font(.system(size: 18, weight: .semibold))
-                            }
-                            .disabled(store.currentMessages.isEmpty)
                             Button(action: { store.newConversation() }) {
                                 // v4.4.11：新会话从 square.and.pencil 换 plus（更简洁，与勾选/菜单同线框风格）
                                 Image(systemName: "plus")
                                     .font(.system(size: 18, weight: .semibold))
                             }
+                            // v4.4.18：全局朗读开关——开着时 AI 流式回复自动朗读
+                            Button(action: { withAnimation { tts.speakerEnabled.toggle() } }) {
+                                Image(systemName: tts.speakerEnabled ? "speaker.wave.2.fill" : "speaker.wave.2")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(tts.speakerEnabled ? .tmCyan : .secondary)
+                            }
+                            // v6.0.28：勾选按钮移到最右侧
+                            Button(action: enterSelection) {
+                                Image(systemName: "checkmark.circle")
+                                    .font(.system(size: 18, weight: .semibold))
+                            }
+                            .disabled(store.currentMessages.isEmpty)
                         }
                     }
                 }
@@ -430,8 +431,8 @@ struct ChatView: View {
                     miniCard("bolt.fill", L10n.t("home_quick_automation"), L10n.t("home_quick_automation_sub"), [.blue, .purple], promptId: "default") {
                         runQuickPrompt("帮我创建一个自动化任务：每 5 分钟执行一次 ping，失败时提醒我")
                     }
-                    miniCard("wrench.and.screwdriver.fill", "一键开发环境", "安装 python3/git/vim/编译工具链", [.green, .blue], promptId: "developer") {
-                        runQuickPrompt("帮我用 shell.exec 一键安装基础开发环境：apk add python3 git vim curl build-base")
+                    miniCard("wrench.and.screwdriver.fill", "开发环境监测", "检测工具链安装状态与版本", [.green, .blue], promptId: "developer") {
+                        runQuickPrompt("检查当前开发环境：python3/git/vim/curl 版本，哪些已装哪些没装")
                     }
                 }
                 .padding(.horizontal, 20)
