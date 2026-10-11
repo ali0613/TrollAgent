@@ -113,6 +113,7 @@ extern "C" const char *g_hud_char;
     NSTimer *_liftTimer;       // 悬空挣扎交替计时器
     int _liftIdx;              // 悬空帧交替序号
     CGFloat _dragHalfW, _dragHalfH;   // v6.0.21：拖拽时帧的半宽/半高（吸附判定用拖拽帧尺寸，避免恢复待机后窄帧误判不贴边）
+    CGFloat _snapReachH, _snapReachV;  // v6.0.27：吸附距离按角色独立配置（左右/上下），与 lift 帧尺寸解耦——调 charScale/素材不再破坏吸附
     BOOL _enableChest;         // v6.0.24：是否启用胸部呼吸动效（仅兔娘 rabit / 猫娘 cat，萝莉 girl 不做）
     BOOL _isCatChar;           // v6.0.25：当前角色是猫娘（身材最修长，胸乳位置更高，用于胸部动效定位）
     CALayer *_chestLayer;   // v6.0.21：左胸呼吸层（mask 只显示左胸条带，心跳式脉冲鼓起，不再整身缩放）
@@ -132,6 +133,11 @@ extern "C" const char *g_hud_char;
         // v6.0.12：兔娘/猫娘身高修长，站姿放大到与萝莉【视觉面积相等】（同高150下内容宽：萝莉73/猫60/兔52，
         // 用 s 放大后包围盒面积≈1.1万：rabit s=1.4(H210/W52)、cat s=1.2(H180/W60)、girl s=1.0(H150/W73)，三者面积差<1%）
         _charScale = isRabbit ? 1.2f : (isCat ? 1.4f : 1.0f);   // v6.0.15：猫娘1.4 高于 兔娘1.2 高于 萝莉1.0
+        // v6.0.27：吸附距离按角色独立配置——该分开就分开（每角色独立值，可单独微调），与 lift 帧尺寸解耦；
+        // 值为"角色中心到边缘触发吸附的距离"，已含内容留白容差，调 charScale/素材不影响吸附判定
+        if (isCat)         { _snapReachH = 78.0f; _snapReachV = 92.0f; }   // 猫娘(1.4) 最修长，阈值最大
+        else if (isRabbit) { _snapReachH = 68.0f; _snapReachV = 80.0f; }   // 兔娘(1.2)
+        else               { _snapReachH = 58.0f; _snapReachV = 68.0f; }   // 萝莉(1.0)
         _enableChest = (isCat || isRabbit);   // v6.0.24：胸部呼吸仅兔娘/猫娘（萝莉 girl 不做）
         _isCatChar = isCat;                   // v6.0.25：标记猫娘（胸乳位置更高）
         UIImage *idle  = [UIImage imageNamed:[NSString stringWithFormat:@"%@_idle", prefix]];
@@ -462,10 +468,9 @@ extern "C" const char *g_hud_char;
     // 不再用恢复待机后的窄站姿半宽——否则 lift 半宽>站姿半宽、minD>reach 永不吸附（问题：贴左右墙不吸附）。
     CGFloat clampH = _dragHalfW > 0 ? _dragHalfW : _girlView.frame.size.width / 2;
     CGFloat clampV = _dragHalfH > 0 ? _dragHalfH : _girlView.frame.size.height / 2;
-    CGFloat reach = (minD == dL || minD == dR) ? clampH : clampV;   // v6.0.14：按方向用对应半尺寸（左右半宽/上下半高）
-    // v6.0.27：吸附容差+8pt——lift帧内容在bounds内居中留白，用户拖到"可见内容贴边"时中心距边>半尺寸导致永不吸附
-    // （兔娘右缘/兔娘猫娘底部不吸附）；8pt容差只在贴边8pt内触发，不影响"不提前虹吸"
-    reach += 8.0f;
+    // v6.0.27：吸附距离按角色独立配置（_snapReachH/_snapReachV，初始化时按角色分支赋值）——
+    // 与 lift 帧尺寸解耦，调 charScale/素材不再破坏吸附；clampH/clampV 仅保留用于诊断日志
+    CGFloat reach = (minD == dL || minD == dR) ? _snapReachH : _snapReachV;
     // v6.0.27：顶部不吸附趴墙——拖到顶部仅待机（用户要求去掉所有角色顶部趴墙）
     if (minD == dT) { _girlView.transform = CGAffineTransformIdentity; [self _startBreathing]; return; }
     // v6.0.25：吸附诊断日志（每次松手输出一行，连手机 log show 定位吸附根因）
