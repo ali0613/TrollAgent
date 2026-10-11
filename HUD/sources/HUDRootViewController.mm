@@ -207,12 +207,7 @@ extern "C" const char *g_hud_char;
     _girlView.frame = CGRectMake((self.view.bounds.size.width - w)/2,
                                  (self.view.bounds.size.height - size)/2,
                                  w, size);
-
-    // v6.0.18：胸部呼吸锚点——把定位/缩放锚点从几何中心(0.5)移到胸部(0.42)，呼吸缩放以胸部为轴心(只带动胸口起伏)，
-    // 并补偿 position 保持几何中心视觉位置不变（_setFrameForImage 用 center 定位，读/设同一 position 即稳定）
-    CGPoint idleC = _girlView.center;
-    _girlView.layer.anchorPoint = CGPointMake(0.5, 0.42f);
-    _girlView.center = CGPointMake(idleC.x, idleC.y - 0.08f * _girlView.bounds.size.height);
+    // 初始锚点=中心(0.5)，不偏移；胸部呼吸锚点(0.42)按状态在 _startBreathing 切换，趴墙/拖拽悬浮保持中心
 
     // v6.0.7：注册锁屏/解锁监听（锁屏隐藏悬浮、解锁恢复，抄 TrollSpeed）
     [self registerNotifications];
@@ -239,8 +234,18 @@ extern "C" const char *g_hud_char;
 // v6.0.7：上下漂浮动画（原来呼吸缩放改成上下飘——用户要求对齐 app 里的漂浮效果）
 // v6.0.8：改 CABasicAnimation（layer 级）——UIView animateWithDuration 的 block 在锁屏/解锁的
 // runloop 状态下可能不执行，导致解锁后悬浮在但不浮动；CABasicAnimation 直接操作 layer 更稳。
+// v6.0.18：按状态切换缩放锚点——待机呼吸用胸部锚点(0.42,呼吸以胸口为轴心)，趴墙/拖拽悬浮用中心锚点(0.5,保持原定位)。
+// 切换时补偿 position，保证几何中心视觉位置不变、不跳动。
+- (void)_setAnchorY:(CGFloat)ay {
+    CGFloat cur = _girlView.layer.anchorPoint.y;
+    if (fabs(cur - ay) < 0.001) return;
+    _girlView.layer.anchorPoint = CGPointMake(0.5, ay);
+    _girlView.center = CGPointMake(_girlView.center.x, _girlView.center.y + (ay - cur) * _girlView.bounds.size.height);
+}
+
 - (void)_startBreathing {
     [_girlView.layer removeAllAnimations];   // 防重复调用叠加动画
+    [self _setAnchorY:0.42f];   // v6.0.18：待机呼吸→胸部锚点（左右趴墙/悬浮不含）
     // v6.0.18：上下漂浮加快（单程 0.7s，往返 1.4s——用户要求拖动悬浮时上下浮动加快）
     CABasicAnimation *anim = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
     anim.fromValue = @(0);
@@ -317,6 +322,8 @@ extern "C" const char *g_hud_char;
     CGPoint p = [g locationInView:self.view];
     if (g.state == UIGestureRecognizerStateBegan) {
         _isDragging = YES;
+        [self _setAnchorY:0.5f];   // v6.0.18：拖拽/悬浮→中心锚点（悬浮不做胸部锚点）
+        [_girlView.layer removeAnimationForKey:@"breathScale"];   // v6.0.18：悬浮/拖拽停胸部呼吸缩放（仅保留上下飘）
         _dragOffset = CGPointMake(p.x - _girlView.center.x, p.y - _girlView.center.y);
         // v6.0.12：拖起角色→显示"被凭空提起、挣扎"悬空帧（lift1/lift2 交替），不再一直显示待机
         if (_liftFrames.count) {
@@ -370,6 +377,7 @@ extern "C" const char *g_hud_char;
 // v6.0.8：松手吸附到最近屏幕边缘（<threshold 才算）并切换扒墙姿势（企鹅趴墙探头）
 // 顶/底（水平边）用水平墙沿图 _wallImage；左/右（垂直边）用竖直墙沿图 _wallImageV。
 - (void)_snapToEdge {
+    [self _setAnchorY:0.5f];   // v6.0.18：趴墙→中心锚点（趴墙/悬浮不做胸部锚点）
     CGSize v = [UIScreen mainScreen].bounds.size;
     CGPoint c = _girlView.center;
     CGFloat dL = c.x, dR = v.width - c.x, dT = c.y, dB = v.height - c.y;
