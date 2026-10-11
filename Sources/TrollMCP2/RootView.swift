@@ -358,30 +358,30 @@ struct ConversationDrawerView: View {
     private var bottomWorkbench: some View {
         // v2.9.10：圆角卡片式底部工具栏（环境入口 + 设置齿轮）
         // v2.9.76：就绪图标美化——渐变圆环 + 脉冲点 + 波浪扫描
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Button(action: { showDevice = true }) {
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     ZStack {
                         Circle()
                             .fill((deviceReady == true ? Color.green : Color.orange).opacity(0.14))
-                            .frame(width: 32, height: 32)
+                            .frame(width: 44, height: 44)
                         Circle()
                             .stroke(
                                 (deviceReady == true ? Color.green : Color.orange).opacity(0.35),
-                                lineWidth: 2
+                                lineWidth: 2.5
                             )
-                            .frame(width: 32, height: 32)
+                            .frame(width: 44, height: 44)
                         Image(systemName: deviceReady == true ? "checkmark" : "exclamationmark")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(size: 18, weight: .bold))
                             .foregroundColor(deviceReady == true ? .green : .orange)
                     }
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(readinessText)
-                            .font(.footnote)
+                            .font(.subheadline)
                             .fontWeight(.medium)
                             .foregroundColor(deviceReady == true ? .green : .orange)
                         Text(failureHint)
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
@@ -395,23 +395,23 @@ struct ConversationDrawerView: View {
                 ui.settingsPresented = true
             }) {
                 Image(systemName: "gearshape.fill")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(.primary)
-                    .frame(width: 38, height: 38)
+                    .frame(width: 52, height: 52)
                     .background(Color(.secondarySystemBackground))
-                    .cornerRadius(11)
+                    .cornerRadius(14)
                     .contentShape(Rectangle())
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: 16)
                 .fill(Color(.systemBackground))
                 .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 2)
         )
         .padding(.horizontal, 10)
-        .padding(.bottom, 8)
+        .padding(.bottom, 24)
     }
 
     static let formatter: DateFormatter = {
