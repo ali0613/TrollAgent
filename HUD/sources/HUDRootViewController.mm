@@ -258,8 +258,8 @@ extern "C" const char *g_hud_char;
     // v6.0.18：胸部呼吸动效——整体轻微缩放(放大↔缩小)循环，模拟胸口呼吸起伏；与上下飘(layer级)共存
     CABasicAnimation *breath = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
     breath.fromValue = @(1.0);
-    breath.toValue = @(1.035);
-    breath.duration = 3.0;
+    breath.toValue = @(1.06);   // v6.0.19：呼吸幅度加大(原1.035太弱看不出)，让胸口起伏明显可见
+    breath.duration = 2.6;
     breath.autoreverses = YES;
     breath.repeatCount = INFINITY;
     breath.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
@@ -332,7 +332,10 @@ extern "C" const char *g_hud_char;
             _girlView.image = _liftFrames.firstObject;
             _girlView.transform = CGAffineTransformIdentity;
             [self _setFrameForImage:_liftFrames.firstObject];
-            _liftTimer = [NSTimer scheduledTimerWithTimeInterval:0.18 target:self selector:@selector(_liftTick) userInfo:nil repeats:YES];
+            _liftTimer = [NSTimer timerWithTimeInterval:0.18 target:self selector:@selector(_liftTick) userInfo:nil repeats:YES];
+            // v6.0.19：加入 CommonModes——scheduledTimer 默认在 default mode，拖拽时 runloop 切 UITrackingRunLoopMode
+            // 定时器不触发，悬空帧永不交替(一直显示 lift1)。CommonModes 让 tracking 下也能交替。
+            [[NSRunLoop mainRunLoop] addTimer:_liftTimer forMode:NSRunLoopCommonModes];
         } else if (_girlView.image != _idleFrames.firstObject && _idleFrames.firstObject) {
             // 无悬空帧：从吸附/扒墙状态开始拖动，先恢复待机图
             _girlView.image = _idleFrames.firstObject;
@@ -418,7 +421,8 @@ extern "C" const char *g_hud_char;
     CGPoint center = _girlView.center;
     CGFloat size = (CGFloat)g_hud_size * _charScale;   // v6.0.12：乘角色放大系数（兔娘1.4/猫娘1.2）
     // v6.0.17：蹲坐/跪姿帧整体 ×0.55——按用户最终定案（蹲坐原图比站姿大太多，缩到用户认可的协调比例）
-    if (_squatFrames && [_squatFrames containsObject:img]) size = size * 0.55f;
+    // v6.0.19：蹲坐/跪姿帧整体 ×0.7——用户从0.55回调（0.55太小说不清表情，0.7居中协调）
+    if (_squatFrames && [_squatFrames containsObject:img]) size = size * 0.7f;
     if (_liftFrames && [_liftFrames containsObject:img]) size = size * 0.8f;   // v6.0.14：悬空帧手脚张开占画面大，缩小显示使头部/手臂面积≈站姿
     CGFloat aspect = (img.size.height > 0) ? (img.size.width / img.size.height) : 1.0;
     CGFloat w = size * aspect;
