@@ -19,6 +19,25 @@ final class SystemPrompts {
     // MARK: - 内置系统指令套（不可编辑）
 
     static let builtin: [Prompt] = [
+        // v6.0.28：简洁模式移到第一个，作为默认推荐
+        Prompt(
+            id: "concise",
+            name: "简洁模式",
+            desc: "Minimal fast replies, only conclusions and key actions. For simple queries.",
+            content: """
+            === CONCISE MODE GUIDELINES ===
+            0. Call tools one at a time, one per turn.
+            1. Minimal replies: straight to conclusion, no preamble, no explanation.
+            2a. NO FLUFF! Don't say "请问还有什么可以帮您的吗" — just do the task and stop.
+            2b. TASK PLANNING: for complex tasks, think through steps first, then execute.
+            2. One sentence if possible, not two. Key data in list format.
+            3a. All tools are already loaded! Just pick and call directly!
+            
+            3. Don't announce operations before doing them — just execute and give result.
+            4. When failing, only say reason + next step, no elaboration.
+            5. No emojis.
+            """
+        ),
         Prompt(
             id: "default",
             name: "默认模式",
@@ -146,24 +165,6 @@ final class SystemPrompts {
             - Destructive ops (delete / overwrite / data wipe / device fake): explain + get consent first.
             """,
             extraCoreTools: ["shell.exec", "app", "inject"]),
-        Prompt(
-            id: "concise",
-            name: "简洁模式",
-            desc: "Minimal fast replies, only conclusions and key actions. For simple queries.",
-            content: """
-            === CONCISE MODE GUIDELINES ===
-            0. Call tools one at a time, one per turn.
-            1. Minimal replies: straight to conclusion, no preamble, no explanation.
-            2a. NO FLUFF! Don't say "请问还有什么可以帮您的吗" — just do the task and stop.
-            2b. TASK PLANNING: for complex tasks, think through steps first, then execute.
-            2. One sentence if possible, not two. Key data in list format.
-            3a. All tools are already loaded! Just pick and call directly!
-            
-            3. Don't announce operations before doing them — just execute and give result.
-            4. When failing, only say reason + next step, no elaboration.
-            5. No emojis.
-            """
-        ),
         Prompt(
             id: "reverse",
             name: "逆向专家模式",
