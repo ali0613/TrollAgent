@@ -102,23 +102,23 @@ struct ChatView: View {
                         }
                     } else {
                         HStack(spacing: 14) {
-                            Button(action: { store.newConversation() }) {
-                                // v4.4.11：新会话从 square.and.pencil 换 plus（更简洁，与勾选/菜单同线框风格）
-                                Image(systemName: "plus")
-                                    .font(.system(size: 18, weight: .semibold))
-                            }
                             // v4.4.18：全局朗读开关——开着时 AI 流式回复自动朗读
                             Button(action: { withAnimation { tts.speakerEnabled.toggle() } }) {
                                 Image(systemName: tts.speakerEnabled ? "speaker.wave.2.fill" : "speaker.wave.2")
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundColor(tts.speakerEnabled ? .tmCyan : .secondary)
                             }
-                            // v6.0.28：勾选按钮移到最右侧
+                            // 勾选/选择按钮
                             Button(action: enterSelection) {
                                 Image(systemName: "checkmark.circle")
                                     .font(.system(size: 18, weight: .semibold))
                             }
                             .disabled(store.currentMessages.isEmpty)
+                            // v6.0.28：加号按钮移到最右侧（新建会话）
+                            Button(action: { store.newConversation() }) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 18, weight: .semibold))
+                            }
                         }
                     }
                 }
