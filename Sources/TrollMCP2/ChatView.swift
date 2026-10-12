@@ -83,9 +83,16 @@ struct ChatView: View {
                     if selectionMode {
                         Button("取消") { exitSelection() }
                     } else {
-                        Button(action: { withAnimation { AppUIState.shared.drawerOpen.toggle() } }) {
-                            Image(systemName: "line.horizontal.3")
-                                .font(.system(size: 18, weight: .semibold))
+                        HStack(spacing: 14) {
+                            Button(action: { withAnimation { AppUIState.shared.drawerOpen.toggle() } }) {
+                                Image(systemName: "line.horizontal.3")
+                                    .font(.system(size: 18, weight: .semibold))
+                            }
+                            // v6.0.28：加号按钮放在左边（三横线后面，新建会话）
+                            Button(action: { store.newConversation() }) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 18, weight: .semibold))
+                            }
                         }
                     }
                 }
@@ -114,11 +121,6 @@ struct ChatView: View {
                                     .font(.system(size: 18, weight: .semibold))
                             }
                             .disabled(store.currentMessages.isEmpty)
-                            // v6.0.28：加号按钮移到最右侧（新建会话）
-                            Button(action: { store.newConversation() }) {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 18, weight: .semibold))
-                            }
                         }
                     }
                 }
