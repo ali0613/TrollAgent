@@ -602,8 +602,8 @@ extern "C" const char *g_hud_char;
 // v6.0.27：启动气泡定时器
 - (void)_startBubbleTimer {
     [self _stopBubbleTimer];
-    // 隔5-10秒弹一次气泡
-    NSTimeInterval interval = 5.0 + arc4random_uniform(5000) / 1000.0;
+    // v6.0.28：隔30-60秒弹一次气泡，不要太频繁
+    NSTimeInterval interval = 30.0 + arc4random_uniform(30000) / 1000.0;
     _bubbleTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *t) {
         [self _showRandomBubble];
     }];
@@ -621,9 +621,56 @@ extern "C" const char *g_hud_char;
 - (void)_showRandomBubble {
     if (!_onSideWall || _isDragging || _isClimbing || _falling) return;
     
-    // 按角色选文案（v6.0.28：每个角色58条）
-    NSArray *messages;
-    if ([_charPrefix isEqualToString:@"rabit"]) {
+    // v6.0.28：按时间段选问候（早/中/晚/深夜）
+    NSCalendar *cal = [NSCalendar currentCalendar];
+    NSDateComponents *comps = [cal components:NSHourCalendarUnit fromDate:[NSDate date]];
+    NSInteger hour = comps.hour;
+    NSArray *timeGreetings;
+    if (hour >= 6 && hour < 11) {
+        // 早上
+        if ([_charPrefix isEqualToString:@"rabit"]) {
+            timeGreetings = @[@"早上好呀～ 新的一天开始啦", @"早安！今天也要元气满满哦", @"起床了吗？记得吃早餐哦", @"早上好主人，昨晚睡得好吗？"];
+        } else if ([_charPrefix isEqualToString:@"cat"]) {
+            timeGreetings = @[@"...哼，早上好", @"这么早叫我干嘛...哦，该吃饭了？", @"早安...别烦我，我还没睡醒", @"哼，人类早上就是麻烦"];
+        } else {
+            timeGreetings = @[@"早安呀！太阳晒屁股啦", @"早上好！今天要玩什么？", @"起床起床！陪我玩嘛", @"早上好哥哥/姐姐！"];
+        }
+    } else if (hour >= 11 && hour < 14) {
+        // 中午
+        if ([_charPrefix isEqualToString:@"rabit"]) {
+            timeGreetings = @[@"中午啦～ 记得吃午饭哦", @"午饭吃了吗？别饿肚子", @"中午好，工作歇一会吧", @"该吃饭啦，别太累着自己"];
+        } else if ([_charPrefix isEqualToString:@"cat"]) {
+            timeGreetings = @[@"哼，该喂饭了吧？", @"中午了，我要吃小鱼干", @"人类，你午饭吃什么？给我也来点", @"...好吧，中午了，勉强打个招呼"];
+        } else {
+            timeGreetings = @[@"中午好！我要吃午饭！", @"肚子饿了～ 要吃饭饭", @"中午啦，我们一起吃饭好不好？", @"哥哥/姐姐 吃了吗？"];
+        }
+    } else if (hour >= 18 && hour < 22) {
+        // 晚上
+        if ([_charPrefix isEqualToString:@"rabit"]) {
+            timeGreetings = @[@"晚上好呀～ 今天辛苦了", @"下班了吗？好好休息一下", @"晚上好，我等你好久了", @"晚安之前，我会一直陪着你"];
+        } else if ([_charPrefix isEqualToString:@"cat"]) {
+            timeGreetings = @[@"哼，晚上了，该陪我玩了", @"晚上好...你终于回来了", @"这个点才回来？我都等饿了", @"...晚上好，就勉强理你一下"];
+        } else {
+            timeGreetings = @[@"晚上好！欢迎回来～", @"陪我玩嘛，白天好无聊", @"晚上吃什么好吃的？", @"我好想你呀！"];
+        }
+    } else {
+        // 深夜/凌晨
+        if ([_charPrefix isEqualToString:@"rabit"]) {
+            timeGreetings = @[@"这么晚还没睡呀？早点休息哦", @"别熬夜啦，对身体不好", @"晚安，做个好梦", @"我会在这里陪着你，快睡吧"];
+        } else if ([_charPrefix isEqualToString:@"cat"]) {
+            timeGreetings = @[@"...大半夜的，你还不睡？", @"哼，熬夜对身体不好哦...才不是关心你", @"快睡吧，我困了", @"晚安...别吵我"];
+        } else {
+            timeGreetings = @[@"好晚呀... 我困了", @"要睡觉觉啦，晚安", @"哥哥/姐姐 早点睡好不好？", @"我打哈欠了，该睡了"];
+        }
+    }
+    
+    // 50%概率弹出时间段问候，50%弹出普通台词
+    BOOL showTimeGreeting = (arc4random_uniform(2) == 0);
+    if (showTimeGreeting) {
+        messages = timeGreetings;
+    } else {
+        // 按角色选普通文案（v6.0.28：每个角色58条）
+        if ([_charPrefix isEqualToString:@"rabit"]) {
         messages = @[
             @"趴墙好累... 有没有人扶我一把",
             @"这个位置看风景还不错",
@@ -806,6 +853,7 @@ extern "C" const char *g_hud_char;
             @"太棒了！",
             @"耶！"
         ];
+        }
     }
     
     NSString *msg = messages[arc4random_uniform((uint32_t)messages.count)];
