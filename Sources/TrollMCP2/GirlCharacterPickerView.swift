@@ -68,7 +68,8 @@ struct GirlCharacterPickerView: View {
                 .onChange(of: companion.floatSize) { _ in
                     // 尺寸变化后自动重启HUD生效
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        HUDManager.shared.restart()
+                        _ = HUDManager.shared.stop()
+                        _ = HUDManager.shared.start()
                     }
                 }
             }
@@ -83,7 +84,8 @@ struct GirlCharacterPickerView: View {
                 .onChange(of: companion.bubbleStyle) { _ in
                     // 气泡样式变化后自动重启HUD生效
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        HUDManager.shared.restart()
+                        _ = HUDManager.shared.stop()
+                        _ = HUDManager.shared.start()
                     }
                 }
             }
