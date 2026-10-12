@@ -433,6 +433,9 @@ final class SystemPrompts {
     - ENVIRONMENT ROUTING (auto): default is iOS native; auto-routes to Alpine when a command needs apk add/tar/git/
       sh -c/full scripts. python3 defaults to native CPython; force Alpine with `sh -c 'python3 ...'`. Never pass env
       to switch (ignored); never write env:alpine/env:ios prefixes (cause "not found").
+      iOS-only commands (plutil etc) → use runtime="ios"; scripts/loops/git/vim → use runtime="alpine" (paths use /ios_* prefix).
+      If you see "native pipe not supported / no URL parsed / syntax error unexpected do", first suspect routing mismatch,
+      switch runtime and retry — don't treat it as an environment failure.
     - COMMAND EXISTENCE (v4.5.9, 实测边界): App 视角下 `ls /usr/bin` 目录枚举只显示系统 daemon 子集
       (swift-inspect/sysdiagnose 等)，常用命令(chmod/ls/cp/launchctl)不会出现在目录列表里——但【直接路径访问正常】。
       确认某命令是否存在，用 `command -v <名>` 或 `ls -la /usr/bin/<名>` / `/usr/sbin/<名>`；【不要】用 `ls <目录>` 枚举
