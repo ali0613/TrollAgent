@@ -267,23 +267,13 @@ struct SettingsView: View {
                          subtitle: LanguageManager.shared.language.displayName,
                          icon: "globe", color: .purple,
                          action: { showLanguagePicker = true }),
-            // v4.3.29：一键更新——单行点击即 检查GitHub最新→下载→调起TrollStore安装
+            // v4.3.29：一键更新——单行点击即进入更新页面（里面包含检查更新和镜像源设置）
             // v4.3.39：发现新版时行尾显示红点提醒
             SettingsItem(title: L10n.t("row_check_update"),
                          subtitle: updateSubtitle(),
                          icon: "arrow.triangle.2.circlepath.circle.fill", color: .green,
-                         action: {
-                             updateManager.updateNow(currentVersion: ver)
-                         },
+                         destination: AnyView(UpdateView()),
                          redDot: { UpdateManager.shared.hasUpdateRedDot }),
-            // v4.3.30：多源镜像配置——GitHub 被墙时备用通道
-            SettingsItem(title: "更新镜像源",
-                         subtitle: mirrorSubtitle(),
-                         icon: "arrow.triangle.branch", color: .orange,
-                         action: {
-                             mirrorsText = UpdateManager.shared.mirrorsText
-                             showMirrorEditor = true
-                         }),
             SettingsItem(title: L10n.t("version"),
                          subtitle: ver, icon: "number.circle.fill", color: .gray,
                          destination: nil)
@@ -533,6 +523,103 @@ struct LabeledRow: View {
                 .foregroundColor(.secondary)
                 .font(.system(.footnote, design: .monospaced))
         }
+    }
+}
+
+// v6.0.28：更新页面（包含检查更新和更新镜像源设置）
+struct UpdateView: View {
+    @ObservedObject private var updateManager = UpdateManager.shared
+    @State private var showMirrorEditor = false
+    @State private var mirrorsText = ""
+    
+    private var currentVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+    }
+    
+    private var updateSubtitle: String {
+        if updateManager.isChecking { return "正在检查更新…" }
+        if let p = updateManager.downloadProgress { return "正在下载 v\(updateManager.latestVersion ?? "")… \(Int(p*100))%" }
+        if updateManager.updateAvailable, let v = updateManager.latestVersion {
+            return "发现新版本 v\(v) · 点下方按钮更新"
+        }
+        if let s = updateManager.installMessage, !s.isEmpty { return s }
+        return "已是最新版本"
+    }
+    
+    var body: some View {
+        List {
+            Section(header: Text("更新状态")) {
+                HStack {
+                    Text("当前版本")
+                    Spacer()
+                    Text(currentVersion)
+                        .foregroundColor(.secondary)
+                }
+                HStack {
+                    Text("状态")
+                    Spacer()
+                    Text(updateSubtitle)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.trailing)
+                }
+                Button(action: { updateManager.updateNow(currentVersion: currentVersion) }) {
+                    HStack {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                        Text("立即检查更新")
+                    }
+                }
+            }
+            
+            Section(header: Text("高级设置"), footer: Text("GitHub 被墙（国内常见）时，自动按顺序尝试这些镜像前缀来检查与下载更新。每行一个，用逗号分隔；留空恢复默认（ghfast.top、gh-proxy.com）。")) {
+                Button(action: {
+                    mirrorsText = UpdateManager.shared.mirrorsText
+                    showMirrorEditor = true
+                }) {
+                    HStack {
+                        Image(systemName: "arrow.triangle.branch")
+                            .foregroundColor(.orange)
+                        Text("更新镜像源")
+                        Spacer()
+                        Text(mirrorHost())
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+                }
+            }
+        }
+        .navigationTitle("检查更新")
+        .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showMirrorEditor) {
+            NavigationView {
+                Form {
+                    Section(footer: Text("GitHub 被墙（国内常见）时，自动按顺序尝试这些镜像前缀来检查与下载更新。每行一个，用逗号分隔；留空恢复默认（ghfast.top、gh-proxy.com）。")) {
+                        TextEditor(text: $mirrorsText)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minHeight: 110)
+                    }
+                }
+                .navigationTitle("更新镜像源")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { showMirrorEditor = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("保存") {
+                            UpdateManager.shared.mirrorsText = mirrorsText
+                            showMirrorEditor = false
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func mirrorHost() -> String {
+        let m = UpdateManager.shared.mirrorsText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if m.isEmpty { return "默认（ghfast.top）" }
+        let first = m.components(separatedBy: [",", "\n"]).first(where: { !$0.isEmpty }) ?? ""
+        return first.isEmpty ? "默认" : first
     }
 }
 
