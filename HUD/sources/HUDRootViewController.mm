@@ -472,11 +472,13 @@ extern "C" const char *g_hud_char;
             [self _setFrameForImage:_idleFrames.firstObject];
         }
         
-        // v6.0.29：所有位置松手都自动掉落到底部吸附
+        // v6.0.29：所有位置松手都自动到底部吸附——顶部松手显示掉落帧，其他位置直接平滑移到底部
         CGSize v = [UIScreen mainScreen].bounds.size;
+        CGPoint c = _girlView.center;
+        CGFloat topY = _girlView.frame.size.height / 2;   // 顶部边缘的Y坐标
         
-        if (_fallImage && !_falling) {
-            // ✅ 松手 → 掉落动画，坠落帧缩小到85%
+        if (_fallImage && !_falling && c.y <= topY + 50) {
+            // ✅ 拖到顶部松手 → 掉落动画，坠落帧缩小到85%
             _falling = YES;
             _girlView.image = _fallImage;
             [self _setFrameForImage:_fallImage];
@@ -499,12 +501,20 @@ extern "C" const char *g_hud_char;
                     [self _startBreathing];   // 恢复胸部呼吸动效
                 }
                 _falling = NO;
-                // 掉到底部后触发底部吸附逻辑
-                [self _snapToEdge];
             }];
         } else {
-            // 没有掉落帧就走原来的贴边吸附
-            [self _snapToEdge];
+            // ✅ 其他位置松手 → 不显示掉落帧，直接平滑移到底部站着
+            CGPoint endC = c;
+            endC.y = v.height - _girlView.frame.size.height / 2;
+            [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+                _girlView.center = endC;
+            } completion:^(BOOL finished) {
+                if (_idleFrames.firstObject) {
+                    _girlView.image = _idleFrames.firstObject;
+                    [self _setFrameForImage:_idleFrames.firstObject];
+                    [self _startBreathing];
+                }
+            }];
         }
     }
 }
