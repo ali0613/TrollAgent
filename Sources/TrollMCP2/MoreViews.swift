@@ -107,15 +107,13 @@ struct AuditLogView: View {
                 }
             } else {
                 ForEach(crashPaths, id: \.self) { path in
-                    NavigationLink(destination: CrashDetailView(path: path)) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text((path as NSString).lastPathComponent)
-                                .font(.body)
-                            Text(CrashCatcher.preview(path, maxChars: 100))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .lineLimit(2)
-                        }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text((path as NSString).lastPathComponent)
+                            .font(.body)
+                        Text(CrashCatcher.preview(path, maxChars: 100))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(2)
                     }
                 }
             }
