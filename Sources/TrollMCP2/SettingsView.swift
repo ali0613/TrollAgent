@@ -234,7 +234,7 @@ struct SettingsView: View {
                              icon: "books.vertical.fill", color: .brown,
                              destination: AnyView(KnowledgeBaseView()))
             ]
-            groups.append(SettingsGroup(header: L10n.t("sec_dev"), items: devItems))
+            groups.append(SettingsGroup(header: "工具与管理", items: devItems))
 
         // 安全
         groups.append(SettingsGroup(header: L10n.t("sec_security"), items: [
