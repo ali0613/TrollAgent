@@ -71,10 +71,11 @@ final class SystemPrompts {
                 inject status
               * device: info → device info; processes → shell.exec("ps aux")
               * shell.exec 环境选择(v6.0.28):
-                - 读iOS文件/统计缓存/系统信息 → runtime="ios"（原生FileManager直连整个文件系统）
-                - 装包/解包/编译/复杂脚本 → runtime="alpine"（完整Linux工具链，只能访问绑定目录）
+                - 读iOS文件/统计缓存/系统信息/plutil等iOS命令 → runtime="ios"（原生FileManager直连整个文件系统）
+                - 装包/解包/编译/复杂脚本/循环/git/vim → runtime="alpine"（完整Linux工具链，只能访问绑定目录，路径加/ios_前缀）
                 - 不确定就 runtime="auto"（默认），结果里看 `runtime_actual` 字段确认实际环境
                 - 结果返回空/0字节时先检查：是不是走了Alpine但路径不在绑定范围？换 runtime="ios" 重试
+                - 看到"原生管道暂不支持过滤器/没解析到URL/syntax error unexpected do"报错时，先判定是路由不匹配，换正确runtime重试，勿当环境故障
               * combos: screenshot+OCR → control screenshot → multimodal vision; web+content → browser navigate → browser text;
                 inject → inject list(find bundle_id) → inject → app launch(verify); tap button → control screenshot
                 (read coords) → control tap
