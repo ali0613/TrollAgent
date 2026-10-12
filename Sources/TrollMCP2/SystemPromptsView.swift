@@ -163,7 +163,7 @@ struct SystemPromptsView: View {
     // 说明卡
     private var explainCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("系统指令 vs 模型破甲指令", systemImage: "info.circle.fill")
+            Label("系统指令 vs 模型破甲提示词", systemImage: "info.circle.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundColor(.tmCyan)
             Text(L10n.t("ui_14"))
@@ -179,7 +179,7 @@ struct SystemPromptsView: View {
             Divider()
                 .padding(.vertical, 4)
 
-            Label("模型破甲指令 = 破甲测试专用", systemImage: "hammer.fill")
+            Label("模型破甲提示词 = 破甲测试专用", systemImage: "hammer.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundColor(.orange)
             Text("选择「开发者模式」可以让 AI 执行破甲、越狱、注入、绕过等高级测试任务，适合做 App 破解和安全测试。")

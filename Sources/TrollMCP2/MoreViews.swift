@@ -1018,10 +1018,10 @@ struct DeveloperInstructionsView: View {
                         Label("破甲测试专用", systemImage: "hammer.fill")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.orange)
-                        Text("这里的模型破甲指令会作为补充提示词注入 AI，适合做破甲、越狱、注入、绕过等高级测试任务。")
+                        Text("这里的模型破甲提示词会作为补充提示词注入 AI，适合做破甲、越狱、注入、绕过等高级测试任务。")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text("选「开发者模式」系统指令 + 这里的破甲指令 = 最强的破甲测试组合。")
+                        Text("选「开发者模式」系统指令 + 这里的破甲提示词 = 最强的破甲测试组合。")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
