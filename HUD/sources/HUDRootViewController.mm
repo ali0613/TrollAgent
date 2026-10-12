@@ -912,14 +912,21 @@ extern "C" const char *g_hud_char;
     }
     
     _bubbleLabel.text = msg;
+    
+    // v6.0.28：限制气泡最大宽度为屏幕宽度的80%，文字自动换行
+    CGSize screenSize = [UIScreen mainScreen].bounds.size;
+    CGFloat maxBubbleW = screenSize.width * 0.8;
+    CGFloat labelMaxW = maxBubbleW - 24;
+    _bubbleLabel.preferredMaxLayoutWidth = labelMaxW;
     [_bubbleLabel sizeToFit];
     
     // 调整气泡大小，加内边距
     CGRect labelF = _bubbleLabel.frame;
-    CGFloat bubbleW = labelF.size.width + 24;
+    // 确保气泡宽度不超过最大值
+    CGFloat bubbleW = MIN(labelF.size.width + 24, maxBubbleW);
     CGFloat bubbleH = labelF.size.height + 16;
     _bubbleView.frame = CGRectMake(0, 0, bubbleW, bubbleH);
-    _bubbleLabel.frame = CGRectMake(12, 8, labelF.size.width, labelF.size.height);
+    _bubbleLabel.frame = CGRectMake(12, 8, bubbleW - 24, labelF.size.height);
     
     // v6.0.28：气泡位置改成在角色头顶上方，小尾巴朝下指向角色
     CGFloat tailW = 12;
@@ -930,6 +937,20 @@ extern "C" const char *g_hud_char;
     CGFloat bubbleX = c.x;
     // 气泡在角色头顶上方，距离角色顶部15pt
     CGFloat bubbleY = c.y - _girlView.frame.size.height / 2 - bubbleH / 2 - 15;
+    
+    // v6.0.28：边界检查，不让气泡超出屏幕左右边界
+    CGFloat bubbleLeft = bubbleX - bubbleW / 2;
+    CGFloat bubbleRight = bubbleX + bubbleW / 2;
+    if (bubbleLeft < 10) {
+        bubbleX = 10 + bubbleW / 2;
+    }
+    if (bubbleRight > screenSize.width - 10) {
+        bubbleX = screenSize.width - 10 - bubbleW / 2;
+    }
+    // 顶部边界检查，不让气泡超出屏幕顶部
+    if (bubbleY - bubbleH / 2 < 10) {
+        bubbleY = 10 + bubbleH / 2;
+    }
     _bubbleView.center = CGPointMake(bubbleX, bubbleY);
     
     // 用CAShapeLayer画小尾巴（在气泡底部中间，朝下指向角色头）
