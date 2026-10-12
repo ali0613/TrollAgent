@@ -660,19 +660,52 @@ extern "C" const char *g_hud_char;
     
     NSString *msg = messages[arc4random_uniform((uint32_t)messages.count)];
     
+    // v6.0.28：读取气泡样式设置（0=经典圆角 1=椭圆 2=方形硬边 3=爆炸吐槽）
+    int bubbleStyle = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"trollmcp2.bubble_style"];
+    
     // 创建卡通漫画气泡（带小尾巴）
     if (!_bubbleLabel) {
         // 用UIView画带尾巴的气泡
         UIView *bubbleView = [[UIView alloc] init];
-        bubbleView.backgroundColor = [UIColor whiteColor];
-        bubbleView.layer.cornerRadius = 14;
-        bubbleView.layer.masksToBounds = YES;
-        bubbleView.layer.borderWidth = 2;
-        bubbleView.layer.borderColor = [UIColor systemPinkColor].CGColor;
         bubbleView.alpha = 0;
         
+        // 根据样式设置外观
+        if (bubbleStyle == 3) {
+            // 爆炸吐槽：黄色背景，黑色边框
+            bubbleView.backgroundColor = [UIColor systemYellowColor];
+            bubbleView.layer.cornerRadius = 8;
+            bubbleView.layer.masksToBounds = YES;
+            bubbleView.layer.borderWidth = 2;
+            bubbleView.layer.borderColor = [UIColor blackColor].CGColor;
+        } else if (bubbleStyle == 2) {
+            // 方形硬边：白色背景，黑色边框，直角
+            bubbleView.backgroundColor = [UIColor whiteColor];
+            bubbleView.layer.cornerRadius = 0;
+            bubbleView.layer.masksToBounds = YES;
+            bubbleView.layer.borderWidth = 2;
+            bubbleView.layer.borderColor = [UIColor blackColor].CGColor;
+        } else if (bubbleStyle == 1) {
+            // 椭圆气泡：粉色背景，无边框，大圆角
+            bubbleView.backgroundColor = [UIColor systemPinkColor];
+            bubbleView.layer.cornerRadius = 20;
+            bubbleView.layer.masksToBounds = YES;
+        } else {
+            // 经典圆角（默认）：白色背景，粉色边框
+            bubbleView.backgroundColor = [UIColor whiteColor];
+            bubbleView.layer.cornerRadius = 14;
+            bubbleView.layer.masksToBounds = YES;
+            bubbleView.layer.borderWidth = 2;
+            bubbleView.layer.borderColor = [UIColor systemPinkColor].CGColor;
+        }
+        
         UILabel *label = [[UILabel alloc] init];
-        label.textColor = [UIColor darkGrayColor];
+        if (bubbleStyle == 1) {
+            label.textColor = [UIColor whiteColor];
+        } else if (bubbleStyle == 3) {
+            label.textColor = [UIColor blackColor];
+        } else {
+            label.textColor = [UIColor darkGrayColor];
+        }
         label.font = [UIFont systemFontOfSize:14];
         label.numberOfLines = 0;
         [bubbleView addSubview:label];
@@ -726,8 +759,20 @@ extern "C" const char *g_hud_char;
     
     CAShapeLayer *tailLayer = [CAShapeLayer layer];
     tailLayer.path = tailPath.CGPath;
-    tailLayer.fillColor = [UIColor whiteColor].CGColor;
-    tailLayer.strokeColor = [UIColor systemPinkColor].CGColor;
+    // v6.0.28：尾巴颜色跟着气泡样式走
+    if (bubbleStyle == 3) {
+        tailLayer.fillColor = [UIColor systemYellowColor].CGColor;
+        tailLayer.strokeColor = [UIColor blackColor].CGColor;
+    } else if (bubbleStyle == 2) {
+        tailLayer.fillColor = [UIColor whiteColor].CGColor;
+        tailLayer.strokeColor = [UIColor blackColor].CGColor;
+    } else if (bubbleStyle == 1) {
+        tailLayer.fillColor = [UIColor systemPinkColor].CGColor;
+        tailLayer.strokeColor = [UIColor clearColor].CGColor;
+    } else {
+        tailLayer.fillColor = [UIColor whiteColor].CGColor;
+        tailLayer.strokeColor = [UIColor systemPinkColor].CGColor;
+    }
     tailLayer.lineWidth = 2;
     [_bubbleView.layer addSublayer:tailLayer];
     

@@ -43,12 +43,17 @@ final class GirlCompanion: ObservableObject {
     @Published var floatSize: Double {
         didSet { UserDefaults.standard.set(floatSize, forKey: "trollmcp2.girl_float_size") }
     }
+    // v6.0.28：气泡样式（0=经典圆角 1=椭圆 2=方形硬边 3=爆炸形）
+    @Published var bubbleStyle: Int {
+        didSet { UserDefaults.standard.set(bubbleStyle, forKey: "trollmcp2.bubble_style") }
+    }
     private init() {
         enabled = UserDefaults.standard.bool(forKey: "trollmcp2.girl_companion_enabled")
         selectedCharacter = GirlCharacter.stored(rawValue: UserDefaults.standard.string(forKey: "trollmcp2.girl_character"))
-        // 默认148，范围100-200
+        // 默认200，范围170-300
         floatSize = UserDefaults.standard.double(forKey: "trollmcp2.girl_float_size")
-        if floatSize <= 0 { floatSize = 148 }
+        if floatSize <= 0 { floatSize = 200 }
+        bubbleStyle = UserDefaults.standard.integer(forKey: "trollmcp2.bubble_style")
     }
 }
 

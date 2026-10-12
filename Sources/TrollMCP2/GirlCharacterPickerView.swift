@@ -66,7 +66,16 @@ struct GirlCharacterPickerView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            Section(footer: Text("切换角色或调整尺寸后自动重启桌面悬浮生效。")) {
+            Section(header: Text("气泡样式")) {
+                Picker("气泡样式", selection: $companion.bubbleStyle) {
+                    Text("经典圆角").tag(0)
+                    Text("椭圆气泡").tag(1)
+                    Text("方形硬边").tag(2)
+                    Text("爆炸吐槽").tag(3)
+                }
+                .pickerStyle(.segmented)
+            }
+            Section(footer: Text("切换角色、调整尺寸或气泡样式后自动重启桌面悬浮生效。")) {
                 EmptyView()
             }
         }
