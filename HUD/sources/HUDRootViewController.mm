@@ -921,38 +921,23 @@ extern "C" const char *g_hud_char;
     _bubbleView.frame = CGRectMake(0, 0, bubbleW, bubbleH);
     _bubbleLabel.frame = CGRectMake(12, 8, labelF.size.width, labelF.size.height);
     
-    // 画小尾巴（三角形）
+    // v6.0.28：气泡位置改成在角色头顶上方，小尾巴朝下指向角色
     CGFloat tailW = 12;
     CGFloat tailH = 10;
-    BOOL onLeftSide = (_girlView.center.x < [UIScreen mainScreen].bounds.size.width / 2);
     
-    // 气泡位置：在角色旁边
+    // 气泡位置：角色头顶上方
     CGPoint c = _girlView.center;
-    CGSize v = [UIScreen mainScreen].bounds.size;
-    CGFloat bubbleX;
-    if (onLeftSide) {
-        // 左边缘趴墙，气泡放右边，尾巴朝左指向角色
-        bubbleX = c.x + _girlView.frame.size.width / 2 + 15;
-    } else {
-        // 右边缘趴墙，气泡放左边，尾巴朝右指向角色
-        bubbleX = c.x - _girlView.frame.size.width / 2 - 15 - bubbleW;
-    }
-    CGFloat bubbleY = c.y - bubbleH / 2;
-    _bubbleView.center = CGPointMake(bubbleX + bubbleW/2, bubbleY + bubbleH/2);
+    CGFloat bubbleX = c.x;
+    // 气泡在角色头顶上方，距离角色顶部15pt
+    CGFloat bubbleY = c.y - _girlView.frame.size.height / 2 - bubbleH / 2 - 15;
+    _bubbleView.center = CGPointMake(bubbleX, bubbleY);
     
-    // 用CAShapeLayer画小尾巴
+    // 用CAShapeLayer画小尾巴（在气泡底部中间，朝下指向角色头）
     UIBezierPath *tailPath = [UIBezierPath bezierPath];
-    if (onLeftSide) {
-        // 左边缘：尾巴在气泡左边
-        [tailPath moveToPoint:CGPointMake(0, bubbleH/2 - tailH/2)];
-        [tailPath addLineToPoint:CGPointMake(-tailW, bubbleH/2)];
-        [tailPath addLineToPoint:CGPointMake(0, bubbleH/2 + tailH/2)];
-    } else {
-        // 右边缘：尾巴在气泡右边
-        [tailPath moveToPoint:CGPointMake(bubbleW, bubbleH/2 - tailH/2)];
-        [tailPath addLineToPoint:CGPointMake(bubbleW + tailW, bubbleH/2)];
-        [tailPath addLineToPoint:CGPointMake(bubbleW, bubbleH/2 + tailH/2)];
-    }
+    CGFloat tailX = bubbleW / 2;
+    [tailPath moveToPoint:CGPointMake(tailX - tailW/2, bubbleH)];
+    [tailPath addLineToPoint:CGPointMake(tailX, bubbleH + tailH)];
+    [tailPath addLineToPoint:CGPointMake(tailX + tailW/2, bubbleH)];
     [tailPath closePath];
     
     CAShapeLayer *tailLayer = [CAShapeLayer layer];
