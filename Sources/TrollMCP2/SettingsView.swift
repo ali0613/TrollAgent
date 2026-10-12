@@ -249,13 +249,9 @@ struct SettingsView: View {
         // 安全
         groups.append(SettingsGroup(header: L10n.t("sec_security"), items: [
             SettingsItem(title: L10n.t("row_audit"),
-                         subtitle: "工具调用 · 成功/失败 · 导出给 AI 查看",
+                         subtitle: "工具调用 · 成功/失败 · 崩溃日志 · 导出给 AI 查看",
                          icon: "list.bullet.rectangle", color: .tmIndigo,
                          destination: AnyView(AuditLogView())),
-            SettingsItem(title: L10n.t("row_crash"),
-                         subtitle: "\(CrashCatcher.list().count) 条闪退记录",
-                         icon: "exclamationmark.triangle.fill", color: .red,
-                         destination: AnyView(CrashLogView())),
             SettingsItem(title: L10n.t("row_workspace"),
                          subtitle: "点开浏览目录 · 预览 · 复制路径 · 分享",
                          icon: "folder", color: .blue,
