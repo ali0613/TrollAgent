@@ -1384,11 +1384,7 @@ final class ShellExecTool: MCPTool {
             }
             return Data(input.utf8).base64EncodedString()
         default:
-            let lang = LanguageManager.shared.language
-            let msg = lang == .chinese
-                ? "iOS 原生管道暂不支持过滤器: \(word) (可用 head/tail/grep/wc/sed/awk/sort/uniq/cut/tr/rev/echo/cat/base64)\n原输出:\n\(input)"
-                : "iOS native pipe does not support filter: \(word) (available: head/tail/grep/wc/sed/awk/sort/uniq/cut/tr/rev/echo/cat/base64)\nOriginal output:\n\(input)"
-            return msg
+            return "iOS native pipe does not support filter: \(word) (available: head/tail/grep/wc/sed/awk/sort/uniq/cut/tr/rev/echo/cat/base64)\nOriginal output:\n\(input)"
         }
     }
     
