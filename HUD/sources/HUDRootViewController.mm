@@ -590,11 +590,11 @@ extern "C" const char *g_hud_char;
     [_girlView.layer removeAnimationForKey:@"hudFloat"];   // v6.0.14：趴墙停止上下漂浮——底部/侧趴墙不再上下起伏
     [self _stopChestBreath];   // v6.0.21：趴墙同时停胸部呼吸
     
-    // v6.0.26：左右边缘趴墙时，随机启动自动攀爬（隔几秒爬一段，不是一直爬）
+    // v6.0.26：左右边缘趴墙时，随机启动自动攀爬（10分钟内3-5次，不要太频繁）
     if ((minD == dL || minD == dR) && _climbFrames.count >= 2) {
         [self _stopClimbTimer];
-        // 随机延迟3-8秒后开始攀爬
-        NSTimeInterval delay = 3.0 + arc4random_uniform(5000) / 1000.0;
+        // 第一次延迟30-60秒后开始攀爬
+        NSTimeInterval delay = 30.0 + arc4random_uniform(30000) / 1000.0;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [self _startClimbing];
         });
@@ -1107,8 +1107,8 @@ extern "C" const char *g_hud_char;
         _girlView.center = c;
     }
     
-    // 爬完之后，过5-10秒自动再爬一次，不是永久停
-    NSTimeInterval nextDelay = 5.0 + arc4random_uniform(5000) / 1000.0;
+    // 爬完之后，过2-3分钟自动再爬一次，10分钟内总共3-5次，不要太频繁
+    NSTimeInterval nextDelay = 120.0 + arc4random_uniform(60000) / 1000.0;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(nextDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         // v6.0.29：自动再爬之前检查是不是还在左右墙，不在就不爬
         CGSize v = [UIScreen mainScreen].bounds.size;
