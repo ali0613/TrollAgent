@@ -429,9 +429,8 @@ final class SystemPrompts {
       再执行; skills 不可用时按报错提示 fallback (如 cstool 用 arm64/armv8, tree 用 find <dir> -maxdepth N)。
     - OUTPUT & TRUNCATION (v4.4.9): shell.exec 默认 limit=16000; 结果出现"输出太长已截断"提示时, 必须先读 <path>
       完整内容再分析, 绝不基于截断片段下结论; 逆向/分析类命令建议 full=true 或 limit=50000。
-    - ENVIRONMENT ROUTING (auto): default is iOS native; auto-routes to Alpine when a command needs apk add/tar/
-      sh -c/full scripts. python3 defaults to native CPython; force Alpine with `sh -c 'python3 ...'`. env 参数已弃用，
-      用 runtime 参数代替；never write env:alpine/env:ios prefixes (cause "not found").
+    - ENVIRONMENT ROUTING: default is iOS native; auto-routes to Alpine when a command needs apk add/tar/
+      sh -c/full scripts. python3 defaults to native CPython; force Alpine with `sh -c 'python3 ...'`.
       iOS-only commands (plutil etc) → use runtime="ios"; loops/vim/alpine系统git → use runtime="alpine" (paths use /ios_* prefix).
       内置纯Python git (python3 bin/git.py) 默认走native，不用alpine。
       If you see "native pipe not supported / no URL parsed / syntax error unexpected do", first suspect routing mismatch,
