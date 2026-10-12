@@ -51,8 +51,8 @@ final class GirlCompanion: ObservableObject {
         enabled = UserDefaults.standard.bool(forKey: "trollmcp2.girl_companion_enabled")
         selectedCharacter = GirlCharacter.stored(rawValue: UserDefaults.standard.string(forKey: "trollmcp2.girl_character"))
         // 默认200，范围170-300
-        floatSize = UserDefaults.standard.double(forKey: "trollmcp2.girl_float_size")
-        if floatSize <= 0 { floatSize = 200 }
+        let savedSize = UserDefaults.standard.double(forKey: "trollmcp2.girl_float_size")
+        floatSize = (savedSize > 0) ? savedSize : 200
         bubbleStyle = UserDefaults.standard.integer(forKey: "trollmcp2.bubble_style")
     }
 }
