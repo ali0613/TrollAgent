@@ -428,6 +428,7 @@ extern "C" const char *g_hud_char;
     CGPoint p = [g locationInView:self.view];
     if (g.state == UIGestureRecognizerStateBegan) {
         _isDragging = YES;
+        [self _stopClimbTimer];    // v6.0.29：拖动时立刻停止所有攀爬
         [self _setAnchorY:0.5f];   // v6.0.18：拖拽/悬浮→中心锚点（悬浮不做胸部锚点）
         [self _stopChestBreath];   // v6.0.21：拖拽/悬浮停胸部呼吸（移除条带层）
         [self _startFloatWithDuration:0.5f];   // v6.0.21：悬浮/拖拽上下浮动加快到0.5s单程
