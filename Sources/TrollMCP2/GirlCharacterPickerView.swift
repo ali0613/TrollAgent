@@ -65,6 +65,12 @@ struct GirlCharacterPickerView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+                .onChange(of: companion.floatSize) { _ in
+                    // 尺寸变化后自动重启HUD生效
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        HUDManager.shared.restart()
+                    }
+                }
             }
             Section(header: Text("气泡样式")) {
                 Picker("气泡样式", selection: $companion.bubbleStyle) {
@@ -74,6 +80,12 @@ struct GirlCharacterPickerView: View {
                     Text("爆炸吐槽").tag(3)
                 }
                 .pickerStyle(.segmented)
+                .onChange(of: companion.bubbleStyle) { _ in
+                    // 气泡样式变化后自动重启HUD生效
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        HUDManager.shared.restart()
+                    }
+                }
             }
             Section(footer: Text("切换角色、调整尺寸或气泡样式后自动重启桌面悬浮生效。")) {
                 EmptyView()
