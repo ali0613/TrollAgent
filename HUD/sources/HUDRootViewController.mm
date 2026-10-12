@@ -472,20 +472,18 @@ extern "C" const char *g_hud_char;
             [self _setFrameForImage:_idleFrames.firstObject];
         }
         
-        // 判断：拖到屏幕顶部松手才触发掉落动画，其他位置走原来的贴边吸附
+        // v6.0.29：所有位置松手都自动掉落到底部吸附
         CGSize v = [UIScreen mainScreen].bounds.size;
-        CGPoint c = _girlView.center;
-        CGFloat topY = _girlView.frame.size.height / 2;   // 顶部边缘的Y坐标
         
-        if (_fallImage && !_falling && c.y <= topY + 50) {
-            // ✅ 拖到顶部松手 → 掉落动画，坠落帧缩小到85%
+        if (_fallImage && !_falling) {
+            // ✅ 松手 → 掉落动画，坠落帧缩小到85%
             _falling = YES;
             _girlView.image = _fallImage;
             [self _setFrameForImage:_fallImage];
             // 坠落帧缩小到85%
             _girlView.transform = CGAffineTransformMakeScale(0.85, 0.85);
             
-            // 目标Y：屏幕底部
+            // 目标Y：屏幕底部，X保持当前位置不变
             CGPoint endC = _girlView.center;
             endC.y = v.height - _girlView.frame.size.height / 2;
             
@@ -501,9 +499,11 @@ extern "C" const char *g_hud_char;
                     [self _startBreathing];   // 恢复胸部呼吸动效
                 }
                 _falling = NO;
+                // 掉到底部后触发底部吸附逻辑
+                [self _snapToEdge];
             }];
         } else {
-            // ✅ 其他位置 → 走原来的贴边吸附逻辑（保留左右趴墙、底部趴墙等所有原有功能）
+            // 没有掉落帧就走原来的贴边吸附
             [self _snapToEdge];
         }
     }
