@@ -58,19 +58,20 @@ struct GirlCharacterPickerView: View {
                 VStack {
                     HStack {
                         Text("小")
-                        Slider(value: $companion.floatSize, in: 170...300, step: 5)
+                        Slider(value: $companion.floatSize, in: 170...300, step: 5, onEditingChanged: { editing in
+                            if !editing {
+                                // 拖动结束松手后才重启HUD生效
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    _ = HUDManager.shared.stop()
+                                    _ = HUDManager.shared.start()
+                                }
+                            }
+                        })
                         Text("大")
                     }
                     Text("当前尺寸：\(Int(companion.floatSize)) pt")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                }
-                .onChange(of: companion.floatSize) { _ in
-                    // 尺寸变化后自动重启HUD生效
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        _ = HUDManager.shared.stop()
-                        _ = HUDManager.shared.start()
-                    }
                 }
             }
             Section(header: Text("气泡样式")) {
