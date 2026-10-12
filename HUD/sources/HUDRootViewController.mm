@@ -725,13 +725,13 @@ extern "C" const char *g_hud_char;
     CGPoint c = _girlView.center;
     BOOL onLeftEdge = (c.x < v.width / 2);
     
-    // 用第一帧开始攀爬，保持朝向（左边缘镜像面朝左，右边缘正常面朝右）
+    // 用第一帧开始攀爬，保持朝向（左边缘正常面朝右朝向屏幕中间，右边缘镜像面朝左朝向屏幕中间）
     UIImage *cf = _climbFrames[0];
     _girlView.image = cf;
     if (onLeftEdge) {
-        _girlView.transform = CGAffineTransformMakeScale(-1, 1);
-    } else {
         _girlView.transform = CGAffineTransformIdentity;
+    } else {
+        _girlView.transform = CGAffineTransformMakeScale(-1, 1);
     }
     [self _setFrameForImage:cf];
     
@@ -780,13 +780,13 @@ extern "C" const char *g_hud_char;
         CGFloat wallH = (CGFloat)g_hud_size * wallScale * 0.5;
         CGFloat wa = (wallImg.size.height > 0) ? (wallImg.size.width / wallImg.size.height) : 1.0;
         _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
-        // 重新吸附到边缘，左边缘镜像，右边缘正常
+        // 重新吸附到边缘，左边缘正常面朝右，右边缘镜像面朝左
         if (dL < dR) {
             c.x = _girlView.frame.size.width / 2;
-            _girlView.transform = CGAffineTransformMakeScale(-1, 1);
+            _girlView.transform = CGAffineTransformIdentity;
         } else {
             c.x = v.width - _girlView.frame.size.width / 2;
-            _girlView.transform = CGAffineTransformIdentity;
+            _girlView.transform = CGAffineTransformMakeScale(-1, 1);
         }
         _girlView.center = c;
     }
