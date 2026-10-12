@@ -622,6 +622,7 @@ extern "C" const char *g_hud_char;
     if (!_onSideWall || _isDragging || _isClimbing || _falling) return;
     
     // v6.0.28：按时间段选问候（早/中/晚/深夜）
+    NSArray *messages;
     NSCalendar *cal = [NSCalendar currentCalendar];
     NSDateComponents *comps = [cal components:NSHourCalendarUnit fromDate:[NSDate date]];
     NSInteger hour = comps.hour;
