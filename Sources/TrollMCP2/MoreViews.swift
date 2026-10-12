@@ -9,6 +9,8 @@ struct AuditLogView: View {
     @State private var fileLogText = ""
     @State private var sortOrder: SortOrder = .newest
     @State private var sortBy: SortBy = .time
+    // v6.0.28：崩溃日志tab
+    @State private var crashPaths: [String] = []
     // v4.3.43：Alert 按钮里不再直接 present 分享页（Alert dismiss 转场中 present 会崩溃），
     // 改为先记录待分享路径，等 Alert 完全消失后再由 onChange 触发。
     @State private var pendingSharePath: String?
@@ -61,13 +63,9 @@ struct AuditLogView: View {
                 }
             }
         }
-        .onAppear { loadFileLog(); loadCrashLog() }
+        .onAppear { loadFileLog(); crashPaths = CrashCatcher.list() }
     
     // v6.0.28：崩溃日志tab
-    @State private var crashPaths: [String] = []
-    private mutating func loadCrashLog() {
-        crashPaths = CrashCatcher.list()
-    }
     private var crashLogView: some View {
         List {
             if crashPaths.isEmpty {

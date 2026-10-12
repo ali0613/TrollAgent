@@ -538,7 +538,7 @@ struct UpdateView: View {
     
     private var updateSubtitle: String {
         if updateManager.isChecking { return "正在检查更新…" }
-        if let p = updateManager.downloadProgress { return "正在下载 v\(updateManager.latestVersion ?? "")… \(Int(p*100))%" }
+        if updateManager.downloadProgress > 0 { return "正在下载 v\(updateManager.latestVersion ?? "")… \(Int(updateManager.downloadProgress*100))%" }
         if updateManager.updateAvailable, let v = updateManager.latestVersion {
             return "发现新版本 v\(v) · 点下方按钮更新"
         }
@@ -606,7 +606,7 @@ struct UpdateView: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("保存") {
-                            UpdateManager.shared.mirrorsText = mirrorsText
+                            UpdateManager.shared.saveMirrors(mirrorsText)
                             showMirrorEditor = false
                         }
                     }
