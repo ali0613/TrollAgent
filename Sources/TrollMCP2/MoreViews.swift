@@ -64,7 +64,34 @@ struct AuditLogView: View {
             }
         }
         .onAppear { loadFileLog(); crashPaths = CrashCatcher.list() }
-    
+        .alert(isPresented: $showExportAlert) {
+            // v4.3.43：Alert 按钮只记录待分享路径，等 Alert dismiss 完成后
+            // 由 onChange(showExportAlert) 触发分享——避免在 Alert dismiss 转场中
+            // present UIActivityViewController 导致崩溃。
+            if let p = exportPath, p.hasPrefix("/") {
+                return Alert(title: Text(L10n.t("ui_45")),
+                             message: Text(p),
+                             primaryButton: .default(Text("分享")) {
+                                 pendingSharePath = p
+                             },
+                             secondaryButton: .cancel(Text(L10n.t("ui_44"))))
+            } else {
+                return Alert(title: Text(L10n.t("ui_45")),
+                             message: Text(exportPath ?? ""),
+                             dismissButton: .default(Text(L10n.t("ui_44"))))
+            }
+        }
+        // v4.3.43：Alert 完全消失后再弹分享页（转场安全）
+        .onChange(of: showExportAlert) { shown in
+            if !shown, let p = pendingSharePath {
+                pendingSharePath = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    SharePresenter.present([URL(fileURLWithPath: p)])
+                }
+            }
+        }
+    }
+
     // v6.0.28：崩溃日志tab
     private var crashLogView: some View {
         List {
@@ -90,33 +117,6 @@ struct AuditLogView: View {
                                 .lineLimit(2)
                         }
                     }
-                }
-            }
-        }
-    }
-        .alert(isPresented: $showExportAlert) {
-            // v4.3.43：Alert 按钮只记录待分享路径，等 Alert dismiss 完成后
-            // 由 onChange(showExportAlert) 触发分享——避免在 Alert dismiss 转场中
-            // present UIActivityViewController 导致崩溃。
-            if let p = exportPath, p.hasPrefix("/") {
-                return Alert(title: Text(L10n.t("ui_45")),
-                             message: Text(p),
-                             primaryButton: .default(Text("分享")) {
-                                 pendingSharePath = p
-                             },
-                             secondaryButton: .cancel(Text(L10n.t("ui_44"))))
-            } else {
-                return Alert(title: Text(L10n.t("ui_45")),
-                             message: Text(exportPath ?? ""),
-                             dismissButton: .default(Text(L10n.t("ui_44"))))
-            }
-        }
-        // v4.3.43：Alert 完全消失后再弹分享页（转场安全）
-        .onChange(of: showExportAlert) { shown in
-            if !shown, let p = pendingSharePath {
-                pendingSharePath = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    SharePresenter.present([URL(fileURLWithPath: p)])
                 }
             }
         }
