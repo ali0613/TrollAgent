@@ -12,7 +12,13 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     static let shared = TTSService()
 
     @Published var speakerEnabled: Bool {
-        didSet { UserDefaults.standard.set(speakerEnabled, forKey: "trollmcp2.tts_enabled") }
+        didSet {
+            UserDefaults.standard.set(speakerEnabled, forKey: "trollmcp2.tts_enabled")
+            // v6.0.28：关开关立刻停止所有朗读，清空队列，不要继续播上一段的
+            if !speakerEnabled {
+                stopInternal()
+            }
+        }
     }
     @Published var isSpeaking = false {
         didSet { if !isSpeaking { speakingId = nil } }

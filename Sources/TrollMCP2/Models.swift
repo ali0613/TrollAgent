@@ -718,6 +718,8 @@ final class ConversationStore: ObservableObject {
         selectedId = conv.id
         // v2.9.22：新会话清空工具会话授权 (AI 需重新搜索/决定）
         ToolRegistry.shared.clearSessionApproval()
+        // v6.0.28：新会话清空TTS队列，不要读上一段的内容
+        TTSService.shared.stop()
         save()
     }
 
@@ -727,6 +729,8 @@ final class ConversationStore: ObservableObject {
             conversations[idx].updatedAt = Date()
         }
         selectedId = id
+        // v6.0.28：切换会话清空TTS队列，不要读上一段的内容
+        TTSService.shared.stop()
         sortAndSave()
     }
 
