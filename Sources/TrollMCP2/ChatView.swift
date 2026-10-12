@@ -1272,8 +1272,8 @@ struct MessageBubble: View {
     // v3.5.31：思考开关——思考关时隐藏思考块（API 仍可能返回 thinking，UI 一律不显示）
     var thinkEnabled: Bool = true
 
-    // v3.5.4：工具结果默认展开可见（5=A：完整展示 工具名+命令+结果）；长结果可点"工具结果 ▴"折叠
-    @State private var expanded = true
+    // v6.0.28：工具结果默认折叠，用户手动点才展开
+    @State private var expanded = false
     @State private var expandedToolIds: Set<String> = []
     // v3.4.5：打字机效果——已显示字符数 + 定时器（显示与网络解耦，逐字稳定刷出）
     // v3.4.7：降速到 25 字/秒(0.04s/字)让打字感清晰可见；且不依赖 isStreaming——
