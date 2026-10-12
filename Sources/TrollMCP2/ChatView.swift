@@ -315,36 +315,21 @@ struct ChatView: View {
         ScrollView {
             VStack(spacing: 22) {
                 Spacer(minLength: 30)
-                // v2.9.76：首页使用真实 App 图标（浅蓝巨魔脸）
-                // v2.9.78：外层加浅蓝渐变光环
+                // v6.0.28：首页直接显示App图标，去掉外面的蓝色圆环，避免两层蓝色叠在一起
                 ZStack {
-                    Circle()
-                        .fill(Color.tmCyan.opacity(0.12))
-                        .frame(width: 176, height: 176)
-                    Circle()
-                        .stroke(
-                            LinearGradient(colors: [.tmCyan.opacity(0.55), .blue.opacity(0.15)],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing),
-                            lineWidth: 2
-                        )
-                        .frame(width: 156, height: 156)
                     Group {
                         if let appIcon = UIImage(named: "AppIcon60x60@3x") ?? UIImage(named: "AppIcon1024x1024") {
                             Image(uiImage: appIcon)
                                 .resizable()
                                 .scaledToFill()
-                                .frame(width: 104, height: 104)
-                                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                                        .stroke(Color.tmCyan.opacity(0.3), lineWidth: 1)
-                                )
-                                .shadow(color: Color.tmCyan.opacity(0.35), radius: 14, x: 0, y: 6)
+                                .frame(width: 140, height: 140)
+                                .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                                .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 8)
                         } else {
                             Image(systemName: "cpu")
                                 .font(.system(size: 56))
                                 .foregroundColor(.white)
-                                .frame(width: 104, height: 104)
+                                .frame(width: 140, height: 140)
                                 .background(
                                     LinearGradient(colors: [.tmCyan, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
                                 )
