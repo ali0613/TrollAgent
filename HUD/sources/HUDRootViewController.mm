@@ -124,7 +124,8 @@ extern "C" const char *g_hud_char;
     BOOL _isClimbing;           // 正在攀爬中
     NSTimer *_climbTimer;        // 攀爬交替计时器
     int _climbIdx;              // 攀爬帧序号
-    UILabel *_bubbleLabel;       // v6.0.27：侧边趴墙卡通聊天气泡
+    UILabel *_bubbleLabel;       // v6.0.27：侧边趴墙卡通聊天气泡文字
+    UIView *_bubbleView;         // v6.0.28：卡通气泡背景（带小尾巴）
     NSTimer *_bubbleTimer;       // 气泡定时弹出计时器
     BOOL _onSideWall;           // 是否在左右侧边趴墙
     NSString *_charPrefix;      // v6.0.27：当前角色前缀（rabit/girl/cat）
@@ -611,7 +612,8 @@ extern "C" const char *g_hud_char;
 - (void)_stopBubbleTimer {
     [_bubbleTimer invalidate];
     _bubbleTimer = nil;
-    [_bubbleLabel removeFromSuperview];
+    [_bubbleView removeFromSuperview];
+    _bubbleView = nil;
     _bubbleLabel = nil;
 }
 
@@ -658,55 +660,90 @@ extern "C" const char *g_hud_char;
     
     NSString *msg = messages[arc4random_uniform((uint32_t)messages.count)];
     
-    // 创建卡通气泡
+    // 创建卡通漫画气泡（带小尾巴）
     if (!_bubbleLabel) {
-        _bubbleLabel = [[UILabel alloc] init];
-        _bubbleLabel.backgroundColor = [UIColor whiteColor];
-        _bubbleLabel.textColor = [UIColor darkGrayColor];
-        _bubbleLabel.font = [UIFont systemFontOfSize:14];
-        _bubbleLabel.numberOfLines = 0;
-        _bubbleLabel.layer.cornerRadius = 10;
-        _bubbleLabel.layer.masksToBounds = YES;
-        _bubbleLabel.layer.borderWidth = 1;
-        _bubbleLabel.layer.borderColor = [UIColor systemPinkColor].CGColor;
-        _bubbleLabel.alpha = 0;
+        // 用UIView画带尾巴的气泡
+        UIView *bubbleView = [[UIView alloc] init];
+        bubbleView.backgroundColor = [UIColor whiteColor];
+        bubbleView.layer.cornerRadius = 14;
+        bubbleView.layer.masksToBounds = YES;
+        bubbleView.layer.borderWidth = 2;
+        bubbleView.layer.borderColor = [UIColor systemPinkColor].CGColor;
+        bubbleView.alpha = 0;
+        
+        UILabel *label = [[UILabel alloc] init];
+        label.textColor = [UIColor darkGrayColor];
+        label.font = [UIFont systemFontOfSize:14];
+        label.numberOfLines = 0;
+        [bubbleView addSubview:label];
+        _bubbleLabel = label;
+        _bubbleView = bubbleView;
     }
     
     _bubbleLabel.text = msg;
     [_bubbleLabel sizeToFit];
     
     // 调整气泡大小，加内边距
-    CGRect f = _bubbleLabel.frame;
-    f.size.width += 20;
-    f.size.height += 12;
-    _bubbleLabel.frame = f;
+    CGRect labelF = _bubbleLabel.frame;
+    CGFloat bubbleW = labelF.size.width + 24;
+    CGFloat bubbleH = labelF.size.height + 16;
+    _bubbleView.frame = CGRectMake(0, 0, bubbleW, bubbleH);
+    _bubbleLabel.frame = CGRectMake(12, 8, labelF.size.width, labelF.size.height);
+    
+    // 画小尾巴（三角形）
+    CGFloat tailW = 12;
+    CGFloat tailH = 10;
+    BOOL onLeftSide = (_girlView.center.x < [UIScreen mainScreen].bounds.size.width / 2);
     
     // 气泡位置：在角色旁边
     CGPoint c = _girlView.center;
     CGSize v = [UIScreen mainScreen].bounds.size;
     CGFloat bubbleX;
-    if (c.x < v.width / 2) {
-        // 左边缘趴墙，气泡放右边
-        bubbleX = c.x + _girlView.frame.size.width / 2 + 10;
+    if (onLeftSide) {
+        // 左边缘趴墙，气泡放右边，尾巴朝左指向角色
+        bubbleX = c.x + _girlView.frame.size.width / 2 + 15;
     } else {
-        // 右边缘趴墙，气泡放左边
-        bubbleX = c.x - _girlView.frame.size.width / 2 - 10 - f.size.width;
+        // 右边缘趴墙，气泡放左边，尾巴朝右指向角色
+        bubbleX = c.x - _girlView.frame.size.width / 2 - 15 - bubbleW;
     }
-    CGFloat bubbleY = c.y - f.size.height / 2;
-    _bubbleLabel.center = CGPointMake(bubbleX + f.size.width/2, bubbleY + f.size.height/2);
+    CGFloat bubbleY = c.y - bubbleH / 2;
+    _bubbleView.center = CGPointMake(bubbleX + bubbleW/2, bubbleY + bubbleH/2);
     
-    if (!_bubbleLabel.superview) {
-        [self.view addSubview:_bubbleLabel];
+    // 用CAShapeLayer画小尾巴
+    UIBezierPath *tailPath = [UIBezierPath bezierPath];
+    if (onLeftSide) {
+        // 左边缘：尾巴在气泡左边
+        [tailPath moveToPoint:CGPointMake(0, bubbleH/2 - tailH/2)];
+        [tailPath addLineToPoint:CGPointMake(-tailW, bubbleH/2)];
+        [tailPath addLineToPoint:CGPointMake(0, bubbleH/2 + tailH/2)];
+    } else {
+        // 右边缘：尾巴在气泡右边
+        [tailPath moveToPoint:CGPointMake(bubbleW, bubbleH/2 - tailH/2)];
+        [tailPath addLineToPoint:CGPointMake(bubbleW + tailW, bubbleH/2)];
+        [tailPath addLineToPoint:CGPointMake(bubbleW, bubbleH/2 + tailH/2)];
+    }
+    [tailPath closePath];
+    
+    CAShapeLayer *tailLayer = [CAShapeLayer layer];
+    tailLayer.path = tailPath.CGPath;
+    tailLayer.fillColor = [UIColor whiteColor].CGColor;
+    tailLayer.strokeColor = [UIColor systemPinkColor].CGColor;
+    tailLayer.lineWidth = 2;
+    [_bubbleView.layer addSublayer:tailLayer];
+    
+    if (!_bubbleView.superview) {
+        [self.view addSubview:_bubbleView];
     }
     
     // 淡入淡出
     [UIView animateWithDuration:0.3 animations:^{
-        _bubbleLabel.alpha = 1.0;
+        _bubbleView.alpha = 1.0;
     } completion:^(BOOL finished) {
         [UIView animateWithDuration:0.3 delay:2.0 options:0 animations:^{
-            _bubbleLabel.alpha = 0;
+            _bubbleView.alpha = 0;
         } completion:^(BOOL finished) {
-            [_bubbleLabel removeFromSuperview];
+            [_bubbleView removeFromSuperview];
+            _bubbleView = nil;
             _bubbleLabel = nil;
         }];
     }];
