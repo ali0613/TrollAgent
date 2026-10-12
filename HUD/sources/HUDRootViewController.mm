@@ -593,9 +593,17 @@ extern "C" const char *g_hud_char;
     if (minD == dL || minD == dR) {
         _onSideWall = YES;
         [self _startBubbleTimer];
+        // v6.0.29：左右墙翻转角色朝向——左墙朝左，右墙朝右
+        if (minD == dL) {
+            _girlView.transform = CGAffineTransformMakeScale(-1, 1);
+        } else {
+            _girlView.transform = CGAffineTransformIdentity;
+        }
     } else {
         _onSideWall = NO;
         [self _stopBubbleTimer];
+        // 离开侧边墙恢复正常朝向
+        _girlView.transform = CGAffineTransformIdentity;
     }
 }
 
