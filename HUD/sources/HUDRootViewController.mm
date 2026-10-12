@@ -472,7 +472,7 @@ extern "C" const char *g_hud_char;
             [self _setFrameForImage:_idleFrames.firstObject];
         }
         
-        // v6.0.29：所有位置松手都自动到底部吸附——顶部松手显示掉落帧，其他位置直接平滑移到底部
+        // v6.0.29：顶部松手显示掉落动画，其他位置走原来的自动吸附逻辑（每个角色独立吸附距离）
         CGSize v = [UIScreen mainScreen].bounds.size;
         CGPoint c = _girlView.center;
         CGFloat topY = _girlView.frame.size.height / 2;   // 顶部边缘的Y坐标
@@ -503,18 +503,8 @@ extern "C" const char *g_hud_char;
                 _falling = NO;
             }];
         } else {
-            // ✅ 其他位置松手 → 不显示掉落帧，直接平滑移到底部站着
-            CGPoint endC = c;
-            endC.y = v.height - _girlView.frame.size.height / 2;
-            [UIView animateWithDuration:0.3 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-                _girlView.center = endC;
-            } completion:^(BOOL finished) {
-                if (_idleFrames.firstObject) {
-                    _girlView.image = _idleFrames.firstObject;
-                    [self _setFrameForImage:_idleFrames.firstObject];
-                    [self _startBreathing];
-                }
-            }];
+            // ✅ 其他位置松手 → 走原来的贴边吸附逻辑（保留左右趴墙、底部趴墙等所有原有功能，每个角色独立配置）
+            [self _snapToEdge];
         }
     }
 }
