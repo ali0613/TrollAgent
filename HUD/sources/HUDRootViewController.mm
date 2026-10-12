@@ -1012,21 +1012,26 @@ extern "C" const char *g_hud_char;
     if (_isClimbing || _isDragging || _falling) return;
     if (!_climbFrames.count) return;
     
+    // v6.0.29：必须在左右侧边墙才启动攀爬，底部/顶部不爬
+    CGSize v = [UIScreen mainScreen].bounds.size;
+    CGPoint c = _girlView.center;
+    CGFloat dL = c.x, dR = v.width - c.x, dT = c.y, dB = v.height - c.y;
+    CGFloat minD = MIN(MIN(dL, dR), MIN(dT, dB));
+    if (minD != dL && minD != dR) return;   // 不是左右墙，不爬
+    
     _isClimbing = YES;
     _climbIdx = 0;
     
     // 记录当前在哪一侧边缘，爬的时候保持朝向一致
-    CGSize v = [UIScreen mainScreen].bounds.size;
-    CGPoint c = _girlView.center;
-    BOOL onLeftEdge = (c.x < v.width / 2);
+    BOOL onLeftEdge = (minD == dL);
     
-    // 用第一帧开始攀爬，保持朝向（左边缘正常面朝右朝向屏幕中间，右边缘镜像面朝左朝向屏幕中间）
+    // 用第一帧开始攀爬，保持朝向——左墙朝左，右墙朝右
     UIImage *cf = _climbFrames[0];
     _girlView.image = cf;
     if (onLeftEdge) {
-        _girlView.transform = CGAffineTransformIdentity;
-    } else {
         _girlView.transform = CGAffineTransformMakeScale(-1, 1);
+    } else {
+        _girlView.transform = CGAffineTransformIdentity;
     }
     [self _setFrameForImage:cf];
     
@@ -1047,12 +1052,17 @@ extern "C" const char *g_hud_char;
         _girlView.image = nextFrame;
         [self _setFrameForImage:nextFrame];
         
-        // 随机方向移动40pt
-        CGPoint c = _girlView.center;
-        c.y += moveStep;
-        // 边界检查：不能超出屏幕顶部或底部
+        // 边界检查：如果已经到底部/顶部，就不继续爬了
         CGFloat halfH = _girlView.frame.size.height / 2;
-        c.y = MAX(halfH, MIN(c.y, v.height - halfH));
+        CGPoint c = _girlView.center;
+        CGFloat newY = c.y + moveStep;
+        // 已经在底部还想往下爬，或已经在顶部还想往上爬，就停
+        if ((moveStep > 0 && c.y >= v.height - halfH - 5) ||
+            (moveStep < 0 && c.y <= halfH + 5)) {
+            [self _stopClimbing];
+            return;
+        }
+        c.y = MAX(halfH, MIN(newY, v.height - halfH));
         _girlView.center = c;
     }];
 }
@@ -1075,13 +1085,13 @@ extern "C" const char *g_hud_char;
         CGFloat wallH = (CGFloat)g_hud_size * wallScale * 0.5;
         CGFloat wa = (wallImg.size.height > 0) ? (wallImg.size.width / wallImg.size.height) : 1.0;
         _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
-        // 重新吸附到边缘，左边缘正常面朝右，右边缘镜像面朝左
+        // 重新吸附到边缘，左墙朝左（翻转），右墙朝右（正常）
         if (dL < dR) {
             c.x = _girlView.frame.size.width / 2;
-            _girlView.transform = CGAffineTransformIdentity;
+            _girlView.transform = CGAffineTransformMakeScale(-1, 1);
         } else {
             c.x = v.width - _girlView.frame.size.width / 2;
-            _girlView.transform = CGAffineTransformMakeScale(-1, 1);
+            _girlView.transform = CGAffineTransformIdentity;
         }
         _girlView.center = c;
     }
@@ -1089,7 +1099,14 @@ extern "C" const char *g_hud_char;
     // 爬完之后，过5-10秒自动再爬一次，不是永久停
     NSTimeInterval nextDelay = 5.0 + arc4random_uniform(5000) / 1000.0;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(nextDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self _startClimbing];
+        // v6.0.29：自动再爬之前检查是不是还在左右墙，不在就不爬
+        CGSize v = [UIScreen mainScreen].bounds.size;
+        CGPoint c = _girlView.center;
+        CGFloat dL = c.x, dR = v.width - c.x, dT = c.y, dB = v.height - c.y;
+        CGFloat minD = MIN(MIN(dL, dR), MIN(dT, dB));
+        if (minD == dL || minD == dR) {
+            [self _startClimbing];
+        }
     });
 }
 
