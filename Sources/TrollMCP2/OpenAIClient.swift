@@ -314,7 +314,10 @@ final class OpenAIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         applyAuth(to: &request)
 
-        var body = buildBody(level: level, messages: messages, tools: tools)
+        // v6.0.30: 试探阶段发最小健康检查请求，不带完整历史和工具，减少token浪费
+        let isTrialRequest = (isFirst == false || level != self.config.compatLevel)
+        let trialMessages = [ChatMessage(role: "user", content: "ping")]
+        let body = buildBody(level: level, messages: isTrialRequest ? trialMessages : messages, tools: isTrialRequest ? nil : tools)
         injectBodyAuth(into: &body)
         applyParamAliases(into: &body)
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -397,9 +400,12 @@ final class OpenAIClient {
                 }
                 if level != self.config.compatLevel {
                     let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
-                    NetworkLog.shared.log("\(self.config.name) 级别 \(level) (\(self.levelName(level)))请求OK (\(el)ms)，已记忆该级别")
+                    NetworkLog.shared.log("\(self.config.name) 级别 \(level) (\(self.levelName(level)))试探OK (\(el)ms)，已记忆该级别，发送完整请求")
                     NetworkLog.lastCompatNote = "模型「\(self.config.name)」当前兼容级别: \(level) (\(self.levelName(level)))"
                     self.persist(level: level)
+                    // 试探成功，发完整用户请求
+                    self.attempt(level: level, isFirst: true, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
+                    return
                 }
                 completion(.success(self.parseChoice(firstChoice)))
                 return
