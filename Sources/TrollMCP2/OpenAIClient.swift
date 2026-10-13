@@ -399,7 +399,9 @@ final class OpenAIClient {
                     self.currentReasoningLevel = saved
                     return
                 }
-                if level != self.config.compatLevel {
+                // v6.0.30: 如果这次是试探请求，成功了就记住级别，发完整请求，不返回ping结果
+                let isThisTrial = (isFirst == false || self.config.compatLevel == 0)
+                if isThisTrial {
                     let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
                     NetworkLog.shared.log("\(self.config.name) 级别 \(level) (\(self.levelName(level)))试探OK (\(el)ms)，已记忆该级别，发送完整请求")
                     NetworkLog.lastCompatNote = "模型「\(self.config.name)」当前兼容级别: \(level) (\(self.levelName(level)))"
