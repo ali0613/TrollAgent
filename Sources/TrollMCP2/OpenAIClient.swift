@@ -400,7 +400,8 @@ final class OpenAIClient {
                     return
                 }
                 // v6.0.30: 如果这次是试探请求，成功了就记住级别，发完整请求，不返回ping结果
-                let isThisTrial = (isFirst == false || self.config.compatLevel == 0)
+                // 注意：skipTrial=true的递归请求（发完整请求）不算试探，直接返回结果
+                let isThisTrial = !skipTrial && (isFirst == false || self.config.compatLevel == 0)
                 if isThisTrial {
                     let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
                     NetworkLog.shared.log("\(self.config.name) 级别 \(level) (\(self.levelName(level)))试探OK (\(el)ms)，已记忆该级别，发送完整请求")
