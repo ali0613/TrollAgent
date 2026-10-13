@@ -318,7 +318,7 @@ final class OpenAIClient {
         // 试探条件：降级重试(isFirst=false) 或 新模型未试探过(compatLevel=0)
         let isTrialRequest = (isFirst == false || self.config.compatLevel == 0)
         let trialMessages = [ChatMessage(role: "user", content: "ping")]
-        let body = buildBody(level: level, messages: isTrialRequest ? trialMessages : messages, tools: isTrialRequest ? nil : tools)
+        var body = buildBody(level: level, messages: isTrialRequest ? trialMessages : messages, tools: isTrialRequest ? nil : tools)
         injectBodyAuth(into: &body)
         applyParamAliases(into: &body)
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
