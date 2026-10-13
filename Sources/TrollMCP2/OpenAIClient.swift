@@ -315,7 +315,8 @@ final class OpenAIClient {
         applyAuth(to: &request)
 
         // v6.0.30: 试探阶段发最小健康检查请求，不带完整历史和工具，减少token浪费
-        let isTrialRequest = (isFirst == false || level != self.config.compatLevel)
+        // 试探条件：降级重试(isFirst=false) 或 新模型未试探过(compatLevel=0)
+        let isTrialRequest = (isFirst == false || self.config.compatLevel == 0)
         let trialMessages = [ChatMessage(role: "user", content: "ping")]
         let body = buildBody(level: level, messages: isTrialRequest ? trialMessages : messages, tools: isTrialRequest ? nil : tools)
         injectBodyAuth(into: &body)
