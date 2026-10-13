@@ -654,6 +654,15 @@ extern "C" const char *g_hud_char;
         } else {
             timeGreetings = @[@"中午好！我要吃午饭！", @"肚子饿了～ 要吃饭饭", @"中午啦，我们一起吃饭好不好？", @"哥哥/姐姐 吃了吗？"];
         }
+    } else if (hour >= 14 && hour < 18) {
+        // 下午
+        if ([_charPrefix isEqualToString:@"rabit"]) {
+            timeGreetings = @[@"下午好呀～ 喝杯茶歇一会吧", @"下午工作累不累呀？", @"下午茶时间，想吃小点心吗？", @"这个时间晒太阳好舒服"];
+        } else if ([_charPrefix isEqualToString:@"cat"]) {
+            timeGreetings = @[@"哼，下午了还不陪我玩", @"晒了一下午太阳，好舒服", @"人类，你下午吃零食了吗？", @"...下午好，勉强打个招呼"];
+        } else {
+            timeGreetings = @[@"下午好！我们一起玩吧", @"下午茶时间！吃蛋糕吗？", @"下午的阳光好舒服呀", @"哥哥/姐姐 累不累呀？"];
+        }
     } else if (hour >= 18 && hour < 22) {
         // 晚上
         if ([_charPrefix isEqualToString:@"rabit"]) {
@@ -664,7 +673,7 @@ extern "C" const char *g_hud_char;
             timeGreetings = @[@"晚上好！欢迎回来～", @"陪我玩嘛，白天好无聊", @"晚上吃什么好吃的？", @"我好想你呀！"];
         }
     } else {
-        // 深夜/凌晨
+        // 深夜/凌晨（22点到次日6点）
         if ([_charPrefix isEqualToString:@"rabit"]) {
             timeGreetings = @[@"这么晚还没睡呀？早点休息哦", @"别熬夜啦，对身体不好", @"晚安，做个好梦", @"我会在这里陪着你，快睡吧"];
         } else if ([_charPrefix isEqualToString:@"cat"]) {
