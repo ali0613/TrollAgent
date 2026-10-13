@@ -261,7 +261,7 @@ final class OpenAIClient {
 
     // MARK: - 逐级试探
 
-    private func attempt(level: Int, isFirst: Bool, messages: [ChatMessage], tools: [[String: Any]]?, onStatus: ((String) -> Void)?, onDelta: ((String) -> Void)?, onThinking: ((String) -> Void)? = nil, avoidL5: Bool = false, skipTrial: Bool = false, completion: @escaping (Result<ChatResult, Error>) -> Void) {
+    private func attempt(level: Int, isFirst: Bool, messages: [ChatMessage], tools: [[String: Any]]?, onStatus: ((String) -> Void)?, onDelta: ((String) -> Void)?, onThinking: ((String) -> Void)? = nil, avoidL5: Bool = false, completion: @escaping (Result<ChatResult, Error>) -> Void) {
         // v2.9.87：总预算检查——降级链整体超时直接failed，不再无限串行等
         if Date() > overallDeadline {
             let el = Int(Date().timeIntervalSince(requestStart) * 1000)
@@ -315,10 +315,10 @@ final class OpenAIClient {
         applyAuth(to: &request)
 
         // v6.0.30: 试探阶段发最小健康检查请求，不带完整历史和工具，减少token浪费
-        // 试探条件：降级重试(isFirst=false) 或 新模型未试探过(compatLevel=0)，递归发完整请求时跳过
-        let isTrialRequest = !skipTrial && (isFirst == false || self.config.compatLevel == 0)
+        // 试探条件：降级重试(isFirst=false) 或 新模型未试探过(compatLevel=0)
+        let isTrialRequest = (isFirst == false || self.config.compatLevel == 0)
         let trialMessages = [ChatMessage(role: "user", content: "ping")]
-        var body = buildBody(level: level, messages: isTrialRequest ? trialMessages : messages, tools: isTrialRequest ? nil : tools)
+        let body = buildBody(level: level, messages: isTrialRequest ? trialMessages : messages, tools: isTrialRequest ? nil : tools)
         injectBodyAuth(into: &body)
         applyParamAliases(into: &body)
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
@@ -399,16 +399,13 @@ final class OpenAIClient {
                     self.currentReasoningLevel = saved
                     return
                 }
-                // v6.0.30: 如果这次是试探请求，成功了就记住级别，发完整请求，不返回ping结果
-                // 注意：skipTrial=true的递归请求（发完整请求）不算试探，直接返回结果
-                let isThisTrial = !skipTrial && (isFirst == false || self.config.compatLevel == 0)
-                if isThisTrial {
+                if level != self.config.compatLevel {
                     let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
                     NetworkLog.shared.log("\(self.config.name) 级别 \(level) (\(self.levelName(level)))试探OK (\(el)ms)，已记忆该级别，发送完整请求")
                     NetworkLog.lastCompatNote = "模型「\(self.config.name)」当前兼容级别: \(level) (\(self.levelName(level)))"
                     self.persist(level: level)
-                    // 试探成功，发完整用户请求，跳过ping
-                    self.attempt(level: level, isFirst: true, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, skipTrial: true, completion: completion)
+                    // 试探成功，发完整用户请求
+                    self.attempt(level: level, isFirst: true, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                     return
                 }
                 completion(.success(self.parseChoice(firstChoice)))
