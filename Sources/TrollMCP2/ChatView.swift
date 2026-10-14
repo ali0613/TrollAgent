@@ -914,14 +914,24 @@ struct ChatView: View {
     }
 
     /// v2.9.10：读取应用图标（用于输入栏附件预览）
+    // v6.0.30: app图标内存缓存，所有用到图标的地方自动秒开
+    private static let iconCache = NSCache<NSString, UIImage>()
     static func appIcon(for path: String) -> UIImage? {
+        // 先查缓存
+        if let cached = iconCache.object(forKey: path as NSString) {
+            return cached
+        }
         guard let info = Bundle(path: path)?.infoDictionary,
               let icons = info["CFBundleIcons"] as? [String: Any],
               let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
               let files = primary["CFBundleIconFiles"] as? [String],
               let last = files.last else { return nil }
         let p = (path as NSString).appendingPathComponent(last + "@2x.png")
-        return UIImage(contentsOfFile: p) ?? UIImage(contentsOfFile: (path as NSString).appendingPathComponent(last + ".png"))
+        let img = UIImage(contentsOfFile: p) ?? UIImage(contentsOfFile: (path as NSString).appendingPathComponent(last + ".png"))
+        if let img = img {
+            iconCache.setObject(img, forKey: path as NSString)
+        }
+        return img
     }
 
     // MARK: - v3.1.67：UIKit 文档选择器（真机稳定方案，替代 .fileImporter）
