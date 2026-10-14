@@ -215,6 +215,28 @@ final class AppCatalog {
         iconCache.removeAllObjects()
     }
 
+    /// v6.0.30: 自动清理3天前的临时文件，不占空间
+    static func autoCleanTempFiles() {
+        let fm = FileManager.default
+        let tempDirs = [
+            NSHomeDirectory() + "/tmp",
+            NSHomeDirectory() + "/Documents/Workspace"
+        ]
+        let cutoff = Date().addingTimeInterval(-3*24*3600) // 3天前
+        for dir in tempDirs {
+            guard let files = try? fm.contentsOfDirectory(atPath: dir) else { continue }
+            for f in files {
+                // 只清理临时文件：_*.py、_*.bin、troll_py_*
+                guard f.hasPrefix("_") || f.hasPrefix("troll_py_") else { continue }
+                let fullPath = (dir as NSString).appendingPathComponent(f)
+                guard let attr = try? fm.attributesOfItem(atPath: fullPath),
+                      let mtime = attr[.modificationDate] as? Date,
+                      mtime < cutoff else { continue }
+                try? fm.removeItem(atPath: fullPath)
+            }
+        }
+    }
+
     /// v2.9.128：运行中 App 的可执行名集合（ps -ax，匹配 execName；兼容 16 字符截断）
     static func runningExecNames() -> Set<String> {
         var set = Set<String>()
