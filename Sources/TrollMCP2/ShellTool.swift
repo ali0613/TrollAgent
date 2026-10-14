@@ -2220,6 +2220,13 @@ final class ShellExecTool: MCPTool {
         } else if let d = try? String(contentsOfFile: docsBase + "/troll_py_out.txt", encoding: .utf8), !d.isEmpty {
             out += d
         }
+        // v6.0.30: 过滤诊断噪音，stdout只留用户print的结果
+        out = out.components(separatedBy: .newlines)
+            .filter { line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                return !t.hasPrefix("[PY-BIND-FILE]") && !t.hasPrefix("[py-diag]") && !t.hasPrefix("[PYVER")
+            }
+            .joined(separator: "\n")
         for dpath in [pyDiagPath, docsBase + "/troll_py_diag.txt", "/tmp/troll_py_diag.txt", "troll_py_diag.txt"] {
             if let d = try? String(contentsOfFile: dpath, encoding: .utf8), !d.isEmpty {
                 out += "\n[py-diag]\n" + d
