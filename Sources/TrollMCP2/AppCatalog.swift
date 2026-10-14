@@ -208,17 +208,19 @@ final class AppCatalog {
     // v6.0.30: app图标全局内存缓存，key是bundleId，预加载后直接读，滚动不卡顿
     static let iconCache = NSCache<NSString, UIImage>()
 
-    /// 预加载所有图标，后台串行加载，和TrollStore一样，避免并发调LSApplicationProxy返回nil
+    /// 预加载所有图标，LSApplicationProxy.iconImage必须在主线程调用，后台调用返回nil
     static func preloadIcons(for apps: [AppEntry]) {
+        // 先在后台线程排队，然后切回主线程串行加载，每个间隔20ms不卡UI
         DispatchQueue.global(qos: .utility).async {
             for app in apps {
-                // 已经有缓存就跳过
                 if iconCache.object(forKey: app.bundleId as NSString) != nil { continue }
-                // 串行一个一个加载，每个间隔10ms，避免LSApplicationProxy线程安全问题
-                if let img = app.iconImage() {
-                    iconCache.setObject(img, forKey: app.bundleId as NSString)
+                // 切回主线程调用iconImage，不然返回nil
+                DispatchQueue.main.async {
+                    if let img = app.iconImage() {
+                        iconCache.setObject(img, forKey: app.bundleId as NSString)
+                    }
                 }
-                Thread.sleep(forTimeInterval: 0.01)
+                Thread.sleep(forTimeInterval: 0.02)
             }
         }
     }

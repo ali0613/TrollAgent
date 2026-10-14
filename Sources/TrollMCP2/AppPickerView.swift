@@ -142,13 +142,9 @@ struct AppIconView: View {
             image = cached
             return
         }
-        // 缓存没有，后台异步加载，主线程不卡
-        DispatchQueue.global(qos: .userInitiated).async {
-            guard let app = app else { return }
-            let img = AppCatalog.icon(for: app)
-            DispatchQueue.main.async {
-                image = img
-            }
-        }
+        // LSApplicationProxy.iconImage必须在主线程调用，直接在主线程加载，不切后台
+        guard let app = app else { return }
+        let img = AppCatalog.icon(for: app)
+        image = img
     }
 }
