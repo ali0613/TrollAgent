@@ -244,7 +244,7 @@ struct FanMenuAddView: View {
             }
         }
         .sheet(isPresented: $showPicker) {
-            AppBrowserView { app in
+            AppPickerView { app in
                 savedApps.append(["name":app.name, "bundleId":app.bundleId])
                 UserDefaults.standard.set(savedApps, forKey: "fanMenuApps")
                 showPicker = false

@@ -227,23 +227,13 @@ final class AppCatalog {
         if let cached = iconCache.object(forKey: app.bundleId as NSString) {
             return cached
         }
-        // 缓存没有就同步加载
+        // 优先用系统proxy的iconImage，秒出
         if let img = app.iconImage() {
             iconCache.setObject(img, forKey: app.bundleId as NSString)
             return img
         }
-        return UIImage(systemName: "app")
-    }
-
-    /// 直接读app包里的图标，带缓存，秒开
-    static func icon(for app: AppEntry) -> UIImage? {
-        // 先查缓存
-        if let cached = iconCache.object(forKey: app.bundleId as NSString) {
-            return cached
-        }
-        // 直接从app bundle路径读icon
+        // 兜底：直接从app bundle路径读icon
         let appPath = app.path
-        // 常见icon文件名
         let iconNames = ["AppIcon60x60", "AppIcon80x80", "AppIcon76x76", "Icon"]
         for name in iconNames {
             if let iconPath = Bundle(path: appPath)?.path(forResource: name, ofType: "png"),
@@ -252,12 +242,7 @@ final class AppCatalog {
                 return img
             }
         }
-        // 兜底：读Assets.car里的icon，或者用系统占位图
-        let img = UIImage(named: "default_app_icon") ?? UIImage(systemName: "app")
-        if let img = img {
-            iconCache.setObject(img, forKey: app.bundleId as NSString)
-        }
-        return img
+        return UIImage(systemName: "app")
     }
 
     /// 安装/删除app时清缓存
