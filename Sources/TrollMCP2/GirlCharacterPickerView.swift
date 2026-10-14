@@ -9,47 +9,123 @@ struct GirlCharacterPickerView: View {
     var body: some View {
         Form {
             Section(header: Text("选择可爱助手的角色")) {
-                ForEach(GirlCharacter.allCases) { c in
+                // 上面小萝莉大卡片，横向跪姿
+                Button {
+                    companion.selectedCharacter = .loli
+                    _ = HUDManager.shared.stop()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        _ = HUDManager.shared.start()
+                    }
+                } label: {
+                    HStack(spacing: 16) {
+                        if let img = UIImage(named: "girl_kneel") {
+                            Image(uiImage: img)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(height: 110)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 8) {
+                            Text("小萝莉")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            if companion.selectedCharacter == .loli {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.title)
+                                    .foregroundColor(.pink)
+                            } else {
+                                Image(systemName: "circle")
+                                    .font(.title)
+                                    .foregroundColor(.secondary.opacity(0.4))
+                            }
+                        }
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(companion.selectedCharacter == .loli ? Color.pink.opacity(0.15) : Color(.secondarySystemGroupedBackground))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(companion.selectedCharacter == .loli ? Color.pink : Color.clear, lineWidth: 2)
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+                // 下面兔娘和猫娘并排小卡片
+                HStack(spacing: 12) {
+                    // 兔娘
                     Button {
-                        companion.selectedCharacter = c
-                        // v6.0.7：桌面悬浮 HUD 读当前角色，切换后重启悬浮让新角色生效
+                        companion.selectedCharacter = .rabit
                         _ = HUDManager.shared.stop()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                             _ = HUDManager.shared.start()
                         }
                     } label: {
-                        HStack(spacing: 14) {
-                            // 角色形象（idle 帧）
-                            if let img = UIImage(named: "\(c.iconPrefix)_idle") {
+                        VStack(spacing: 8) {
+                            if let img = UIImage(named: "rabit_idle") {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(width: 46, height: 69)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            } else {
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color.pink.opacity(0.15))
-                                    .frame(width: 46, height: 69)
+                                    .frame(height: 100)
                             }
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(c.rawValue)
-                                    .font(.headline)
-                                Text(c == .loli ? "粉粉洛丽塔小萝莉" : (c == .rabit ? "黑丝高马尾兔娘" : "白色性感御姐猫娘"))
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            if companion.selectedCharacter == c {
+                            Text("兔娘")
+                                .font(.headline)
+                            if companion.selectedCharacter == .rabit {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .font(.title2)
                                     .foregroundColor(.pink)
                             } else {
                                 Image(systemName: "circle")
-                                    .font(.title2)
                                     .foregroundColor(.secondary.opacity(0.4))
                             }
                         }
-                        .contentShape(Rectangle())
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(companion.selectedCharacter == .rabit ? Color.pink.opacity(0.15) : Color(.secondarySystemGroupedBackground))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(companion.selectedCharacter == .rabit ? Color.pink : Color.clear, lineWidth: 2)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    // 猫娘
+                    Button {
+                        companion.selectedCharacter = .cat
+                        _ = HUDManager.shared.stop()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            _ = HUDManager.shared.start()
+                        }
+                    } label: {
+                        VStack(spacing: 8) {
+                            if let img = UIImage(named: "cat_idle") {
+                                Image(uiImage: img)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(height: 100)
+                            }
+                            Text("猫娘")
+                                .font(.headline)
+                            if companion.selectedCharacter == .cat {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.pink)
+                            } else {
+                                Image(systemName: "circle")
+                                    .foregroundColor(.secondary.opacity(0.4))
+                            }
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(companion.selectedCharacter == .cat ? Color.pink.opacity(0.15) : Color(.secondarySystemGroupedBackground))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(companion.selectedCharacter == .cat ? Color.pink : Color.clear, lineWidth: 2)
+                        )
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
