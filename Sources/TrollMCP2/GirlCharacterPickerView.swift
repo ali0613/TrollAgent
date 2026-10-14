@@ -18,13 +18,7 @@ struct GirlCharacterPickerView: View {
                 // 上面小萝莉大卡片，横向跪姿
                 Button {
                     companion.selectedCharacter = .loli
-                    // 只有桌宠正在运行才重启，没运行不自动打开
-                    if HUDManager.shared.isRunning {
-                        _ = HUDManager.shared.stop()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            _ = HUDManager.shared.start()
-                        }
-                    }
+                    // 改设置只存参数，绝对不自动启动/重启桌宠
                 } label: {
                     HStack(spacing: 16) {
                         if let img = UIImage(named: "girl_idle") {
@@ -64,12 +58,6 @@ struct GirlCharacterPickerView: View {
                     // 兔娘
                     Button {
                         companion.selectedCharacter = .rabit
-                        if HUDManager.shared.isRunning {
-                            _ = HUDManager.shared.stop()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                _ = HUDManager.shared.start()
-                            }
-                        }
                     } label: {
                         VStack(spacing: 8) {
                             if let img = UIImage(named: "rabit_idle") {
@@ -103,12 +91,6 @@ struct GirlCharacterPickerView: View {
                     // 猫娘
                     Button {
                         companion.selectedCharacter = .cat
-                        if HUDManager.shared.isRunning {
-                            _ = HUDManager.shared.stop()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                _ = HUDManager.shared.start()
-                            }
-                        }
                     } label: {
                         VStack(spacing: 8) {
                             if let img = UIImage(named: "cat_idle") {
@@ -141,19 +123,11 @@ struct GirlCharacterPickerView: View {
                     .buttonStyle(PlainButtonStyle())
                 }
             }
-            Section(header: Text("悬浮尺寸")) {
+            Section(header: Text("悬浮尺寸（改完手动重启悬浮生效）")) {
                 VStack {
                     HStack {
                         Text("小")
-                        Slider(value: $companion.floatSize, in: 170...300, step: 5, onEditingChanged: { editing in
-                            if !editing && HUDManager.shared.isRunning {
-                                // 只有桌宠正在运行才重启，没运行不动
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                    _ = HUDManager.shared.stop()
-                                    _ = HUDManager.shared.start()
-                                }
-                            }
-                        })
+                        Slider(value: $companion.floatSize, in: 170...300, step: 5)
                         Text("大")
                     }
                     Text("当前尺寸：\(Int(companion.floatSize)) pt")
@@ -161,7 +135,7 @@ struct GirlCharacterPickerView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            Section(header: Text("气泡样式")) {
+            Section(header: Text("气泡样式（改完手动重启悬浮生效）")) {
                 Picker("气泡样式", selection: $companion.bubbleStyle) {
                     Text("经典圆角").tag(0)
                     Text("椭圆气泡").tag(1)
@@ -169,14 +143,6 @@ struct GirlCharacterPickerView: View {
                     Text("爆炸吐槽").tag(3)
                 }
                 .pickerStyle(.segmented)
-                .onChange(of: companion.bubbleStyle) { _ in
-                    if HUDManager.shared.isRunning {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            _ = HUDManager.shared.stop()
-                            _ = HUDManager.shared.start()
-                        }
-                    }
-                }
                 // 实时预览气泡
                 VStack {
                     Text("预览：哈喽呀～")
