@@ -175,6 +175,7 @@ enum SystemCleanupEngine {
 // MARK: - UI
 
 struct SystemCleanupView: View {
+    @Environment(\.dismiss) private var dismiss
     @State private var storage: [String: Any] = [:]
     @State private var quickItems: [SystemCleanupItem] = []
     @State private var advancedItems: [SystemCleanupItem] = []
@@ -209,6 +210,9 @@ struct SystemCleanupView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle("系统清理")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarItems(leading: Button("关闭") {
+            dismiss()
+        })
         .overlay(alignment: .bottom) { toastView }
         .onAppear { if quickItems.isEmpty { startScan() } }
     }
