@@ -1181,15 +1181,28 @@ extern "C" const char *g_hud_char;
     BOOL fromTop = (girlY < 150);
     BOOL fromLeft = (girlX < 150);
     BOOL fromRight = (girlX > screenW - 150);
-    // 默认6个入口：微信、抖音、相机、设置、AI聊天、隐藏
-    NSArray *apps = @[
-        @{@"name":@"微信", @"url":@"weixin://", @"color":[UIColor colorWithRed:0.19 green:0.78 blue:0.32 alpha:1.0]},
-        @{@"name":@"抖音", @"url":@"snssdk1128://", @"color":[UIColor blackColor]},
-        @{@"name":@"相机", @"url":@"camera://", @"color":[UIColor darkGrayColor]},
-        @{@"name":@"设置", @"url":@"App-prefs://", @"color":[UIColor grayColor]},
-        @{@"name":@"AI", @"url":@"trollagent://chat", @"color":[UIColor systemBlueColor]},
-        @{@"name":@"隐藏", @"url":@"trollagent://hide", @"color":[UIColor systemRedColor]}
-    ];
+    // 从UserDefaults读取自定义应用列表，默认4个常用
+    NSArray *savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
+    NSMutableArray *apps = [NSMutableArray array];
+    if (savedApps.count) {
+        for (NSDictionary *a in savedApps) {
+            [apps addObject:@{
+                @"name": a[@"name"],
+                @"url": a[@"url"],
+                @"color": [UIColor systemBlueColor]
+            }];
+        }
+    } else {
+        // 默认
+        [apps addObjectsFromArray:@[
+            @{@"name":@"微信", @"url":@"weixin://", @"color":[UIColor colorWithRed:0.19 green:0.78 blue:0.32 alpha:1.0]},
+            @{@"name":@"抖音", @"url":@"snssdk1128://", @"color":[UIColor blackColor]},
+            @{@"name":@"设置", @"url":@"App-prefs://", @"color":[UIColor grayColor]}
+        ]];
+    }
+    // 最后固定加AI聊天和隐藏
+    [apps addObject:@{@"name":@"AI", @"url":@"trollagent://chat", @"color":[UIColor systemBlueColor]}];
+    [apps addObject:@{@"name":@"隐藏", @"url":@"trollagent://hide", @"color":[UIColor systemRedColor]}];
     CGFloat radius = 110;
     NSInteger count = apps.count;
     for (NSInteger i = 0; i < count; i++) {
@@ -1236,24 +1249,26 @@ extern "C" const char *g_hud_char;
 - (void)_fanBtnClick:(UIButton *)btn {
     NSInteger idx = btn.tag - 9001;
     [self _closeFanMenu];
-    // 简单处理：后面加自定义应用
-    if (idx == 5) {
-        // 隐藏
+    // 读取应用列表
+    NSArray *savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
+    NSInteger customCount = savedApps.count ?: 3;
+    if (idx == customCount + 1) {
+        // 最后一个是隐藏
         self.view.alpha = 0.3;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             self.view.alpha = 0;
         });
         return;
     }
-    if (idx == 4) {
-        // AI聊天
+    if (idx == customCount) {
+        // 倒数第二个是AI聊天
         [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"trollagent://chat"] options:@{} completionHandler:nil];
         return;
     }
-    // 其他app用url打开
-    NSArray *urls = @[@"weixin://", @"snssdk1128://", @"camera://", @"App-prefs://"];
-    if (idx < urls.count) {
-        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:urls[idx]] options:@{} completionHandler:nil];
+    // 自定义应用
+    if (idx < savedApps.count) {
+        NSString *url = savedApps[idx][@"url"];
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];
     }
 }
 

@@ -90,11 +90,57 @@ struct GirlCharacterPickerView: View {
                     }
                 }
             }
+            Section(header: Text("扇形快捷菜单"), footer: Text("单击桌宠弹出的快捷应用，可添加/删除，重启后生效。URL Scheme比如微信weixin://，抖音snssdk1128://")) {
+                let defaults = UserDefaults.standard
+                let savedApps = defaults.array(forKey: "fanMenuApps") as? [[String:String]] ?? [
+                    ["name":"微信", "url":"weixin://"],
+                    ["name":"抖音", "url":"snssdk1128://"],
+                    ["name":"相机", "url":"camera://"],
+                    ["name":"设置", "url":"App-prefs://"]
+                ]
+                ForEach(0..<savedApps.count, id:\.self) { i in
+                    HStack {
+                        Text(savedApps[i]["name"] ?? "")
+                        Spacer()
+                        Text(savedApps[i]["url"] ?? "").font(.caption).foregroundColor(.gray)
+                    }
+                }
+                .onDelete { indexSet in
+                    var apps = savedApps
+                    apps.remove(atOffsets: indexSet)
+                    defaults.set(apps, forKey: "fanMenuApps")
+                }
+                // 添加新应用
+                FanMenuAddView()
+            }
             Section(footer: Text("切换角色、调整尺寸或气泡样式后自动重启桌面悬浮生效。")) {
                 EmptyView()
             }
         }
         .navigationTitle("可爱助手角色")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct FanMenuAddView: View {
+    @State private var name = ""
+    @State private var url = ""
+    var body: some View {
+        VStack {
+            HStack {
+                TextField("应用名称", text: $name)
+                TextField("URL Scheme 比如 weixin://", text: $url)
+                Button("添加") {
+                    guard !name.isEmpty, !url.isEmpty else { return }
+                    let defaults = UserDefaults.standard
+                    var apps = defaults.array(forKey: "fanMenuApps") as? [[String:String]] ?? []
+                    apps.append(["name":name, "url":url])
+                    defaults.set(apps, forKey: "fanMenuApps")
+                    name = ""
+                    url = ""
+                }
+                .disabled(name.isEmpty || url.isEmpty)
+            }
+        }
     }
 }
