@@ -403,6 +403,7 @@ final class OpenAIClient {
                     NetworkLog.shared.log("\(self.config.name) 级别 \(level) (\(self.levelName(level)))试探OK (\(el)ms)，已记忆该级别，发送完整请求")
                     NetworkLog.lastCompatNote = "模型「\(self.config.name)」当前兼容级别: \(level) (\(self.levelName(level)))"
                     self.persist(level: level)
+                    self.config.compatLevel = level;  // v6.0.30: 立刻更新内存里的兼容级别，避免递归时反复进试探分支死循环
                     // 试探成功，发完整用户请求
                     self.attempt(level: level, isFirst: true, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                     return
