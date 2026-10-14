@@ -203,8 +203,35 @@ final class AppCatalog {
         list().first(where: { $0.bundleId == bundleId })
     }
 
-    // v6.0.30: app图标内存缓存，照TrollStore方式直接读包内icon，不依赖系统接口
-    private static let iconCache = NSCache<NSString, UIImage>()
+    // v6.0.30: app图标全局内存缓存，key是bundleId，预加载后直接读，滚动不卡顿
+    static let iconCache = NSCache<NSString, UIImage>()
+
+    /// 预加载所有图标，进页面的时候后台跑，避免滚动时一块一块出
+    static func preloadIcons(for apps: [AppEntry]) {
+        DispatchQueue.global(qos: .utility).async {
+            for app in apps {
+                // 已经有缓存就跳过
+                if iconCache.object(forKey: app.bundleId as NSString) != nil { continue }
+                // 直接调系统proxy的iconImage，同步读系统缓存，最快
+                if let img = app.iconImage() {
+                    iconCache.setObject(img, forKey: app.bundleId as NSString)
+                }
+            }
+        }
+    }
+
+    /// 从缓存读图标，没有再加载
+    static func icon(for app: AppEntry) -> UIImage? {
+        if let cached = iconCache.object(forKey: app.bundleId as NSString) {
+            return cached
+        }
+        // 缓存没有就同步加载
+        if let img = app.iconImage() {
+            iconCache.setObject(img, forKey: app.bundleId as NSString)
+            return img
+        }
+        return UIImage(systemName: "app")
+    }
 
     /// 直接读app包里的图标，带缓存，秒开
     static func icon(for app: AppEntry) -> UIImage? {
