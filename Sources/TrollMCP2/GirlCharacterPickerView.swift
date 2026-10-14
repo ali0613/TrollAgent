@@ -15,47 +15,9 @@ struct GirlCharacterPickerView: View {
     var body: some View {
         Form {
             Section(header: Text("选择可爱助手的角色")) {
-                // 上面小萝莉大卡片，横向跪姿
-                Button {
-                    companion.selectedCharacter = .loli
-                    // 改设置只存参数，绝对不自动启动/重启桌宠
-                } label: {
-                    HStack(spacing: 16) {
-                        if let img = UIImage(named: "girl_idle") {
-                            Image(uiImage: img)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(height: 110)
-                        }
-                        Text("小萝莉")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        Spacer()
-                        if companion.selectedCharacter == .loli {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.title)
-                                .foregroundColor(.pink)
-                        } else {
-                            Image(systemName: "circle")
-                                .font(.title)
-                                .foregroundColor(.secondary.opacity(0.4))
-                        }
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(companion.selectedCharacter == .loli ? Color.pink.opacity(0.15) : Color(.secondarySystemGroupedBackground))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(companion.selectedCharacter == .loli ? Color.pink : Color.clear, lineWidth: 2)
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
-                // 下面兔娘和猫娘并排小卡片
+                // 三个角色并排：兔娘左、小萝莉中、猫娘右，名字都在图底部
                 HStack(spacing: 12) {
-                    // 兔娘
+                    // 兔娘（左）
                     Button {
                         companion.selectedCharacter = .rabit
                     } label: {
@@ -64,7 +26,7 @@ struct GirlCharacterPickerView: View {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(height: 100)
+                                    .frame(height: 110)
                             }
                             Text("兔娘")
                                 .font(.headline)
@@ -88,7 +50,40 @@ struct GirlCharacterPickerView: View {
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
-                    // 猫娘
+                    // 小萝莉（中间）
+                    Button {
+                        companion.selectedCharacter = .loli
+                    } label: {
+                        VStack(spacing: 8) {
+                            if let img = UIImage(named: "girl_idle") {
+                                Image(uiImage: img)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(height: 110)
+                            }
+                            Text("小萝莉")
+                                .font(.headline)
+                            if companion.selectedCharacter == .loli {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.pink)
+                            } else {
+                                Image(systemName: "circle")
+                                    .foregroundColor(.secondary.opacity(0.4))
+                            }
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(companion.selectedCharacter == .loli ? Color.pink.opacity(0.15) : Color(.secondarySystemGroupedBackground))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(companion.selectedCharacter == .loli ? Color.pink : Color.clear, lineWidth: 2)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    // 猫娘（右）
                     Button {
                         companion.selectedCharacter = .cat
                     } label: {
@@ -97,7 +92,7 @@ struct GirlCharacterPickerView: View {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
-                                    .frame(height: 100)
+                                    .frame(height: 110)
                             }
                             Text("猫娘")
                                 .font(.headline)
