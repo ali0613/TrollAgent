@@ -227,8 +227,17 @@ final class ShellExecTool: MCPTool {
                     let nsCmd = finalCmd as NSString
                     let matchStr = nsCmd.substring(with: result.range(at: 2))
                     // 跳过选项（以-开头）、已经是绝对路径、命令本身
-                    if matchStr.hasPrefix("-") || matchStr.hasPrefix("/") || matchStr == "python3" || matchStr == "python" || matchStr == "ls" || matchStr == "cat" || matchStr == "grep" || matchStr == "rm" || matchStr == "mv" || matchStr == "cp" || matchStr == "touch" || matchStr == "find" || matchStr == "echo" || matchStr == "cd" || matchStr == "." || matchStr == "./" {
+                    if matchStr.hasPrefix("-") || matchStr.hasPrefix("/") || matchStr == "python3" || matchStr == "python" || matchStr == "ls" || matchStr == "cat" || matchStr == "grep" || matchStr == "rm" || matchStr == "mv" || matchStr == "cp" || matchStr == "touch" || matchStr == "find" || matchStr == "echo" || matchStr == "cd" || matchStr == "./" {
                         return nsCmd.substring(with: result.range)
+                    }
+                    // find . 替换成workingDir
+                    if matchStr == "." {
+                        return workingDir
+                    }
+                    // python -m 后面的模块名（带点不带斜杠）不补全
+                    let fullMatch = nsCmd.substring(with: result.range)
+                    if fullMatch.range(of: "-m ") != nil && matchStr.contains(".") && !matchStr.contains("/") {
+                        return fullMatch
                     }
                     return "\(workingDir)/\(matchStr)"
                 })
