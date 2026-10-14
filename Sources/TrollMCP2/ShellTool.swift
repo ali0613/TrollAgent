@@ -227,7 +227,11 @@ final class ShellExecTool: MCPTool {
                     let nsCmd = finalCmd as NSString
                     let matchStr = nsCmd.substring(with: result.range(at: 2))
                     // 跳过选项（以-开头）、已经是绝对路径、命令本身
-                    if matchStr.hasPrefix("-") || matchStr.hasPrefix("/") || matchStr == "python3" || matchStr == "python" || matchStr == "ls" || matchStr == "cat" || matchStr == "grep" || matchStr == "rm" || matchStr == "mv" || matchStr == "cp" || matchStr == "touch" || matchStr == "find" || matchStr == "echo" || matchStr == "cd" || matchStr == "./" {
+                    if matchStr.hasPrefix("-") || matchStr.hasPrefix("/") || matchStr == "python3" || matchStr == "python" || matchStr == "ls" || matchStr == "cat" || matchStr == "grep" || matchStr == "rm" || matchStr == "mv" || matchStr == "cp" || matchStr == "touch" || matchStr == "find" || matchStr == "cd" || matchStr == "./" {
+                        return nsCmd.substring(with: result.range)
+                    }
+                    // echo后面的参数是输出文本，不补全路径
+                    if finalCmd.hasPrefix("echo ") || finalCmd.hasPrefix("echo\t") {
                         return nsCmd.substring(with: result.range)
                     }
                     // find . 替换成workingDir
