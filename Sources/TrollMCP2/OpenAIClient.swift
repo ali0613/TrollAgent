@@ -72,6 +72,7 @@ final class OpenAIClient {
     /// v4.3.36：思考自动升档标志——低/中档请求成功但响应无任何思考痕迹时，自动以 high 重试一次。
     /// 破甲站等中转 gpt-5.5 实测 low/medium 不触发思考 (reasoning_tokens=0)，只有 high 出思考。
     private var didAutoEscalateReasoning = false
+    private var currentCompatLevel: Int;  // v6.0.30: 内存里的兼容级别，避免反复试探死循环
     /// v2.9.87：多级降级总预算——全链串行最坏 7 分钟+，用户感知"一直请求中"。
     /// v2.9.96：试探级 (L0-L4）超时已压到 25s，预算放宽到 220s 给 L5 流式留足时间。
     private var overallDeadline = Date.distantFuture
@@ -80,6 +81,7 @@ final class OpenAIClient {
     var currentReasoningLevel = 0  // v2.9.49：默认 low (medium/high 推理显著增加延迟，对标 Codex CLI 默认 low）
 
     init(_ config: ModelConfig) {
+        currentCompatLevel = config.compatLevel  // v6.0.30: 初始化内存里的兼容级别
         // v4.4.16：API 协议自动纠偏——用户配错协议(如 deepseek 配 Responses)时，请求前自动纠正
         // (deepseek→Chat Completions, gpt-5/o系列→Responses, claude→Anthropic)，无需用户手动改
         var c = config
@@ -314,8 +316,8 @@ final class OpenAIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         applyAuth(to: &request)
 
-        // v6.0.30: 试探阶段（level != 已记住的compatLevel）发最小ping请求，不带历史和工具，减少token浪费
-        let isTrialRequest = (level != self.config.compatLevel)
+        // v6.0.30: 试探阶段（level != 已记住的currentCompatLevel）发最小ping请求，不带历史和工具，减少token浪费
+        let isTrialRequest = (level != currentCompatLevel)
         let trialMessages = [ChatMessage(role: "user", content: "ping")]
         var body = buildBody(level: level, messages: isTrialRequest ? trialMessages : messages, tools: isTrialRequest ? nil : tools)
         injectBodyAuth(into: &body)
@@ -398,12 +400,12 @@ final class OpenAIClient {
                     self.currentReasoningLevel = saved
                     return
                 }
-                if level != self.config.compatLevel {
+                if level != currentCompatLevel {
                     let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
                     NetworkLog.shared.log("\(self.config.name) 级别 \(level) (\(self.levelName(level)))试探OK (\(el)ms)，已记忆该级别，发送完整请求")
                     NetworkLog.lastCompatNote = "模型「\(self.config.name)」当前兼容级别: \(level) (\(self.levelName(level)))"
                     self.persist(level: level)
-                    self.config.compatLevel = level;  // v6.0.30: 立刻更新内存里的兼容级别，避免递归时反复进试探分支死循环
+                    currentCompatLevel = level;  // v6.0.30: 立刻更新内存里的兼容级别，避免递归时反复进试探分支死循环
                     // 试探成功，发完整用户请求
                     self.attempt(level: level, isFirst: true, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                     return
