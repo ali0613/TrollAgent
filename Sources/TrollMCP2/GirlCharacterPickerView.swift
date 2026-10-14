@@ -18,26 +18,24 @@ struct GirlCharacterPickerView: View {
                     }
                 } label: {
                     HStack(spacing: 16) {
-                        if let img = UIImage(named: "girl_kneel") {
+                        if let img = UIImage(named: "girl_idle") {
                             Image(uiImage: img)
                                 .resizable()
                                 .scaledToFit()
                                 .frame(height: 110)
                         }
+                        Text("小萝莉")
+                            .font(.title2)
+                            .fontWeight(.bold)
                         Spacer()
-                        VStack(alignment: .trailing, spacing: 8) {
-                            Text("小萝莉")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                            if companion.selectedCharacter == .loli {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.title)
-                                    .foregroundColor(.pink)
-                            } else {
-                                Image(systemName: "circle")
-                                    .font(.title)
-                                    .foregroundColor(.secondary.opacity(0.4))
-                            }
+                        if companion.selectedCharacter == .loli {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.title)
+                                .foregroundColor(.pink)
+                        } else {
+                            Image(systemName: "circle")
+                                .font(.title)
+                                .foregroundColor(.secondary.opacity(0.4))
                         }
                     }
                     .padding()
@@ -189,7 +187,7 @@ struct GirlCharacterPickerView: View {
                     )
                     .padding(.vertical, 8)
             }
-            Section(header: Text("快捷菜单"), footer: Text("单击桌宠弹出的菜单样式和应用，可添加/删除，重启后生效。URL Scheme比如微信weixin://，抖音snssdk1128://")) {
+            Section(header: Text("快捷菜单"), footer: Text("💡 提示：单击桌面上的桌宠就会弹出这个快捷菜单！可添加/删除自定义应用，URL Scheme比如微信weixin://，抖音snssdk1128://")) {
                 Picker("弹出样式", selection: Binding<Int>(
                     get: { UserDefaults.standard.integer(forKey: "fanMenuStyle") },
                     set: { UserDefaults.standard.set($0, forKey: "fanMenuStyle") }
@@ -198,23 +196,6 @@ struct GirlCharacterPickerView: View {
                     Text("纵向列表").tag(1)
                 }
                 .pickerStyle(.segmented)
-                // 菜单样式预览
-                HStack {
-                    Spacer()
-                    if UserDefaults.standard.integer(forKey: "fanMenuStyle") == 0 {
-                        Text("🌕🌖🌗\n   🧸")
-                            .multilineTextAlignment(.center)
-                    } else {
-                        VStack(spacing: 4) {
-                            Text("🌕")
-                            Text("🌖")
-                            Text("🌗")
-                            Text("🧸")
-                        }
-                    }
-                    Spacer()
-                }
-                .padding(.vertical, 4)
                 let defaults = UserDefaults.standard
                 let savedApps = defaults.array(forKey: "fanMenuApps") as? [[String:String]] ?? [
                     ["name":"微信", "url":"weixin://"],
