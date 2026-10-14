@@ -245,6 +245,10 @@ extern "C" const char *g_hud_char;
                                  w, size);
     // 初始锚点=中心(0.5)，不偏移；胸部呼吸锚点(0.42)按状态在 _startBreathing 切换，趴墙/拖拽悬浮保持中心
 
+    // v6.0.30：键盘弹出时自动隐藏桌宠
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+
     // v6.0.7：注册锁屏/解锁监听（锁屏隐藏悬浮、解锁恢复，抄 TrollSpeed）
     [self registerNotifications];
 
@@ -1295,6 +1299,20 @@ extern "C" const char *g_hud_char;
             [self _setFrameForImage:self->_idleFrames.firstObject];
         }
     });
+}
+
+// v6.0.30：键盘弹出/收起自动隐藏/恢复桌宠
+- (void)keyboardWillShow:(NSNotification *)note {
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"autoHideWithKeyboard"]) {
+        [UIView animateWithDuration:0.2 animations:^{
+            self.view.alpha = 0.2;
+        }];
+    }
+}
+- (void)keyboardWillHide:(NSNotification *)note {
+    [UIView animateWithDuration:0.2 animations:^{
+        self.view.alpha = 1.0;
+    }];
 }
 
 @end

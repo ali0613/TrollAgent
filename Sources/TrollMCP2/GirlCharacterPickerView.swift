@@ -237,6 +237,12 @@ struct GirlCharacterPickerView: View {
                 // 添加新应用
                 FanMenuAddView()
             }
+            Section(header: Text("其他")) {
+                Toggle("键盘弹出时自动隐藏桌宠", isOn: Binding<Bool>(
+                    get: { UserDefaults.standard.bool(forKey: "autoHideWithKeyboard") },
+                    set: { UserDefaults.standard.set($0, forKey: "autoHideWithKeyboard") }
+                ))
+            }
             Section(footer: Text("切换角色、调整尺寸或气泡样式后自动重启桌面悬浮生效。")) {
                 EmptyView()
             }
