@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import ObjectiveC
 
 /// 枚举设备已安装 App（通过 LSApplicationWorkspace 私有 API，TrollStore 环境下可用）
@@ -179,6 +180,39 @@ final class AppCatalog {
 
     static func find(_ bundleId: String) -> AppEntry? {
         list().first(where: { $0.bundleId == bundleId })
+    }
+
+    // v6.0.30: app图标内存缓存，照TrollStore方式直接读包内icon，不依赖系统接口
+    private static let iconCache = NSCache<NSString, UIImage>()
+
+    /// 直接读app包里的图标，带缓存，秒开
+    static func icon(for app: AppEntry) -> UIImage? {
+        // 先查缓存
+        if let cached = iconCache.object(forKey: app.bundleId as NSString) {
+            return cached
+        }
+        // 直接从app bundle路径读icon
+        let appPath = app.path
+        // 常见icon文件名
+        let iconNames = ["AppIcon60x60", "AppIcon80x80", "AppIcon76x76", "Icon"]
+        for name in iconNames {
+            if let iconPath = Bundle(path: appPath)?.path(forResource: name, ofType: "png"),
+               let img = UIImage(contentsOfFile: iconPath) {
+                iconCache.setObject(img, forKey: app.bundleId as NSString)
+                return img
+            }
+        }
+        // 兜底：读Assets.car里的icon，或者用系统占位图
+        let img = UIImage(named: "default_app_icon") ?? UIImage(systemName: "app")
+        if let img = img {
+            iconCache.setObject(img, forKey: app.bundleId as NSString)
+        }
+        return img
+    }
+
+    /// 安装/删除app时清缓存
+    static func invalidateIconCache() {
+        iconCache.removeAllObjects()
     }
 
     /// v2.9.128：运行中 App 的可执行名集合（ps -ax，匹配 execName；兼容 16 字符截断）
