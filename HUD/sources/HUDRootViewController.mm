@@ -104,6 +104,7 @@ extern "C" const char *g_hud_char;
     BOOL _autoMoodPaused;             // 锁屏时暂停待机自动换表情
     BOOL _moodShowing;                // 待机表情显示中（防重复切换）
     BOOL _isDragging;
+    BOOL _isHidden;
     CGPoint _dragOffset;
     int _emojiTimer;      // 点击表情显示计时
     NSUInteger _moodSeqIndex;  // v6.0.9：待机有序循环当前帧序号（不再随机挑帧）
@@ -1170,6 +1171,15 @@ extern "C" const char *g_hud_char;
         [self _startBreathing];   // v6.0.14：从趴墙恢复待机，重启漂浮
         return;
     }
+    // 如果现在是隐藏缩小状态，点一下先恢复
+    if (_isHidden) {
+        _isHidden = NO;
+        [UIView animateWithDuration:0.3 animations:^{
+            _girlView.transform = CGAffineTransformIdentity;
+            self.view.alpha = 1.0;
+        }];
+        return;
+    }
     // v6.0.30: 单击弹出自适应扇形快捷菜单，不切表情了
     // 先检查菜单是不是已经弹出来了，弹出来就关掉
     BOOL menuVisible = NO;
@@ -1277,11 +1287,16 @@ extern "C" const char *g_hud_char;
     NSArray *savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
     NSInteger customCount = savedApps.count ?: 3;
     if (idx == customCount + 1) {
-        // 最后一个是隐藏
-        self.view.alpha = 0.3;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            self.view.alpha = 0;
-        });
+        // 最后一个是隐藏：缩小成小圆点贴屏幕边缘，不消失，点一下恢复
+        [UIView animateWithDuration:0.3 animations:^{
+            CGFloat screenW = [UIScreen mainScreen].bounds.size.width;
+            CGFloat screenH = [UIScreen mainScreen].bounds.size.height;
+            _girlView.transform = CGAffineTransformMakeScale(0.1, 0.1);
+            _girlView.center = CGPointMake(screenW - 30, screenH - 100);
+            self.view.alpha = 0.7;
+        }];
+        // 记下来现在是隐藏状态
+        _isHidden = YES;
         return;
     }
     if (idx == customCount) {
