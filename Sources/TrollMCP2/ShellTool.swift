@@ -209,9 +209,25 @@ final class ShellExecTool: MCPTool {
             return result
         }
         
+        // v6.0.30: 兼容 cd 路径 && 命令 组合：自动提取cd的路径，后面的相对路径自动补全，不用切Alpine
+        var workingDir = ""
+        var finalCmd = trimmed
+        let cdPattern = #"^\s*cd\s+([^\s&]+)\s*&&\s*(.+)$"#
+        if let cdMatch = trimmed.range(of: cdPattern, options: .regularExpression) {
+            let nsCmd = trimmed as NSString
+            let cdPath = nsCmd.substring(with: cdMatch.range(at: 1))
+            let restCmd = nsCmd.substring(with: cdMatch.range(at: 2))
+            workingDir = (cdPath as NSString).expandingTildeInPath
+            finalCmd = restCmd
+            // 把后面命令里的相对路径（不是/开头的）补成绝对路径
+            let pathRegex = try? NSRegularExpression(pattern: #"\s([a-zA-Z0-9_\-./]+\.(py|sh|txt|json|log|png|jpg|bin))"#, options: [])
+            if let re = pathRegex {
+                finalCmd = re.stringByReplacingMatches(in: finalCmd, options: [], range: NSRange(location: 0, length: (finalCmd as NSString).length), withTemplate: " \(workingDir)/$1")
+            }
+        }
         // v4.3.9: 反向路径翻译——原生命令收到 Alpine 挂载路径(/ios_workspace 等)时翻译回 iOS 真实路径,
         // 消除 grep/cat/ls 收到 /ios_workspace 找不到文件的割裂(AI 不必手动换路径)。
-        let iosCmd = ShellExecTool.alpineToIOSPath(trimmed)
+        let iosCmd = ShellExecTool.alpineToIOSPath(finalCmd)
         
         // 1. ls 命令——iOS 原生实现
         if trimmed.hasPrefix("ls ") || trimmed == "ls" {
