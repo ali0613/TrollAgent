@@ -90,7 +90,15 @@ struct GirlCharacterPickerView: View {
                     }
                 }
             }
-            Section(header: Text("扇形快捷菜单"), footer: Text("单击桌宠弹出的快捷应用，可添加/删除，重启后生效。URL Scheme比如微信weixin://，抖音snssdk1128://")) {
+            Section(header: Text("快捷菜单"), footer: Text("单击桌宠弹出的菜单样式和应用，可添加/删除，重启后生效。URL Scheme比如微信weixin://，抖音snssdk1128://")) {
+                Picker("弹出样式", selection: Binding<Int>(
+                    get: { UserDefaults.standard.integer(forKey: "fanMenuStyle") },
+                    set: { UserDefaults.standard.set($0, forKey: "fanMenuStyle") }
+                )) {
+                    Text("扇形展开").tag(0)
+                    Text("纵向列表").tag(1)
+                }
+                .pickerStyle(.segmented)
                 let defaults = UserDefaults.standard
                 let savedApps = defaults.array(forKey: "fanMenuApps") as? [[String:String]] ?? [
                     ["name":"微信", "url":"weixin://"],

@@ -1206,6 +1206,7 @@ extern "C" const char *g_hud_char;
     [apps addObject:@{@"name":@"隐藏", @"url":@"trollagent://hide", @"color":[UIColor systemRedColor]}];
     CGFloat radius = 110;
     NSInteger count = apps.count;
+    NSInteger menuStyle = [[NSUserDefaults standardUserDefaults] integerForKey:@"fanMenuStyle"];
     for (NSInteger i = 0; i < count; i++) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
         btn.frame = CGRectMake(0, 0, 56, 56);
@@ -1215,23 +1216,28 @@ extern "C" const char *g_hud_char;
         [btn setTitle:apps[i][@"name"] forState:UIControlStateNormal];
         btn.tag = 9001 + i;
         btn.alpha = 0;
-        // 计算角度
-        CGFloat angle;
-        if (fromBottom) {
-            // 从底部向上展开，角度从-150°到-30°
-            angle = (-150 + (120.0/(count-1))*i) * M_PI/180;
-        } else if (fromTop) {
-            // 从顶部向下展开，角度从30°到150°
-            angle = (30 + (120.0/(count-1))*i) * M_PI/180;
-        } else if (fromLeft) {
-            // 从左边缘向右展开，角度从-60°到60°
-            angle = (-60 + (120.0/(count-1))*i) * M_PI/180;
+        CGFloat x, y;
+        if (menuStyle == 1) {
+            // 纵向列表样式：垂直排列，在角色右侧（如果在右边缘就左侧）
+            CGFloat startY = girlY - (count * 64)/2;
+            CGFloat listX = fromRight ? girlX - 80 : girlX + 80;
+            x = listX;
+            y = startY + i * 64;
         } else {
-            // 从右边缘向左展开，角度从120°到240°
-            angle = (120 + (120.0/(count-1))*i) * M_PI/180;
+            // 扇形样式：按角度算
+            CGFloat angle;
+            if (fromBottom) {
+                angle = (-150 + (120.0/(count-1))*i) * M_PI/180;
+            } else if (fromTop) {
+                angle = (30 + (120.0/(count-1))*i) * M_PI/180;
+            } else if (fromLeft) {
+                angle = (-60 + (120.0/(count-1))*i) * M_PI/180;
+            } else {
+                angle = (120 + (120.0/(count-1))*i) * M_PI/180;
+            }
+            x = girlX + cos(angle)*radius;
+            y = girlY + sin(angle)*radius;
         }
-        CGFloat x = girlX + cos(angle)*radius;
-        CGFloat y = girlY + sin(angle)*radius;
         btn.center = CGPointMake(x, y);
         [btn addTarget:self action:@selector(_fanBtnClick:) forControlEvents:UIControlEventTouchUpInside];
         [self.view addSubview:btn];
