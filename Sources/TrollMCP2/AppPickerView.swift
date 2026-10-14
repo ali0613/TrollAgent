@@ -38,6 +38,10 @@ final class AppIconLoader {
     static let shared = AppIconLoader()
     private let cache = NSCache<NSString, UIImage>()
     private init() { cache.countLimit = 512 }
+    /// 清所有图标缓存
+    func clear() {
+        cache.removeAllObjects()
+    }
 
     func icon(forPath path: String, app: AppCatalog.AppEntry? = nil) -> UIImage? {
         guard !path.isEmpty else { return nil }

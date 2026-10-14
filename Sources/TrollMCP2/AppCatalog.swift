@@ -117,7 +117,7 @@ final class AppCatalog {
         cachedList = nil
         cachedAt = nil
         // 同时清图标缓存
-        AppIconLoader.shared.removeAllObjects()
+        AppIconLoader.shared.clear()
         listLock.unlock()
     }
 
