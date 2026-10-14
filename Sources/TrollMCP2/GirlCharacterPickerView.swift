@@ -198,6 +198,23 @@ struct GirlCharacterPickerView: View {
                     Text("纵向列表").tag(1)
                 }
                 .pickerStyle(.segmented)
+                // 菜单样式预览
+                HStack {
+                    Spacer()
+                    if UserDefaults.standard.integer(forKey: "fanMenuStyle") == 0 {
+                        Text("🌕🌖🌗\n   🧸")
+                            .multilineTextAlignment(.center)
+                    } else {
+                        VStack(spacing: 4) {
+                            Text("🌕")
+                            Text("🌖")
+                            Text("🌗")
+                            Text("🧸")
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 4)
                 let defaults = UserDefaults.standard
                 let savedApps = defaults.array(forKey: "fanMenuApps") as? [[String:String]] ?? [
                     ["name":"微信", "url":"weixin://"],
