@@ -225,25 +225,37 @@ final class AppCatalog {
         }
     }
 
-    /// 从缓存读图标，没有再加载
+    /// 从缓存读图标，没有再加载，和TrollStore完全同款方法
     static func icon(for app: AppEntry) -> UIImage? {
         if let cached = iconCache.object(forKey: app.bundleId as NSString) {
             return cached
         }
-        // 优先用系统proxy的iconImage，秒出
-        if let img = app.iconImage() {
-            iconCache.setObject(img, forKey: app.bundleId as NSString)
-            return img
+        // TrollStore同款：LSApplicationWorkspace的_applicationIconImageForBundleIdentifier:format:scale:
+        // 之前用的proxy.iconImage()在iOS15+返回nil，所以后面图标都是黑框
+        guard let wsClass = NSClassFromString("LSApplicationWorkspace") else {
+            return UIImage(systemName: "app")
         }
-        // 兜底：直接从app bundle路径读icon
-        let appPath = app.path
-        let iconNames = ["AppIcon60x60", "AppIcon80x80", "AppIcon76x76", "Icon"]
-        for name in iconNames {
-            if let iconPath = Bundle(path: appPath)?.path(forResource: name, ofType: "png"),
-               let img = UIImage(contentsOfFile: iconPath) {
+        guard let ws = wsClass.perform(NSSelectorFromString("defaultWorkspace")).takeUnretainedValue() else {
+            return UIImage(systemName: "app")
+        }
+        let sel = NSSelectorFromString("_applicationIconImageForBundleIdentifier:format:scale:")
+        guard ws.responds(to: sel) else {
+            // 兜底用proxy.iconImage
+            if let img = app.iconImage() {
                 iconCache.setObject(img, forKey: app.bundleId as NSString)
                 return img
             }
+            return UIImage(systemName: "app")
+        }
+        typealias IconFn = @convention(c) (AnyObject, Selector, NSString, NSInteger, CGFloat) -> UIImage?
+        guard let m = class_getMethodImplementation(type(of: ws), sel) else {
+            return UIImage(systemName: "app")
+        }
+        let fn = unsafeBitCast(m, to: IconFn.self)
+        // format=1是小图标，scale=2是@2x分辨率
+        if let img = fn(ws, sel, app.bundleId as NSString, 1, 2.0) {
+            iconCache.setObject(img, forKey: app.bundleId as NSString)
+            return img
         }
         return UIImage(systemName: "app")
     }
