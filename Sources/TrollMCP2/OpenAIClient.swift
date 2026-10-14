@@ -317,7 +317,7 @@ final class OpenAIClient {
         applyAuth(to: &request)
 
         // v6.0.30: 试探阶段（level != 已记住的currentCompatLevel）发最小ping请求，不带历史和工具，减少token浪费
-        let isTrialRequest = (level != currentCompatLevel)
+        let isTrialRequest = (level != self.currentCompatLevel)
         let trialMessages = [ChatMessage(role: "user", content: "ping")]
         var body = buildBody(level: level, messages: isTrialRequest ? trialMessages : messages, tools: isTrialRequest ? nil : tools)
         injectBodyAuth(into: &body)
@@ -400,12 +400,12 @@ final class OpenAIClient {
                     self.currentReasoningLevel = saved
                     return
                 }
-                if level != currentCompatLevel {
+                if level != self.currentCompatLevel {
                     let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
                     NetworkLog.shared.log("\(self.config.name) 级别 \(level) (\(self.levelName(level)))试探OK (\(el)ms)，已记忆该级别，发送完整请求")
                     NetworkLog.lastCompatNote = "模型「\(self.config.name)」当前兼容级别: \(level) (\(self.levelName(level)))"
                     self.persist(level: level)
-                    currentCompatLevel = level;  // v6.0.30: 立刻更新内存里的兼容级别，避免递归时反复进试探分支死循环
+                    self.currentCompatLevel = level;  // v6.0.30: 立刻更新内存里的兼容级别，避免递归时反复进试探分支死循环
                     // 试探成功，发完整用户请求
                     self.attempt(level: level, isFirst: true, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                     return
