@@ -887,6 +887,12 @@ extern "C" const char *g_hud_char;
     // v6.0.28：读取气泡样式设置（0=经典圆角 1=椭圆 2=方形硬边 3=爆炸吐槽）
     int bubbleStyle = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"trollmcp2.bubble_style"];
     
+    // 换样式之后旧气泡扔掉，下次重新创建
+    if (_bubbleView) {
+        [_bubbleView removeFromSuperview];
+        _bubbleView = nil;
+        _bubbleLabel = nil;
+    }
     // 创建卡通漫画气泡（带小尾巴）
     if (!_bubbleLabel) {
         // 用UIView画带尾巴的气泡
