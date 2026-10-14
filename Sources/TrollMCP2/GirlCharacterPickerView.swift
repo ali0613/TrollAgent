@@ -5,6 +5,12 @@ import UIKit
 /// 入口：设置 → 可爱助手 → 可爱助手角色
 struct GirlCharacterPickerView: View {
     @ObservedObject private var companion = GirlCompanion.shared
+    @State private var savedApps: [[String:String]] = (UserDefaults.standard.array(forKey: "fanMenuApps") as? [[String:String]]) ?? [
+        ["name":"微信", "url":"weixin://"],
+        ["name":"抖音", "url":"snssdk1128://"],
+        ["name":"相机", "url":"camera://"],
+        ["name":"设置", "url":"App-prefs://"]
+    ]
 
     var body: some View {
         Form {
@@ -215,12 +221,6 @@ struct GirlCharacterPickerView: View {
                 }
                 .pickerStyle(.segmented)
                 let defaults = UserDefaults.standard
-                let savedApps = defaults.array(forKey: "fanMenuApps") as? [[String:String]] ?? [
-                    ["name":"微信", "url":"weixin://"],
-                    ["name":"抖音", "url":"snssdk1128://"],
-                    ["name":"相机", "url":"camera://"],
-                    ["name":"设置", "url":"App-prefs://"]
-                ]
                 ForEach(0..<savedApps.count, id:\.self) { i in
                     HStack {
                         Text(savedApps[i]["name"] ?? "")
@@ -229,12 +229,11 @@ struct GirlCharacterPickerView: View {
                     }
                 }
                 .onDelete { indexSet in
-                    var apps = savedApps
-                    apps.remove(atOffsets: indexSet)
-                    defaults.set(apps, forKey: "fanMenuApps")
+                    savedApps.remove(atOffsets: indexSet)
+                    defaults.set(savedApps, forKey: "fanMenuApps")
                 }
                 // 添加新应用
-                FanMenuAddView()
+                FanMenuAddView(savedApps: $savedApps)
             }
             Section(header: Text("其他")) {
                 Toggle("键盘弹出时自动隐藏桌宠", isOn: Binding<Bool>(
@@ -258,6 +257,7 @@ struct GirlCharacterPickerView: View {
 }
 
 struct FanMenuAddView: View {
+    @Binding var savedApps: [[String:String]]
     @State private var name = ""
     @State private var url = ""
     var body: some View {
@@ -267,10 +267,8 @@ struct FanMenuAddView: View {
                 TextField("URL Scheme 比如 weixin://", text: $url)
                 Button("添加") {
                     guard !name.isEmpty, !url.isEmpty else { return }
-                    let defaults = UserDefaults.standard
-                    var apps = defaults.array(forKey: "fanMenuApps") as? [[String:String]] ?? []
-                    apps.append(["name":name, "url":url])
-                    defaults.set(apps, forKey: "fanMenuApps")
+                    savedApps.append(["name":name, "url":url])
+                    UserDefaults.standard.set(savedApps, forKey: "fanMenuApps")
                     name = ""
                     url = ""
                 }
