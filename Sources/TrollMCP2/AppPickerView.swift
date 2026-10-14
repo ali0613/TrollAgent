@@ -116,12 +116,12 @@ struct AppIconView: View {
     let path: String
     var app: AppCatalog.AppEntry? = nil
 
+    @State private var image: UIImage?
+
     var body: some View {
-        // 直接读全局缓存，预加载完之后秒显示，不会一块一块出
-        let img = app != nil ? AppCatalog.icon(for: app!) : nil
         Group {
-            if let img = img {
-                Image(uiImage: img)
+            if let image = image {
+                Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else {
@@ -131,6 +131,23 @@ struct AppIconView: View {
                         .font(.system(size: 20, weight: .medium))
                         .foregroundColor(.secondary)
                 }
+            }
+        }
+        .onAppear { loadIcon() }
+    }
+
+    private func loadIcon() {
+        // 先查全局缓存，有就直接显示，不阻塞
+        if let app = app, let cached = AppCatalog.iconCache.object(forKey: app.bundleId as NSString) {
+            image = cached
+            return
+        }
+        // 缓存没有，后台异步加载，主线程不卡
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let app = app else { return }
+            let img = AppCatalog.icon(for: app)
+            DispatchQueue.main.async {
+                image = img
             }
         }
     }
