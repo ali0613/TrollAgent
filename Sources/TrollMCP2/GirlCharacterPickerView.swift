@@ -165,6 +165,29 @@ struct GirlCharacterPickerView: View {
                         _ = HUDManager.shared.start()
                     }
                 }
+                // 实时预览气泡
+                Text("预览：哈喽呀～")
+                    .padding()
+                    .background(
+                        Group {
+                            if companion.bubbleStyle == 0 {
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color(.secondarySystemGroupedBackground))
+                            } else if companion.bubbleStyle == 1 {
+                                Capsule()
+                                    .fill(Color(.secondarySystemGroupedBackground))
+                            } else if companion.bubbleStyle == 2 {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .stroke(Color.blue, lineWidth: 2)
+                                    .background(Color(.secondarySystemGroupedBackground))
+                            } else {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.yellow.opacity(0.9))
+                                    .shadow(radius: 2)
+                            }
+                        }
+                    )
+                    .padding(.vertical, 8)
             }
             Section(header: Text("快捷菜单"), footer: Text("单击桌宠弹出的菜单样式和应用，可添加/删除，重启后生效。URL Scheme比如微信weixin://，抖音snssdk1128://")) {
                 Picker("弹出样式", selection: Binding<Int>(
