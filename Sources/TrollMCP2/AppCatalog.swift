@@ -67,6 +67,8 @@ final class AppCatalog {
         let fresh = enumerate()
         cachedList = fresh
         cachedAt = Date()
+        // 枚举完立刻后台预加载所有图标，和TrollStore一样，不管哪个页面打开都秒显示
+        preloadIcons(for: fresh)
         return fresh
     }
 
