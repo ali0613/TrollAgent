@@ -1162,19 +1162,107 @@ extern "C" const char *g_hud_char;
         [self _startBreathing];   // v6.0.14：从趴墙恢复待机，重启漂浮
         return;
     }
-    static int seq = 0;
-    // v6.0.8：表情池扩大——happy、think + 新增站立表情（比心/惊喜/生气/跳跃/挥手/捂嘴等）轮流展示
-    NSMutableArray *pool = [NSMutableArray array];
-    if (_happyFrames.firstObject) [pool addObject:_happyFrames.firstObject];
-    if (_thinkFrames.firstObject) [pool addObject:_thinkFrames.firstObject];
-    if (_moodFrames.count) [pool addObjectsFromArray:_moodFrames];
-    if (!pool.count) return;
-    UIImage *img = pool[(NSUInteger)(seq % (int)pool.count)];
-    seq = (seq + 1) % (int)pool.count;
-    _girlView.image = img;
-    [self _setFrameForImage:img];
-    _emojiTimer = 2;   // 约 1.6s 后回待机
-    [self _resetAfterEmoji];
+    // v6.0.30: 单击弹出自适应扇形快捷菜单，不切表情了
+    [self _showFanMenu];
+}
+
+// v6.0.30: 扇形快捷菜单
+- (void)_showFanMenu {
+    // 先关掉旧菜单
+    for (UIView *v in self.view.subviews) {
+        if (v.tag == 9001) [v removeFromSuperview];
+    }
+    CGFloat screenW = [UIScreen mainScreen].bounds.size.width;
+    CGFloat screenH = [UIScreen mainScreen].bounds.size.height;
+    CGFloat girlX = _girlView.center.x;
+    CGFloat girlY = _girlView.center.y;
+    // 判断方向：永远朝屏幕中间弹
+    BOOL fromBottom = (girlY > screenH - 200);
+    BOOL fromTop = (girlY < 150);
+    BOOL fromLeft = (girlX < 150);
+    BOOL fromRight = (girlX > screenW - 150);
+    // 默认6个入口：微信、抖音、相机、设置、AI聊天、隐藏
+    NSArray *apps = @[
+        @{@"name":@"微信", @"url":@"weixin://", @"color":[UIColor colorWithRed:0.19 green:0.78 blue:0.32 alpha:1.0]},
+        @{@"name":@"抖音", @"url":@"snssdk1128://", @"color":[UIColor blackColor]},
+        @{@"name":@"相机", @"url":@"camera://", @"color":[UIColor darkGrayColor]},
+        @{@"name":@"设置", @"url":@"App-prefs://", @"color":[UIColor grayColor]},
+        @{@"name":@"AI", @"url":@"trollagent://chat", @"color":[UIColor systemBlueColor]},
+        @{@"name":@"隐藏", @"url":@"trollagent://hide", @"color":[UIColor systemRedColor]}
+    ];
+    CGFloat radius = 110;
+    NSInteger count = apps.count;
+    for (NSInteger i = 0; i < count; i++) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+        btn.frame = CGRectMake(0, 0, 56, 56);
+        btn.layer.cornerRadius = 28;
+        btn.backgroundColor = apps[i][@"color"];
+        btn.titleLabel.font = [UIFont systemFontOfSize:12];
+        [btn setTitle:apps[i][@"name"] forState:UIControlStateNormal];
+        btn.tag = 9001 + i;
+        btn.alpha = 0;
+        // 计算角度
+        CGFloat angle;
+        if (fromBottom) {
+            // 从底部向上展开，角度从-150°到-30°
+            angle = (-150 + (120.0/(count-1))*i) * M_PI/180;
+        } else if (fromTop) {
+            // 从顶部向下展开，角度从30°到150°
+            angle = (30 + (120.0/(count-1))*i) * M_PI/180;
+        } else if (fromLeft) {
+            // 从左边缘向右展开，角度从-60°到60°
+            angle = (-60 + (120.0/(count-1))*i) * M_PI/180;
+        } else {
+            // 从右边缘向左展开，角度从120°到240°
+            angle = (120 + (120.0/(count-1))*i) * M_PI/180;
+        }
+        CGFloat x = girlX + cos(angle)*radius;
+        CGFloat y = girlY + sin(angle)*radius;
+        btn.center = CGPointMake(x, y);
+        [btn addTarget:self action:@selector(_fanBtnClick:) forControlEvents:UIControlEventTouchUpInside];
+        [self.view addSubview:btn];
+        [UIView animateWithDuration:0.3 animations:^{
+            btn.alpha = 1.0;
+        }];
+    }
+    // 点空白处关菜单
+    UIButton *blank = [UIButton buttonWithType:UIButtonTypeCustom];
+    blank.frame = self.view.bounds;
+    blank.tag = 9000;
+    [blank addTarget:self action:@selector(_closeFanMenu) forControlEvents:UIControlEventTouchUpInside];
+    [self.view insertSubview:blank atIndex:0];
+}
+
+- (void)_fanBtnClick:(UIButton *)btn {
+    NSInteger idx = btn.tag - 9001;
+    [self _closeFanMenu];
+    // 简单处理：后面加自定义应用
+    if (idx == 5) {
+        // 隐藏
+        self.view.alpha = 0.3;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            self.view.alpha = 0;
+        });
+        return;
+    }
+    if (idx == 4) {
+        // AI聊天
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"trollagent://chat"] options:@{} completionHandler:nil];
+        return;
+    }
+    // 其他app用url打开
+    NSArray *urls = @[@"weixin://", @"snssdk1128://", @"camera://", @"App-prefs://"];
+    if (idx < urls.count) {
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:urls[idx]] options:@{} completionHandler:nil];
+    }
+}
+
+- (void)_closeFanMenu {
+    for (UIView *v in self.view.subviews) {
+        if (v.tag >= 9000) {
+            [v removeFromSuperview];
+        }
+    }
 }
 
 - (void)_resetAfterEmoji {
