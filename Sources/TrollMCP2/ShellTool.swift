@@ -295,12 +295,7 @@ final class ShellExecTool: MCPTool {
         }
         
         // 7. rm 命令——iOS 原生实现 (删文件/目录）
-        // v6.0.30: 自动检测Alpine路径(如/root/...)，自动转Alpine执行，避免iOS原生删不到却报成功
         if trimmed.hasPrefix("rm ") {
-            if trimmed.contains("/root/") || trimmed.contains("/alpine-rootfs/") {
-                AuditLog.shared.log("shell.exec (alpine auto rm)", detail: String(trimmed.prefix(100)))
-                return ShellExecTool.runAlpine(trimmed, timeout: timeout)
-            }
             let result = ShellExecTool.runIOSRm(iosCmd)
             AuditLog.shared.log("shell.exec (ios rm)", detail: String(trimmed.prefix(100)))
             return result
