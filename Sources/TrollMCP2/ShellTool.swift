@@ -654,6 +654,16 @@ final class ShellExecTool: MCPTool {
            !c.contains("-maxdepth") {
             return true
         }
+        // v6.0.30: 阻塞型联网/重命令自动切Alpine，避免原生跑阻塞命令闪退
+        let blockingMarkers = [
+            "git clone", "git pull", "git fetch",
+            "wget ", "curl -O", "curl -L",
+            "$(", "`",  // 命令替换，原生不支持
+            ">>"  // 重定向写文件，原生处理不一致
+        ]
+        for m in blockingMarkers {
+            if c.contains(m) { return true }
+        }
         return false
     }
 
