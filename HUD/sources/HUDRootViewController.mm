@@ -9,6 +9,7 @@
 #import "HUDRootViewController.h"
 #import "HUDMainWindow.h"
 #import <string.h>
+#import <math.h>
 #import <QuartzCore/QuartzCore.h>
 #import <mach/mach.h>
 
