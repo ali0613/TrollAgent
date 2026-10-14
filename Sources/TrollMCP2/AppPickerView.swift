@@ -39,11 +39,19 @@ final class AppIconLoader {
     private let cache = NSCache<NSString, UIImage>()
     private init() { cache.countLimit = 512 }
 
-    func icon(forPath path: String) -> UIImage? {
+    func icon(forPath path: String, app: AppCatalog.AppEntry? = nil) -> UIImage? {
         guard !path.isEmpty else { return nil }
         let key = path as NSString
         if let hit = cache.object(forKey: key) { return hit }
-        let img = Self.readIcon(from: path)
+        // 优先用系统缓存的图标（TrollStore同款，秒出）
+        var img: UIImage? = nil
+        if let app = app {
+            img = app.iconImage()
+        }
+        // 找不到再读文件
+        if img == nil {
+            img = Self.readIcon(from: path)
+        }
         if let img = img { cache.setObject(img, forKey: key) }
         return img
     }
@@ -102,6 +110,7 @@ final class AppIconLoader {
 
 struct AppIconView: View {
     let path: String
+    var app: AppCatalog.AppEntry? = nil
 
     @State private var image: UIImage?
 
@@ -124,8 +133,13 @@ struct AppIconView: View {
     }
 
     private func loadIcon() {
+        // 先直接拿系统缓存图标，秒出，不用后台线程
+        if let app = app, let img = app.iconImage() {
+            image = img
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async {
-            let img = AppIconLoader.shared.icon(forPath: path)
+            let img = AppIconLoader.shared.icon(forPath: path, app: app)
             DispatchQueue.main.async {
                 image = img
             }

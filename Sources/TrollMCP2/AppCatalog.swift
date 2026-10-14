@@ -16,6 +16,8 @@ final class AppCatalog {
         let appType: String
         /// 签名 TeamID（TrollStore 侧载为 TROLLTROLL）
         let teamID: String?
+        /// 存原始proxy，直接拿系统缓存图标
+        let proxy: NSObject?
         var id: String { bundleId }
 
         /// 用户 App（App Store / 企业签名）：LS 类型 = User
@@ -25,6 +27,17 @@ final class AppCatalog {
         /// 巨魔 TrollStore 侧载：LS 类型 = System（系统 App 已被路径过滤，
         /// 剩余 System 即 TrollStore 装）；teamID=TROLLTROLL 兜底
         var isTroll: Bool { appType == "System" || (teamID?.uppercased().contains("TROLL") ?? false) }
+
+        /// 直接拿系统缓存的图标，秒出，不用自己找文件
+        func iconImage() -> UIImage? {
+            guard let p = proxy else { return nil }
+            let sel = NSSelectorFromString("iconImage")
+            guard p.responds(to: sel) else { return nil }
+            typealias IconFn = @convention(c) (AnyObject, Selector) -> UIImage?
+            guard let m = class_getMethodImplementation(type(of: p), sel) else { return nil }
+            let fn = unsafeBitCast(m, to: IconFn.self)
+            return fn(p, sel)
+        }
     }
 
     /// v2.9.135：全量枚举缓存（TTL 5 秒）——旧版每次 list() 都重新枚举 266 个 App，
@@ -126,14 +139,12 @@ final class AppCatalog {
                 bundleId: bid,
                 name: safeValue(p, "localizedName") as? String ?? bid,
                 path: path,
-                // v4.3.60：枚举不再读 dataContainerURL（私有属性，全量读取 266 个 App 的
-                // 容器路径会深层访问容器数据库，污染进程 LS 状态 → 分享面板/打开方式崩溃）。
-                // 容器路径改为 lookupContainer 按需懒查。
                 containerPath: nil,
                 version: plist?["CFBundleShortVersionString"] as? String ?? "",
                 execName: plist?["CFBundleExecutable"] as? String ?? "",
                 appType: appType,
-                teamID: teamID
+                teamID: teamID,
+                proxy: p
             )
         }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }

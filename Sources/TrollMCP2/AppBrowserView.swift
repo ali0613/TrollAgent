@@ -148,7 +148,7 @@ struct AppBrowserList: View {
     private func row(_ app: AppCatalog.AppEntry) -> some View {
         Button(action: { onTap(app) }) {
             HStack(spacing: 12) {
-                AppIconView(path: app.path)
+                AppIconView(path: app.path, app: app)
                     .frame(width: 42, height: 42)
                     .cornerRadius(10)
                 VStack(alignment: .leading, spacing: 3) {
