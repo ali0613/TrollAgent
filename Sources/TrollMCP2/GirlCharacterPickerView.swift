@@ -29,7 +29,7 @@ struct GirlCharacterPickerView: View {
                         }
                     } label: {
                         VStack(spacing: 8) {
-                            if let img = UIImage(named: "rabit_idle") {
+                            if let img = UIImage(named: "rabit_cross") {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
@@ -69,7 +69,7 @@ struct GirlCharacterPickerView: View {
                         }
                     } label: {
                         VStack(spacing: 8) {
-                            if let img = UIImage(named: "girl_idle") {
+                            if let img = UIImage(named: "girl_kneel") {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
@@ -109,7 +109,7 @@ struct GirlCharacterPickerView: View {
                         }
                     } label: {
                         VStack(spacing: 8) {
-                            if let img = UIImage(named: "cat_idle") {
+                            if let img = UIImage(named: "cat_kneel") {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
