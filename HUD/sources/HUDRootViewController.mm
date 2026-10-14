@@ -149,7 +149,7 @@ extern "C" const char *g_hud_char;
         _charScale = isRabbit ? 1.2f : (isCat ? 1.3f : 1.0f);   // v6.0.30：猫娘1.3 高于 兔娘1.2 高于 萝莉1.0
         // v6.0.27：吸附距离按角色独立配置——该分开就分开（每角色独立值，可单独微调），与 lift 帧尺寸解耦；
         // 值为"角色中心到边缘触发吸附的距离"，已含内容留白容差，调 charScale/素材不影响吸附判定
-        if (isCat)         { _snapReachH = 72.0f; _snapReachV = 85.0f; }   // 猫娘(1.3) 按1.3/1.4比例缩小吸附范围
+        if (isCat)         { _snapReachH = 78.0f; _snapReachV = 92.0f; }   // 猫娘吸附位置不变，保持原阈值
         else if (isRabbit) { _snapReachH = 68.0f; _snapReachV = 80.0f; }   // 兔娘(1.2)
         else               { _snapReachH = 58.0f; _snapReachV = 68.0f; }   // 萝莉(1.0)
         _enableChest = (isCat || isRabbit);   // v6.0.24：胸部呼吸仅兔娘/猫娘（萝莉 girl 不做）
