@@ -649,6 +649,11 @@ final class ShellExecTool: MCPTool {
         for m in controlPatterns {
             if c.range(of: m, options: .regularExpression) != nil { return true }
         }
+        // v6.0.30: 全盘find /自动切Alpine执行，避免iOS原生find在手机上卡死
+        if c.range(of: #"find\s+/\s"#, options: .regularExpression) != nil,
+           !c.contains("-maxdepth") {
+            return true
+        }
         return false
     }
 
