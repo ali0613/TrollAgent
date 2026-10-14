@@ -663,7 +663,8 @@ final class ShellExecTool: MCPTool {
             // 首词 python3 走 iOS 原生分支(runIOSPython3)。要 Alpine 版 Python 用 sh -c 'python3 ...'
             // (sh marker 命中仍走 Alpine)，或显式声明"在 Alpine 里跑"。
             #"^\s*(pip3?)\s+"#,        // pip / pip3 (装包仍在 Alpine)
-            #"^\s*(git|wget|make|cmake|gcc|clang)\s+"#,  // 工具链
+            #"^\s*(wget|make|cmake|gcc|clang)\s+"#,  // 工具链
+            #"^\s*git\s+(clone|pull|fetch|push)\s"#,  // 只有git联网操作切Alpine，本地status/log/diff原生跑
             #"^\s*sh\s+"#,             // 任意 sh 脚本(含无 flag) → Alpine 全功能 shell
             #"^\s*bash\s+"#,
             #"^\s*file\s+"#,           // native 无 file 命令 → Alpine 的 file(真实现, autoBind 后能读 iOS 文件)
