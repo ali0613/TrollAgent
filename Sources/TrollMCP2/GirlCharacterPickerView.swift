@@ -184,7 +184,16 @@ struct GirlCharacterPickerView: View {
             }, footer: Text("💡 提示：单击桌面上的桌宠就会弹出这个快捷菜单！点右上角编辑可删除应用，URL Scheme比如微信weixin://，抖音snssdk1128://")) {
                 Picker("弹出样式", selection: Binding<Int>(
                     get: { UserDefaults.standard.integer(forKey: "fanMenuStyle") },
-                    set: { UserDefaults.standard.set($0, forKey: "fanMenuStyle") }
+                    set: { 
+                        UserDefaults.standard.set($0, forKey: "fanMenuStyle")
+                        // 如果桌宠正在运行，自动重启读新参数；没运行绝对不启动
+                        if HUDManager.shared.isRunning {
+                            _ = HUDManager.shared.stop()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                _ = HUDManager.shared.start()
+                            }
+                        }
+                    }
                 )) {
                     Text("扇形展开").tag(0)
                     Text("纵向列表").tag(1)
