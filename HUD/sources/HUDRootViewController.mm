@@ -1240,16 +1240,17 @@ extern "C" const char *g_hud_char;
             x = listX;
             y = startY + i * 64;
         } else {
-            // 扇形样式：按角度算
+            // 扇形样式：按角度算，count=1的时候不除以0
             CGFloat angle;
+            CGFloat step = (count > 1) ? (120.0/(count-1)) : 0;
             if (fromBottom) {
-                angle = (-150 + (120.0/(count-1))*i) * M_PI/180;
+                angle = (-150 + step*i) * M_PI/180;
             } else if (fromTop) {
-                angle = (30 + (120.0/(count-1))*i) * M_PI/180;
+                angle = (30 + step*i) * M_PI/180;
             } else if (fromLeft) {
-                angle = (-60 + (120.0/(count-1))*i) * M_PI/180;
+                angle = (-60 + step*i) * M_PI/180;
             } else {
-                angle = (120 + (120.0/(count-1))*i) * M_PI/180;
+                angle = (120 + step*i) * M_PI/180;
             }
             x = girlX + cos(angle)*radius;
             y = girlY + sin(angle)*radius;
@@ -1270,7 +1271,7 @@ extern "C" const char *g_hud_char;
 }
 
 - (void)_fanBtnClick:(UIButton *)btn {
-    NSInteger idx = btn.tag - 9001;
+    NSInteger idx = btn.tag - 9000;
     [self _closeFanMenu];
     // 读取应用列表
     NSArray *savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
