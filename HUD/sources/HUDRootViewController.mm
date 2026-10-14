@@ -245,7 +245,10 @@ extern "C" const char *g_hud_char;
                                  w, size);
     // 初始锚点=中心(0.5)，不偏移；胸部呼吸锚点(0.42)按状态在 _startBreathing 切换，趴墙/拖拽悬浮保持中心
 
-    // v6.0.30：键盘弹出时自动隐藏桌宠
+    // v6.0.30：键盘弹出时自动隐藏桌宠，默认打开
+    if ([[NSUserDefaults standardUserDefaults] objectForKey:@"autoHideWithKeyboard"] == nil) {
+        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"autoHideWithKeyboard"];
+    }
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
 
@@ -1168,7 +1171,16 @@ extern "C" const char *g_hud_char;
         return;
     }
     // v6.0.30: 单击弹出自适应扇形快捷菜单，不切表情了
-    [self _showFanMenu];
+    // 先检查菜单是不是已经弹出来了，弹出来就关掉
+    BOOL menuVisible = NO;
+    for (UIView *v in self.view.subviews) {
+        if (v.tag >= 9000 && v.tag < 9100) { menuVisible = YES; break; }
+    }
+    if (menuVisible) {
+        [self _closeFanMenu];
+    } else {
+        [self _showFanMenu];
+    }
 }
 
 // v6.0.30: 扇形快捷菜单
@@ -1218,7 +1230,7 @@ extern "C" const char *g_hud_char;
         btn.backgroundColor = apps[i][@"color"];
         btn.titleLabel.font = [UIFont systemFontOfSize:12];
         [btn setTitle:apps[i][@"name"] forState:UIControlStateNormal];
-        btn.tag = 9000;
+        btn.tag = 9000 + i;
         btn.alpha = 0;
         CGFloat x, y;
         if (menuStyle == 1) {

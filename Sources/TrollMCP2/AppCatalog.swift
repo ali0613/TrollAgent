@@ -38,6 +38,14 @@ final class AppCatalog {
             let fn = unsafeBitCast(m, to: IconFn.self)
             return fn(p, sel)
         }
+
+        // 只比较bundleId，proxy不参与Hashable，避免编译错误
+        static func == (lhs: AppEntry, rhs: AppEntry) -> Bool {
+            return lhs.bundleId == rhs.bundleId
+        }
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(bundleId)
+        }
     }
 
     /// v2.9.135：全量枚举缓存（TTL 5 秒）——旧版每次 list() 都重新枚举 266 个 App，
