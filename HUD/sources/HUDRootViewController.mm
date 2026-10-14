@@ -1321,8 +1321,18 @@ extern "C" const char *g_hud_char;
     }
     // 自定义应用
     if (idx < savedApps.count) {
-        NSString *url = savedApps[idx][@"url"];
-        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];
+        // 优先用bundleId直接打开（新添加的应用）
+        NSString *bundleId = savedApps[idx][@"bundleId"];
+        if (bundleId.length > 0) {
+            // 用LSApplicationWorkspace直接打开，不用URL scheme
+            Class LSWorkspace = NSClassFromString(@"LSApplicationWorkspace");
+            id ws = [LSWorkspace performSelector:@selector(defaultWorkspace)];
+            [ws performSelector:@selector(openApplicationWithBundleID:) withObject:bundleId];
+        } else {
+            // 兼容旧的url scheme
+            NSString *url = savedApps[idx][@"url"];
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];
+        }
     }
 }
 

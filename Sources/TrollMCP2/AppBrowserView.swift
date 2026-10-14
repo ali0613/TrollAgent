@@ -56,6 +56,14 @@ struct AppBrowserList: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // 进页面后台预加载所有图标，避免滚动时一块一块出来
+            Color.clear.onAppear {
+                DispatchQueue.global(qos: .utility).async {
+                    for app in apps {
+                        _ = AppCatalog.shared.iconImage(bundleId: app.bundleId)
+                    }
+                }
+            }
             searchBar
             categoryBar
 

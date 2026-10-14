@@ -237,21 +237,22 @@ struct GirlCharacterPickerView: View {
 
 struct FanMenuAddView: View {
     @Binding var savedApps: [[String:String]]
-    @State private var name = ""
-    @State private var url = ""
+    @State private var showPicker = false
     var body: some View {
-        VStack {
+        Button {
+            showPicker = true
+        } label: {
             HStack {
-                TextField("应用名称", text: $name)
-                TextField("URL Scheme 比如 weixin://", text: $url)
-                Button("添加") {
-                    guard !name.isEmpty, !url.isEmpty else { return }
-                    savedApps.append(["name":name, "url":url])
-                    UserDefaults.standard.set(savedApps, forKey: "fanMenuApps")
-                    name = ""
-                    url = ""
-                }
-                .disabled(name.isEmpty || url.isEmpty)
+                Image(systemName: "plus.circle.fill")
+                Text("从已安装应用选择添加")
+                Spacer()
+            }
+        }
+        .sheet(isPresented: $showPicker) {
+            AppBrowserView { app in
+                savedApps.append(["name":app.name, "bundleId":app.bundleId])
+                UserDefaults.standard.set(savedApps, forKey: "fanMenuApps")
+                showPicker = false
             }
         }
     }
