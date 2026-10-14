@@ -1173,9 +1173,9 @@ extern "C" const char *g_hud_char;
 
 // v6.0.30: 扇形快捷菜单
 - (void)_showFanMenu {
-    // 先关掉旧菜单
+    // 先关掉所有旧菜单按钮（统一tag=9000）
     for (UIView *v in self.view.subviews) {
-        if (v.tag == 9001) [v removeFromSuperview];
+        if (v.tag >= 9000 && v.tag < 9100) [v removeFromSuperview];
     }
     CGFloat screenW = [UIScreen mainScreen].bounds.size.width;
     CGFloat screenH = [UIScreen mainScreen].bounds.size.height;
@@ -1218,7 +1218,7 @@ extern "C" const char *g_hud_char;
         btn.backgroundColor = apps[i][@"color"];
         btn.titleLabel.font = [UIFont systemFontOfSize:12];
         [btn setTitle:apps[i][@"name"] forState:UIControlStateNormal];
-        btn.tag = 9001 + i;
+        btn.tag = 9000;
         btn.alpha = 0;
         CGFloat x, y;
         if (menuStyle == 1) {

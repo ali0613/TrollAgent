@@ -12,9 +12,12 @@ struct GirlCharacterPickerView: View {
                 // 上面小萝莉大卡片，横向跪姿
                 Button {
                     companion.selectedCharacter = .loli
-                    _ = HUDManager.shared.stop()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        _ = HUDManager.shared.start()
+                    // 只有桌宠正在运行才重启，没运行不自动打开
+                    if HUDManager.shared.isRunning {
+                        _ = HUDManager.shared.stop()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            _ = HUDManager.shared.start()
+                        }
                     }
                 } label: {
                     HStack(spacing: 16) {
@@ -55,9 +58,11 @@ struct GirlCharacterPickerView: View {
                     // 兔娘
                     Button {
                         companion.selectedCharacter = .rabit
-                        _ = HUDManager.shared.stop()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            _ = HUDManager.shared.start()
+                        if HUDManager.shared.isRunning {
+                            _ = HUDManager.shared.stop()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                _ = HUDManager.shared.start()
+                            }
                         }
                     } label: {
                         VStack(spacing: 8) {
@@ -92,9 +97,11 @@ struct GirlCharacterPickerView: View {
                     // 猫娘
                     Button {
                         companion.selectedCharacter = .cat
-                        _ = HUDManager.shared.stop()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            _ = HUDManager.shared.start()
+                        if HUDManager.shared.isRunning {
+                            _ = HUDManager.shared.stop()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                _ = HUDManager.shared.start()
+                            }
                         }
                     } label: {
                         VStack(spacing: 8) {
@@ -133,8 +140,8 @@ struct GirlCharacterPickerView: View {
                     HStack {
                         Text("小")
                         Slider(value: $companion.floatSize, in: 170...300, step: 5, onEditingChanged: { editing in
-                            if !editing {
-                                // 拖动结束松手后才重启HUD生效
+                            if !editing && HUDManager.shared.isRunning {
+                                // 只有桌宠正在运行才重启，没运行不动
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                     _ = HUDManager.shared.stop()
                                     _ = HUDManager.shared.start()
@@ -157,10 +164,11 @@ struct GirlCharacterPickerView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: companion.bubbleStyle) { _ in
-                    // 气泡样式变化后自动重启HUD生效
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        _ = HUDManager.shared.stop()
-                        _ = HUDManager.shared.start()
+                    if HUDManager.shared.isRunning {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            _ = HUDManager.shared.stop()
+                            _ = HUDManager.shared.start()
+                        }
                     }
                 }
                 // 实时预览气泡
@@ -230,7 +238,13 @@ struct GirlCharacterPickerView: View {
             }
             Section(header: Text("其他")) {
                 Toggle("键盘弹出时自动隐藏桌宠", isOn: Binding<Bool>(
-                    get: { UserDefaults.standard.bool(forKey: "autoHideWithKeyboard") },
+                    get: { 
+                        // 默认打开
+                        if UserDefaults.standard.object(forKey: "autoHideWithKeyboard") == nil {
+                            return true
+                        }
+                        return UserDefaults.standard.bool(forKey: "autoHideWithKeyboard")
+                    },
                     set: { UserDefaults.standard.set($0, forKey: "autoHideWithKeyboard") }
                 ))
             }
