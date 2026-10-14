@@ -256,7 +256,12 @@ final class ShellExecTool: MCPTool {
         }
         
         // 7. rm 命令——iOS 原生实现 (删文件/目录）
+        // v6.0.30: 自动检测Alpine路径(如/root/...)，自动转Alpine执行，避免iOS原生删不到却报成功
         if trimmed.hasPrefix("rm ") {
+            if trimmed.contains("/root/") || trimmed.contains("/alpine-rootfs/") {
+                AuditLog.shared.log("shell.exec (alpine auto rm)", detail: String(trimmed.prefix(100)))
+                return ShellExecTool.runAlpine(trimmed, timeout: timeout)
+            }
             let result = ShellExecTool.runIOSRm(iosCmd)
             AuditLog.shared.log("shell.exec (ios rm)", detail: String(trimmed.prefix(100)))
             return result
@@ -628,6 +633,13 @@ final class ShellExecTool: MCPTool {
         ]
         for m in alpineMarkers {
             if c.range(of: m, options: .regularExpression) != nil { return true }
+        }
+        // v6.0.30: python代码里要开子进程(subprocess/os.system/popen)，原生python不支持，自动切Alpine
+        if c.hasPrefix("python3") || c.hasPrefix("python") {
+            let subprocessMarkers = ["subprocess", "os.system", "os.popen", "Popen", "os.exec"]
+            for m in subprocessMarkers {
+                if c.contains(m) { return true }
+            }
         }
         // 复杂控制结构 (for/while/case/if...then) 走 Alpine 全功能 shell
         let controlPatterns = [
@@ -2721,20 +2733,33 @@ final class ShellExecTool: MCPTool {
             return ["command": command, "exit_code": 1, "stdout": "Usage: rm [-rf] <path>", "ios_native": true]
         }
         var removed: [String] = []
+        var failed: [String] = []
         var firstErr: String? = nil
         for p in paths {
             let path = ShellExecTool.normalizePath((p as NSString).expandingTildeInPath)
+            // 路径不存在不算失败
+            if !fm.fileExists(atPath: path) {
+                removed.append("\(path) (不存在，自动跳过)")
+                continue
+            }
             do {
                 try fm.removeItem(atPath: path)
                 removed.append(path)
             } catch {
+                failed.append(path)
                 if firstErr == nil { firstErr = error.localizedDescription }
             }
         }
-        if removed.isEmpty {
-            return ["command": command, "exit_code": 1, "stdout": "rm failed: \(firstErr ?? "no path removed")", "ios_native": true]
+        if failed.isEmpty {
+            return ["command": command, "exit_code": 0, "stdout": "Removed: \(removed.joined(separator: ", "))", "ios_native": true]
         }
-        return ["command": command, "exit_code": 0, "stdout": "Removed: \(removed.joined(separator: ", "))", "ios_native": true]
+        // 有任何路径删失败，就返回exit_code=1，明确列出没删掉的，避免假成功
+        let stdout = """
+        Removed: \(removed.joined(separator: ", "))
+        Failed to remove: \(failed.joined(separator: ", "))
+        Error: \(firstErr ?? "unknown")
+        """
+        return ["command": command, "exit_code": 1, "stdout": stdout, "ios_native": true]
     }
     
     /// v3.1.32: iOS 原生 mv 命令——移动/重命名
