@@ -164,28 +164,38 @@ struct GirlCharacterPickerView: View {
                     }
                 }
                 // 实时预览气泡
-                Text("预览：哈喽呀～")
-                    .padding()
-                    .background(
-                        Group {
-                            if companion.bubbleStyle == 0 {
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color(.secondarySystemGroupedBackground))
-                            } else if companion.bubbleStyle == 1 {
-                                Capsule()
-                                    .fill(Color(.secondarySystemGroupedBackground))
-                            } else if companion.bubbleStyle == 2 {
-                                RoundedRectangle(cornerRadius: 4)
-                                    .stroke(Color.blue, lineWidth: 2)
-                                    .background(Color(.secondarySystemGroupedBackground))
-                            } else {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.yellow.opacity(0.9))
-                                    .shadow(radius: 2)
+                VStack {
+                    Text("预览：哈喽呀～")
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .overlay(
+                            Group {
+                                if companion.bubbleStyle == 0 {
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(Color(.secondarySystemGroupedBackground))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16)
+                                                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                                        )
+                                } else if companion.bubbleStyle == 1 {
+                                    Capsule()
+                                        .fill(Color(.secondarySystemGroupedBackground))
+                                } else if companion.bubbleStyle == 2 {
+                                    Rectangle()
+                                        .fill(Color(.secondarySystemGroupedBackground))
+                                        .overlay(
+                                            Rectangle()
+                                                .stroke(Color.blue, lineWidth: 2)
+                                        )
+                                } else {
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.yellow.opacity(0.95))
+                                        .shadow(radius: 3)
+                                }
                             }
-                        }
-                    )
-                    .padding(.vertical, 8)
+                        )
+                }
+                .padding(.vertical, 12)
             }
             Section(header: Text("快捷菜单"), footer: Text("💡 提示：单击桌面上的桌宠就会弹出这个快捷菜单！可添加/删除自定义应用，URL Scheme比如微信weixin://，抖音snssdk1128://")) {
                 Picker("弹出样式", selection: Binding<Int>(
