@@ -211,7 +211,11 @@ struct GirlCharacterPickerView: View {
                 }
                 .padding(.vertical, 12)
             }
-            Section(header: Text("快捷菜单"), footer: Text("💡 提示：单击桌面上的桌宠就会弹出这个快捷菜单！可添加/删除自定义应用，URL Scheme比如微信weixin://，抖音snssdk1128://")) {
+            Section(header: HStack {
+                Text("快捷菜单")
+                Spacer()
+                EditButton()
+            }, footer: Text("💡 提示：单击桌面上的桌宠就会弹出这个快捷菜单！点右上角编辑可删除应用，URL Scheme比如微信weixin://，抖音snssdk1128://")) {
                 Picker("弹出样式", selection: Binding<Int>(
                     get: { UserDefaults.standard.integer(forKey: "fanMenuStyle") },
                     set: { UserDefaults.standard.set($0, forKey: "fanMenuStyle") }

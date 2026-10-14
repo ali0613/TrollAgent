@@ -1205,6 +1205,12 @@ extern "C" const char *g_hud_char;
     for (UIView *v in self.view.subviews) {
         if (v.tag >= 9000 && v.tag < 9100) [v removeFromSuperview];
     }
+    // 暂停气泡定时器，菜单弹出来的时候不弹气泡吵人
+    [_bubbleTimer invalidate];
+    _bubbleTimer = nil;
+    [_bubbleView removeFromSuperview];
+    _bubbleView = nil;
+    _bubbleLabel = nil;
     CGFloat screenW = [UIScreen mainScreen].bounds.size.width;
     CGFloat screenH = [UIScreen mainScreen].bounds.size.height;
     CGFloat girlX = _girlView.center.x;
@@ -1322,6 +1328,10 @@ extern "C" const char *g_hud_char;
         if (v.tag >= 9000) {
             [v removeFromSuperview];
         }
+    }
+    // 恢复气泡定时器
+    if (!_isHidden) {
+        [self _startBubbleTimer];
     }
 }
 
