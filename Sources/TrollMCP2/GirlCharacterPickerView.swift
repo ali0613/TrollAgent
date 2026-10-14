@@ -20,6 +20,13 @@ struct GirlCharacterPickerView: View {
                     // 兔娘（左）
                     Button {
                         companion.selectedCharacter = .rabit
+                        // 桌宠开着就自动重启切换角色，关着不自动启动
+                        if HUDManager.shared.isRunning {
+                            _ = HUDManager.shared.stop()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                _ = HUDManager.shared.start()
+                            }
+                        }
                     } label: {
                         VStack(spacing: 8) {
                             if let img = UIImage(named: "rabit_idle") {
@@ -53,6 +60,13 @@ struct GirlCharacterPickerView: View {
                     // 小萝莉（中间）
                     Button {
                         companion.selectedCharacter = .loli
+                        // 桌宠开着就自动重启切换角色，关着不自动启动
+                        if HUDManager.shared.isRunning {
+                            _ = HUDManager.shared.stop()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                _ = HUDManager.shared.start()
+                            }
+                        }
                     } label: {
                         VStack(spacing: 8) {
                             if let img = UIImage(named: "girl_idle") {
@@ -86,6 +100,13 @@ struct GirlCharacterPickerView: View {
                     // 猫娘（右）
                     Button {
                         companion.selectedCharacter = .cat
+                        // 桌宠开着就自动重启切换角色，关着不自动启动
+                        if HUDManager.shared.isRunning {
+                            _ = HUDManager.shared.stop()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                _ = HUDManager.shared.start()
+                            }
+                        }
                     } label: {
                         VStack(spacing: 8) {
                             if let img = UIImage(named: "cat_idle") {
