@@ -219,10 +219,19 @@ final class ShellExecTool: MCPTool {
             let restCmd = nsCmd.substring(with: cdMatch.range(at: 2))
             workingDir = (cdPath as NSString).expandingTildeInPath
             finalCmd = restCmd
-            // 把后面命令里的相对路径（不是/开头的）补成绝对路径
-            let pathRegex = try? NSRegularExpression(pattern: #"\s([a-zA-Z0-9_\-./]+\.(py|sh|txt|json|log|png|jpg|bin))"#, options: [])
+            // 把后面命令里所有不是/开头的相对路径（文件/目录）全部补成workingDir下的绝对路径
+            // 匹配：空格/=后面跟的不是/开头的路径（字母/数字/._-组成，不带空格）
+            let pathRegex = try? NSRegularExpression(pattern: #"(^|\s)([a-zA-Z0-9_./\-][a-zA-Z0-9_./\-]*[a-zA-Z0-9_./\-])"#, options: [])
             if let re = pathRegex {
-                finalCmd = re.stringByReplacingMatches(in: finalCmd, options: [], range: NSRange(location: 0, length: (finalCmd as NSString).length), withTemplate: " \(workingDir)/$1")
+                finalCmd = re.stringByReplacingMatches(in: finalCmd, options: [], range: NSRange(location: 0, length: (finalCmd as NSString).length), using: { result in
+                    let nsCmd = finalCmd as NSString
+                    let matchStr = nsCmd.substring(with: result.range(at: 2))
+                    // 跳过选项（以-开头）、已经是绝对路径、命令本身
+                    if matchStr.hasPrefix("-") || matchStr.hasPrefix("/") || matchStr == "python3" || matchStr == "python" || matchStr == "ls" || matchStr == "cat" || matchStr == "grep" || matchStr == "rm" || matchStr == "mv" || matchStr == "cp" || matchStr == "touch" || matchStr == "find" || matchStr == "echo" || matchStr == "cd" || matchStr == "." || matchStr == "./" {
+                        return nsCmd.substring(with: result.range)
+                    }
+                    return "\(workingDir)/\(matchStr)"
+                })
             }
         }
         // v4.3.9: 反向路径翻译——原生命令收到 Alpine 挂载路径(/ios_workspace 等)时翻译回 iOS 真实路径,
