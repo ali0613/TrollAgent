@@ -240,7 +240,8 @@ struct AppBrowserContainer: View {
                 ProgressView("加载应用列表…")
                 Spacer()
             } else {
-                AppBrowserList(apps: apps, runningIds: runningIds, onTap: onTap, defaultCategory: defaultCategory)
+                // v6.0.31：UIKit 原生渲染（TrollStore 同款 UITableView），替换 SwiftUI AppBrowserList
+                AppBrowserTableUIKit(apps: apps, runningIds: runningIds, onTap: onTap)
             }
         }
         .background(Color(.systemGroupedBackground))

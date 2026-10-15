@@ -52,8 +52,8 @@ struct InjectionView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    // v2.9.128：Fuck 工具箱风格（分类标签/类型胶囊/版本/A-Z 索引）
-                    AppBrowserList(apps: apps, runningIds: runningIds) { app in
+                    // v6.0.31：UIKit 原生渲染（TrollStore 同款 UITableView），替换 SwiftUI AppBrowserList
+                    AppBrowserTableUIKit(apps: apps, runningIds: runningIds) { app in
                         selectedApp = app
                         inspectApp(app)
                     }
