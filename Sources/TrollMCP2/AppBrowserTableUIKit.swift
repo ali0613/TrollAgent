@@ -19,6 +19,7 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
     private var groups: [(key: String, apps: [AppCatalog.AppEntry])] = []
 
     private let searchBar = UISearchBar()
+    private let searchWrap = UIView()   // 搜索栏圆角容器（视觉对齐原 SwiftUI 版搜索胶囊）
     private let categoryControl = UISegmentedControl(items: ["全部", "用户", "巨魔", "运行中"])
 
     override func viewDidLoad() {
@@ -33,12 +34,24 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
         searchBar.placeholder = "搜索应用名称或 Bundle ID"
         searchBar.searchBarStyle = .minimal
         searchBar.backgroundImage = UIImage()
+        searchBar.searchTextField.font = .systemFont(ofSize: 15)
+
+        searchWrap.backgroundColor = .secondarySystemBackground
+        searchWrap.layer.cornerRadius = 12
+        searchWrap.clipsToBounds = true
+        searchWrap.addSubview(searchBar)
 
         categoryControl.selectedSegmentIndex = 0
         categoryControl.addTarget(self, action: #selector(categoryChanged(_:)), for: .valueChanged)
+        // 加大分段控件字号（原生默认偏小）
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 15, weight: .semibold)
+        ]
+        categoryControl.setTitleTextAttributes(attrs, for: .normal)
+        categoryControl.setTitleTextAttributes(attrs, for: .selected)
 
         let header = UIView()
-        header.addSubview(searchBar)
+        header.addSubview(searchWrap)
         header.addSubview(categoryControl)
         tableView.tableHeaderView = header
         layoutHeader(width: 320) // 初始占位宽度，viewDidLayoutSubviews 里按实际宽度修正
@@ -54,10 +67,11 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
 
     private func layoutHeader(width: CGFloat) {
         guard let header = tableView.tableHeaderView else { return }
-        let sbH: CGFloat = 44, catH: CGFloat = 34
-        searchBar.frame = CGRect(x: 8, y: 2, width: width - 16, height: sbH)
-        categoryControl.frame = CGRect(x: 16, y: sbH + 4, width: width - 32, height: catH)
-        header.frame = CGRect(x: 0, y: 0, width: width, height: sbH + catH + 10)
+        let sbH: CGFloat = 50, catH: CGFloat = 40, gap: CGFloat = 6
+        searchWrap.frame = CGRect(x: 16, y: 4, width: width - 32, height: sbH)
+        searchBar.frame = searchWrap.bounds.insetBy(dx: 6, dy: 0)
+        categoryControl.frame = CGRect(x: 16, y: 4 + sbH + gap, width: width - 32, height: catH)
+        header.frame = CGRect(x: 0, y: 0, width: width, height: 4 + sbH + gap + catH + 6)
     }
 
     /// 数据或筛选变化时重建分组（数据更新由 SwiftUI 包装器调用；筛选由内部控件触发）
