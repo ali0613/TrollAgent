@@ -147,10 +147,10 @@ struct AppIconView: View {
         if let img = img {
             image = img
         } else {
-            // 首次没拿到（预加载还没跑完/瞬时空），稍后再重试两次，
-            // 预加载完成后缓存有了就自动补上，不会一直停在首字母占位
-            retryLoad(app: app, delay: 0.6)
-            retryLoad(app: app, delay: 2.5)
+            // 首次没拿到（系统方法/proxy 都没命中，后台正在读包内图标文件），
+            // 稍后重试两次：后台回填缓存后自动补上，不会一直停在首字母占位
+            retryLoad(app: app, delay: 0.4)
+            retryLoad(app: app, delay: 1.5)
         }
     }
 

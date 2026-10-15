@@ -223,30 +223,27 @@ final class AppCatalog {
         return fn(imgClass, sel, bundleId as NSString, format, scale)
     }
 
-    /// 预加载所有图标：分批切主线程完整链路加载，批间留时间给UI呼吸。
-    /// 之前每图标单独 dispatch+20ms 太慢（266个要5秒+），滚动时下面图标还在缓存路上→"逐渐加载"。
+    /// 预加载所有图标——TrollStore 同款：全程后台线程，绝不阻塞主线程。
+    /// 之前分批切主线程跑完整链路，私有 API + 文件读取在 main 上排队执行，
+    /// 拖慢 UI 且图标要等 → "部分图标等一会儿才出来"。
     static func preloadIcons(for apps: [AppEntry]) {
         DispatchQueue.global(qos: .utility).async {
-            let pending = apps.filter { iconCache.object(forKey: $0.bundleId as NSString) == nil }
-            let batch = 15
-            var idx = 0
-            while idx < pending.count {
-                let chunk = Array(pending[idx..<min(idx + batch, pending.count)])
-                DispatchQueue.main.async {
-                    for app in chunk {
-                        _ = icon(for: app)   // 完整三级链路，成功自动进缓存
-                    }
+            for app in apps {
+                guard iconCache.object(forKey: app.bundleId as NSString) == nil else { continue }
+                // 1) 系统私有方法（TrollStore 就在后台线程调用，安全）
+                var img = systemIconImage(bundleId: app.bundleId)
+                // 2) 读包内图标文件兜底（纯文件 IO，后台线程）
+                if img == nil { img = AppIconLoader.shared.icon(forPath: app.path) }
+                if let img = img {
+                    iconCache.setObject(img, forKey: app.bundleId as NSString)
                 }
-                Thread.sleep(forTimeInterval: 0.04)
-                idx += batch
             }
         }
     }
 
-    /// 完整图标加载链（三级兜底，任何 iOS 都能出真图标）：
-    /// 1) 缓存 → 2) +[UIImage _applicationIconImageForBundleIdentifier:format:scale:]（TrollStore同款，
-    ///    部分 iOS 不响应返回 nil）→ 3) LSApplicationProxy.iconImage（iOS15+ 可能返回 nil）
-    ///    → 4) 读 App 包内图标文件（v2.9.x 一直可靠的老方案）→ 全部失败才 nil（页面显示首字母占位+稍后重试）
+    /// 完整图标加载链（TrollStore 同款主流程，主线程调用）：
+    /// 缓存 → 系统私有方法（系统图标缓存秒出）→ proxy.iconImage（主线程兜底）
+    /// → 后台读包内图标文件（异步回填，cell 重试自动补上）
     static func icon(for app: AppEntry) -> UIImage? {
         if let cached = iconCache.object(forKey: app.bundleId as NSString) {
             return cached
@@ -257,14 +254,17 @@ final class AppCatalog {
         if img == nil {
             img = app.iconImage()
         }
-        // 3) 读包内图标文件兜底（Info.plist CFBundleIconFiles / 常见名 / 最大PNG）
-        if img == nil {
-            img = AppIconLoader.shared.icon(forPath: app.path)
-        }
         if let img = img {
             iconCache.setObject(img, forKey: app.bundleId as NSString)
+            return img
         }
-        return img
+        // 3) 后台读包内图标文件，异步回填缓存；cell 的重试（0.4s/1.5s）自动补上
+        DispatchQueue.global(qos: .utility).async {
+            if let fimg = AppIconLoader.shared.icon(forPath: app.path) {
+                iconCache.setObject(fimg, forKey: app.bundleId as NSString)
+            }
+        }
+        return nil
     }
 
     /// 安装/删除app时清缓存
