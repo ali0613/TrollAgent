@@ -139,11 +139,19 @@ struct GirlCharacterPickerView: View {
                     .buttonStyle(PlainButtonStyle())
                 }
             }
-            Section(header: Text("悬浮尺寸（改完手动重启悬浮生效）")) {
+            Section(header: Text("悬浮尺寸（改完自动重启悬浮生效）")) {
                 VStack {
                     HStack {
                         Text("小")
-                        Slider(value: $companion.floatSize, in: 170...300, step: 5)
+                        Slider(value: $companion.floatSize, in: 170...300, step: 5) { editing in
+                            // v6.0.30修复：拖动结束才重启（拖动中不重启），桌宠开着立即生效，关着只存参数不弹出
+                            if !editing && HUDManager.shared.isRunning {
+                                _ = HUDManager.shared.stop()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    _ = HUDManager.shared.start()
+                                }
+                            }
+                        }
                         Text("大")
                     }
                     Text("当前尺寸：\(Int(companion.floatSize)) pt")
@@ -151,7 +159,7 @@ struct GirlCharacterPickerView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            Section(header: Text("气泡样式（改完手动重启悬浮生效）")) {
+            Section(header: Text("气泡样式（改完自动重启悬浮生效）")) {
                 Picker("气泡样式", selection: $companion.bubbleStyle) {
                     Text("经典圆角").tag(0)
                     Text("椭圆气泡").tag(1)
@@ -159,6 +167,15 @@ struct GirlCharacterPickerView: View {
                     Text("爆炸吐槽").tag(3)
                 }
                 .pickerStyle(.segmented)
+                .onChange(of: companion.bubbleStyle) { _ in
+                    // v6.0.30修复：桌宠开着改气泡样式立即重启生效，关着只存参数不自动弹出
+                    if HUDManager.shared.isRunning {
+                        _ = HUDManager.shared.stop()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            _ = HUDManager.shared.start()
+                        }
+                    }
+                }
                 // 实时预览气泡
                 VStack {
                     Text("预览：哈喽呀～")

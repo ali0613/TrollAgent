@@ -1228,9 +1228,13 @@ extern "C" const char *g_hud_char;
     NSMutableArray *apps = [NSMutableArray array];
     if (savedApps.count) {
         for (NSDictionary *a in savedApps) {
+            // v6.0.30修复：从已安装应用添加的条目只有bundleId没有url，
+            // 字典字面量遇nil值直接抛NSInvalidArgumentException崩溃（菜单弹不出）
+            NSString *name = a[@"name"] ?: @"应用";
+            NSString *url = a[@"url"] ?: @"";
             [apps addObject:@{
-                @"name": a[@"name"],
-                @"url": a[@"url"],
+                @"name": name,
+                @"url": url,
                 @"color": [UIColor systemBlueColor]
             }];
         }
@@ -1260,7 +1264,12 @@ extern "C" const char *g_hud_char;
         CGFloat x, y;
         if (menuStyle == 1) {
             // 纵向列表样式：垂直排列，在角色右侧（如果在右边缘就左侧）
+            // v6.0.30修复：列表整体上下限位，角色在底部时"隐藏"等按钮不会被顶出屏幕点不到
             CGFloat startY = girlY - (count * 64)/2;
+            CGFloat minY = 30;
+            CGFloat maxY = screenH - count * 64 - 30;
+            if (maxY < minY) maxY = minY;
+            startY = MAX(minY, MIN(startY, maxY));
             CGFloat listX = fromRight ? girlX - 80 : girlX + 80;
             x = listX;
             y = startY + i * 64;
@@ -1368,7 +1377,8 @@ extern "C" const char *g_hud_char;
 }
 - (void)keyboardWillHide:(NSNotification *)note {
     [UIView animateWithDuration:0.2 animations:^{
-        self.view.alpha = 1.0;
+        // v6.0.30修复：恢复时按当前状态还原——普通状态1.0，隐藏缩小状态0.7，别把隐藏态顶成完全显示
+        self.view.alpha = self->_isHidden ? 0.7 : 1.0;
     }];
 }
 

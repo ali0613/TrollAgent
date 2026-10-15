@@ -18,11 +18,14 @@ struct HudSizeSettingsView: View {
         VStack(spacing: 16) {
             Slider(value: $size, in: 80...300, step: 5) { editing in
                 // v6.0.7：拖动结束后保存并自动重启悬浮，让新尺寸立即生效
+                // v6.0.30修复：只在桌宠已经运行的时候才重启，关着绝不自动拉起
                 if !editing {
                     UserDefaults.standard.set(size, forKey: "trollagent.hud_size")
-                    _ = HUDManager.shared.stop()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        _ = HUDManager.shared.start()
+                    if HUDManager.shared.isRunning {
+                        _ = HUDManager.shared.stop()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            _ = HUDManager.shared.start()
+                        }
                     }
                 }
             }
