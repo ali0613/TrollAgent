@@ -259,17 +259,21 @@ struct AppBrowserContainer: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let list = AppCatalog.list()
             let running = AppCatalog.runningExecNames()
-            // v6.0.30修复：AppCatalog.list() 内部已用 TrollStore 同款方法把所有图标
-            // 预加载进 AppCatalog.iconCache（cell 实际读取的缓存），这里不再重复
-            // 逐个读磁盘文件（旧逻辑把图标读进了 AppIconLoader 自己的缓存，cell 根本不用，
-            // 266 个 App 纯白读一遍，拖慢列表加载）
+            // v6.0.30：列表显示前先预热系统图标缓存（TrollStore 秒出的根本），
+            // 后台线程跑，上限 2 秒——首屏一出来图标就在缓存里，零"占位→等待→补上"
+            let deadline = Date().addingTimeInterval(2.0)
+            for app in list {
+                if Date() > deadline { break }
+                guard AppCatalog.iconCache.object(forKey: app.bundleId as NSString) == nil else { continue }
+                if let img = AppCatalog.systemIconImage(bundleId: app.bundleId) {
+                    AppCatalog.iconCache.setObject(img, forKey: app.bundleId as NSString)
+                }
+            }
             DispatchQueue.main.async {
                 apps = list
                 runningIds = running
                 loaded = true
-                // v6.0.30修复：图标预加载在这里触发（容器刷新完成后），
-                // 之前放在 AppBrowserList 的 VStack 里用 Color.clear.onAppear——
-                // Color.clear 是贪婪视图会撑满一半剩余空间，导致列表被压到下半屏。
+                // 剩余兜底（读包内文件）后台继续跑，个别没预热到的由 cell 重试补上
                 AppCatalog.preloadIcons(for: list)
             }
         }
