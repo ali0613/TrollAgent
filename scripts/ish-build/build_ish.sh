@@ -398,6 +398,21 @@ GUARD_PATCH_PY
         log_warning "fs/fake.c 未找到，跳过 bind 守卫 patch"
     fi
 
+    # Configure meson build
+    MESON_BUILDTYPE="release"
+    # meson's `release` buildtype only implies -O3; it does NOT define NDEBUG
+    # (that is a separate `b_ndebug` option). Without it every assert() in the
+    # kernel stays live in a shipping build, so a failed assertion calls
+    # abort() on a user's device instead of being a development-only check.
+    # That is how the mem_ptr() CoW assert reached TestFlight as a SIGABRT in
+    # sys_execve/args_copy. Keep asserts in debug builds, compile them out of
+    # release ones.
+    MESON_NDEBUG="true"
+    if [ "$BUILD_TYPE" == "debug" ]; then
+        MESON_BUILDTYPE="debug"
+        MESON_NDEBUG="false"
+    fi
+
     # v6.1.4: 每架构独立 build 目录 + meson 交叉配置（arm64→build-ios, arm64e→build-ios-arm64e）
     for arch in $ARCHS; do
         if [ "$arch" == "arm64" ]; then
