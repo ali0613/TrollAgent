@@ -235,7 +235,13 @@ final class AppCatalog {
         guard let wsClass = NSClassFromString("LSApplicationWorkspace") else {
             return UIImage(systemName: "app")
         }
-        guard let ws = wsClass.perform(NSSelectorFromString("defaultWorkspace")).takeUnretainedValue() else {
+        let wsSel = NSSelectorFromString("defaultWorkspace")
+        guard let wsGetM = class_getClassMethod(wsClass, wsSel) else {
+            return UIImage(systemName: "app")
+        }
+        typealias WSGetFn = @convention(c) (AnyClass, Selector) -> AnyObject?
+        let wsGet = unsafeBitCast(method_getImplementation(wsGetM), to: WSGetFn.self)
+        guard let ws = wsGet(wsClass, wsSel) else {
             return UIImage(systemName: "app")
         }
         let sel = NSSelectorFromString("_applicationIconImageForBundleIdentifier:format:scale:")
