@@ -21,12 +21,6 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
     private let searchBar = UISearchBar()
     private let searchWrap = UIView()   // 搜索栏圆角容器（视觉对齐原 SwiftUI 版搜索胶囊）
     private let categoryControl = UISegmentedControl(items: ["全部", "用户", "巨魔", "运行中"])
-    // v6.1.2：系统分享面板实测入口（纯 UIKit UIActivityViewController 直出）——
-    // 验证"分享 SIGSEGV"是否与 SwiftUI/进程状态有关；若真机崩溃=侧载环境限制坐实（属预期）
-    private let testShareTextButton = UIButton(type: .system)
-    private let testShareFileButton = UIButton(type: .system)
-    private let testShareCaption = UILabel()
-
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.register(AppBrowserCell.self, forCellReuseIdentifier: AppBrowserCell.reuseID)
@@ -44,7 +38,6 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
         searchWrap.backgroundColor = .secondarySystemBackground
         searchWrap.layer.cornerRadius = 12
         searchWrap.clipsToBounds = true
-        searchWrap.addSubview(searchBar)
 
         categoryControl.selectedSegmentIndex = 0
         categoryControl.addTarget(self, action: #selector(categoryChanged(_:)), for: .valueChanged)
@@ -55,74 +48,52 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
         categoryControl.setTitleTextAttributes(attrs, for: .normal)
         categoryControl.setTitleTextAttributes(attrs, for: .selected)
 
-        // 分享面板测试按钮（纯 UIKit 直出；崩溃=侧载环境限制坐实，属预期）
-        testShareTextButton.setTitle("测试分享·文本", for: .normal)
-        testShareTextButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
-        testShareTextButton.setTitleColor(.systemTeal, for: .normal)
-        testShareTextButton.addTarget(self, action: #selector(testShareText), for: .touchUpInside)
-        testShareFileButton.setTitle("测试分享·文件", for: .normal)
-        testShareFileButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
-        testShareFileButton.setTitleColor(.systemOrange, for: .normal)
-        testShareFileButton.addTarget(self, action: #selector(testShareFile), for: .touchUpInside)
-        testShareCaption.text = "若闪退=侧载环境限制坐实（预期），否则分享可恢复"
-        testShareCaption.font = .systemFont(ofSize: 10)
-        testShareCaption.textColor = .tertiaryLabel
-
-        let header = UIView()
-        header.addSubview(searchWrap)
-        header.addSubview(categoryControl)
-        header.addSubview(testShareTextButton)
-        header.addSubview(testShareFileButton)
-        header.addSubview(testShareCaption)
+        // v6.1.3：header 全部用 Auto Layout 钉住头尾——修复 SwiftUI 托管下按 320pt 占位宽度
+        // 排布导致搜索栏/分段控件不满宽的问题；autoresizingFlexibleWidth 让 UITableView 自动跟宽
+        let header = makeHeader()
         tableView.tableHeaderView = header
-        layoutHeader(width: 320) // 初始占位宽度，viewDidLayoutSubviews 里按实际宽度修正
         rebuild()
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        if let header = tableView.tableHeaderView, header.frame.width != tableView.bounds.width {
-            layoutHeader(width: tableView.bounds.width)
-        }
-    }
-
-    private func layoutHeader(width: CGFloat) {
+        // 双保险：SwiftUI 托管下强制 header 宽度跟随真实屏宽（tableHeaderView 需重新赋值才生效）
         guard let header = tableView.tableHeaderView else { return }
-        let sbH: CGFloat = 50, catH: CGFloat = 40, gap: CGFloat = 6
-        let testH: CGFloat = 30
-        searchWrap.frame = CGRect(x: 16, y: 4, width: width - 32, height: sbH)
-        searchBar.frame = searchWrap.bounds.insetBy(dx: 6, dy: 0)
-        categoryControl.frame = CGRect(x: 16, y: 4 + sbH + gap, width: width - 32, height: catH)
-        let ty = 4 + sbH + gap + catH + gap
-        testShareTextButton.frame = CGRect(x: 16, y: ty, width: 110, height: testH)
-        testShareFileButton.frame = CGRect(x: 132, y: ty, width: 110, height: testH)
-        testShareCaption.frame = CGRect(x: 16, y: ty + testH, width: width - 32, height: 16)
-        header.frame = CGRect(x: 0, y: 0, width: width, height: ty + testH + 16 + 6)
-    }
-
-    // MARK: - 系统分享面板实测（v6.1.2）
-    @objc private func testShareText() {
-        let vc = UIActivityViewController(
-            activityItems: ["TrollAgent 分享面板测试 \(Date())"],
-            applicationActivities: nil)
-        presentShareTest(vc)
-    }
-
-    @objc private func testShareFile() {
-        let path = NSTemporaryDirectory() + "/TrollAgent_share_test.txt"
-        try? "TrollAgent 分享面板测试 \(Date())".write(toFile: path, atomically: true, encoding: .utf8)
-        let vc = UIActivityViewController(
-            activityItems: [URL(fileURLWithPath: path)],
-            applicationActivities: nil)
-        presentShareTest(vc)
-    }
-
-    private func presentShareTest(_ vc: UIActivityViewController) {
-        if let pop = vc.popoverPresentationController {
-            pop.sourceView = tableView
-            pop.sourceRect = tableView.bounds
+        let w = tableView.bounds.width
+        if abs(header.frame.width - w) > 0.5 {
+            header.frame.size.width = w
+            tableView.tableHeaderView = header
         }
-        present(vc, animated: true, completion: nil)
+    }
+
+    private func makeHeader() -> UIView {
+        let header = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 4 + 50 + 6 + 40 + 6))
+        header.autoresizingMask = [.flexibleWidth]
+
+        for v in [searchWrap, categoryControl] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            header.addSubview(v)
+        }
+        searchBar.translatesAutoresizingMaskIntoConstraints = false
+        searchWrap.addSubview(searchBar)
+
+        NSLayoutConstraint.activate([
+            // 搜索栏：左右 16pt 钉住 header 边缘，随宽度自动拉伸
+            searchWrap.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 16),
+            searchWrap.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -16),
+            searchWrap.topAnchor.constraint(equalTo: header.topAnchor, constant: 4),
+            searchWrap.heightAnchor.constraint(equalToConstant: 50),
+            searchBar.leadingAnchor.constraint(equalTo: searchWrap.leadingAnchor, constant: 6),
+            searchBar.trailingAnchor.constraint(equalTo: searchWrap.trailingAnchor, constant: -6),
+            searchBar.topAnchor.constraint(equalTo: searchWrap.topAnchor),
+            searchBar.bottomAnchor.constraint(equalTo: searchWrap.bottomAnchor),
+            // 分类分段控件：同样左右钉满
+            categoryControl.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 16),
+            categoryControl.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -16),
+            categoryControl.topAnchor.constraint(equalTo: searchWrap.bottomAnchor, constant: 6),
+            categoryControl.heightAnchor.constraint(equalToConstant: 40)
+        ])
+        return header
     }
 
     /// 数据或筛选变化时重建分组（数据更新由 SwiftUI 包装器调用；筛选由内部控件触发）
