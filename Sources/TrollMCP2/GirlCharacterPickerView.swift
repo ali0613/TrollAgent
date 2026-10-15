@@ -29,7 +29,8 @@ struct GirlCharacterPickerView: View {
                         }
                     } label: {
                         VStack(spacing: 8) {
-                            if let img = UIImage(named: "rabit_cross") {
+                            // v6.1.5：图片资源名修正——包内实际是 rabit_idle（旧引用 rabit_cross 不存在导致角色图不显示）
+                            if let img = UIImage(named: "rabit_idle") {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
@@ -69,7 +70,8 @@ struct GirlCharacterPickerView: View {
                         }
                     } label: {
                         VStack(spacing: 8) {
-                            if let img = UIImage(named: "girl_kneel") {
+                            // v6.1.5：资源名修正（girl_kneel → girl_idle）
+                            if let img = UIImage(named: "girl_idle") {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
@@ -109,7 +111,8 @@ struct GirlCharacterPickerView: View {
                         }
                     } label: {
                         VStack(spacing: 8) {
-                            if let img = UIImage(named: "cat_kneel") {
+                            // v6.1.5：资源名修正（cat_kneel → cat_idle）
+                            if let img = UIImage(named: "cat_idle") {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
@@ -177,11 +180,13 @@ struct GirlCharacterPickerView: View {
                     }
                 }
                 // 实时预览气泡
+                // v6.1.5：修复预览文字不显示——原 .overlay(不透明 fill) 会盖住文字，
+                // 改为 .background（形状画在文字下层），描边留在形状内不影响文字
                 VStack {
                     Text("预览：哈喽呀～")
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)
-                        .overlay(
+                        .background(
                             Group {
                                 if companion.bubbleStyle == 0 {
                                     RoundedRectangle(cornerRadius: 16)

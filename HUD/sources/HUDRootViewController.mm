@@ -1203,6 +1203,29 @@ extern "C" const char *g_hud_char;
 }
 
 // v6.0.30: 扇形快捷菜单
+// v6.1.5: 快捷菜单美化——扇形按钮加阴影+SF Symbol图标+白字描边；纵向列表改卡片式
+- (NSString *)_symbolForName:(NSString *)name url:(NSString *)url {
+    NSString *u = (url ? url : @"").lowercaseString;
+    if ([u containsString:@"weixin"] || [name containsString:@"微信"]) return @"bubble.left.fill";
+    if ([u containsString:@"snssdk"] || [name containsString:@"抖音"]) return @"play.tv.fill";
+    if ([u containsString:@"camera"] || [name containsString:@"相机"]) return @"camera.fill";
+    if ([u containsString:@"app-prefs"] || [name containsString:@"设置"]) return @"gearshape.fill";
+    if ([u containsString:@"trollagent://chat"]) return @"sparkles";
+    if ([u containsString:@"trollagent://hide"]) return @"eye.slash.fill";
+    if ([name containsString:@"微博"]) return @"at";
+    if ([name containsString:@"淘宝"]) return @"cart.fill";
+    if ([name containsString:@"京东"]) return @"bag.fill";
+    if ([name containsString:@"美团"]) return @"fork.knife";
+    if ([name containsString:@"地图"]) return @"map.fill";
+    if ([name containsString:@"音乐"]) return @"music.note";
+    if ([name containsString:@"相册"] || [name containsString:@"照片"]) return @"photo.fill";
+    if ([name containsString:@"邮件"]) return @"envelope.fill";
+    if ([name containsString:@"电话"]) return @"phone.fill";
+    if ([name containsString:@"浏览器"]) return @"safari.fill";
+    if ([name containsString:@"QQ"]) return @"message.fill";
+    return @"square.grid.2x2.fill";
+}
+
 - (void)_showFanMenu {
     // 先关掉所有旧菜单按钮（统一tag=9000）
     for (UIView *v in self.view.subviews) {
@@ -1249,16 +1272,72 @@ extern "C" const char *g_hud_char;
     // 最后固定加AI聊天和隐藏
     [apps addObject:@{@"name":@"AI", @"url":@"trollagent://chat", @"color":[UIColor systemBlueColor]}];
     [apps addObject:@{@"name":@"隐藏", @"url":@"trollagent://hide", @"color":[UIColor systemRedColor]}];
-    CGFloat radius = 110;
+    CGFloat radius = 120;
     NSInteger count = apps.count;
     NSInteger menuStyle = [[NSUserDefaults standardUserDefaults] integerForKey:@"fanMenuStyle"];
     for (NSInteger i = 0; i < count; i++) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-        btn.frame = CGRectMake(0, 0, 56, 56);
-        btn.layer.cornerRadius = 28;
-        btn.backgroundColor = apps[i][@"color"];
-        btn.titleLabel.font = [UIFont systemFontOfSize:12];
-        [btn setTitle:apps[i][@"name"] forState:UIControlStateNormal];
+        BOOL isList = (menuStyle == 1);
+        NSString *symName = [self _symbolForName:apps[i][@"name"] url:apps[i][@"url"]];
+        if (isList) {
+            // v6.1.5: 纵向列表——卡片式（圆角12、系统背景、阴影、左图标圆+名称+右侧url）
+            btn.frame = CGRectMake(0, 0, 220, 56);
+            btn.layer.cornerRadius = 12;
+            btn.backgroundColor = [UIColor systemBackgroundColor];
+            btn.layer.borderWidth = 0.5;
+            btn.layer.borderColor = [UIColor labelColor colorWithAlphaComponent:0.12].CGColor;
+            btn.layer.shadowColor = [UIColor blackColor].CGColor;
+            btn.layer.shadowOpacity = 0.18;
+            btn.layer.shadowOffset = CGSizeMake(0, 2);
+            btn.layer.shadowRadius = 5;
+            btn.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+            btn.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+            [btn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
+            [btn setTitle:apps[i][@"name"] forState:UIControlStateNormal];
+            btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+            btn.titleEdgeInsets = UIEdgeInsetsMake(0, 60, 0, 44);
+            UIView *iconWrap = [[UIView alloc] initWithFrame:CGRectMake(10, 10, 36, 36)];
+            iconWrap.layer.cornerRadius = 8;
+            iconWrap.backgroundColor = apps[i][@"color"];
+            [btn addSubview:iconWrap];
+            UIImage *sym = [UIImage systemImageNamed:symName];
+            if (sym) {
+                UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:18]]];
+                iv.tintColor = [UIColor whiteColor];
+                iv.frame = CGRectMake(9, 9, 18, 18);
+                [iconWrap addSubview:iv];
+            }
+            UILabel *urlLbl = [[UILabel alloc] initWithFrame:CGRectMake(124, (56 - 16) / 2, 86, 16)];
+            urlLbl.text = apps[i][@"url"];
+            urlLbl.font = [UIFont systemFontOfSize:11];
+            urlLbl.textColor = [UIColor secondaryLabelColor];
+            urlLbl.textAlignment = NSTextAlignmentRight;
+            urlLbl.lineBreakMode = NSLineBreakByTruncatingTail;
+            [btn addSubview:urlLbl];
+        } else {
+            // v6.1.5: 扇形——64pt 圆钮 + 阴影 + 白字描边 + 上方图标下方文字
+            btn.frame = CGRectMake(0, 0, 64, 64);
+            btn.layer.cornerRadius = 32;
+            btn.backgroundColor = apps[i][@"color"];
+            btn.layer.shadowColor = [UIColor blackColor].CGColor;
+            btn.layer.shadowOpacity = 0.35;
+            btn.layer.shadowOffset = CGSizeMake(0, 3);
+            btn.layer.shadowRadius = 6;
+            btn.titleLabel.font = [UIFont boldSystemFontOfSize:12];
+            btn.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+            [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            btn.titleLabel.shadowColor = [UIColor colorWithWhite:0 alpha:0.3];
+            btn.titleLabel.shadowOffset = CGSizeMake(0, 1);
+            [btn setTitle:apps[i][@"name"] forState:UIControlStateNormal];
+            btn.titleEdgeInsets = UIEdgeInsetsMake(26, 0, -26, 0);
+            UIImage *sym = [UIImage systemImageNamed:symName];
+            if (sym) {
+                UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:20]]];
+                iv.tintColor = [UIColor whiteColor];
+                iv.frame = CGRectMake((64 - 22) / 2, 8, 22, 22);
+                [btn addSubview:iv];
+            }
+        }
         btn.tag = 9000 + i;
         btn.alpha = 0;
         CGFloat x, y;
