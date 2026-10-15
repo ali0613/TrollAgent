@@ -21,6 +21,11 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
     private let searchBar = UISearchBar()
     private let searchWrap = UIView()   // 搜索栏圆角容器（视觉对齐原 SwiftUI 版搜索胶囊）
     private let categoryControl = UISegmentedControl(items: ["全部", "用户", "巨魔", "运行中"])
+    // v6.1.2：系统分享面板实测入口（纯 UIKit UIActivityViewController 直出）——
+    // 验证"分享 SIGSEGV"是否与 SwiftUI/进程状态有关；若真机崩溃=侧载环境限制坐实（属预期）
+    private let testShareTextButton = UIButton(type: .system)
+    private let testShareFileButton = UIButton(type: .system)
+    private let testShareCaption = UILabel()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -50,9 +55,25 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
         categoryControl.setTitleTextAttributes(attrs, for: .normal)
         categoryControl.setTitleTextAttributes(attrs, for: .selected)
 
+        // 分享面板测试按钮（纯 UIKit 直出；崩溃=侧载环境限制坐实，属预期）
+        testShareTextButton.setTitle("测试分享·文本", for: .normal)
+        testShareTextButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
+        testShareTextButton.setTitleColor(.systemTeal, for: .normal)
+        testShareTextButton.addTarget(self, action: #selector(testShareText), for: .touchUpInside)
+        testShareFileButton.setTitle("测试分享·文件", for: .normal)
+        testShareFileButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
+        testShareFileButton.setTitleColor(.systemOrange, for: .normal)
+        testShareFileButton.addTarget(self, action: #selector(testShareFile), for: .touchUpInside)
+        testShareCaption.text = "若闪退=侧载环境限制坐实（预期），否则分享可恢复"
+        testShareCaption.font = .systemFont(ofSize: 10)
+        testShareCaption.textColor = .tertiaryLabel
+
         let header = UIView()
         header.addSubview(searchWrap)
         header.addSubview(categoryControl)
+        header.addSubview(testShareTextButton)
+        header.addSubview(testShareFileButton)
+        header.addSubview(testShareCaption)
         tableView.tableHeaderView = header
         layoutHeader(width: 320) // 初始占位宽度，viewDidLayoutSubviews 里按实际宽度修正
         rebuild()
@@ -68,10 +89,40 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
     private func layoutHeader(width: CGFloat) {
         guard let header = tableView.tableHeaderView else { return }
         let sbH: CGFloat = 50, catH: CGFloat = 40, gap: CGFloat = 6
+        let testH: CGFloat = 30
         searchWrap.frame = CGRect(x: 16, y: 4, width: width - 32, height: sbH)
         searchBar.frame = searchWrap.bounds.insetBy(dx: 6, dy: 0)
         categoryControl.frame = CGRect(x: 16, y: 4 + sbH + gap, width: width - 32, height: catH)
-        header.frame = CGRect(x: 0, y: 0, width: width, height: 4 + sbH + gap + catH + 6)
+        let ty = 4 + sbH + gap + catH + gap
+        testShareTextButton.frame = CGRect(x: 16, y: ty, width: 110, height: testH)
+        testShareFileButton.frame = CGRect(x: 132, y: ty, width: 110, height: testH)
+        testShareCaption.frame = CGRect(x: 16, y: ty + testH, width: width - 32, height: 16)
+        header.frame = CGRect(x: 0, y: 0, width: width, height: ty + testH + 16 + 6)
+    }
+
+    // MARK: - 系统分享面板实测（v6.1.2）
+    @objc private func testShareText() {
+        let vc = UIActivityViewController(
+            activityItems: ["TrollAgent 分享面板测试 \(Date())"],
+            applicationActivities: nil)
+        presentShareTest(vc)
+    }
+
+    @objc private func testShareFile() {
+        let path = NSTemporaryDirectory() + "/TrollAgent_share_test.txt"
+        try? "TrollAgent 分享面板测试 \(Date())".write(toFile: path, atomically: true, encoding: .utf8)
+        let vc = UIActivityViewController(
+            activityItems: [URL(fileURLWithPath: path)],
+            applicationActivities: nil)
+        presentShareTest(vc)
+    }
+
+    private func presentShareTest(_ vc: UIActivityViewController) {
+        if let pop = vc.popoverPresentationController {
+            pop.sourceView = tableView
+            pop.sourceRect = tableView.bounds
+        }
+        present(vc, animated: true, completion: nil)
     }
 
     /// 数据或筛选变化时重建分组（数据更新由 SwiftUI 包装器调用；筛选由内部控件触发）
