@@ -208,15 +208,30 @@ final class AppCatalog {
     // v6.0.30: app图标全局内存缓存，key是bundleId，预加载后直接读，滚动不卡顿
     static let iconCache = NSCache<NSString, UIImage>()
 
-    /// 预加载所有图标，LSApplicationProxy.iconImage必须在主线程调用，后台调用返回nil
+    /// v6.0.30终版：TrollStore同款系统图标——`+[UIImage _applicationIconImageForBundleIdentifier:format:scale:]`
+    /// 这是 UIImage 的私有**类方法**（不是 LSApplicationWorkspace 的方法！v6.0.30 之前调在
+    /// LSApplicationWorkspace 实例上直接返回 nil，导致全部图标变占位/空白）。
+    /// 参数对齐 TrollStore/TSAppTableViewController.m：iPhone format=10、iPad format=8，scale 用屏幕倍率。
+    static func systemIconImage(bundleId: String) -> UIImage? {
+        guard let imgClass = NSClassFromString("UIImage") else { return nil }
+        let sel = NSSelectorFromString("_applicationIconImageForBundleIdentifier:format:scale:")
+        guard let m = class_getClassMethod(imgClass, sel) else { return nil }
+        typealias IconFn = @convention(c) (AnyClass, Selector, NSString, NSInteger, Double) -> UIImage?
+        let fn = unsafeBitCast(method_getImplementation(m), to: IconFn.self)
+        let format: NSInteger = UIDevice.current.userInterfaceIdiom == .pad ? 8 : 10
+        let scale = Double(UIScreen.main.scale)
+        return fn(imgClass, sel, bundleId as NSString, format, scale)
+    }
+
+    /// 预加载所有图标，切回主线程调用（与TrollStore一致，图标走系统缓存秒出）
     static func preloadIcons(for apps: [AppEntry]) {
         // 先在后台线程排队，然后切回主线程串行加载，每个间隔20ms不卡UI
         DispatchQueue.global(qos: .utility).async {
             for app in apps {
                 if iconCache.object(forKey: app.bundleId as NSString) != nil { continue }
-                // 切回主线程调用iconImage，不然返回nil
+                // 切回主线程调systemIconImage，避免私有API线程敏感
                 DispatchQueue.main.async {
-                    if let img = app.iconImage() {
+                    if let img = systemIconImage(bundleId: app.bundleId) {
                         iconCache.setObject(img, forKey: app.bundleId as NSString)
                     }
                 }
@@ -230,36 +245,9 @@ final class AppCatalog {
         if let cached = iconCache.object(forKey: app.bundleId as NSString) {
             return cached
         }
-        // TrollStore同款：LSApplicationWorkspace的_applicationIconImageForBundleIdentifier:format:scale:
-        // 之前用的proxy.iconImage()在iOS15+返回nil，所以后面图标都是黑框
-        guard let wsClass = NSClassFromString("LSApplicationWorkspace") else {
-            return UIImage(systemName: "app")
-        }
-        let wsSel = NSSelectorFromString("defaultWorkspace")
-        guard let wsGetM = class_getClassMethod(wsClass, wsSel) else {
-            return UIImage(systemName: "app")
-        }
-        typealias WSGetFn = @convention(c) (AnyClass, Selector) -> AnyObject?
-        let wsGet = unsafeBitCast(method_getImplementation(wsGetM), to: WSGetFn.self)
-        guard let ws = wsGet(wsClass, wsSel) else {
-            return UIImage(systemName: "app")
-        }
-        let sel = NSSelectorFromString("_applicationIconImageForBundleIdentifier:format:scale:")
-        guard ws.responds(to: sel) else {
-            // 兜底用proxy.iconImage
-            if let img = app.iconImage() {
-                iconCache.setObject(img, forKey: app.bundleId as NSString)
-                return img
-            }
-            return UIImage(systemName: "app")
-        }
-        typealias IconFn = @convention(c) (AnyObject, Selector, NSString, NSInteger, CGFloat) -> UIImage?
-        guard let m = class_getMethodImplementation(type(of: ws), sel) else {
-            return UIImage(systemName: "app")
-        }
-        let fn = unsafeBitCast(m, to: IconFn.self)
-        // format=1是小图标，scale=2是@2x分辨率
-        if let img = fn(ws, sel, app.bundleId as NSString, 1, 2.0) {
+        // TrollStore同款：+[UIImage _applicationIconImageForBundleIdentifier:format:scale:]
+        // v6.0.30终版：方法在 UIImage 类上，之前的 LSApplicationWorkspace 版本调错类导致 nil
+        if let img = systemIconImage(bundleId: app.bundleId) {
             iconCache.setObject(img, forKey: app.bundleId as NSString)
             return img
         }

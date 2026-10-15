@@ -50,7 +50,7 @@ final class AppIconLoader {
         // 优先用系统缓存的图标（TrollStore同款，秒出）
         var img: UIImage? = nil
         if let app = app {
-            img = app.iconImage()
+            img = AppCatalog.systemIconImage(bundleId: app.bundleId)
         }
         // 找不到再读文件
         if img == nil {
