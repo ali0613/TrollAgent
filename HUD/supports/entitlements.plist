@@ -30,6 +30,10 @@
 	<true/>
 	<key>com.apple.private.security.no-sandbox</key>
 	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.ai.iosxcode</string>
+	</array>
 	<key>com.apple.springboard.CFUserNotification</key>
 	<true/>
 	<key>com.apple.springboard.accessibility-window-hosting</key>
@@ -42,9 +46,6 @@
 	<true/>
 	<key>file-read-data</key>
 	<true/>
-	<!-- v6.0.4: 加回 platform-application——TrollSpeed/TheBall 的 HUD 二进制都有它且能跑，
-	     TrollStore 重签会保留 platform-app(独立 HUD 二进制已确证被重签为 TROLLTROLL 有效签名)，
-	     主 App 也已有 platform-app，persona 99 提权 spawn 不再报 106。 -->
 	<key>platform-application</key>
 	<true/>
 	<key>user-preference-read</key>

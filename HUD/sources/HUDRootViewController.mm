@@ -1247,7 +1247,11 @@ extern "C" const char *g_hud_char;
     BOOL fromLeft = (girlX < 150);
     BOOL fromRight = (girlX > screenW - 150);
     // 从UserDefaults读取自定义应用列表，默认4个常用
-    NSArray *savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
+    // v6.1.5-3: 主 App 与 HUD 独立进程——fanMenuApps 由主 App 写入 App Group 共享域
+    //（group.com.ai.iosxcode），HUD 必须从同 suite 读；standardUserDefaults 兜底兼容旧数据
+    NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"];
+    NSArray *savedApps = [prefs arrayForKey:@"fanMenuApps"];
+    if (!savedApps) savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
     NSMutableArray *apps = [NSMutableArray array];
     if (savedApps.count) {
         for (NSDictionary *a in savedApps) {
@@ -1274,7 +1278,7 @@ extern "C" const char *g_hud_char;
     [apps addObject:@{@"name":@"隐藏", @"url":@"trollagent://hide", @"color":[UIColor systemRedColor]}];
     CGFloat radius = 120;
     NSInteger count = apps.count;
-    NSInteger menuStyle = [[NSUserDefaults standardUserDefaults] integerForKey:@"fanMenuStyle"];
+    NSInteger menuStyle = [prefs integerForKey:@"fanMenuStyle"];
     for (NSInteger i = 0; i < count; i++) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
         BOOL isList = (menuStyle == 1);
@@ -1386,8 +1390,9 @@ extern "C" const char *g_hud_char;
 - (void)_fanBtnClick:(UIButton *)btn {
     NSInteger idx = btn.tag - 9000;
     [self _closeFanMenu];
-    // 读取应用列表
-    NSArray *savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
+    // 读取应用列表（v6.1.5-3: App Group 共享域优先，standard 兜底旧数据）
+    NSArray *savedApps = [[[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"] arrayForKey:@"fanMenuApps"];
+    if (!savedApps) savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
     NSInteger customCount = savedApps.count ?: 3;
     if (idx == customCount + 1) {
         // 最后一个是隐藏：缩小成小圆点贴屏幕边缘，不消失，点一下恢复

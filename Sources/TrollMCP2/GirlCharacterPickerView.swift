@@ -5,7 +5,10 @@ import UIKit
 /// 入口：设置 → 可爱助手 → 可爱助手角色
 struct GirlCharacterPickerView: View {
     @ObservedObject private var companion = GirlCompanion.shared
-    @State private var savedApps: [[String:String]] = (UserDefaults.standard.array(forKey: "fanMenuApps") as? [[String:String]]) ?? [
+    // v6.1.5-3：与 HUD 进程共享快捷菜单数据（App Group）——主 App 与 TrollAgentHUD 是独立进程，
+    // standardUserDefaults 是各自沙盒域，之前 HUD 读不到 fanMenuApps → 自定义 app 不进菜单
+    private static let prefs: UserDefaults = UserDefaults(suiteName: "group.com.ai.iosxcode") ?? .standard
+    @State private var savedApps: [[String:String]] = (Self.prefs.array(forKey: "fanMenuApps") as? [[String:String]]) ?? [
         ["name":"微信", "url":"weixin://"],
         ["name":"抖音", "url":"snssdk1128://"],
         ["name":"相机", "url":"camera://"],
@@ -221,9 +224,9 @@ struct GirlCharacterPickerView: View {
                 EditButton()
             }, footer: Text("💡 提示：单击桌面上的桌宠就会弹出这个快捷菜单！点右上角编辑可删除应用，URL Scheme比如微信weixin://，抖音snssdk1128://")) {
                 Picker("弹出样式", selection: Binding<Int>(
-                    get: { UserDefaults.standard.integer(forKey: "fanMenuStyle") },
+                    get: { Self.prefs.integer(forKey: "fanMenuStyle") },
                     set: { 
-                        UserDefaults.standard.set($0, forKey: "fanMenuStyle")
+                        Self.prefs.set($0, forKey: "fanMenuStyle")
                         // 如果桌宠正在运行，自动重启读新参数；没运行绝对不启动
                         if HUDManager.shared.isRunning {
                             _ = HUDManager.shared.stop()
@@ -237,8 +240,7 @@ struct GirlCharacterPickerView: View {
                     Text("纵向列表").tag(1)
                 }
                 .pickerStyle(.segmented)
-                let defaults = UserDefaults.standard
-                ForEach(0..<savedApps.count, id:\.self) { i in
+                                ForEach(0..<savedApps.count, id:\.self) { i in
                     HStack {
                         Text(savedApps[i]["name"] ?? "")
                         Spacer()
@@ -247,7 +249,7 @@ struct GirlCharacterPickerView: View {
                 }
                 .onDelete { indexSet in
                     savedApps.remove(atOffsets: indexSet)
-                    defaults.set(savedApps, forKey: "fanMenuApps")
+                    Self.prefs.set(savedApps, forKey: "fanMenuApps")
                 }
                 // 添加新应用
                 FanMenuAddView(savedApps: $savedApps)
@@ -289,7 +291,8 @@ struct FanMenuAddView: View {
         .sheet(isPresented: $showPicker) {
             AppPickerView { app in
                 savedApps.append(["name":app.name, "bundleId":app.bundleId])
-                UserDefaults.standard.set(savedApps, forKey: "fanMenuApps")
+                // v6.1.5-3：写入 App Group 共享域，HUD 进程才能读到
+                (UserDefaults(suiteName: "group.com.ai.iosxcode") ?? .standard).set(savedApps, forKey: "fanMenuApps")
                 showPicker = false
             }
         }

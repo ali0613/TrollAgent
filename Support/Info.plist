@@ -35,6 +35,10 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>6.1.0</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>weixin</string>\n		<string>snssdk1128</string>\n		<string>App-prefs</string>\n		<string>trollagent</string>\n		<string>wechat</string>\n		<string>mqq</string>\n		<string>sinaweibo</string>\n		<string>taobao</string>\n		<string>openapp.jdmobile</string>\n		<string>imean</string>\n		<string>baidumap</string>\n		<string>amapuri</string>\n		<string>qqmusic</string>\n		<string>cloudmusic</string>\n		<string>douban</string>\n		<string>zhihu</string>\n		<string>bilibili</string>\n		<string>kwai</string>\n		<string>xiaohongshu</string>\n		<string>youku</string>\n		<string>iqiyi</string>\n		<string>alipay</string>\n		<string>tmall</string>\n		<string>dianping</string>\n		<string>meituan</string>\n		<string>eleme</string>\n		<string>jdpay</string>\n		<string>unionpay</string>\n		<string>youtube</string>\n		<string>whatsapp</string>\n		<string>telegram</string>\n		<string>twitter</string>\n		<string>instagram</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
