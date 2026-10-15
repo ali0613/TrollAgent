@@ -142,9 +142,25 @@ struct AppIconView: View {
             image = cached
             return
         }
-        // LSApplicationProxy.iconImage必须在主线程调用，直接在主线程加载，不切后台
         guard let app = app else { return }
         let img = AppCatalog.icon(for: app)
-        image = img
+        if let img = img {
+            image = img
+        } else {
+            // 首次没拿到（预加载还没跑完/瞬时空），稍后再重试两次，
+            // 预加载完成后缓存有了就自动补上，不会一直停在首字母占位
+            retryLoad(app: app, delay: 0.6)
+            retryLoad(app: app, delay: 2.5)
+        }
+    }
+
+    private func retryLoad(app: AppCatalog.AppEntry, delay: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            if self.image == nil,
+               let img = AppCatalog.iconCache.object(forKey: app.bundleId as NSString)
+                ?? AppCatalog.icon(for: app) {
+                self.image = img
+            }
+        }
     }
 }

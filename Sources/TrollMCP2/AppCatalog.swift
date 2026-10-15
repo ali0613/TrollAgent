@@ -223,35 +223,48 @@ final class AppCatalog {
         return fn(imgClass, sel, bundleId as NSString, format, scale)
     }
 
-    /// 预加载所有图标，切回主线程调用（与TrollStore一致，图标走系统缓存秒出）
+    /// 预加载所有图标：分批切主线程完整链路加载，批间留时间给UI呼吸。
+    /// 之前每图标单独 dispatch+20ms 太慢（266个要5秒+），滚动时下面图标还在缓存路上→"逐渐加载"。
     static func preloadIcons(for apps: [AppEntry]) {
-        // 先在后台线程排队，然后切回主线程串行加载，每个间隔20ms不卡UI
         DispatchQueue.global(qos: .utility).async {
-            for app in apps {
-                if iconCache.object(forKey: app.bundleId as NSString) != nil { continue }
-                // 切回主线程调systemIconImage，避免私有API线程敏感
+            let pending = apps.filter { iconCache.object(forKey: $0.bundleId as NSString) == nil }
+            let batch = 15
+            var idx = 0
+            while idx < pending.count {
+                let chunk = Array(pending[idx..<min(idx + batch, pending.count)])
                 DispatchQueue.main.async {
-                    if let img = systemIconImage(bundleId: app.bundleId) {
-                        iconCache.setObject(img, forKey: app.bundleId as NSString)
+                    for app in chunk {
+                        _ = icon(for: app)   // 完整三级链路，成功自动进缓存
                     }
                 }
-                Thread.sleep(forTimeInterval: 0.02)
+                Thread.sleep(forTimeInterval: 0.04)
+                idx += batch
             }
         }
     }
 
-    /// 从缓存读图标，没有再加载，和TrollStore完全同款方法
+    /// 完整图标加载链（三级兜底，任何 iOS 都能出真图标）：
+    /// 1) 缓存 → 2) +[UIImage _applicationIconImageForBundleIdentifier:format:scale:]（TrollStore同款，
+    ///    部分 iOS 不响应返回 nil）→ 3) LSApplicationProxy.iconImage（iOS15+ 可能返回 nil）
+    ///    → 4) 读 App 包内图标文件（v2.9.x 一直可靠的老方案）→ 全部失败才 nil（页面显示首字母占位+稍后重试）
     static func icon(for app: AppEntry) -> UIImage? {
         if let cached = iconCache.object(forKey: app.bundleId as NSString) {
             return cached
         }
-        // TrollStore同款：+[UIImage _applicationIconImageForBundleIdentifier:format:scale:]
-        // v6.0.30终版：方法在 UIImage 类上，之前的 LSApplicationWorkspace 版本调错类导致 nil
-        if let img = systemIconImage(bundleId: app.bundleId) {
-            iconCache.setObject(img, forKey: app.bundleId as NSString)
-            return img
+        // 1) TrollStore同款：+[UIImage _applicationIconImageForBundleIdentifier:format:scale:]
+        var img = systemIconImage(bundleId: app.bundleId)
+        // 2) proxy.iconImage 兜底（必须主线程，这里就是主线程）
+        if img == nil {
+            img = app.iconImage()
         }
-        return UIImage(systemName: "app")
+        // 3) 读包内图标文件兜底（Info.plist CFBundleIconFiles / 常见名 / 最大PNG）
+        if img == nil {
+            img = AppIconLoader.shared.icon(forPath: app.path)
+        }
+        if let img = img {
+            iconCache.setObject(img, forKey: app.bundleId as NSString)
+        }
+        return img
     }
 
     /// 安装/删除app时清缓存
