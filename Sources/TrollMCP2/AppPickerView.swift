@@ -125,11 +125,13 @@ struct AppIconView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } else {
+                // v6.0.30：占位不再用字母（看着像"坏了"）——改为通用 App 图标槽位样式，
+                // 对齐 TrollStore 的占位思路：看起来是"正在加载的图标槽"，而不是错误
                 ZStack {
                     Color(.secondarySystemBackground)
-                    Text(String((path as NSString).lastPathComponent.prefix(1).uppercased()))
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(.secondary)
+                    Image(systemName: "app.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.secondary.opacity(0.4))
                 }
             }
         }

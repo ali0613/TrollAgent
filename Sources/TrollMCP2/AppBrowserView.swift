@@ -259,13 +259,15 @@ struct AppBrowserContainer: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let list = AppCatalog.list()
             let running = AppCatalog.runningExecNames()
-            // v6.0.30：列表显示前先预热系统图标缓存（TrollStore 秒出的根本），
-            // 后台线程跑，上限 2 秒——首屏一出来图标就在缓存里，零"占位→等待→补上"
-            let deadline = Date().addingTimeInterval(2.0)
+            // v6.0.30：列表显示前预热图标缓存（系统方法 + 读包内文件双路径，上限3秒）——
+            // 首屏一出来图标就在缓存里，零"占位→等待→补上"
+            let deadline = Date().addingTimeInterval(3.0)
             for app in list {
                 if Date() > deadline { break }
                 guard AppCatalog.iconCache.object(forKey: app.bundleId as NSString) == nil else { continue }
-                if let img = AppCatalog.systemIconImage(bundleId: app.bundleId) {
+                var img = AppCatalog.systemIconImage(bundleId: app.bundleId)
+                if img == nil { img = AppIconLoader.shared.icon(forPath: app.path) }
+                if let img = img {
                     AppCatalog.iconCache.setObject(img, forKey: app.bundleId as NSString)
                 }
             }
