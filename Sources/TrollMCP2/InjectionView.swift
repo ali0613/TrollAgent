@@ -309,17 +309,8 @@ struct InjectionView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             let list = AppCatalog.list()
             let running = AppCatalog.runningExecNames()
-            // v6.0.30：列表显示前预热图标缓存（系统方法+读包内文件双路径，与 AppBrowserContainer 一致）
-            let deadline = Date().addingTimeInterval(3.0)
-            for app in list {
-                if Date() > deadline { break }
-                guard AppCatalog.iconCache.object(forKey: app.bundleId as NSString) == nil else { continue }
-                var img = AppCatalog.systemIconImage(bundleId: app.bundleId)
-                if img == nil { img = AppIconLoader.shared.icon(forPath: app.path) }
-                if let img = img {
-                    AppCatalog.iconCache.setObject(img, forKey: app.bundleId as NSString)
-                }
-            }
+            // v6.0.30：列表显示前预热图标缓存（系统方法串行 + 文件读取并行，与 AppBrowserContainer 一致）
+            AppCatalog.warmIcons(for: list, until: Date().addingTimeInterval(3.0))
             DispatchQueue.main.async {
                 apps = list
                 runningIds = running

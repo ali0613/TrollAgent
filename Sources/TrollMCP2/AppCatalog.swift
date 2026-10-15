@@ -208,6 +208,24 @@ final class AppCatalog {
     // v6.0.30: app图标全局内存缓存，key是bundleId，预加载后直接读，滚动不卡顿
     static let iconCache = NSCache<NSString, UIImage>()
 
+    /// v6.0.30: 图标磁盘缓存目录——内存缓存被系统回收后，回划仍能毫秒级读盘，不会重新占位加载
+    static let diskIconDir = NSHomeDirectory() + "/Documents/IconCache"
+
+    private static func iconCachePath(bundleId: String) -> String {
+        return diskIconDir + "/" + bundleId + ".png"
+    }
+
+    static func saveIconToDisk(bundleId: String, image: UIImage) {
+        guard let data = image.pngData() else { return }
+        let fm = FileManager.default
+        try? fm.createDirectory(atPath: diskIconDir, withIntermediateDirectories: true)
+        try? data.write(to: URL(fileURLWithPath: iconCachePath(bundleId: bundleId)), options: .atomic)
+    }
+
+    static func diskIcon(bundleId: String) -> UIImage? {
+        return UIImage(contentsOfFile: iconCachePath(bundleId: bundleId))
+    }
+
     /// v6.0.30终版：TrollStore同款系统图标——`+[UIImage _applicationIconImageForBundleIdentifier:format:scale:]`
     /// 这是 UIImage 的私有**类方法**（不是 LSApplicationWorkspace 的方法！v6.0.30 之前调在
     /// LSApplicationWorkspace 实例上直接返回 nil，导致全部图标变占位/空白）。
@@ -223,30 +241,53 @@ final class AppCatalog {
         return fn(imgClass, sel, bundleId as NSString, format, scale)
     }
 
-    /// 预加载所有图标——TrollStore 同款：全程后台线程，绝不阻塞主线程。
-    /// 之前分批切主线程跑完整链路，私有 API + 文件读取在 main 上排队执行，
-    /// 拖慢 UI 且图标要等 → "部分图标等一会儿才出来"。
-    static func preloadIcons(for apps: [AppEntry]) {
-        DispatchQueue.global(qos: .utility).async {
-            for app in apps {
-                guard iconCache.object(forKey: app.bundleId as NSString) == nil else { continue }
-                // 1) 系统私有方法（TrollStore 就在后台线程调用，安全）
-                var img = systemIconImage(bundleId: app.bundleId)
-                // 2) 读包内图标文件兜底（纯文件 IO，后台线程）
-                if img == nil { img = AppIconLoader.shared.icon(forPath: app.path) }
-                if let img = img {
-                    iconCache.setObject(img, forKey: app.bundleId as NSString)
-                }
+    /// 预热/预加载一组图标（全程后台线程）：串行系统方法（秒出）+ 并行文件读取（兜底快）。
+    /// 之前文件读取是串行循环——266 个包要 5-25 秒，滚动时没覆盖到的图标只能靠 cell 现读
+    /// → "划到那一栏才展示图标"；并行后 1-2 秒全部进缓存 → 回划毫秒级命中（配合磁盘缓存）。
+    static func warmIcons(for apps: [AppEntry], until deadline: Date? = nil) {
+        func expired() -> Bool {
+            if let d = deadline { return Date() > d }
+            return false
+        }
+        // 1) 串行系统方法（私有 API 避免并发，系统图标缓存秒出）
+        for app in apps {
+            if expired() { break }
+            guard iconCache.object(forKey: app.bundleId as NSString) == nil else { continue }
+            if let img = systemIconImage(bundleId: app.bundleId) {
+                iconCache.setObject(img, forKey: app.bundleId as NSString)
+                saveIconToDisk(bundleId: app.bundleId, image: img)
+            }
+        }
+        // 2) 剩余走文件读取的并行跑（纯 IO，线程安全）
+        let remain = apps.filter { iconCache.object(forKey: $0.bundleId as NSString) == nil }
+        guard !remain.isEmpty else { return }
+        DispatchQueue.concurrentPerform(iterations: remain.count) { i in
+            let app = remain[i]
+            if let img = AppIconLoader.shared.icon(forPath: app.path) {
+                iconCache.setObject(img, forKey: app.bundleId as NSString)
+                saveIconToDisk(bundleId: app.bundleId, image: img)
             }
         }
     }
 
+    /// 预加载所有图标（列表显示后后台继续补）——完整链路 + 并行文件读取
+    static func preloadIcons(for apps: [AppEntry]) {
+        DispatchQueue.global(qos: .utility).async {
+            warmIcons(for: apps)
+        }
+    }
+
     /// 完整图标加载链（TrollStore 同款主流程，主线程调用）：
-    /// 缓存 → 系统私有方法（系统图标缓存秒出）→ proxy.iconImage（主线程兜底）
-    /// → 后台读包内图标文件（异步回填，cell 重试自动补上）
+    /// 内存缓存 → 磁盘缓存（毫秒级）→ 系统私有方法（秒出）→ proxy.iconImage（主线程兜底）
+    /// → 后台读包内图标文件（异步回填 + 落盘，cell 重试自动补上）
     static func icon(for app: AppEntry) -> UIImage? {
         if let cached = iconCache.object(forKey: app.bundleId as NSString) {
             return cached
+        }
+        // 磁盘缓存（防止内存被系统回收后回划重载）
+        if let disk = diskIcon(bundleId: app.bundleId) {
+            iconCache.setObject(disk, forKey: app.bundleId as NSString)
+            return disk
         }
         // 1) TrollStore同款：+[UIImage _applicationIconImageForBundleIdentifier:format:scale:]
         var img = systemIconImage(bundleId: app.bundleId)
@@ -256,12 +297,14 @@ final class AppCatalog {
         }
         if let img = img {
             iconCache.setObject(img, forKey: app.bundleId as NSString)
+            saveIconToDisk(bundleId: app.bundleId, image: img)
             return img
         }
-        // 3) 后台读包内图标文件，异步回填缓存；cell 的重试（0.4s/1.5s）自动补上
+        // 3) 后台读包内图标文件，异步回填缓存 + 落盘；cell 的重试（0.4s/1.5s）自动补上
         DispatchQueue.global(qos: .utility).async {
             if let fimg = AppIconLoader.shared.icon(forPath: app.path) {
                 iconCache.setObject(fimg, forKey: app.bundleId as NSString)
+                saveIconToDisk(bundleId: app.bundleId, image: fimg)
             }
         }
         return nil
