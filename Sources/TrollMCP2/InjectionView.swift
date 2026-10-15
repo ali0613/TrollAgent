@@ -312,6 +312,9 @@ struct InjectionView: View {
             DispatchQueue.main.async {
                 apps = list
                 runningIds = running
+                // v6.0.30：预加载图标（刷新完成后触发；原 AppBrowserList 内 Color.clear
+                // 贪婪撑高布局已移除，这里补上预加载调用）
+                AppCatalog.preloadIcons(for: list)
                 AuditLog.shared.log("injection.refresh", detail: "\(list.count) apps, \(running.count) running")
             }
         }

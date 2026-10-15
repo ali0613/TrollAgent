@@ -56,10 +56,6 @@ struct AppBrowserList: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // 进页面后台预加载所有图标，避免滚动时一块一块出来
-            Color.clear.onAppear {
-                AppCatalog.preloadIcons(for: apps)
-            }
             searchBar
             categoryBar
 
@@ -271,6 +267,10 @@ struct AppBrowserContainer: View {
                 apps = list
                 runningIds = running
                 loaded = true
+                // v6.0.30修复：图标预加载在这里触发（容器刷新完成后），
+                // 之前放在 AppBrowserList 的 VStack 里用 Color.clear.onAppear——
+                // Color.clear 是贪婪视图会撑满一半剩余空间，导致列表被压到下半屏。
+                AppCatalog.preloadIcons(for: list)
             }
         }
     }
