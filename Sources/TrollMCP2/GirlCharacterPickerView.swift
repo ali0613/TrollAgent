@@ -29,8 +29,8 @@ struct GirlCharacterPickerView: View {
                         }
                     } label: {
                         VStack(spacing: 8) {
-                            // v6.1.5：图片资源名修正——包内实际是 rabit_idle（旧引用 rabit_cross 不存在导致角色图不显示）
-                            if let img = UIImage(named: "rabit_idle") {
+                            // v6.1.5-2：预览图用跪姿形象（rabit_cross 已从 HUD/Resources 复制进主包）
+                            if let img = UIImage(named: "rabit_cross") {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
@@ -70,8 +70,8 @@ struct GirlCharacterPickerView: View {
                         }
                     } label: {
                         VStack(spacing: 8) {
-                            // v6.1.5：资源名修正（girl_kneel → girl_idle）
-                            if let img = UIImage(named: "girl_idle") {
+                            // v6.1.5-2：预览图用跪姿形象（girl_kneel 已从 HUD/Resources 复制进主包）
+                            if let img = UIImage(named: "girl_kneel") {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
@@ -111,8 +111,8 @@ struct GirlCharacterPickerView: View {
                         }
                     } label: {
                         VStack(spacing: 8) {
-                            // v6.1.5：资源名修正（cat_kneel → cat_idle）
-                            if let img = UIImage(named: "cat_idle") {
+                            // v6.1.5-2：预览图用跪姿形象（cat_kneel 已从 HUD/Resources 复制进主包）
+                            if let img = UIImage(named: "cat_kneel") {
                                 Image(uiImage: img)
                                     .resizable()
                                     .scaledToFit()
