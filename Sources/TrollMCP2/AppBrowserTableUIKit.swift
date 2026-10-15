@@ -21,6 +21,10 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
     private let searchBar = UISearchBar()
     private let searchWrap = UIView()   // 搜索栏圆角容器（视觉对齐原 SwiftUI 版搜索胶囊）
     private let categoryControl = UISegmentedControl(items: ["全部", "用户", "巨魔", "运行中"])
+    // v6.1.4：双架构验证——arm64e 切片让 App 原生运行后，系统分享面板实测入口
+    private let testShareTextButton = UIButton(type: .system)
+    private let testShareFileButton = UIButton(type: .system)
+    private let testShareCaption = UILabel()
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.register(AppBrowserCell.self, forCellReuseIdentifier: AppBrowserCell.reuseID)
@@ -48,6 +52,19 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
         categoryControl.setTitleTextAttributes(attrs, for: .normal)
         categoryControl.setTitleTextAttributes(attrs, for: .selected)
 
+        // v6.1.4：双架构验证分享按钮（纯 UIKit 直出）——arm64e 原生运行后若不崩=双架构修复生效
+        testShareTextButton.setTitle("测试分享·文本", for: .normal)
+        testShareTextButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
+        testShareTextButton.setTitleColor(.systemTeal, for: .normal)
+        testShareTextButton.addTarget(self, action: #selector(testShareText), for: .touchUpInside)
+        testShareFileButton.setTitle("测试分享·文件", for: .normal)
+        testShareFileButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
+        testShareFileButton.setTitleColor(.systemOrange, for: .normal)
+        testShareFileButton.addTarget(self, action: #selector(testShareFile), for: .touchUpInside)
+        testShareCaption.text = "双架构验证：不崩=分享可恢复，闪退=环境限制坐实"
+        testShareCaption.font = .systemFont(ofSize: 10)
+        testShareCaption.textColor = .tertiaryLabel
+
         // v6.1.3：header 全部用 Auto Layout 钉住头尾——修复 SwiftUI 托管下按 320pt 占位宽度
         // 排布导致搜索栏/分段控件不满宽的问题；autoresizingFlexibleWidth 让 UITableView 自动跟宽
         let header = makeHeader()
@@ -67,10 +84,10 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
     }
 
     private func makeHeader() -> UIView {
-        let header = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 4 + 50 + 6 + 40 + 6))
+        let header = UIView(frame: CGRect(x: 0, y: 0, width: 320, height: 4 + 50 + 6 + 40 + 6 + 30 + 6 + 16 + 6))
         header.autoresizingMask = [.flexibleWidth]
 
-        for v in [searchWrap, categoryControl] {
+        for v in [searchWrap, categoryControl, testShareTextButton, testShareFileButton, testShareCaption] {
             v.translatesAutoresizingMaskIntoConstraints = false
             header.addSubview(v)
         }
@@ -91,9 +108,47 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
             categoryControl.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 16),
             categoryControl.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -16),
             categoryControl.topAnchor.constraint(equalTo: searchWrap.bottomAnchor, constant: 6),
-            categoryControl.heightAnchor.constraint(equalToConstant: 40)
+            categoryControl.heightAnchor.constraint(equalToConstant: 40),
+            // 分享验证按钮（v6.1.4）
+            testShareTextButton.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 16),
+            testShareTextButton.topAnchor.constraint(equalTo: categoryControl.bottomAnchor, constant: 6),
+            testShareTextButton.widthAnchor.constraint(equalToConstant: 118),
+            testShareTextButton.heightAnchor.constraint(equalToConstant: 30),
+            testShareFileButton.leadingAnchor.constraint(equalTo: testShareTextButton.trailingAnchor, constant: 8),
+            testShareFileButton.centerYAnchor.constraint(equalTo: testShareTextButton.centerYAnchor),
+            testShareFileButton.widthAnchor.constraint(equalToConstant: 118),
+            testShareFileButton.heightAnchor.constraint(equalToConstant: 30),
+            testShareCaption.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 16),
+            testShareCaption.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -16),
+            testShareCaption.topAnchor.constraint(equalTo: testShareTextButton.bottomAnchor),
+            testShareCaption.heightAnchor.constraint(equalToConstant: 16)
         ])
         return header
+    }
+
+    // MARK: - 系统分享面板实测（v6.1.4，纯 UIKit UIActivityViewController 直出）
+    @objc private func testShareText() {
+        let vc = UIActivityViewController(
+            activityItems: ["TrollAgent 分享面板测试 \(Date())"],
+            applicationActivities: nil)
+        presentShareTest(vc)
+    }
+
+    @objc private func testShareFile() {
+        let path = NSTemporaryDirectory() + "/TrollAgent_share_test.txt"
+        try? "TrollAgent 分享面板测试 \(Date())".write(toFile: path, atomically: true, encoding: .utf8)
+        let vc = UIActivityViewController(
+            activityItems: [URL(fileURLWithPath: path)],
+            applicationActivities: nil)
+        presentShareTest(vc)
+    }
+
+    private func presentShareTest(_ vc: UIActivityViewController) {
+        if let pop = vc.popoverPresentationController {
+            pop.sourceView = tableView
+            pop.sourceRect = tableView.bounds
+        }
+        present(vc, animated: true, completion: nil)
     }
 
     /// 数据或筛选变化时重建分组（数据更新由 SwiftUI 包装器调用；筛选由内部控件触发）

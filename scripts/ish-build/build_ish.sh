@@ -34,7 +34,10 @@ OUTPUT_RESOURCES="$SCRIPT_DIR/resources"
 
 # Build configuration
 BUILD_TYPE="${1:-release}"
-ARCHS="arm64"
+# v6.1.4: 双架构（arm64 + arm64e）——arm64e 切片让 App 在 A12+ 设备原生运行，
+# 修复 compat 模式下 MobileIcons/CoreImage 渲染分享扩展图标 SIGSEGV
+#（TrollStore/TrollFools 均双架构原生运行，故分享正常）。
+ARCHS="arm64 arm64e"
 IOS_DEPLOYMENT_TARGET="14.0"
 
 # Colors for output
@@ -131,6 +134,7 @@ clean_build() {
     log_info "Cleaning build artifacts..."
 
     rm -rf "$ISH_DIR/build-ios"
+    rm -rf "$ISH_DIR/build-ios-arm64e"
     rm -rf "$OUTPUT_LIBS"
     rm -rf "$OUTPUT_INCLUDE"
     rm -rf "$OUTPUT_RESOURCES"
@@ -142,20 +146,21 @@ clean_build() {
 # Setup Cross Compilation
 # ============================================================================
 setup_cross_compile() {
-    log_info "Setting up iOS cross-compilation..."
+    local arch="$1"
+    local build_dir="$2"
+    log_info "Setting up iOS cross-compilation ($arch)..."
 
-    BUILD_DIR="$ISH_DIR/build-ios"
-    mkdir -p "$BUILD_DIR"
+    mkdir -p "$build_dir"
 
     # Get iOS SDK path
     IOS_SDK=$(xcrun --sdk iphoneos --show-sdk-path)
 
     # Create cross-compilation file for meson
-    CROSS_FILE="$BUILD_DIR/ios-cross.txt"
+    CROSS_FILE="$build_dir/ios-cross.txt"
 
     cat > "$CROSS_FILE" << EOF
 [binaries]
-c = ['clang', '-arch', 'arm64', '-isysroot', '$IOS_SDK', '-miphoneos-version-min=$IOS_DEPLOYMENT_TARGET']
+c = ['clang', '-arch', '$arch', '-isysroot', '$IOS_SDK', '-miphoneos-version-min=$IOS_DEPLOYMENT_TARGET']
 ar = 'ar'
 strip = 'strip'
 pkg-config = 'false'
@@ -184,9 +189,6 @@ EOF
 # ============================================================================
 build_ish() {
     log_info "Building iSH libraries for iOS ($BUILD_TYPE)..."
-
-    BUILD_DIR="$ISH_DIR/build-ios"
-    CROSS_FILE="$BUILD_DIR/ios-cross.txt"
 
     cd "$ISH_DIR"
 
@@ -396,24 +398,18 @@ GUARD_PATCH_PY
         log_warning "fs/fake.c 未找到，跳过 bind 守卫 patch"
     fi
 
+    # v6.1.4: 每架构独立 build 目录 + meson 交叉配置（arm64→build-ios, arm64e→build-ios-arm64e）
+    for arch in $ARCHS; do
+        if [ "$arch" == "arm64" ]; then
+            BUILD_DIR="$ISH_DIR/build-ios"
+        else
+            BUILD_DIR="$ISH_DIR/build-ios-$arch"
+        fi
+        CROSS_FILE="$BUILD_DIR/ios-cross.txt"
     # Configure meson build
-    MESON_BUILDTYPE="release"
-    # meson's `release` buildtype only implies -O3; it does NOT define NDEBUG
-    # (that is a separate `b_ndebug` option). Without it every assert() in the
-    # kernel stays live in a shipping build, so a failed assertion calls
-    # abort() on a user's device instead of being a development-only check.
-    # That is how the mem_ptr() CoW assert reached TestFlight as a SIGABRT in
-    # sys_execve/args_copy. Keep asserts in debug builds, compile them out of
-    # release ones.
-    MESON_NDEBUG="true"
-    if [ "$BUILD_TYPE" == "debug" ]; then
-        MESON_BUILDTYPE="debug"
-        MESON_NDEBUG="false"
-    fi
-
     # Check if already configured
     if [ ! -f "$BUILD_DIR/build.ninja" ]; then
-        log_info "Configuring meson build..."
+        log_info "Configuring meson build ($arch)..."
 
         meson setup "$BUILD_DIR" \
             --cross-file "$CROSS_FILE" \
@@ -427,19 +423,23 @@ GUARD_PATCH_PY
     else
         # Reconfigure both options: an existing build-ios/ from before
         # b_ndebug was introduced would otherwise keep asserts enabled.
-        log_info "Meson already configured, reconfiguring..."
+        log_info "Meson already configured, reconfiguring ($arch)..."
         meson configure "$BUILD_DIR" \
             --buildtype="$MESON_BUILDTYPE" \
             -Db_ndebug="$MESON_NDEBUG"
     fi
 
     # Build libraries
-    log_info "Building with ninja..."
+    log_info "Building with ninja ($arch)..."
     ninja -C "$BUILD_DIR" libish.a libish_emu.a libfakefs.a
 
     # Also build VDSO (arm64 guest VDSO is at vdso/arm64/libvdso.so.elf)
-    log_info "Building VDSO..."
-    ninja -C "$BUILD_DIR" vdso/arm64/libvdso.so.elf || log_warning "VDSO build failed (may need LLVM)"
+    # 仅 arm64 一次构建（guest 产物与 host 架构无关）
+    if [ "$arch" == "arm64" ]; then
+        log_info "Building VDSO..."
+        ninja -C "$BUILD_DIR" vdso/arm64/libvdso.so.elf || log_warning "VDSO build failed (may need LLVM)"
+    fi
+    done
 
     cd "$SCRIPT_DIR"
     log_success "iSH libraries built successfully"
@@ -466,10 +466,19 @@ copy_outputs() {
     mkdir -p "$OUTPUT_RESOURCES"
 
     # Copy static libraries
-    log_info "Copying libraries..."
-    cp "$BUILD_DIR/libish.a" "$OUTPUT_LIBS/"
-    cp "$BUILD_DIR/libish_emu.a" "$OUTPUT_LIBS/"
-    cp "$BUILD_DIR/libfakefs.a" "$OUTPUT_LIBS/"
+    log_info "Copying libraries (lipo arm64+arm64e)..."
+    # v6.1.4: arm64e 切片存在则 lipo 合并为 fat，否则回退单架构
+    for lib in libish libish_emu libfakefs; do
+        ARM64_LIB="$ISH_DIR/build-ios/$lib.a"
+        ARM64E_LIB="$ISH_DIR/build-ios-arm64e/$lib.a"
+        if [ -f "$ARM64E_LIB" ]; then
+            lipo -create "$ARM64_LIB" "$ARM64E_LIB" -output "$OUTPUT_LIBS/$lib.a"
+            log_success "fat $lib.a (arm64+arm64e)"
+        else
+            cp "$ARM64_LIB" "$OUTPUT_LIBS/$lib.a"
+            log_warning "$lib.a arm64e 缺失，回退 arm64 only"
+        fi
+    done
 
     # Copy VDSO if built (arm64 guest VDSO path)
     if [ -f "$BUILD_DIR/vdso/arm64/libvdso.so.elf" ]; then
@@ -643,7 +652,14 @@ main() {
 
     check_prerequisites
     init_submodules
-    setup_cross_compile
+    # v6.1.4: 双架构交叉配置（arm64 + arm64e）
+    for arch in $ARCHS; do
+        if [ "$arch" == "arm64" ]; then
+            setup_cross_compile "$arch" "$ISH_DIR/build-ios"
+        else
+            setup_cross_compile "$arch" "$ISH_DIR/build-ios-$arch"
+        fi
+    done
     build_ish
     copy_outputs
     create_umbrella_header
