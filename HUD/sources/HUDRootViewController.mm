@@ -1285,7 +1285,7 @@ extern "C" const char *g_hud_char;
             btn.layer.cornerRadius = 12;
             btn.backgroundColor = [UIColor systemBackgroundColor];
             btn.layer.borderWidth = 0.5;
-            btn.layer.borderColor = [UIColor labelColor colorWithAlphaComponent:0.12].CGColor;
+            btn.layer.borderColor = [[UIColor labelColor] colorWithAlphaComponent:0.12].CGColor;
             btn.layer.shadowColor = [UIColor blackColor].CGColor;
             btn.layer.shadowOpacity = 0.18;
             btn.layer.shadowOffset = CGSizeMake(0, 2);
