@@ -1255,9 +1255,8 @@ extern "C" const char *g_hud_char;
     NSInteger count = apps.count;
     NSInteger menuStyle = [[[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"] integerForKey:@"fanMenuStyle"];
     BOOL isList = (menuStyle == 1);
-    // 第一遍：算所有按钮中心，收集范围（面板要包住按钮+名称胶囊）
+    // 第一遍：算所有按钮中心
     NSMutableArray *centers = [NSMutableArray arrayWithCapacity:count];
-    CGFloat minX = CGFLOAT_MAX, maxX = -CGFLOAT_MAX, minY = CGFLOAT_MAX, maxY = -CGFLOAT_MAX;
     CGFloat btnHalf = isList ? 28.0 : (fanBtn / 2);
     for (NSInteger i = 0; i < count; i++) {
         CGFloat x, y;
@@ -1295,11 +1294,6 @@ extern "C" const char *g_hud_char;
             y = MAX(45, MIN(screenH - 45, y));
         }
         [centers addObject:[NSValue valueWithCGPoint:CGPointMake(x, y)]];
-        CGFloat capBottom = isList ? (y + btnHalf) : (y + btnHalf + 20); // 扇形含下方名称胶囊
-        minX = MIN(minX, x - (isList ? 110 : btnHalf));
-        maxX = MAX(maxX, x + (isList ? 110 : btnHalf));
-        minY = MIN(minY, y - btnHalf);
-        maxY = MAX(maxY, capBottom);
     }
     // 点空白处关菜单（最底层）
     UIButton *blank = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -1307,24 +1301,9 @@ extern "C" const char *g_hud_char;
     blank.tag = 9000;
     [blank addTarget:self action:@selector(_closeFanMenu) forControlEvents:UIControlEventTouchUpInside];
     [self.view insertSubview:blank atIndex:0];
-    // v6.1.5-9：毛玻璃面板（包住所有按钮+胶囊，控制中心质感）
-    CGFloat pad = isList ? 14 : 18;
-    CGRect panelFrame = CGRectMake(minX - pad, minY - pad, (maxX - minX) + pad*2, (maxY - minY) + pad*2);
-    UIVisualEffectView *panel = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark]];
-    panel.frame = panelFrame;
-    panel.layer.cornerRadius = isList ? 16 : 22;
-    panel.layer.masksToBounds = YES;
-    panel.layer.borderWidth = 0.5;
-    panel.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15].CGColor;
-    panel.tag = 9001;
-    panel.userInteractionEnabled = NO; // 面板只是背景，触摸透传给最底层的 blank 关闭菜单
-    panel.alpha = 0;
-    panel.transform = CGAffineTransformMakeScale(0.85, 0.85);
-    [self.view addSubview:panel];
-    [UIView animateWithDuration:0.18 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-        panel.alpha = 1.0;
-        panel.transform = CGAffineTransformIdentity;
-    } completion:nil];
+    // v6.1.5-13：去掉毛玻璃大背景面板（用户反馈"大框背景"突兀）——菜单干净无框，
+    // 精致感靠按钮本身（圆钮/白边框/真实图标/名称胶囊/弹性动画）
+    // 第二遍：创建按钮 + 名称胶囊，逐个弹性入场
     // 第二遍：创建按钮 + 名称胶囊，逐个弹性入场
     for (NSInteger i = 0; i < count; i++) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
