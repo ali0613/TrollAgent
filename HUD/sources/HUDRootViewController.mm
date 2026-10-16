@@ -137,6 +137,7 @@ extern "C" const char *g_hud_char;
     NSInteger _lastFanClickIdx;         // v6.1.5-14i：菜单点击去重（手势+按钮双触发只处理一次）
     NSTimeInterval _lastFanClickTime;   // v6.1.5-14i
     NSTimer *_kbTimer;                  // v6.1.5-14n：键盘全局文件轮询
+    CGFloat _dragLastX, _dragLastY;     // v6.1.5-14o：拖拽倾斜速度基准
 }
 
 + (BOOL)passthroughMode { return _passthrough; }
@@ -280,6 +281,15 @@ extern "C" const char *g_hud_char;
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(_tap:)];
     [_girlView addGestureRecognizer:pan];
     [_girlView addGestureRecognizer:tap];
+    // v6.1.5-14o：活物感——双击=蹦跳开心、长按=捏扁弹回（单击=弹菜单，互不冲突）
+    UITapGestureRecognizer *tap2 = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(_doubleTap:)];
+    tap2.numberOfTapsRequired = 2;
+    [_girlView addGestureRecognizer:tap2];
+    [tap requireGestureRecognizerToFail:tap2];  // 双击时不触发单击
+    UILongPressGestureRecognizer *lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(_longPress:)];
+    lp.minimumPressDuration = 0.4;
+    [_girlView addGestureRecognizer:lp];
+    [tap requireGestureRecognizerToFail:lp];    // 长按时不触发单击
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -409,6 +419,9 @@ extern "C" const char *g_hud_char;
         self->_moodShowing = YES;
         self->_girlView.image = m;
         [self _setFrameForImage:m];
+        // v6.1.5-14o：偷偷小动作——头顶冒 emoji 小符号（😊✨🥱😋🌟），活物感
+        NSArray *emojis = @[@"😊", @"✨", @"🥱", @"😋", @"🌟"];
+        [self _showHeadEmoji:emojis[arc4random_uniform((uint32_t)emojis.count)]];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             self->_moodShowing = NO;
             if (!self->_isDragging && !self->_autoMoodPaused &&
@@ -450,6 +463,7 @@ extern "C" const char *g_hud_char;
     CGPoint p = [g locationInView:self.view];
     if (g.state == UIGestureRecognizerStateBegan) {
         _isDragging = YES;
+        _dragLastX = 0; _dragLastY = 0;  // v6.1.5-14o：拖拽倾斜速度基准重置
         [self _stopClimbTimer];    // v6.0.29：拖动时立刻停止所有攀爬
         [self _setAnchorY:0.5f];   // v6.0.18：拖拽/悬浮→中心锚点（悬浮不做胸部锚点）
         [self _stopChestBreath];   // v6.0.21：拖拽/悬浮停胸部呼吸（移除条带层）
@@ -483,6 +497,14 @@ extern "C" const char *g_hud_char;
         c.x = MAX(gs.width/2, MIN(c.x, v.width - gs.width/2));
         c.y = MAX(gs.height/2, MIN(c.y, v.height - gs.height/2));
         _girlView.center = c;
+        // v6.1.5-14o：活物感——拖拽时朝移动方向微微倾斜（速度越大倾角越大，像被拽着挣扎）
+        CGFloat vx = c.x - _dragLastX, vy = c.y - _dragLastY;
+        _dragLastX = c.x; _dragLastY = c.y;
+        CGFloat speed = sqrtf(vx*vx + vy*vy);
+        if (speed > 0.5) {
+            CGFloat tilt = MAX(-0.16, MIN(0.16, vx / 160.0));  // 水平倾斜 ±9°
+            _girlView.transform = CGAffineTransformMakeRotation(tilt);
+        }
     } else if (g.state == UIGestureRecognizerStateEnded || g.state == UIGestureRecognizerStateCancelled) {
         _isDragging = NO;
         [self _stopLiftTimer];
@@ -515,13 +537,19 @@ extern "C" const char *g_hud_char;
             [UIView animateWithDuration:1.2 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
                 _girlView.center = endC;
             } completion:^(BOOL finished) {
-                // 恢复站立idle，把缩放改回1.0
+                // v6.1.5-14o：活物感——落地 squash&stretch：先压扁(砸实)再弹回(颠一下)
                 if (_idleFrames.firstObject) {
-                    _girlView.transform = CGAffineTransformIdentity;
                     _girlView.image = _idleFrames.firstObject;
                     [self _setFrameForImage:_idleFrames.firstObject];
                     [self _startBreathing];   // 恢复胸部呼吸动效
                 }
+                [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+                    _girlView.transform = CGAffineTransformMakeScale(1.18, 0.72);  // 砸实压扁
+                } completion:^(BOOL f) {
+                    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.5 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseOut animations:^{
+                        _girlView.transform = CGAffineTransformIdentity;  // 弹起回正
+                    } completion:nil];
+                }];
                 _falling = NO;
             }];
         } else {
@@ -541,6 +569,35 @@ extern "C" const char *g_hud_char;
 - (void)_stopLiftTimer {
     [_liftTimer invalidate]; _liftTimer = nil;
     _lifting = NO;
+}
+
+// v6.1.5-14o：头顶冒 emoji 小符号（淡入→停留→淡出），挂在角色上方
+- (void)_showHeadEmoji:(NSString *)emoji {
+    if (!emoji.length) return;
+    UIView *superview = _girlView.superview;
+    if (!superview) return;
+    UIView *old = [superview viewWithTag:9501];
+    if (old) [old removeFromSuperview];
+    UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, 44, 44)];
+    lb.tag = 9501;
+    lb.text = emoji;
+    lb.font = [UIFont systemFontOfSize:22];
+    lb.textAlignment = NSTextAlignmentCenter;
+    CGPoint c = _girlView.center;
+    CGFloat top = c.y - _girlView.frame.size.height / 2 - 36;
+    top = MAX(30, top);
+    lb.center = CGPointMake(c.x, top);
+    lb.alpha = 0;
+    [superview addSubview:lb];
+    [UIView animateWithDuration:0.4 animations:^{
+        lb.alpha = 1.0;
+    } completion:^(BOOL f) {
+        [UIView animateWithDuration:0.5 delay:1.1 options:UIViewAnimationOptionCurveEaseIn animations:^{
+            lb.alpha = 0;
+        } completion:^(BOOL f2) {
+            [lb removeFromSuperview];
+        }];
+    }];
 }
 
 // v6.0.8：松手吸附到最近屏幕边缘（<threshold 才算）并切换扒墙姿势（企鹅趴墙探头）
@@ -1180,6 +1237,57 @@ extern "C" const char *g_hud_char;
         else          [self _startChestBreath];
     }
 }
+// v6.1.5-14o：活物感——双击：向上蹦跳+happy帧+挤压拉伸（squash&stretch），不动菜单
+- (void)_doubleTap:(UITapGestureRecognizer *)g {
+    if (_isDragging || _falling) return;
+    if (_isHidden) return;  // 隐藏态交给单击恢复
+    if (_girlView.image == _wallImage || _girlView.image == _wallImageV) return;  // 趴墙时交给单击恢复站立
+    UIImage *hp = _happyFrames.firstObject;
+    if (!hp && _idleFrames.firstObject) hp = _idleFrames.firstObject;
+    if (hp) _girlView.image = hp;
+    CGPoint c = _girlView.center;
+    [UIView animateWithDuration:0.18 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        // 蹦起：先压扁蓄力再弹起
+        _girlView.transform = CGAffineTransformMakeScale(1.15, 0.85);
+    } completion:^(BOOL f) {
+        [UIView animateWithDuration:0.16 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            _girlView.center = CGPointMake(c.x, c.y - 26);  // 蹦起 26pt
+            _girlView.transform = CGAffineTransformMakeScale(0.92, 1.08);  // 上升拉长
+        } completion:^(BOOL f2) {
+            [UIView animateWithDuration:0.22 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+                _girlView.center = c;
+                _girlView.transform = CGAffineTransformIdentity;  // 落回原位
+            } completion:^(BOOL f3) {
+                [self _resetToIdleIfNeeded];
+            }];
+        }];
+    }];
+}
+// v6.1.5-14o：活物感——长按：捏扁（压扁变宽），松手弹回（spring）
+- (void)_longPress:(UILongPressGestureRecognizer *)g {
+    if (_isDragging || _falling || _isHidden) return;
+    if (g.state == UIGestureRecognizerStateBegan) {
+        [UIView animateWithDuration:0.18 animations:^{
+            _girlView.transform = CGAffineTransformMakeScale(1.25, 0.65);  // 捏扁
+        }];
+    } else if (g.state == UIGestureRecognizerStateEnded || g.state == UIGestureRecognizerStateCancelled) {
+        [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.45 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            _girlView.transform = CGAffineTransformIdentity;  // 弹回
+        } completion:^(BOOL f) {
+            [self _resetToIdleIfNeeded];
+        }];
+    }
+}
+// v6.1.5-14o：被摸/长按/蹦跳结束后若切了 happy 帧且非特殊状态，回到待机帧
+- (void)_resetToIdleIfNeeded {
+    if (_isDragging || _falling || _isClimbing || _onSideWall) return;
+    if (_idleFrames.firstObject && _girlView.image != _idleFrames.firstObject) {
+        _girlView.image = _idleFrames.firstObject;
+        [self _setFrameForImage:_idleFrames.firstObject];
+        [self _startBreathing];
+    }
+}
+
 - (void)_tap:(UITapGestureRecognizer *)g {
     if (_isDragging) return;
     // v6.0.8：从扒墙状态点击 → 直接恢复站立待机（不切表情）
