@@ -1278,18 +1278,19 @@ extern "C" const char *g_hud_char;
                 if (i < acc + caps[L]) { layer = L; posInLayer = i - acc; break; }
                 acc += caps[L];
             }
-            CGFloat radii[3] = {190, 0, 0};
-            if (layerCount == 2) { radii[0] = 110; radii[1] = 220; }
-            else if (layerCount == 3) { radii[0] = 88; radii[1] = 172; radii[2] = 256; }
+            CGFloat radii[3] = {165, 0, 0};
+            if (layerCount == 2) { radii[0] = 96; radii[1] = 185; }
+            else if (layerCount == 3) { radii[0] = 76; radii[1] = 140; radii[2] = 205; }
             CGFloat layerR = radii[layer];
             NSInteger nk = caps[layer];
-            // 扇面跨度由最多的一层决定，各层共享同一扇面区间（内外对齐、整齐）
+            // v6.1.5-14f：扇面跨度收窄（120°→80°），半径收小——外层 app 不再"间隔太大"（用户反馈），
+            // 孔雀开屏保持紧凑：外层 5 个在 80° 内均分（20°×205 ≈ 72pt 间隔，按钮 56pt 不重叠）
             NSInteger maxCaps = caps[0];
             for (NSInteger L = 1; L < layerCount; L++) maxCaps = MAX(maxCaps, caps[L]);
-            CGFloat span = (maxCaps > 1) ? MAX(36.0, MIN(120.0, (maxCaps - 1) * 36.0)) : 0;
+            CGFloat span = (maxCaps > 1) ? MAX(24.0, MIN(80.0, (maxCaps - 1) * 26.0)) : 0;
             // v6.1.5-12：扇面中心始终指向屏幕中心——角色贴边/贴底时外层按钮也朝屏幕中央展开
             CGFloat centerAng = atan2(screenH / 2 - girlY, screenW / 2 - girlX) * 180.0 / M_PI;
-            CGFloat startDeg = centerAng - 60;
+            CGFloat startDeg = centerAng - span / 2;
             // 层内均分同一扇面：单个数居中，多个均匀铺开
             CGFloat deg = (nk == 1) ? (startDeg + span / 2) : (startDeg + posInLayer * (span / (nk - 1)));
             CGFloat ang = deg * M_PI / 180;

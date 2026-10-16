@@ -760,9 +760,17 @@ enum ProcessHelper {
         return nil
     }
 
-    /// 启动 App：优先 SBSLaunchApplicationWithIdentifier (需 frontboard/springboard entitlements），failed回退 openURL，再failed返回提示
+    /// 启动 App：优先 SBSLaunchApplicationWithIdentifier (需 frontboard/springboard entitlements），
+    /// failed 回退 LSApplicationWorkspace（主 App 有 backboardd.launchapplications），再回退 openURL，
+    /// 再 failed 返回提示。v6.1.5-14f：加 LSWorkspace 兜底 + 代开日志（/var/mobile/Documents/hud.log）
     @discardableResult
     static func launchApp(bundleId: String) -> (Bool, String) {
+        // v6.1.5-14f：代开日志——HUD 点菜单→主 App 代开的目标/结果，供真机诊断
+        let logLine = "\(Date()): main-open bid=\(bundleId)\n"
+        let logURL = URL(fileURLWithPath: "/var/mobile/Documents/hud.log")
+        if let h = try? FileHandle(forWritingTo: logURL) { h.seekToEndOfFile(); h.write(logLine.data(using: .utf8)!); try? h.close() }
+        else { try? logLine.data(using: .utf8)?.write(to: logURL, options: .atomic) }
+
         if let handle = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", RTLD_LAZY) {
             typealias SBSLaunchFn = @convention(c) (CFString, Bool) -> Int32
             if let sym = dlsym(handle, "SBSLaunchApplicationWithIdentifier") {
@@ -773,6 +781,15 @@ enum ProcessHelper {
                 }
             }
             dlclose(handle)
+        }
+        // v6.1.5-14f：LSApplicationWorkspace 兜底（主 App 有 backboardd.launchapplications）
+        if let wsCls = NSClassFromString("LSApplicationWorkspace"),
+           let ws = wsCls.perform(NSSelectorFromString("defaultWorkspace")),
+           ws.responds(to: NSSelectorFromString("openApplicationWithBundleID:")) {
+            let ret = ws.perform(NSSelectorFromString("openApplicationWithBundleID:"), with: bundleId)
+            if ret != nil {
+                return (true, "LSApplicationWorkspace open OK")
+            }
         }
         if let url = URL(string: "trollmcp2://") {
             if UIThreadBridge.openURL(url, timeout: 3) { return (true, "openURL launch OK") }
