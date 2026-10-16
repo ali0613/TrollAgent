@@ -1243,10 +1243,7 @@ extern "C" const char *g_hud_char;
     CGFloat screenH = [UIScreen mainScreen].bounds.size.height;
     CGFloat girlX = _girlView.center.x;
     CGFloat girlY = _girlView.center.y;
-    // 判断方向：永远朝屏幕中间弹
-    BOOL fromBottom = (girlY > screenH - 200);
-    BOOL fromTop = (girlY < 150);
-    BOOL fromLeft = (girlX < 150);
+    // 列表样式摆放方向：角色靠右时列表放左边，否则放右边（扇形统一朝屏幕中心展开，无需四方向判断）
     BOOL fromRight = (girlX > screenW - 150);
     // 统一菜单数据源（v6.1.5-10：显示顺序重排——AI 置内圈、隐藏次之，其余按序）
     NSArray *apps = [self _orderedFanMenuApps];
@@ -1257,7 +1254,6 @@ extern "C" const char *g_hud_char;
     BOOL isList = (menuStyle == 1);
     // 第一遍：算所有按钮中心
     NSMutableArray *centers = [NSMutableArray arrayWithCapacity:count];
-    CGFloat btnHalf = isList ? 28.0 : (fanBtn / 2);
     for (NSInteger i = 0; i < count; i++) {
         CGFloat x, y;
         if (isList) {
@@ -1269,27 +1265,36 @@ extern "C" const char *g_hud_char;
             x = fromRight ? girlX - 80 : girlX + 80;
             y = startY + i * 64;
         } else {
-            // v6.1.5-10：孔雀开屏——3 层同心弧：内圈 1 个、中圈 2 个、外圈 N-3 个；
-            // 半径递增（88/172/256），每层在 120° 扇面内均分 → 越外围 app 越多、越内围越少
-            NSInteger layer = 0, posInLayer = 0;
-            if (i == 0) { layer = 0; posInLayer = 0; }
-            else if (i <= 2) { layer = 1; posInLayer = i - 1; }
-            else { layer = 2; posInLayer = i - 3; }
-            CGFloat layerR = 88 + layer * 84;
-            NSInteger nk = (layer == 0) ? 1 : (layer == 1) ? 2 : MAX(1, count - 3);
-            // v6.1.5-10：扇面跨度自适应——每 app 至少 36° 间隔，最多 120°（app 多时扇面更展开不重叠）
-            CGFloat span = (nk > 1) ? MAX(36.0, MIN(120.0, (nk - 1) * 36.0)) : 0;
-            CGFloat stepA = (nk > 1) ? (span / (nk - 1)) : 0;
-            // v6.1.5-12：扇面中心始终指向屏幕中心——角色贴边/贴底时外层按钮也朝屏幕中央展开，
-            // 不会往屏幕外跑被 clamp 拉回边缘堆叠（旧四方向 startDeg 在边缘会混乱）
+            // v6.1.5-14：自适应层数——app 少单层、多一点双层、再多三层，逐层往外扩散；
+            // 每层共享同一扇面区间并内部均分（整齐扇形）；越外围 app 越多
+            NSInteger layerCount = (count <= 4) ? 1 : (count <= 7) ? 2 : 3;
+            NSInteger caps[3] = {0, 0, 0};
+            if (layerCount == 1) caps[0] = count;
+            else if (layerCount == 2) { caps[0] = MIN(2, count - 2); caps[1] = count - caps[0]; }
+            else { caps[0] = 1; caps[1] = 2; caps[2] = count - 3; }
+            NSInteger layer = 0, posInLayer = 0, acc = 0;
+            for (NSInteger L = 0; L < layerCount; L++) {
+                if (i < acc + caps[L]) { layer = L; posInLayer = i - acc; break; }
+                acc += caps[L];
+            }
+            CGFloat radii[3] = {190, 0, 0};
+            if (layerCount == 2) { radii[0] = 110; radii[1] = 220; }
+            else if (layerCount == 3) { radii[0] = 88; radii[1] = 172; radii[2] = 256; }
+            CGFloat layerR = radii[layer];
+            NSInteger nk = caps[layer];
+            // 扇面跨度由最多的一层决定，各层共享同一扇面区间（内外对齐、整齐）
+            NSInteger maxCaps = caps[0];
+            for (NSInteger L = 1; L < layerCount; L++) maxCaps = MAX(maxCaps, caps[L]);
+            CGFloat span = (maxCaps > 1) ? MAX(36.0, MIN(120.0, (maxCaps - 1) * 36.0)) : 0;
+            // v6.1.5-12：扇面中心始终指向屏幕中心——角色贴边/贴底时外层按钮也朝屏幕中央展开
             CGFloat centerAng = atan2(screenH / 2 - girlY, screenW / 2 - girlX) * 180.0 / M_PI;
             CGFloat startDeg = centerAng - 60;
-            // 内圈单个数居中；其它层按角度均分
-            CGFloat deg = (nk == 1) ? (startDeg + 60) : (startDeg + stepA * posInLayer);
+            // 层内均分同一扇面：单个数居中，多个均匀铺开
+            CGFloat deg = (nk == 1) ? (startDeg + span / 2) : (startDeg + posInLayer * (span / (nk - 1)));
             CGFloat ang = deg * M_PI / 180;
             x = girlX + cos(ang) * layerR;
             y = girlY + sin(ang) * layerR;
-            // 出屏保护（含下方名称胶囊）
+            // 出屏保护
             x = MAX(30, MIN(screenW - 30, x));
             y = MAX(45, MIN(screenH - 45, y));
         }
@@ -1388,35 +1393,18 @@ extern "C" const char *g_hud_char;
         }
         btn.tag = 9000 + i;
         btn.alpha = 0;
-        btn.transform = CGAffineTransformMakeScale(0.3, 0.3);
         CGPoint c = [centers[i] CGPointValue];
         btn.center = c;
         [btn addTarget:self action:@selector(_fanBtnClick:) forControlEvents:UIControlEventTouchUpInside];
         [self.view addSubview:btn];
-        // v6.1.5-9：名称胶囊（半透明黑底白字，扇形专用；列表卡片自带标题不再加）
-        UILabel *cap = nil;
-        if (!isList) {
-            cap = [[UILabel alloc] initWithFrame:CGRectZero];
-            cap.text = apps[i][@"name"];
-            cap.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
-            cap.textColor = [UIColor whiteColor];
-            cap.backgroundColor = [UIColor colorWithWhite:0 alpha:0.42];
-            cap.textAlignment = NSTextAlignmentCenter;
-            cap.layer.cornerRadius = 7.5;
-            cap.clipsToBounds = YES;
-            cap.userInteractionEnabled = NO;
-            CGSize ts = [cap.text sizeWithAttributes:@{NSFontAttributeName: cap.font}];
-            CGFloat capW = ceil(ts.width) + 16;
-            cap.frame = CGRectMake(c.x - capW/2, c.y + fanBtn/2 + 5, capW, 15);
-            cap.tag = 9000 + i;
-            cap.alpha = 0;
-            [self.view addSubview:cap];
-        }
-        // v6.1.5-9：逐个弹性入场（stagger）
-        [UIView animateWithDuration:0.45 delay:0.06 + i*0.045 usingSpringWithDamping:0.65 initialSpringVelocity:0.7 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        // v6.1.5-14：菜单诊断——记录每个按钮 tag/名称/frame，定位"点不到"是否位置错位
+        [self _appendHudLog:[NSString stringWithFormat:@"menu i=%ld name=%@ frame=%@", (long)i, apps[i][@"name"] ?: @"", NSStringFromCGRect(btn.frame)]];
+        // v6.1.5-14：去掉扇形名称胶囊（用户要求"不要显示 app 名字"）——扇形纯图标圆钮；
+        // 列表卡片自带标题不受影响
+        // v6.1.5-14：入场只做 alpha 淡入——不做 scale/位移动画，按钮创建即最终位置尺寸，
+        // 动画期间点击区域完整可用（修复"视觉已放大但点不到"的命中错位）
+        [UIView animateWithDuration:0.25 delay:0.05 + i*0.04 options:UIViewAnimationOptionCurveEaseOut animations:^{
             btn.alpha = 1.0;
-            btn.transform = CGAffineTransformIdentity;
-            if (cap) cap.alpha = 1.0;
         } completion:nil];
     }
 }
@@ -1460,11 +1448,20 @@ extern "C" const char *g_hud_char;
         }
         // v6.1.5-7：workspace 不可用或打开失败时，兜底走 openURL
         if (!opened && url.length > 0) {
-            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:^(BOOL ok) {
+                if (!ok) [self _showToast:[NSString stringWithFormat:@"打不开 %@", target[@"name"] ?: @"该应用"]];
+            }];
+        }
+        // v6.1.5-14：打开失败且无 url scheme 时，明确提示"点了有反应"
+        if (!opened) {
+            [self _appendHudLog:[NSString stringWithFormat:@"open FAIL idx=%ld bid=%@", (long)idx, bundleId]];
+            if (url.length == 0) [self _showToast:[NSString stringWithFormat:@"打不开 %@", target[@"name"] ?: @"该应用"]];
         }
     } else if (url.length > 0) {
         // url scheme 打开
         [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];
+    } else {
+        [self _showToast:@"该应用未配置打开方式"];
     }
 }
 
@@ -1481,6 +1478,28 @@ extern "C" const char *g_hud_char;
     } else {
         [entry writeToFile:@"/tmp/hud_fan.log" atomically:YES encoding:NSUTF8StringEncoding error:nil];
     }
+}
+
+// v6.1.5-14：轻提示（点击反馈）——打开失败/未配置时明确告知，避免"点了没反应"
+- (void)_showToast:(NSString *)msg {
+    UILabel *toast = [[UILabel alloc] initWithFrame:CGRectZero];
+    toast.text = msg;
+    toast.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    toast.textColor = [UIColor whiteColor];
+    toast.backgroundColor = [UIColor colorWithWhite:0 alpha:0.78];
+    toast.textAlignment = NSTextAlignmentCenter;
+    toast.layer.cornerRadius = 12;
+    toast.clipsToBounds = YES;
+    CGSize ts = [toast.text sizeWithAttributes:@{NSFontAttributeName: toast.font}];
+    CGFloat tw = MIN(ts.width + 28, [UIScreen mainScreen].bounds.size.width - 40);
+    toast.frame = CGRectMake(([UIScreen mainScreen].bounds.size.width - tw) / 2, [UIScreen mainScreen].bounds.size.height - 200, tw, 32);
+    toast.tag = 9100;
+    [self.view addSubview:toast];
+    toast.alpha = 0;
+    [UIView animateWithDuration:0.22 animations:^{ toast.alpha = 1.0; }];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [UIView animateWithDuration:0.3 animations:^{ toast.alpha = 0; } completion:^(BOOL fin) { [toast removeFromSuperview]; }];
+    });
 }
 
 - (NSArray *)_readMainAppPrefsFanMenuApps {
