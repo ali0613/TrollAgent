@@ -437,7 +437,7 @@ extern "C" const char *g_hud_char;
 }
 - (void)_autoMoodFire {
     _autoMoodTimer = nil;
-    if (_autoMoodPaused || _isDragging || _moodShowing) { [self _scheduleAutoMood]; return; }
+    if (_autoMoodPaused || _isDragging || _falling || _moodShowing) { [self _scheduleAutoMood]; return; }  // v6.1.5-14ab：掉落中不切表情
     if (_girlView.image == _wallImage || _girlView.image == _wallImageV) { [self _scheduleAutoMood]; return; }
     if (_girlView.image != _idleFrames.firstObject) { [self _scheduleAutoMood]; return; }
     NSUInteger idx = _moodSeqIndex % _moodFrames.count;
@@ -577,20 +577,24 @@ extern "C" const char *g_hud_char;
             [UIView animateWithDuration:1.2 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
                 _girlView.center = endC;
             } completion:^(BOOL finished) {
-                // v6.1.5-14o：活物感——落地 squash&stretch：先压扁(砸实)再弹回(颠一下)
-                if (_idleFrames.firstObject) {
-                    _girlView.image = _idleFrames.firstObject;
-                    [self _setFrameForImage:_idleFrames.firstObject];
-                    [self _startBreathing];   // 恢复胸部呼吸动效
+                // v6.1.5-14ab：掉落中若用户已拖走（_isDragging），跳过落地恢复/弹跳——拖拽已接管，
+                // 原无条件恢复 idle+弹跳会打断正在进行的拖拽（角色突然变帧+transform 竞争）
+                if (finished && !_isDragging) {
+                    // v6.1.5-14o：活物感——落地 squash&stretch：先压扁(砸实)再弹回(颠一下)
+                    if (_idleFrames.firstObject) {
+                        _girlView.image = _idleFrames.firstObject;
+                        [self _setFrameForImage:_idleFrames.firstObject];
+                        [self _startBreathing];   // 恢复胸部呼吸动效
+                    }
+                    [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+                        _girlView.transform = CGAffineTransformMakeScale(1.18, 0.72);  // 砸实压扁
+                    } completion:^(BOOL f) {
+                        [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.5 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseOut animations:^{
+                            _girlView.transform = CGAffineTransformIdentity;  // 弹起回正
+                        } completion:nil];
+                    }];
                 }
-                [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-                    _girlView.transform = CGAffineTransformMakeScale(1.18, 0.72);  // 砸实压扁
-                } completion:^(BOOL f) {
-                    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.5 initialSpringVelocity:0.6 options:UIViewAnimationOptionCurveEaseOut animations:^{
-                        _girlView.transform = CGAffineTransformIdentity;  // 弹起回正
-                    } completion:nil];
-                }];
-                _falling = NO;
+                _falling = NO;   // 标志始终清，避免卡在掉落态
             }];
         } else {
             // ✅ 其他位置松手 → 走原来的贴边吸附逻辑（保留左右趴墙、底部趴墙等所有原有功能，每个角色独立配置）
@@ -646,6 +650,10 @@ extern "C" const char *g_hud_char;
 // 顶/底（水平边）用水平墙沿图 _wallImage；左/右（垂直边）用竖直墙沿图 _wallImageV。
 - (void)_snapToEdge {
     [self _setAnchorY:0.5f];   // v6.0.18：趴墙→中心锚点（趴墙/悬浮不做胸部锚点）
+    // v6.1.5-14ab：开头统一清吸附态动效——原提前 return 分支（顶部/未贴边）不停底部呼吸/横向挪动/姿势展示，
+    // 底部趴墙后拖到中间松手，角色站中间仍残留底部起伏+挪动排期；吸附分支后面会各自重新启动
+    [self _stopPoseShow];
+    [self _stopBottomAmbient];
     CGSize v = [UIScreen mainScreen].bounds.size;
     CGPoint c = _girlView.center;
     CGFloat dL = c.x, dR = v.width - c.x, dT = c.y, dB = v.height - c.y;
@@ -1491,7 +1499,7 @@ extern "C" const char *g_hud_char;
 }
 
 - (void)_tap:(UITapGestureRecognizer *)g {
-    if (_isDragging) return;
+    if (_isDragging || _falling) return;   // v6.1.5-14ab：掉落中不可点击
     [self _stopPoseShow];   // v6.1.5-14z：单击打断坐姿/跪姿展示
     // v6.0.8：从扒墙状态点击 → 直接恢复站立待机（不切表情）
     if ((_girlView.image == _wallImage || _girlView.image == _wallImageV) && _idleFrames.firstObject) {
