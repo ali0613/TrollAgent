@@ -136,6 +136,8 @@ extern "C" const char *g_hud_char;
     BOOL _onSideWall;           // 是否在左右侧边趴墙
     BOOL _onBottomWall;         // v6.1.5-14w：是否底部趴墙（底部呼吸/横向挪动专用）
     NSTimer *_bottomCrawlTimer; // v6.1.5-14w：底部横向挪动定时器
+    NSTimer *_autoMoodTimer;    // v6.1.5-14y：待机表情排期定时器（可取消，防解锁/回前台多链堆积）
+    NSTimer *_autoMoodResetTimer; // v6.1.5-14y：表情显示1.2s后回待机的定时器
     NSString *_charPrefix;      // v6.0.27：当前角色前缀（rabit/girl/cat）
     NSInteger _lastFanClickIdx;         // v6.1.5-14i：菜单点击去重（手势+按钮双触发只处理一次）
     NSTimeInterval _lastFanClickTime;   // v6.1.5-14i
@@ -418,34 +420,51 @@ extern "C" const char *g_hud_char;
 
 // v6.0.9：待机自动切换表情——空闲时按 _moodFrames【顺序循环】取一帧显示约 1.2s（睁眼→眯眼→蹲坐→回睁眼），然后回 idle，再排下一次。
 // 只在"待机态 + 未拖拽 + 未扒墙 + 未锁屏"时切换，不打断用户正在看的表情/扒墙/拖拽。
+// v6.1.5-14y：dispatch_after → 可取消定时器——原实现 unlockShow/启动/递归多入口排多个 4.5s 延迟，
+// 频繁锁屏/解锁会堆积多链并行导致表情乱切；现在排期全局唯一（新排期 invalidate 旧的）
 - (void)_scheduleAutoMood {
     if (!_moodFrames.count || _moodShowing) return;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (self->_autoMoodPaused || self->_isDragging || self->_moodShowing) { [self _scheduleAutoMood]; return; }
-        if (self->_girlView.image == self->_wallImage || self->_girlView.image == self->_wallImageV) { [self _scheduleAutoMood]; return; }
-        if (self->_girlView.image != self->_idleFrames.firstObject) { [self _scheduleAutoMood]; return; }
-        NSUInteger idx = self->_moodSeqIndex % self->_moodFrames.count;
-        self->_moodSeqIndex = (self->_moodSeqIndex + 1) % self->_moodFrames.count;
-        UIImage *m = self->_moodFrames[idx];
-        if (!m) { [self _scheduleAutoMood]; return; }
-        self->_moodShowing = YES;
-        self->_girlView.image = m;
-        [self _setFrameForImage:m];
-        // v6.1.5-14o：偷偷小动作——头顶冒 emoji 小符号（😊✨🥱😋🌟），活物感
-        NSArray *emojis = @[@"😊", @"✨", @"🥱", @"😋", @"🌟"];
-        [self _showHeadEmoji:emojis[arc4random_uniform((uint32_t)emojis.count)]];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            self->_moodShowing = NO;
-            if (!self->_isDragging && !self->_autoMoodPaused &&
-                self->_girlView.image != self->_idleFrames.firstObject &&
-                self->_girlView.image != self->_wallImage && self->_girlView.image != self->_wallImageV) {
-                self->_girlView.image = self->_idleFrames.firstObject;
-                self->_girlView.transform = CGAffineTransformIdentity;
-                [self _setFrameForImage:self->_idleFrames.firstObject];
-            }
-            [self _scheduleAutoMood];
-        });
-    });
+    [_autoMoodTimer invalidate];
+    _autoMoodTimer = nil;
+    _autoMoodTimer = [NSTimer scheduledTimerWithTimeInterval:4.5
+                                                      target:self
+                                                    selector:@selector(_autoMoodFire)
+                                                    userInfo:nil repeats:NO];
+}
+- (void)_autoMoodFire {
+    _autoMoodTimer = nil;
+    if (_autoMoodPaused || _isDragging || _moodShowing) { [self _scheduleAutoMood]; return; }
+    if (_girlView.image == _wallImage || _girlView.image == _wallImageV) { [self _scheduleAutoMood]; return; }
+    if (_girlView.image != _idleFrames.firstObject) { [self _scheduleAutoMood]; return; }
+    NSUInteger idx = _moodSeqIndex % _moodFrames.count;
+    _moodSeqIndex = (_moodSeqIndex + 1) % _moodFrames.count;
+    UIImage *m = _moodFrames[idx];
+    if (!m) { [self _scheduleAutoMood]; return; }
+    _moodShowing = YES;
+    _girlView.image = m;
+    [self _setFrameForImage:m];
+    // v6.1.5-14o：偷偷小动作——头顶冒 emoji 小符号（😊✨🥱😋🌟），活物感
+    NSArray *emojis = @[@"😊", @"✨", @"🥱", @"😋", @"🌟"];
+    [self _showHeadEmoji:emojis[arc4random_uniform((uint32_t)emojis.count)]];
+    // 显示 1.2s 后回待机（可取消定时器）
+    [_autoMoodResetTimer invalidate];
+    _autoMoodResetTimer = nil;
+    _autoMoodResetTimer = [NSTimer scheduledTimerWithTimeInterval:1.2
+                                                           target:self
+                                                         selector:@selector(_autoMoodReset)
+                                                         userInfo:nil repeats:NO];
+}
+- (void)_autoMoodReset {
+    _autoMoodResetTimer = nil;
+    _moodShowing = NO;
+    if (!_isDragging && !_autoMoodPaused &&
+        _girlView.image != _idleFrames.firstObject &&
+        _girlView.image != _wallImage && _girlView.image != _wallImageV) {
+        _girlView.image = _idleFrames.firstObject;
+        _girlView.transform = CGAffineTransformIdentity;
+        [self _setFrameForImage:_idleFrames.firstObject];
+    }
+    [self _scheduleAutoMood];
 }
 
 // v6.0.7：注册 springboard 锁屏状态监听（抄 TrollSpeed HUDRootViewController）
@@ -459,6 +478,8 @@ extern "C" const char *g_hud_char;
     _girlView.hidden = YES;
     _autoMoodPaused = YES;
     _moodShowing = NO;
+    [_autoMoodTimer invalidate]; _autoMoodTimer = nil;          // v6.1.5-14y：锁屏停表情排期
+    [_autoMoodResetTimer invalidate]; _autoMoodResetTimer = nil;
     [_girlView.layer removeAllAnimations];
 }
 
@@ -1795,7 +1816,10 @@ extern "C" const char *g_hud_char;
 }
 
 // v6.1.5-14：轻提示（点击反馈）——打开失败/未配置时明确告知，避免"点了没反应"
+// v6.1.5-14y：先移除旧 toast——原实现每次新建叠加，快速多次提示时多个 toast 叠屏+多个延迟堆积
 - (void)_showToast:(NSString *)msg {
+    UIView *old = [self.view viewWithTag:9100];
+    if (old) [old removeFromSuperview];
     UILabel *toast = [[UILabel alloc] initWithFrame:CGRectZero];
     toast.text = msg;
     toast.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
