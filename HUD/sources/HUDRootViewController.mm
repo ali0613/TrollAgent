@@ -28,6 +28,7 @@ static BOOL _passthrough = NO;
 - (void)lockHide;
 - (void)unlockShow;
 - (void)registerNotifications;
+- (void)_appendHudLog:(NSString *)line; // v6.1.5-7：诊断日志写 /tmp/hud_fan.log
 @end
 
 // v6.0.8：裁剪掉 UIImage 四周透明留白，返回角色实际内容图（无背景留白，角色才能贴到屏幕边缘）。
@@ -1368,6 +1369,8 @@ extern "C" const char *g_hud_char;
     NSDictionary *target = apps[idx];
     NSString *url = target[@"url"] ?: @"";
     NSString *bundleId = target[@"bundleId"] ?: @"";
+    // v6.1.5-7：点击诊断日志
+    [self _appendHudLog:[NSString stringWithFormat:@"tap idx=%ld name=%@ bid=%@ url=%@", (long)idx, target[@"name"] ?: @"", bundleId, url]];
     if ([url isEqualToString:@"trollagent://hide"]) {
         // 隐藏：缩小成小圆点贴屏幕边缘，不消失，点一下恢复
         [UIView animateWithDuration:0.3 animations:^{
@@ -1386,13 +1389,36 @@ extern "C" const char *g_hud_char;
         return;
     }
     if (bundleId.length > 0) {
-        // 用LSApplicationWorkspace直接打开，不用URL scheme
+        // 用LSApplicationWorkspace直接打开（v6.1.5-6 起 HUD 带 launchapplications 权限）
         Class LSWorkspace = NSClassFromString(@"LSApplicationWorkspace");
-        id ws = [LSWorkspace performSelector:@selector(defaultWorkspace)];
-        [ws performSelector:@selector(openApplicationWithBundleID:) withObject:bundleId];
+        id ws = LSWorkspace ? [LSWorkspace performSelector:@selector(defaultWorkspace)] : nil;
+        BOOL opened = NO;
+        if (ws && [ws respondsToSelector:@selector(openApplicationWithBundleID:)]) {
+            id ret = [ws performSelector:@selector(openApplicationWithBundleID:) withObject:bundleId];
+            opened = (ret != nil);
+        }
+        // v6.1.5-7：workspace 不可用或打开失败时，兜底走 openURL
+        if (!opened && url.length > 0) {
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];
+        }
     } else if (url.length > 0) {
         // url scheme 打开
         [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];
+    }
+}
+
+// v6.1.5-7：诊断日志追加写 /tmp/hud_fan.log（HUD no-sandbox，/tmp 全局可写）
+- (void)_appendHudLog:(NSString *)line {
+    NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+    fmt.dateFormat = @"HH:mm:ss";
+    NSString *entry = [NSString stringWithFormat:@"%@ %@\n", [fmt stringFromDate:[NSDate date]], line];
+    NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:@"/tmp/hud_fan.log"];
+    if (fh) {
+        [fh seekToEndOfFile];
+        [fh writeData:[entry dataUsingEncoding:NSUTF8StringEncoding]];
+        [fh closeFile];
+    } else {
+        [entry writeToFile:@"/tmp/hud_fan.log" atomically:YES encoding:NSUTF8StringEncoding error:nil];
     }
 }
 
@@ -1415,12 +1441,21 @@ extern "C" const char *g_hud_char;
 - (NSArray *)_fanMenuApps {
     // v6.1.5-4：统一菜单数据构建——自定义列表（App Group suite 优先，standard 兜底旧数据）
     // + 无自定义时默认4个 + 固定 AI/隐藏。_showFanMenu 与 _fanBtnClick 都走这里，保证点对项
+    // v6.1.5-7：记录数据来源（suite/plist/std/default），写诊断日志到 /tmp/hud_fan.log 定位"自定义不进菜单"卡在哪层
     NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"];
     NSArray *savedApps = [prefs arrayForKey:@"fanMenuApps"];
+    NSString *src = @"default";
+    if (savedApps.count) src = @"suite";
     // v6.1.5-6：App Group suite 读不到时，no-sandbox 直读主 App 容器偏好文件
     // （TheBall 同款思路：主 App 与悬浮球共享同一数据文件，绕开 App Group 在独立 HUD App 上的权限不确定性）
-    if (!savedApps) savedApps = [self _readMainAppPrefsFanMenuApps];
-    if (!savedApps) savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
+    if (!savedApps.count) {
+        savedApps = [self _readMainAppPrefsFanMenuApps];
+        if (savedApps.count) src = @"plist";
+    }
+    if (!savedApps.count) {
+        savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
+        if (savedApps.count) src = @"std";
+    }
     NSMutableArray *apps = [NSMutableArray array];
     if (savedApps.count) {
         for (NSDictionary *a in savedApps) {
@@ -1448,6 +1483,10 @@ extern "C" const char *g_hud_char;
     // 最后固定加AI聊天和隐藏
     [apps addObject:@{@"name":@"AI", @"url":@"trollagent://chat", @"bundleId":@"", @"color":[UIColor systemBlueColor]}];
     [apps addObject:@{@"name":@"隐藏", @"url":@"trollagent://hide", @"bundleId":@"", @"color":[UIColor systemRedColor]}];
+    // v6.1.5-7：诊断——记录本次菜单数据来源与内容
+    NSMutableString *names = [NSMutableString string];
+    for (NSDictionary *a in apps) { [names appendFormat:@"%@,", a[@"name"]]; }
+    [self _appendHudLog:[NSString stringWithFormat:@"menu src=%@ count=%ld names=%@", src, (long)apps.count, names]];
     return apps;
 }
 

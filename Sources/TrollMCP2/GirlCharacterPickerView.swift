@@ -8,6 +8,23 @@ struct GirlCharacterPickerView: View {
     // v6.1.5-3：与 HUD 进程共享快捷菜单数据（App Group）——主 App 与 TrollAgentHUD 是独立进程，
     // standardUserDefaults 是各自沙盒域，之前 HUD 读不到 fanMenuApps → 自定义 app 不进菜单
     private static let prefs: UserDefaults = UserDefaults(suiteName: "group.com.ai.iosxcode") ?? .standard
+    // v6.1.5-7：统一保存入口——双写(suite+standard) + 强制落盘 + 写后读回验证，诊断记入 fanMenuDiag
+    // UserDefaults.set 默认异步落盘，添加后立刻切后台可能没写进 plist，HUD 直读文件时读不到 → 必须 synchronize
+    private static func saveFanMenu(_ apps: [[String:String]]) {
+        prefs.set(apps, forKey: "fanMenuApps")
+        prefs.synchronize()
+        UserDefaults.standard.set(apps, forKey: "fanMenuApps")
+        UserDefaults.standard.synchronize()
+        // 写后立即读回验证（暴露 App Group 失效 / 落盘失败）
+        let backSuite = (UserDefaults(suiteName: "group.com.ai.iosxcode")?.array(forKey: "fanMenuApps") as? [[String:String]])?.count ?? -1
+        let backStd = UserDefaults.standard.array(forKey: "fanMenuApps") as? [[String:String]]
+        let diag = "\(Date()): 写\(apps.count)项 suite读回=\(backSuite) std读回=\(backStd?.count ?? -1)"
+        var logs = UserDefaults.standard.stringArray(forKey: "fanMenuDiag") ?? []
+        logs.append(diag)
+        if logs.count > 30 { logs.removeFirst(logs.count - 30) }
+        UserDefaults.standard.set(logs, forKey: "fanMenuDiag")
+        UserDefaults.standard.synchronize()
+    }
     @State private var savedApps: [[String:String]] = {
         // v6.1.5-6：suite 优先，standard 兜底（HUD 进程 no-sandbox 直读主App容器偏好文件，双写保证两边都能拿到）
         let suite = Self.prefs.array(forKey: "fanMenuApps") as? [[String:String]]
@@ -227,11 +244,18 @@ struct GirlCharacterPickerView: View {
                 Text("快捷菜单")
                 Spacer()
                 EditButton()
-            }, footer: Text("💡 提示：单击桌面上的桌宠就会弹出这个快捷菜单！点右上角编辑可删除应用，URL Scheme比如微信weixin://，抖音snssdk1128://")) {
+            }, footer: VStack(alignment: .leading, spacing: 4) {
+                Text("💡 提示：单击桌面上的桌宠就会弹出这个快捷菜单！点右上角编辑可删除应用，URL Scheme比如微信weixin://，抖音snssdk1128://")
+                // v6.1.5-7：写入诊断（写后读回验证结果），排查"自定义 app 不进菜单"直接截图发我
+                if let last = UserDefaults.standard.stringArray(forKey: "fanMenuDiag")?.last {
+                    Text("🩺 \(last)").font(.caption2).foregroundColor(.secondary)
+                }
+            }) {
                 Picker("弹出样式", selection: Binding<Int>(
                     get: { Self.prefs.integer(forKey: "fanMenuStyle") },
                     set: { 
                         Self.prefs.set($0, forKey: "fanMenuStyle")
+                        Self.prefs.synchronize() // v6.1.5-7：强制落盘，HUD 重启后必然读到新样式
                         // 如果桌宠正在运行，自动重启读新参数；没运行绝对不启动
                         if HUDManager.shared.isRunning {
                             _ = HUDManager.shared.stop()
@@ -254,8 +278,7 @@ struct GirlCharacterPickerView: View {
                 }
                 .onDelete { indexSet in
                     savedApps.remove(atOffsets: indexSet)
-                    Self.prefs.set(savedApps, forKey: "fanMenuApps")
-                    UserDefaults.standard.set(savedApps, forKey: "fanMenuApps") // v6.1.5-6 双写：主App容器 plist，HUD no-sandbox 直读
+                    Self.saveFanMenu(savedApps) // v6.1.5-7：双写+落盘+读回验证
                 }
                 // 添加新应用
                 FanMenuAddView(savedApps: $savedApps)
@@ -297,9 +320,8 @@ struct FanMenuAddView: View {
         .sheet(isPresented: $showPicker) {
             AppPickerView { app in
                 savedApps.append(["name":app.name, "bundleId":app.bundleId])
-                // v6.1.5-3：写入 App Group 共享域，HUD 进程才能读到
-                (UserDefaults(suiteName: "group.com.ai.iosxcode") ?? .standard).set(savedApps, forKey: "fanMenuApps")
-                UserDefaults.standard.set(savedApps, forKey: "fanMenuApps") // v6.1.5-6 双写：主App容器 plist，HUD no-sandbox 直读
+                // v6.1.5-7：统一保存入口——双写(suite+standard)+强制落盘+写后读回验证
+                GirlCharacterPickerView.saveFanMenu(savedApps)
                 showPicker = false
             }
         }
