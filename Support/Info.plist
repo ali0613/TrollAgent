@@ -37,7 +37,39 @@
 	<string>6.1.0</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
-		<string>weixin</string>\n		<string>snssdk1128</string>\n		<string>App-prefs</string>\n		<string>trollagent</string>\n		<string>wechat</string>\n		<string>mqq</string>\n		<string>sinaweibo</string>\n		<string>taobao</string>\n		<string>openapp.jdmobile</string>\n		<string>imean</string>\n		<string>baidumap</string>\n		<string>amapuri</string>\n		<string>qqmusic</string>\n		<string>cloudmusic</string>\n		<string>douban</string>\n		<string>zhihu</string>\n		<string>bilibili</string>\n		<string>kwai</string>\n		<string>xiaohongshu</string>\n		<string>youku</string>\n		<string>iqiyi</string>\n		<string>alipay</string>\n		<string>tmall</string>\n		<string>dianping</string>\n		<string>meituan</string>\n		<string>eleme</string>\n		<string>jdpay</string>\n		<string>unionpay</string>\n		<string>youtube</string>\n		<string>whatsapp</string>\n		<string>telegram</string>\n		<string>twitter</string>\n		<string>instagram</string>
+		<string>weixin</string>
+		<string>snssdk1128</string>
+		<string>App-prefs</string>
+		<string>trollagent</string>
+		<string>wechat</string>
+		<string>mqq</string>
+		<string>sinaweibo</string>
+		<string>taobao</string>
+		<string>openapp.jdmobile</string>
+		<string>imean</string>
+		<string>baidumap</string>
+		<string>amapuri</string>
+		<string>qqmusic</string>
+		<string>cloudmusic</string>
+		<string>douban</string>
+		<string>zhihu</string>
+		<string>bilibili</string>
+		<string>kwai</string>
+		<string>xiaohongshu</string>
+		<string>youku</string>
+		<string>iqiyi</string>
+		<string>alipay</string>
+		<string>tmall</string>
+		<string>dianping</string>
+		<string>meituan</string>
+		<string>eleme</string>
+		<string>jdpay</string>
+		<string>unionpay</string>
+		<string>youtube</string>
+		<string>whatsapp</string>
+		<string>telegram</string>
+		<string>twitter</string>
+		<string>instagram</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
