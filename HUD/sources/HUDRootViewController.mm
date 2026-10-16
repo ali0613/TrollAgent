@@ -133,6 +133,8 @@ extern "C" const char *g_hud_char;
     UIView *_bubbleView;         // v6.0.28：卡通气泡背景（带小尾巴）
     NSTimer *_bubbleTimer;       // 气泡定时弹出计时器
     BOOL _onSideWall;           // 是否在左右侧边趴墙
+    BOOL _onBottomWall;         // v6.1.5-14w：是否底部趴墙（底部呼吸/横向挪动专用）
+    NSTimer *_bottomCrawlTimer; // v6.1.5-14w：底部横向挪动定时器
     NSString *_charPrefix;      // v6.0.27：当前角色前缀（rabit/girl/cat）
     NSInteger _lastFanClickIdx;         // v6.1.5-14i：菜单点击去重（手势+按钮双触发只处理一次）
     NSTimeInterval _lastFanClickTime;   // v6.1.5-14i
@@ -474,6 +476,7 @@ extern "C" const char *g_hud_char;
         _isDragging = YES;
         _dragLastX = 0; _dragLastY = 0;  // v6.1.5-14o：拖拽倾斜速度基准重置
         [self _stopClimbTimer];    // v6.0.29：拖动时立刻停止所有攀爬
+        [self _stopBottomAmbient]; // v6.1.5-14w：拖动时停止底部呼吸/横向挪动
         [self _setAnchorY:0.5f];   // v6.0.18：拖拽/悬浮→中心锚点（悬浮不做胸部锚点）
         [self _stopChestBreath];   // v6.0.21：拖拽/悬浮停胸部呼吸（移除条带层）
         [self _startFloatWithDuration:0.5f];   // v6.0.21：悬浮/拖拽上下浮动加快到0.5s单程
@@ -669,6 +672,15 @@ extern "C" const char *g_hud_char;
     _girlView.center = c;
     [_girlView.layer removeAnimationForKey:@"hudFloat"];   // v6.0.14：趴墙停止上下漂浮——底部/侧趴墙不再上下起伏
     [self _stopChestBreath];   // v6.0.21：趴墙同时停胸部呼吸
+    
+    // v6.1.5-14w：底部趴墙 → 启动"贴底呼吸+横向挪动"；左右/其他位置 → 停止底部动效
+    if (minD == dB) {
+        _onBottomWall = YES;
+        [self _startBottomBreath];
+        [self _scheduleBottomCrawl];
+    } else {
+        [self _stopBottomAmbient];
+    }
     
     // v6.0.26：左右边缘趴墙时，随机启动自动攀爬（10分钟内3-5次，不要太频繁）
     if ((minD == dL || minD == dR) && _climbFrames.count >= 2) {
@@ -1248,6 +1260,58 @@ extern "C" const char *g_hud_char;
     _isClimbing = NO;
 }
 
+// v6.1.5-14w：底部趴墙动效——贴底呼吸（肚皮起伏，layer scale.y 关键帧，不影响翻转 transform）
+- (void)_startBottomBreath {
+    [_girlView.layer removeAnimationForKey:@"hudBottomBreath"];
+    CAKeyframeAnimation *a = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale.y"];
+    a.values = @[@1.0f, @1.045f, @1.0f];
+    a.keyTimes = @[@0.0f, @0.5f, @1.0f];
+    a.duration = 1.2;
+    a.repeatCount = INFINITY;
+    a.calculationMode = kCAAnimationCubic;
+    [_girlView.layer addAnimation:a forKey:@"hudBottomBreath"];
+}
+- (void)_stopBottomBreath {
+    [_girlView.layer removeAnimationForKey:@"hudBottomBreath"];
+}
+
+// v6.1.5-14w：底部趴墙动效——横向小碎步挪动（30-60s 一次，随机方向缓动 60-120pt）
+- (void)_scheduleBottomCrawl {
+    [_bottomCrawlTimer invalidate];
+    _bottomCrawlTimer = nil;
+    if (!_onBottomWall) return;
+    NSTimeInterval delay = 30.0 + arc4random_uniform(30000) / 1000.0;
+    _bottomCrawlTimer = [NSTimer scheduledTimerWithTimeInterval:delay
+                                                         target:self
+                                                       selector:@selector(_doBottomCrawl)
+                                                       userInfo:nil repeats:NO];
+}
+- (void)_doBottomCrawl {
+    _bottomCrawlTimer = nil;
+    if (!_onBottomWall || _isDragging || _falling || _isClimbing) return;
+    CGSize v = [UIScreen mainScreen].bounds.size;
+    CGFloat halfW = _girlView.frame.size.width / 2;
+    CGFloat curX = _girlView.center.x;
+    int dir = (arc4random_uniform(2) == 0) ? -1 : 1;
+    CGFloat step = 60.0 + arc4random_uniform(61);   // 60-120pt
+    CGFloat nx = curX + dir * step;
+    nx = MAX(halfW, MIN(nx, v.width - halfW));
+    if (fabs(nx - curX) < 8) { [self _scheduleBottomCrawl]; return; }   // 已到头：换方向下次再说
+    [UIView animateWithDuration:1.2 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+        self->_girlView.center = CGPointMake(nx, self->_girlView.center.y);
+    } completion:^(BOOL f) {
+        [self _scheduleBottomCrawl];
+    }];
+}
+
+// v6.1.5-14w：停止底部动效（呼吸+挪动），离开底部趴墙/拖拽/恢复站立时调用
+- (void)_stopBottomAmbient {
+    _onBottomWall = NO;
+    [_bottomCrawlTimer invalidate];
+    _bottomCrawlTimer = nil;
+    [self _stopBottomBreath];
+}
+
 // 点击切表情：开心→思考→待机
 // v6.0.8：切帧时按新帧内容比例重设 frame（高度固定 size、宽按比例、保持中心）——
 // 兔女郎各动作帧内容比例差异巨大(idle 0.25 vs happy 0.52)，固定 init 的窄框会让 aspectFit 缩放导致"一下大一下小"。
@@ -1319,6 +1383,7 @@ extern "C" const char *g_hud_char;
 }
 // v6.1.5-14o：被摸/长按/蹦跳结束后若切了 happy 帧且非特殊状态，回到待机帧
 - (void)_resetToIdleIfNeeded {
+    [self _stopBottomAmbient];   // v6.1.5-14w：任何回待机路径都停底部动效
     if (_isDragging || _falling || _isClimbing || _onSideWall) return;
     if (_idleFrames.firstObject && _girlView.image != _idleFrames.firstObject) {
         _girlView.image = _idleFrames.firstObject;
@@ -1331,6 +1396,7 @@ extern "C" const char *g_hud_char;
     if (_isDragging) return;
     // v6.0.8：从扒墙状态点击 → 直接恢复站立待机（不切表情）
     if ((_girlView.image == _wallImage || _girlView.image == _wallImageV) && _idleFrames.firstObject) {
+        [self _stopBottomAmbient];   // v6.1.5-14w：恢复站立停底部动效
         _girlView.image = _idleFrames.firstObject;
         _girlView.transform = CGAffineTransformIdentity;
         [self _setFrameForImage:_idleFrames.firstObject];
