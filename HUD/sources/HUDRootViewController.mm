@@ -1932,12 +1932,25 @@ static UIImage * _realAppIcon(NSString *bundleId) {
 // v6.1.5-14p：emoji → UIImage（粒子素材，零图片资源）
 // v6.1.5-14q：改直接字符串绘制——drawViewHierarchyInRect 要求视图在窗口树里，
 // 独立 HUD 进程里 UILabel 不在 window 上会生成空图 → 粒子完全不可见（用户反馈看不到粒子）
-static UIImage *emojiImage(NSString *emoji, CGFloat size) {
+// v6.1.5-14v：用户要"柔和光粒子"——弃用 emoji，改径向渐变圆形（中心亮→边缘透明）柔光光斑，
+// 白色素材 + cell.color 按场景染色（充电白蓝/深夜银白淡蓝/傍晚暖金）
+static UIImage *softParticleImage(CGFloat size) {
     UIGraphicsBeginImageContextWithOptions(CGSizeMake(size, size), NO, 0);
-    [emoji drawInRect:CGRectMake(0, 0, size, size) withAttributes:@{
-        NSFontAttributeName: [UIFont systemFontOfSize:size * 0.88f],
-        NSForegroundColorAttributeName: [UIColor whiteColor]
-    }];
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    CGFloat locs[3] = {0.0f, 0.55f, 1.0f};
+    CGFloat comps[12] = {
+        1.0f, 1.0f, 1.0f, 1.0f,      // 中心：纯白高亮
+        1.0f, 1.0f, 1.0f, 0.55f,     // 中间：半透
+        1.0f, 1.0f, 1.0f, 0.0f       // 边缘：完全透明（柔光羽化）
+    };
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGGradientRef grad = CGGradientCreateWithColorComponents(cs, comps, locs, 3);
+    CGContextDrawRadialGradient(ctx, grad,
+                                CGPointMake(size / 2, size / 2), 0,
+                                CGPointMake(size / 2, size / 2), size / 2,
+                                kCGGradientDrawsBeforeStartLocation | kCGGradientDrawsAfterEndLocation);
+    CGGradientRelease(grad);
+    CGColorSpaceRelease(cs);
     UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
     return img;
@@ -1957,25 +1970,27 @@ static UIImage *emojiImage(NSString *emoji, CGFloat size) {
     _ambientTimer = [NSTimer scheduledTimerWithTimeInterval:60 target:self selector:@selector(_updateAmbient) userInfo:nil repeats:YES];
 }
 
-// v6.1.5-14p/q：环境决策——按小时选粒子，充电叠加闪电；粒子跟随角色位置（无光晕）
+// v6.1.5-14p/q：环境决策——按小时选粒子，充电叠加粒子；粒子跟随角色位置（无光晕）
+// v6.1.5-14v：场景→颜色（素材统一柔白光点，cell.color 染色），白天无粒子
 - (void)_updateAmbient {
     NSCalendar *cal = [NSCalendar currentCalendar];
     NSInteger hour = [cal component:NSCalendarUnitHour fromDate:[NSDate date]];
-    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    NSMutableArray<UIColor *> *colors = [NSMutableArray array];
     NSInteger bucket = 0;   // 白天
     if (hour >= 21 || hour < 6) {
-        bucket = 2;  // 深夜
-        [parts addObject:@"✨"]; [parts addObject:@"⭐️"];
-        if (arc4random_uniform(3) == 0) [parts addObject:@"💤"];
+        bucket = 2;  // 深夜：冷银白 + 淡蓝，静谧萤光
+        [colors addObject:[UIColor colorWithWhite:0.92 alpha:1.0]];
+        [colors addObject:[UIColor colorWithRed:0.72 green:0.83 blue:1.0 alpha:1.0]];
     } else if (hour >= 17 && hour < 19) {
-        bucket = 1;  // 傍晚
-        [parts addObject:@"✨"];
+        bucket = 1;  // 傍晚：暖金余晖
+        [colors addObject:[UIColor colorWithRed:1.0 green:0.85 blue:0.55 alpha:1.0]];
     }
     BOOL charging = ([UIDevice currentDevice].batteryState == UIDeviceBatteryStateCharging ||
                      [UIDevice currentDevice].batteryState == UIDeviceBatteryStateFull);
     if (charging) {
-        bucket = 3;  // 充电
-        [parts addObject:@"⚡️"];
+        bucket = 3;  // 充电：明亮白 + 浅蓝，能量感
+        [colors addObject:[UIColor colorWithRed:0.95 green:0.98 blue:1.0 alpha:1.0]];
+        [colors addObject:[UIColor colorWithRed:0.7 green:0.85 blue:1.0 alpha:1.0]];
     }
     // 漂浮时长只在环境时段切换时重置（避免每 60s 打断漂浮动画）
     if (_ambientBucket != bucket) {
@@ -1983,8 +1998,8 @@ static UIImage *emojiImage(NSString *emoji, CGFloat size) {
         if (bucket == 2) [self _startFloatWithDuration:2.6f];  // 深夜入睡慢呼吸
         else [self _startFloatWithDuration:1.3f];
     }
-    if (parts.count) {
-        [self _setParticles:parts];
+    if (colors.count) {
+        [self _setParticles:colors];
     } else {
         [self _clearParticles];
     }
@@ -2000,8 +2015,9 @@ static UIImage *emojiImage(NSString *emoji, CGFloat size) {
     }
 }
 
-// v6.1.5-14p/q：设置粒子（emoji 上飘粒）——提高密度/尺寸让粒子肉眼可见
-- (void)_setParticles:(NSArray<NSString *> *)emojis {
+// v6.1.5-14p/q：设置粒子（上飘粒）
+// v6.1.5-14v：柔和光点版——柔光渐变圆 + cell.color 染色；光点不旋转、缓慢淡出，更柔和
+- (void)_setParticles:(NSArray<UIColor *> *)colors {
     if (!_particleLayer) {
         _particleLayer = [CAEmitterLayer layer];
         _particleLayer.emitterMode = kCAEmitterLayerVolume;
@@ -2009,23 +2025,23 @@ static UIImage *emojiImage(NSString *emoji, CGFloat size) {
         [self.view.layer insertSublayer:_particleLayer below:_girlView.layer];  // 粒子在角色后方
     }
     NSMutableArray *cells = [NSMutableArray array];
-    for (NSString *e in emojis) {
+    UIImage *dotImg = softParticleImage(24);
+    for (UIColor *col in colors) {
         CAEmitterCell *cell = [CAEmitterCell emitterCell];
-        UIImage *img = emojiImage(e, 28);
-        if (!img) continue;
-        cell.contents = (id)img.CGImage;
-        cell.birthRate = 1.4;
+        cell.contents = (id)dotImg.CGImage;
+        cell.color = col.CGColor;
+        cell.birthRate = 1.8;
         cell.lifetime = 7;
-        cell.velocity = 30;
-        cell.velocityRange = 25;
-        cell.yAcceleration = -10;          // 上飘
+        cell.velocity = 22;
+        cell.velocityRange = 22;
+        cell.yAcceleration = -8;          // 轻柔上飘
         cell.emissionRange = M_PI * 2;
-        cell.scale = 0.7;
-        cell.scaleRange = 0.4;
-        cell.scaleSpeed = -0.03;          // 越飘越小
-        cell.alphaSpeed = -0.1;           // 淡出
-        cell.spin = 0.4;
-        cell.spinRange = 0.8;
+        cell.scale = 0.55;
+        cell.scaleRange = 0.35;
+        cell.scaleSpeed = -0.025;         // 越飘越小
+        cell.alphaSpeed = -0.08;          // 缓慢淡出
+        cell.spin = 0;                    // 光点不旋转
+        cell.spinRange = 0;
         [cells addObject:cell];
     }
     if (!cells.count) { [self _clearParticles]; return; }
