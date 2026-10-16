@@ -35,15 +35,24 @@ struct GirlCharacterPickerView: View {
     // UserDefaults.set 默认异步落盘，添加后立刻切后台可能没写进 plist，HUD 直读文件时读不到 → 必须 synchronize
     // v6.1.5-14e：第三通道——写全局文件 /var/mobile/Documents/fanmenu.json（主 App no-sandbox 可写，
     // HUD 独立进程同样 no-sandbox 可读，绕开 App Group 在独立 HUD 上可能的权限不确定性）
+    // v6.1.5-14ae：保存前补稳定 id——ForEach 用 id 做稳定标识（原索引 id 在 onDelete 时 diff 错乱 → "删一个加一个"）
     fileprivate static let fanMenuSharedFile = "/var/mobile/Documents/fanmenu.json"
+    fileprivate static func ensureAppIDs(_ apps: [[String:String]]) -> [[String:String]] {
+        return apps.map { a in
+            var m = a
+            if m["id"] == nil { m["id"] = "\(UInt32(arc4random()))_\(Date().timeIntervalSince1970)" }
+            return m
+        }
+    }
     fileprivate static func saveFanMenu(_ apps: [[String:String]]) {
-        prefs.set(apps, forKey: "fanMenuApps")
+        let apps2 = ensureAppIDs(apps)
+        prefs.set(apps2, forKey: "fanMenuApps")
         prefs.synchronize()
-        UserDefaults.standard.set(apps, forKey: "fanMenuApps")
+        UserDefaults.standard.set(apps2, forKey: "fanMenuApps")
         UserDefaults.standard.synchronize()
         // v6.1.5-14e：全局文件通道（主 App no-sandbox，直接写 /var/mobile/Documents）
         do {
-            let data = try JSONSerialization.data(withJSONObject: apps, options: [])
+            let data = try JSONSerialization.data(withJSONObject: apps2, options: [])
             try data.write(to: URL(fileURLWithPath: fanMenuSharedFile), options: .atomic)
         } catch {
             // 写失败不阻塞主流程，诊断里可见
@@ -52,12 +61,20 @@ struct GirlCharacterPickerView: View {
         // 写后立即读回验证（暴露 App Group 失效 / 落盘失败）
         let backSuite = (UserDefaults(suiteName: "group.com.ai.iosxcode")?.array(forKey: "fanMenuApps") as? [[String:String]])?.count ?? -1
         let backStd = UserDefaults.standard.array(forKey: "fanMenuApps") as? [[String:String]]
-        let diag = "\(Date()): 写\(apps.count)项 suite读回=\(backSuite) std读回=\(backStd?.count ?? -1)"
+        let diag = "\(Date()): 写\(apps2.count)项 suite读回=\(backSuite) std读回=\(backStd?.count ?? -1)"
         var logs = UserDefaults.standard.stringArray(forKey: "fanMenuDiag") ?? []
         logs.append(diag)
         if logs.count > 30 { logs.removeFirst(logs.count - 30) }
         UserDefaults.standard.set(logs, forKey: "fanMenuDiag")
         UserDefaults.standard.synchronize()
+    }
+    // v6.1.5-14ae：按 bundleId 取真实图标（AppCatalog 定位路径 → AppIconLoader 读图标，带缓存毫秒级）
+    private static func appIcon(forBundleId bid: String) -> UIImage? {
+        if bid.isEmpty { return nil }
+        if let path = AppCatalog.lookupBundlePath(bundleId: bid) {
+            return AppIconLoader.shared.icon(forPath: path)
+        }
+        return nil
     }
     // v6.1.5-14r：菜单参数用 @State 驱动——Slider 拖动实时更新数值文本（UserDefaults 变化不触发 SwiftUI 刷新）
     @State private var fanAlpha: Double = (prefs.object(forKey: "fanMenuAlpha") as? Double) ?? 1.0
@@ -67,7 +84,7 @@ struct GirlCharacterPickerView: View {
         // v6.1.5-6：suite 优先，standard 兜底（HUD 进程 no-sandbox 直读主App容器偏好文件，双写保证两边都能拿到）
         let suite = Self.prefs.array(forKey: "fanMenuApps") as? [[String:String]]
         let std = UserDefaults.standard.array(forKey: "fanMenuApps") as? [[String:String]]
-        return (suite ?? std) ?? [
+        let base = (suite ?? std) ?? [
             // v6.1.5-8：默认项带 bundleId——点击走 LSApplicationWorkspace openApplicationWithBundleID
             // （camera:// App-prefs:// 等 scheme 在 iOS 上不存在/被拒，之前默认项点击必"没反应"）
             ["name":"微信", "url":"weixin://", "bundleId":"com.tencent.xin"],
@@ -75,6 +92,7 @@ struct GirlCharacterPickerView: View {
             ["name":"相机", "url":"camera://", "bundleId":"com.apple.camera"],
             ["name":"设置", "url":"App-prefs://", "bundleId":"com.apple.Preferences"]
         ]
+        return Self.ensureAppIDs(base)   // v6.1.5-14ae：初始数据补稳定 id（ForEach 依赖）
     }()
 
     var body: some View {
@@ -364,19 +382,52 @@ struct GirlCharacterPickerView: View {
                     Text(String(format: "%.1f×", fanArc))
                         .font(.caption).foregroundColor(.secondary).frame(width: 42)
                 }
-                                ForEach(0..<savedApps.count, id:\.self) { i in
-                    HStack {
-                        Text(savedApps[i]["name"] ?? "")
-                        Spacer()
-                        Text(savedApps[i]["url"] ?? "").font(.caption).foregroundColor(.gray)
-                    }
-                }
-                .onDelete { indexSet in
-                    savedApps.remove(atOffsets: indexSet)
-                    Self.saveFanMenu(savedApps) // v6.1.5-7：双写+落盘+读回验证
-                }
-                // 添加新应用
-                FanMenuAddView(savedApps: $savedApps)
+                                // v6.1.5-14ae：ForEach 用稳定 id（app["id"]，ensureAppIDs 已保证唯一）——
+                                // 原 0..<count 索引 id 在 onDelete 时 diff 错乱（删中间项后所有后续项 id 前移）→ "删一个又冒出一个"
+                                let menuRows: [FanMenuRow] = savedApps.map { FanMenuRow(id: $0["id"] ?? "\($0["name"] ?? "")|\($0["url"] ?? "")", app: $0) }
+                                ForEach(menuRows) { row in
+                                    HStack(spacing: 12) {
+                                        // v6.1.5-14ae：行美化——真实图标圆角 + 名称 + url 次要灰色
+                                        ZStack {
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .fill(Color(.tertiarySystemFill))
+                                                .frame(width: 34, height: 34)
+                                            if let bid = row.app["bundleId"], let icon = Self.appIcon(forBundleId: bid) {
+                                                Image(uiImage: icon)
+                                                    .resizable()
+                                                    .scaledToFit()
+                                                    .frame(width: 26, height: 26)
+                                            } else {
+                                                Image(systemName: "app.fill")
+                                                    .font(.system(size: 16))
+                                                    .foregroundColor(.secondary)
+                                            }
+                                        }
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(row.app["name"] ?? "")
+                                                .font(.body)
+                                            Text(row.app["url"] ?? "")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                        Spacer()
+                                    }
+                                    .padding(.vertical, 3)
+                                }
+                                .onDelete { indexSet in
+                                    savedApps.remove(atOffsets: indexSet)
+                                    Self.saveFanMenu(savedApps) // v6.1.5-7：双写+落盘+读回验证（v6.1.5-14ae：写入前补稳定 id）
+                                }
+                                // v6.1.5-14ae：返回/重进时强制从持久化重读（@State 初始值只在首次创建时读，
+                                // 若视图被系统缓存则内存值可能过期 → "删除后返回又全部回来"）
+                                .onAppear {
+                                    let fresh = Self.prefs.array(forKey: "fanMenuApps") as? [[String:String]]
+                                        ?? UserDefaults.standard.array(forKey: "fanMenuApps") as? [[String:String]]
+                                    if let fresh { savedApps = fresh }
+                                }
+                                // 添加新应用
+                                FanMenuAddView(savedApps: $savedApps)
             }
             Section(header: Text("其他")) {
                 Toggle("键盘弹出时自动隐藏桌宠", isOn: Binding<Bool>(
@@ -406,6 +457,12 @@ struct GirlCharacterPickerView: View {
     }
 }
 
+// v6.1.5-14ae：快捷菜单行——稳定 id（ForEach 删除不再错乱）
+private struct FanMenuRow: Identifiable {
+    let id: String
+    let app: [String:String]
+}
+
 struct FanMenuAddView: View {
     @Binding var savedApps: [[String:String]]
     @State private var showPicker = false
@@ -421,7 +478,9 @@ struct FanMenuAddView: View {
         }
         .sheet(isPresented: $showPicker) {
             AppPickerView { app in
-                savedApps.append(["name":app.name, "bundleId":app.bundleId])
+                // v6.1.5-14ae：添加时补稳定 id（原无 id → ForEach id 撞车）
+                savedApps.append(["name":app.name, "bundleId":app.bundleId,
+                                  "id":"\(UInt32(arc4random()))_\(Date().timeIntervalSince1970)"])
                 // v6.1.5-7：统一保存入口——双写(suite+standard)+强制落盘+写后读回验证
                 GirlCharacterPickerView.saveFanMenu(savedApps)
                 showPicker = false
