@@ -343,6 +343,9 @@ extern "C" const char *g_hud_char;
     [_chestLayer removeFromSuperlayer]; _chestLayer = nil;
     [_chestLayerR removeFromSuperlayer]; _chestLayerR = nil;
     if (!_enableChest || !_girlView.image) return;
+    // v6.1.5-14t：防御——趴墙/攀爬态不启动胸前特效（用户反馈"侧边栏也会出现胸前特效"）
+    if (_onSideWall || _isClimbing) return;
+    if (_girlView.image == _wallImage || _girlView.image == _wallImageV) return;
     CGFloat W = _girlView.bounds.size.width;
     CGFloat H = _girlView.bounds.size.height;
     if (W < 1 || H < 1) return;
@@ -1116,6 +1119,9 @@ extern "C" const char *g_hud_char;
 - (void)_startClimbing {
     if (_isClimbing || _isDragging || _falling) return;
     if (!_climbFrames.count) return;
+    // v6.1.5-14t：必须真正处于侧边趴墙态才爬——原只判断"离左右墙哪个近"(minD==dL/dR)，
+    // 角色站在屏幕边缘附近(未吸附)也会被判"在左墙"→ 站着爬！加 _onSideWall 检查
+    if (!_onSideWall) return;
     
     // v6.0.29：必须在左右侧边墙才启动攀爬，底部/顶部不爬
     CGSize v = [UIScreen mainScreen].bounds.size;
