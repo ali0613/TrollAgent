@@ -138,6 +138,9 @@ extern "C" const char *g_hud_char;
     NSTimer *_bottomCrawlTimer; // v6.1.5-14w：底部横向挪动定时器
     NSTimer *_autoMoodTimer;    // v6.1.5-14y：待机表情排期定时器（可取消，防解锁/回前台多链堆积）
     NSTimer *_autoMoodResetTimer; // v6.1.5-14y：表情显示1.2s后回待机的定时器
+    NSTimer *_poseShowTimer;    // v6.1.5-14z：吸附态偶尔换姿势展示排期（1小时3-5次）
+    NSTimer *_poseHoldTimer;    // v6.1.5-14z：姿势展示保持计时（2.5-3s后趴回）
+    BOOL _poseShowing;          // v6.1.5-14z：正在展示站立/坐姿（展示中不触发攀爬/挪动）
     NSString *_charPrefix;      // v6.0.27：当前角色前缀（rabit/girl/cat）
     NSInteger _lastFanClickIdx;         // v6.1.5-14i：菜单点击去重（手势+按钮双触发只处理一次）
     NSTimeInterval _lastFanClickTime;   // v6.1.5-14i
@@ -480,6 +483,7 @@ extern "C" const char *g_hud_char;
     _moodShowing = NO;
     [_autoMoodTimer invalidate]; _autoMoodTimer = nil;          // v6.1.5-14y：锁屏停表情排期
     [_autoMoodResetTimer invalidate]; _autoMoodResetTimer = nil;
+    [self _stopPoseShow];   // v6.1.5-14z：锁屏打断坐姿/跪姿展示
     [_girlView.layer removeAllAnimations];
 }
 
@@ -499,6 +503,7 @@ extern "C" const char *g_hud_char;
         _dragLastX = 0; _dragLastY = 0;  // v6.1.5-14o：拖拽倾斜速度基准重置
         [self _stopClimbTimer];    // v6.0.29：拖动时立刻停止所有攀爬
         [self _stopBottomAmbient]; // v6.1.5-14w：拖动时停止底部呼吸/横向挪动
+        [self _stopPoseShow];      // v6.1.5-14z：拖动时打断坐姿/跪姿展示（排期一并作废）
         [self _setAnchorY:0.5f];   // v6.0.18：拖拽/悬浮→中心锚点（悬浮不做胸部锚点）
         [self _stopChestBreath];   // v6.0.21：拖拽/悬浮停胸部呼吸（移除条带层）
         [self _startFloatWithDuration:0.5f];   // v6.0.21：悬浮/拖拽上下浮动加快到0.5s单程
@@ -729,6 +734,8 @@ extern "C" const char *g_hud_char;
         // 离开侧边墙恢复正常朝向
         _girlView.transform = CGAffineTransformIdentity;
     }
+    // v6.1.5-14z：吸附成立后排"偶尔换坐姿/跪姿"（内部检查吸附态，非吸附不排；排期全局唯一不堆积）
+    [self _schedulePoseShow];
 }
 
 // v6.0.27：启动气泡定时器
@@ -1278,8 +1285,8 @@ extern "C" const char *g_hud_char;
 }
 - (void)_tryStartClimbing {
     _climbSchedTimer = nil;
-    // 必须仍在左右趴墙态且未被拖拽/掉落才爬
-    if (!_onSideWall || _isDragging || _falling || _isClimbing) return;
+    // 必须仍在左右趴墙态且未被拖拽/掉落才爬；v6.1.5-14z：坐姿/跪姿展示中不爬
+    if (_poseShowing || !_onSideWall || _isDragging || _falling || _isClimbing) return;
     [self _startClimbing];
 }
 
@@ -1320,6 +1327,7 @@ extern "C" const char *g_hud_char;
 - (void)_doBottomCrawl {
     _bottomCrawlTimer = nil;
     if (!_onBottomWall || _isDragging || _falling || _isClimbing) return;
+    if (_poseShowing) { [self _scheduleBottomCrawl]; return; }   // v6.1.5-14z：坐姿/跪姿展示中跳过本次挪动
     CGSize v = [UIScreen mainScreen].bounds.size;
     CGFloat halfW = _girlView.frame.size.width / 2;
     CGFloat curX = _girlView.center.x;
@@ -1341,6 +1349,58 @@ extern "C" const char *g_hud_char;
     [_bottomCrawlTimer invalidate];
     _bottomCrawlTimer = nil;
     [self _stopBottomBreath];
+}
+
+// v6.1.5-14z：侧面吸附（左右墙）偶尔"活过来"——坐姿/跪姿展示2.5-3s再趴回。
+// 频率1小时3-5次（720-1200s随机），左右两侧都自然触发（在哪侧吸附就在哪侧原地展示）；
+// 全部用可取消定时器，全局唯一排期，打断即作废、趴回时由 _snapToEdge 统一重建攀爬排期 → 不堆积。
+// 仅侧面（_onSideWall）触发；底部趴墙已有呼吸+横向挪动，不叠加
+- (void)_schedulePoseShow {
+    [_poseShowTimer invalidate];
+    _poseShowTimer = nil;
+    if (_poseShowing || !_onSideWall) return;
+    NSTimeInterval delay = 720.0 + arc4random_uniform(48000) / 100.0;   // 720-1199s ≈ 1小时3-5次
+    _poseShowTimer = [NSTimer scheduledTimerWithTimeInterval:delay
+                                                      target:self
+                                                    selector:@selector(_poseShowFire)
+                                                    userInfo:nil repeats:NO];
+}
+- (void)_poseShowFire {
+    _poseShowTimer = nil;
+    if (_poseShowing || _isDragging || _falling || _isClimbing || _isHidden) { [self _schedulePoseShow]; return; }
+    if (!_onSideWall) { [self _schedulePoseShow]; return; }
+    _poseShowing = YES;
+    // 展示期间停攀爬排期（趴回时 _snapToEdge 会重建，避免展示中爬动冲突）
+    [_climbSchedTimer invalidate]; _climbSchedTimer = nil;
+    CGPoint c = _girlView.center;
+    // 随机坐姿/跪姿帧（squat 池：squat/kneel/sit/side_sit/kneel_up/chin_sit 等，多帧随机更有变化）
+    UIImage *poseImg = nil;
+    if (_squatFrames.count) {
+        poseImg = _squatFrames[arc4random_uniform((uint32_t)_squatFrames.count)];
+    } else if (_idleFrames.firstObject) {
+        poseImg = _idleFrames.firstObject;   // 兜底：该角色无坐姿/跪姿帧时才用站立
+    }
+    if (!poseImg) { _poseShowing = NO; [self _schedulePoseShow]; return; }
+    _girlView.image = poseImg;
+    _girlView.transform = CGAffineTransformIdentity;   // 站直/坐正（恢复朝向）
+    [self _setFrameForImage:poseImg];
+    _girlView.center = c;   // 保持吸附位置原地换姿势
+    // 展示 2.5-3s 后趴回
+    _poseHoldTimer = [NSTimer scheduledTimerWithTimeInterval:2.5 + arc4random_uniform(60) / 100.0
+                                                      target:self
+                                                    selector:@selector(_poseReattach)
+                                                    userInfo:nil repeats:NO];
+}
+- (void)_poseReattach {
+    _poseHoldTimer = nil;
+    _poseShowing = NO;
+    [self _snapToEdge];          // 按当前中心重新吸附（自动恢复趴墙图/底部呼吸/攀爬/底部挪动排期，末尾会重排下一次展示）
+}
+// v6.1.5-14z：打断展示（拖拽/点击/长按/锁屏/隐藏），排期与保持计时一并作废
+- (void)_stopPoseShow {
+    [_poseShowTimer invalidate]; _poseShowTimer = nil;
+    [_poseHoldTimer invalidate]; _poseHoldTimer = nil;
+    _poseShowing = NO;
 }
 
 // 点击切表情：开心→思考→待机
@@ -1374,6 +1434,7 @@ extern "C" const char *g_hud_char;
 // v6.1.5-14o：活物感——双击：向上蹦跳+happy帧+挤压拉伸（squash&stretch），不动菜单
 - (void)_doubleTap:(UITapGestureRecognizer *)g {
     if (_isDragging || _falling) return;
+    [self _stopPoseShow];   // v6.1.5-14z：双击打断坐姿/跪姿展示
     if (_isHidden) return;  // 隐藏态交给单击恢复
     if (_girlView.image == _wallImage || _girlView.image == _wallImageV) return;  // 趴墙时交给单击恢复站立
     UIImage *hp = _happyFrames.firstObject;
@@ -1400,6 +1461,7 @@ extern "C" const char *g_hud_char;
 // v6.1.5-14o：活物感——长按：捏扁（压扁变宽），松手弹回（spring）
 - (void)_longPress:(UILongPressGestureRecognizer *)g {
     if (_isDragging || _falling || _isHidden) return;
+    [self _stopPoseShow];   // v6.1.5-14z：长按打断坐姿/跪姿展示
     if (g.state == UIGestureRecognizerStateBegan) {
         [UIView animateWithDuration:0.18 animations:^{
             _girlView.transform = CGAffineTransformMakeScale(1.25, 0.65);  // 捏扁
@@ -1425,6 +1487,7 @@ extern "C" const char *g_hud_char;
 
 - (void)_tap:(UITapGestureRecognizer *)g {
     if (_isDragging) return;
+    [self _stopPoseShow];   // v6.1.5-14z：单击打断坐姿/跪姿展示
     // v6.0.8：从扒墙状态点击 → 直接恢复站立待机（不切表情）
     if ((_girlView.image == _wallImage || _girlView.image == _wallImageV) && _idleFrames.firstObject) {
         [self _stopBottomAmbient];   // v6.1.5-14w：恢复站立停底部动效
