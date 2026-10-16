@@ -1577,10 +1577,23 @@ static UIImage * _realAppIcon(NSString *bundleId) {
     // v6.1.5-4：统一菜单数据构建——自定义列表（App Group suite 优先，standard 兜底旧数据）
     // + 无自定义时默认4个 + 固定 AI/隐藏。_showFanMenu 与 _fanBtnClick 都走这里，保证点对项
     // v6.1.5-7：记录数据来源（suite/plist/std/default），写诊断日志到 /tmp/hud_fan.log 定位"自定义不进菜单"卡在哪层
+    // v6.1.5-14e：新增全局文件通道 /var/mobile/Documents/fanmenu.json（主 App no-sandbox 写、HUD 读，
+    // 不依赖 App Group 在独立 HUD 上的权限确定性）——suite → 全局文件 → 主App容器plist → standard → 默认
     NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"];
     NSArray *savedApps = [prefs arrayForKey:@"fanMenuApps"];
     NSString *src = @"default";
     if (savedApps.count) src = @"suite";
+    // v6.1.5-14e：全局文件通道（最不依赖权限：两边都是 no-sandbox，直接读 /var/mobile/Documents）
+    if (!savedApps.count) {
+        NSData *jdata = [NSData dataWithContentsOfFile:@"/var/mobile/Documents/fanmenu.json"];
+        if (jdata) {
+            NSArray *jarr = [NSJSONSerialization JSONObjectWithData:jdata options:0 error:nil];
+            if ([jarr isKindOfClass:[NSArray class]] && jarr.count) {
+                savedApps = jarr;
+                src = @"sharedfile";
+            }
+        }
+    }
     // v6.1.5-6：App Group suite 读不到时，no-sandbox 直读主 App 容器偏好文件
     // （TheBall 同款思路：主 App 与悬浮球共享同一数据文件，绕开 App Group 在独立 HUD App 上的权限不确定性）
     if (!savedApps.count) {

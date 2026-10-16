@@ -10,11 +10,22 @@ struct GirlCharacterPickerView: View {
     private static let prefs: UserDefaults = UserDefaults(suiteName: "group.com.ai.iosxcode") ?? .standard
     // v6.1.5-7：统一保存入口——双写(suite+standard) + 强制落盘 + 写后读回验证，诊断记入 fanMenuDiag
     // UserDefaults.set 默认异步落盘，添加后立刻切后台可能没写进 plist，HUD 直读文件时读不到 → 必须 synchronize
+    // v6.1.5-14e：第三通道——写全局文件 /var/mobile/Documents/fanmenu.json（主 App no-sandbox 可写，
+    // HUD 独立进程同样 no-sandbox 可读，绕开 App Group 在独立 HUD 上可能的权限不确定性）
+    fileprivate static let fanMenuSharedFile = "/var/mobile/Documents/fanmenu.json"
     fileprivate static func saveFanMenu(_ apps: [[String:String]]) {
         prefs.set(apps, forKey: "fanMenuApps")
         prefs.synchronize()
         UserDefaults.standard.set(apps, forKey: "fanMenuApps")
         UserDefaults.standard.synchronize()
+        // v6.1.5-14e：全局文件通道（主 App no-sandbox，直接写 /var/mobile/Documents）
+        do {
+            let data = try JSONSerialization.data(withJSONObject: apps, options: [])
+            try data.write(to: URL(fileURLWithPath: fanMenuSharedFile), options: .atomic)
+        } catch {
+            // 写失败不阻塞主流程，诊断里可见
+            NSLog("[TrollAgent] fanmenu shared file write FAIL: \(error)")
+        }
         // 写后立即读回验证（暴露 App Group 失效 / 落盘失败）
         let backSuite = (UserDefaults(suiteName: "group.com.ai.iosxcode")?.array(forKey: "fanMenuApps") as? [[String:String]])?.count ?? -1
         let backStd = UserDefaults.standard.array(forKey: "fanMenuApps") as? [[String:String]]
