@@ -182,7 +182,7 @@ final class InjectionRemoveTool: MCPTool {
 // MARK: - 原版缺失工具：container.delete
 
 final class ContainerDeleteTool: MCPTool {
-    let definition = ToolDefinition(name: "container.delete", summary: "Delete a file/directory inside an app container. Use for: clean up app data files. Don't use for: delete workspace files (use fs.rm), list directory (use bridge.ls). Warning: irreversible! Example: user says 'delete 小红书 cache files' → delete file.",
+    let definition = ToolDefinition(name: "container.delete", summary: "Delete a file/directory inside an app container. Use for: clean up app data files. Don't use for: delete workspace files (use shell.exec rm), list directory (use shell.exec ls). Warning: irreversible! Example: user says 'delete 小红书 cache files' → delete file.",
         parameters: ["bundle_id": "Target app bundle ID", "path": "Path inside app container"], verified: true, category: "filesystem")
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
         guard let bid = params["bundle_id"] as? String,

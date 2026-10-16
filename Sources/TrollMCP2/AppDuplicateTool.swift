@@ -9,7 +9,7 @@ import Foundation
 final class AppDuplicateTool: MCPTool {
     let definition = ToolDefinition(
         name: "app.duplicate",
-        summary: "Clone an app to create a parallel copy (two versions side by side). Use for: run two accounts at once, test without affecting original. Don't use for: just install app (use app.install), duplicate data (use backup.restore). Note: doesn't work on encrypted apps (decrypt first). Example: user says 'install two WeChat copies, log into both' → clone app.",
+        summary: "Clone an app to create a parallel copy (two versions side by side). Use for: run two accounts at once, test without affecting original. Don't use for: just install app (use app.install), duplicate data (use rescue.recover_all). Note: doesn't work on encrypted apps (decrypt first). Example: user says 'install two WeChat copies, log into both' → clone app.",
         parameters: [
             "bundle_id": "Source App bundle ID to clone (required)",
             "new_name": "New display name (optional)",

@@ -40,7 +40,7 @@ final class ShellExecTool: MCPTool {
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",
-            "runtime": "Optional String: force execution environment. 'auto'(默认)=按命令类型自动判断；'ios'=强制iOS原生(FileManager直连整个文件系统)；'alpine'=强制Alpine Linux(完整工具链，只能访问绑定目录). 选择原则: ①读iOS文件/统计缓存/系统信息→ios; ②装包/解包/编译/复杂脚本→alpine; ③不确定就auto，结果里看runtime_actual字段确认实际环境.",
+            "runtime": "Optional String: force execution environment. 'auto'(默认)=按命令类型自动判断；'ios'=强制iOS原生(FileManager直连整个文件系统)；'alpine'=强制Alpine Linux(完整工具链，iOS 路径自动 bind 为 /ios_* 直读直写). 选择原则: ①读iOS文件/统计缓存/系统信息→ios; ②装包/解包/编译/复杂脚本→alpine; ③不确定就auto，结果里看runtime_actual字段确认实际环境.",
             "reset_cwd": "Optional Bool: reset working dir to default (default false)",
             "limit": "Optional Int: result string truncation cap (default 16000 chars——覆盖多数分析输出；仍不够用 full=true). If diagnostics output is trimmed and the body is invisible, pass limit=20000 或更大；full=true 则不截断返回完整结果",
             "full": "Optional Bool: true=返回完整结果不截断 (慎用，大输出占满上下文)",

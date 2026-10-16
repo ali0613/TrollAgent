@@ -8,7 +8,7 @@ import UIKit
 final class AppInstallTool: MCPTool {
     let definition = ToolDefinition(
         name: "app.install",
-        summary: "Install an IPA file to the iPhone. Use for: install app from IPA file, sideload. Don't use for: launch installed app (use apps.open), uninstall app (use app.uninstall). Example: user says 'install this IPA' → install it.",
+        summary: "Install an IPA file to the iPhone. Use for: install app from IPA file, sideload. Don't use for: launch installed app (use app.launch), uninstall app (use app.uninstall). Example: user says 'install this IPA' → install it.",
         parameters: ["ipa_path": "Absolute path to IPA file on device (required)"], verified: true, category: "app_control", prerequisites: ["IPA 文件已存在于设备且 ipa_path 路径有效 (先用 shell.exec ls 确认)"])
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
         guard let path = params["ipa_path"] as? String, !path.isEmpty else {
@@ -96,7 +96,7 @@ final class AppInstallTool: MCPTool {
 final class AppUninstallTool: MCPTool {
     let definition = ToolDefinition(
         name: "app.uninstall",
-        summary: "Completely uninstall/delete an app from the iPhone. Use for: remove app, free up space. Don't use for: just restart app (use app.restart), clear app cache (use cleanup.execute). Warning: this deletes ALL app data permanently! Backup first if needed. Example: user says 'delete 小红书' → uninstall com.xingin.discover.",
+        summary: "Completely uninstall/delete an app from the iPhone. Use for: remove app, free up space. Don't use for: just restart app (use app.restart), clear app cache (use rescue.cleanup). Warning: this deletes ALL app data permanently! Backup first if needed. Example: user says 'delete 小红书' → uninstall com.xingin.discover.",
         parameters: ["bundle_id": "App bundle_id to uninstall (required). e.g. com.xingin.discover"],
         verified: true, category: "app_control")
     func invoke(_ params: [String: Any]) throws -> [String: Any] {

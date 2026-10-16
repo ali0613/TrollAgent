@@ -727,6 +727,15 @@ public final class ToolRegistry: ObservableObject {
 
     @discardableResult
     public func dispatch(name: String, params: [String: Any]) throws -> [String: Any] {
+        // v6.1.5-14ai：幽灵工具别名——描述/提示词里出现的 dotted 名映射到真实实现。
+        // 50 处工具 description 用 control.tap / injection.mem / reminder.create 等写法，
+        // 但注册的是大工具+子命令；不加映射 AI 按描述调用必报 unknown tool → 反复试错。
+        // 别名走同一 dispatch：把 params 并入 command 后递归分发（无环：映射目标均为注册名）。
+        if let (realName, realCommand) = Self.ghostAlias(name) {
+            var p = params
+            if !realCommand.isEmpty { p["command"] = realCommand }
+            return try dispatch(name: realName, params: p)
+        }
         // v3.0.90：去掉锁——只读操作 (查工具）
         var tool = tools[name]
         if tool == nil, let original = apiNameToOriginal[name] {
@@ -1059,6 +1068,31 @@ public final class ToolRegistry: ObservableObject {
             if let s = d["description"] as? String, !s.isEmpty { return s }
         }
         return fallback
+    }
+
+    // v6.1.5-14ai：幽灵工具别名表——描述文本里出现但未独立注册的 dotted 名 → (真实注册工具名, 子命令)。
+    // 均映射到真实实现（大工具子命令或已注册 dotted 工具），杜绝"AI 按描述调用 → unknown tool → 试错"。
+    static func ghostAlias(_ name: String) -> (String, String)? {
+        switch name {
+        case "control.tap": return ("control", "tap")
+        case "control.swipe": return ("control", "swipe")
+        case "control.type": return ("control", "type")
+        case "calendar.list": return ("calendar", "list")
+        case "device.fake": return ("device", "fake")
+        case "device.keychain_wipe": return ("inject", "keychain_wipe")
+        case "device.refresh_container": return ("container", "refresh")
+        case "location.clear": return ("location", "clear")
+        case "artifact.write_text": return ("artifact", "write")
+        case "assistant.memory_get": return ("assistant_memory", "list")
+        case "reminder.create": return ("reminder", "create")
+        case "reminder.schedule": return ("reminder", "schedule")
+        case "automation.cron_fire": return ("automation", "cron_fire")
+        case "rescue.restore_all": return ("rescue", "recover_all")
+        case "injection.mem": return ("inject", "mem")
+        case "debug.dump_messages": return ("debug.dump_conversation", "")
+        case "debug.dump_model_configs": return ("model", "config")
+        default: return nil
+        }
     }
 
     // v2.9.36：权限标签 (对齐老 MCP readOnly/privilegedRead/write 语义，按工具名前缀粗分）

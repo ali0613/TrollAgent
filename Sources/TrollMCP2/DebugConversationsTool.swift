@@ -34,7 +34,7 @@ final class DebugDumpConversationsTool: MCPTool {
 final class DebugDumpConversationTool: MCPTool {
     let definition = ToolDefinition(
         name: "debug.dump_conversation",
-        summary: "Debug: export full messages of one conversation. Use for: debug AI behavior, see how AI thinks and calls tools. Don't use for: list all conversations (use debug.dump_conversations), send a message (use chat.send). Example: user says 'see the recent conversation' → dump conversation messages.",
+        summary: "Debug: export full messages of one conversation. Use for: debug AI behavior, see how AI thinks and calls tools. Don't use for: list all conversations (use debug.dump_conversations), send a message (no such tool — use shell.exec or automation). Example: user says 'see the recent conversation' → dump conversation messages.",
         parameters: ["title": "Conversation title to export (e.g. 'Hello')", "limit": "Max messages to return (default: 50, max: 200)"], verified: true, category: "debug", remoteOnly: true)
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {

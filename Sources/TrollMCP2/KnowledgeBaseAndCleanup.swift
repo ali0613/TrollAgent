@@ -237,7 +237,7 @@ final class KnowledgeBaseTool: MCPTool {
 final class WorkspaceCleanupTool: MCPTool {
     let definition = ToolDefinition(
         name: "workspace.cleanup",
-        summary: "Clean up workspace temporary files. Use for: free up workspace space, remove old downloads/logs/reports. Don't use for: clean app cache (use cleanup.scan/execute), delete specific file (use fs.rm). Example: user says 'clean temp files in workspace' → cleanup.",
+        summary: "Clean up workspace temporary files. Use for: free up workspace space, remove old downloads/logs/reports. Don't use for: clean app cache (use rescue.cleanup), delete specific file (use shell.exec rm). Example: user says 'clean temp files in workspace' → cleanup.",
         parameters: [
             "dry_run": "Preview only, don't actually delete (default: true)",
             "max_age_days": "Delete files older than N days (default: 7)",

@@ -89,7 +89,7 @@ private func openURLSync(_ url: URL) -> Bool {
 final class AppCacheInspectTool: MCPTool {
     let definition = ToolDefinition(
         name: "apps.cache_inspect",
-        summary: "Check how much cache space each app uses. Use for: see which apps take up the most cache, find big cache users. Don't use for: actually clearing cache (use cleanup.scan/cleanup.execute), check free disk space (use device.snapshot). Example: user says 'which app has the biggest cache' → inspect cache sizes.",
+        summary: "Check how much cache space each app uses. Use for: see which apps take up the most cache, find big cache users. Don't use for: actually clearing cache (use rescue.cleanup), check free disk space (use device.snapshot). Example: user says 'which app has the biggest cache' → inspect cache sizes.",
         verified: true, category: "app_control")
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
@@ -254,7 +254,7 @@ private func waitAgentReady(timeout: TimeInterval = 8) -> Bool {
 final class AppOpenAndInputTool: MCPTool {
     let definition = ToolDefinition(
         name: "apps.open_and_input",
-        summary: "Open app and automatically input text into it. Use for: launch app and fill in text (like search). Don't use for: just open app (use apps.open), type into already open app (use control.type_text). Example: user says 'open Baidu and search iPhone 15' → open and input text.",
+        summary: "Open app and automatically input text into it. Use for: launch app and fill in text (like search). Don't use for: just open app (use app.launch), type into already open app (use control.type_text). Example: user says 'open Baidu and search iPhone 15' → open and input text.",
         parameters: [
             "bundle_id": "Target App bundle ID",
             "text": "Text to input",

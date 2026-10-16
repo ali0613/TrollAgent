@@ -34,7 +34,7 @@ final class SystemOverviewTool: MCPTool {
             "system": "TrollAgent",
             "version": ver,
             "total_tools": names.count,
-            "important_note": "The callable tools are the BIG TOOLS below — call them as `name` + `command`/`action` subcommand (e.g. `app` + command:decrypt, `inject` + command:enable). Dotted names like app.decrypt are NOT separate tool names. A few single tools are callable as-is: shell.exec, web.search, web.fetch, network.capture, vpn.capture, skills.read, env.setup_re.",
+            "important_note": "All dotted tools below (app.decrypt, injection.enable, browser.snapshot...) are individually registered and callable directly. The BIG TOOLS (app/inject/control/container...) additionally accept `name` + `command`/`action` subcommand syntax (e.g. `app` + command:decrypt) which maps to the same implementation — both syntaxes are equivalent, prefer the dotted tool from the schema. Single tools callable as-is include shell.exec, web.search, web.fetch, network.capture, vpn.capture, skills.read, env.setup_re.",
             "tool_categories": cats,
             "ios_version_support": [
                 "trollstore_supported": [
@@ -84,11 +84,11 @@ final class SystemOverviewTool: MCPTool {
                 ]
             ],
             "tips": [
-                "Call BIG TOOLS as `name` + `command`/`action` subcommand (app + command:launch, inject + command:enable).",
+                "Dotted tools in the schema (app.decrypt etc.) are callable directly; BIG TOOLS (app/inject/control) also accept `name`+command: syntax — equivalent, don't switch syntax mid-task.",
                 "If you're stuck after 2 tries, ask the user for clarification.",
                 "Don't repeat the same tool with the same params — it's a loop.",
-                "Before injecting dylib, call device + command:info to detect environment.",
-                "TrollStore + iOS ≤17.0: inject + command:enable (ct_bypass runtime); iOS 17.0.1+: inject + command:static."
+                "Before injecting dylib, call device.info or device + command:info to detect environment.",
+                "TrollStore + iOS ≤17.0: injection.enable (ct_bypass runtime); iOS 17.0.1+: injection static or inject + command:static."
             ]
         ]
     }
@@ -379,7 +379,7 @@ final class ContainerResolveTool: MCPTool {
 // MARK: - M4 Gateway 工具
 
 final class CronFireTool: MCPTool {
-    let definition = ToolDefinition(name: "cron.fire", summary: "Manually trigger a scheduled/cron task. Use for: test automation task works, run scheduled task right now instead of waiting. Don't use for: create new automation task (use automation.create), list tasks (use automation.list). Example: user says 'run the scheduled task now' → fire the task.",
+    let definition = ToolDefinition(name: "cron.fire", summary: "Manually trigger a scheduled/cron task. Use for: test automation task works, run scheduled task right now instead of waiting. Don't use for: create new automation task (no create command — use reminder.schedule_recurring for recurring reminders), list tasks (use automation.list). Example: user says 'run the scheduled task now' → fire the task.",
         parameters: ["task": "Name of the scheduled task to trigger"], verified: true)
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
         let task = params["task"] as? String ?? "unnamed"
@@ -391,7 +391,7 @@ final class CronFireTool: MCPTool {
 // MARK: - M4 自动化工具 (真实 UNUserNotificationCenter 调度）
 
 final class AutomationRunNowTool: MCPTool {
-    let definition = ToolDefinition(name: "automation.run_now", summary: "Run an automation task immediately (right now, don't wait for schedule). Use for: execute a saved automation task manually. Don't use for: create new task (use automation.create), list all tasks (use automation.list). Example: user says 'run that scheduled task' → run it now.",
+    let definition = ToolDefinition(name: "automation.run_now", summary: "Run an automation task immediately (right now, don't wait for schedule). Use for: execute a saved automation task manually. Don't use for: create new task (automation.create not registered — use reminder.schedule_recurring), list all tasks (use automation.list). Example: user says 'run that scheduled task' → run it now.",
         parameters: ["name": "Task name or ID to run immediately"], verified: true)
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
         guard let name = params["name"] as? String else { throw MCPError.invalidParams("name required") }
