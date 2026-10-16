@@ -136,6 +136,7 @@ extern "C" const char *g_hud_char;
     NSString *_charPrefix;      // v6.0.27：当前角色前缀（rabit/girl/cat）
     NSInteger _lastFanClickIdx;         // v6.1.5-14i：菜单点击去重（手势+按钮双触发只处理一次）
     NSTimeInterval _lastFanClickTime;   // v6.1.5-14i
+    NSTimer *_kbTimer;                  // v6.1.5-14n：键盘全局文件轮询
 }
 
 + (BOOL)passthroughMode { return _passthrough; }
@@ -263,6 +264,10 @@ extern "C" const char *g_hud_char;
 
     // v6.0.7：注册锁屏/解锁监听（锁屏隐藏悬浮、解锁恢复，抄 TrollSpeed）
     [self registerNotifications];
+
+    // v6.1.5-14n：键盘轮询——独立 HUD 收不到其他 App 的键盘通知，
+    // 由主 App 写 /var/mobile/Documents/keyboard_state.json，HUD 每 0.5s 轮询应用
+    _kbTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 target:self selector:@selector(_pollKeyboardFile) userInfo:nil repeats:YES];
 
     // 呼吸动画（idle 缩放循环）
     [self _startBreathing];
@@ -1754,6 +1759,26 @@ static UIImage * _realAppIcon(NSString *bundleId) {
         // v6.0.30修复：恢复时按当前状态还原——普通状态1.0，隐藏缩小状态0.7，别把隐藏态顶成完全显示
         self.view.alpha = self->_isHidden ? 0.7 : 1.0;
     }];
+}
+
+// v6.1.5-14n：轮询键盘全局文件（主 App 写）——覆盖 HUD 收不到键盘通知的场景
+- (void)_pollKeyboardFile {
+    // 开关：全局文件（设置页写）优先；文件不存在按 HUD 自身 standard 兜底（默认开）
+    BOOL enabled = YES;
+    NSString *sw = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/auto_hide_keyboard.txt"
+                                             encoding:NSUTF8StringEncoding error:nil];
+    if (sw.length > 0) enabled = [sw hasPrefix:@"1"];
+    if (!enabled) return;
+    BOOL vis = NO;
+    NSString *kv = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/keyboard_state.json"
+                                            encoding:NSUTF8StringEncoding error:nil];
+    if (kv.length > 0) vis = [kv hasPrefix:@"1"];
+    CGFloat target = vis ? 0.2 : (self->_isHidden ? 0.7 : 1.0);
+    if (fabs(self.view.alpha - target) > 0.05) {
+        [UIView animateWithDuration:0.2 animations:^{
+            self.view.alpha = target;
+        }];
+    }
 }
 
 @end

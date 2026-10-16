@@ -33,6 +33,14 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
+    // v6.1.5-14n：键盘状态落盘（HUD 独立进程轮询）
+    static func writeKeyboardState(_ visible: Bool) {
+        do {
+            try (visible ? "1" : "0").write(to: URL(fileURLWithPath: "/var/mobile/Documents/keyboard_state.json"),
+                                            atomically: true, encoding: .utf8)
+        } catch {}
+    }
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -86,6 +94,20 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         window = UIWindow(frame: UIScreen.main.bounds)
         window?.rootViewController = UIHostingController(rootView: RootView())
         window?.makeKeyAndVisible()
+        // v6.1.5-14n：键盘弹出/收起 → 写全局文件 /var/mobile/Documents/keyboard_state.json
+        // （HUD 是独立进程收不到键盘通知，由主 App 监听并落盘，HUD 轮询读取——键盘弹起时隐藏桌宠）
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { _ in
+            Self.writeKeyboardState(true)
+        }
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { _ in
+            Self.writeKeyboardState(false)
+        }
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { _ in
+            Self.writeKeyboardState(true)
+        }
+        NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { _ in
+            Self.writeKeyboardState(false)
+        }
 
         // v2.9.136：全局后台常驻开关（设置页「后台常驻」）——开启后 App 启动即启动静音保活引擎，
         // 与远程控制的临时保活互补，长任务/后台等待 AI 结果时不挂起。

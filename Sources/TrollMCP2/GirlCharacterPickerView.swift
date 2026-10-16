@@ -374,7 +374,14 @@ struct GirlCharacterPickerView: View {
                         }
                         return UserDefaults.standard.bool(forKey: "autoHideWithKeyboard")
                     },
-                    set: { UserDefaults.standard.set($0, forKey: "autoHideWithKeyboard") }
+                    set: {
+                        UserDefaults.standard.set($0, forKey: "autoHideWithKeyboard")
+                        // v6.1.5-14n：全局文件通道——HUD 独立进程读不到主 App standard，写文件让 HUD 轮询读到
+                        do {
+                            try ($0 ? "1" : "0").write(to: URL(fileURLWithPath: "/var/mobile/Documents/auto_hide_keyboard.txt"),
+                                                        atomically: true, encoding: .utf8)
+                        } catch {}
+                    }
                 ))
             }
             Section(footer: Text("切换角色、调整尺寸或气泡样式后自动重启桌面悬浮生效。")) {
