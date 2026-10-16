@@ -1372,15 +1372,19 @@ extern "C" const char *g_hud_char;
             btn.layer.shadowOffset = CGSizeMake(0, 3);
             btn.layer.shadowRadius = 6;
             // v6.1.5-8：真实图标优先（自定义 app），SF Symbol 兜底（默认项）
+            // v6.1.5-14g：图标在方形图标里裁剪成圆形（wrap 与 riv 都 cornerRadius=20 圆形 mask）——
+            // 用户反馈"app图标不在方形图标里裁剪圆形"
             UIImage *realIcon = _realAppIcon(apps[i][@"bundleId"]);
             if (realIcon) {
                 UIView *wrap = [[UIView alloc] initWithFrame:CGRectMake((fanBtn - 40) / 2, 8, 40, 40)];
-                wrap.layer.cornerRadius = 9;
+                wrap.layer.cornerRadius = 20;
                 wrap.layer.masksToBounds = YES;
                 wrap.backgroundColor = [UIColor whiteColor];
                 UIImageView *riv = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 40, 40)];
                 riv.image = realIcon;
-                riv.contentMode = UIViewContentModeScaleAspectFit;
+                riv.contentMode = UIViewContentModeScaleAspectFill;
+                riv.layer.cornerRadius = 20;
+                riv.layer.masksToBounds = YES;
                 [wrap addSubview:riv];
                 [btn addSubview:wrap];
             } else {
