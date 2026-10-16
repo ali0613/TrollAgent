@@ -144,6 +144,29 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         }
 
         let path = comps.host ?? ""
+        // v6.1.5-14b：HUD 快捷菜单——AI 聊天（主界面即聊天，唤起即达）
+        if path == "chat" {
+            return true
+        }
+        // v6.1.5-14b：HUD 快捷菜单——主 App 代开目标 app（HUD 权限失效时的可靠兜底）
+        // 链接格式: trollagent://open?bid=<bundleId>&url=<scheme>
+        if path == "open" {
+            let bid = value("bid") ?? ""
+            let urlStr = value("url") ?? ""
+            if !bid.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    _ = AdvancedTools.launchApp(bundleId: bid)
+                }
+                return true
+            }
+            if !urlStr.isEmpty, let u = URL(string: urlStr) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    _ = UIThreadBridge.openURL(u, timeout: 3)
+                }
+                return true
+            }
+            return false
+        }
         if path == "import" {
             let baseURL = value("baseURL") ?? ""
             let apiKey = value("apiKey") ?? ""

@@ -13,6 +13,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <mach/mach.h>
 #import <objc/runtime.h> // v6.1.5-8：真实 app 图标（TrollStore/TheBall 同款私有 API）
+#import <dlfcn.h>       // v6.1.5-14b：点击打开 SBSLaunchApplicationWithIdentifier（运行时加载）
 
 // v6.0.7：SpringBoardServices 是私有 framework（Xcode SDK 无头文件），直接 extern "C" 声明原型（.mm 是 C++，
 // 不加 extern "C" 会按 C++ 链接找不到 tbd 里的 C 符号），符号由 HUD/libraries/SpringBoardServices.framework/SpringBoardServices.tbd 链接提供
@@ -1438,27 +1439,41 @@ extern "C" const char *g_hud_char;
         return;
     }
     if (bundleId.length > 0) {
-        // 用LSApplicationWorkspace直接打开（v6.1.5-6 起 HUD 带 launchapplications 权限）
-        Class LSWorkspace = NSClassFromString(@"LSApplicationWorkspace");
-        id ws = LSWorkspace ? [LSWorkspace performSelector:@selector(defaultWorkspace)] : nil;
         BOOL opened = NO;
-        if (ws && [ws respondsToSelector:@selector(openApplicationWithBundleID:)]) {
-            id ret = [ws performSelector:@selector(openApplicationWithBundleID:) withObject:bundleId];
-            opened = (ret != nil);
+        // v6.1.5-14b：点击打开三保险——
+        // 1) SBSLaunchApplicationWithIdentifier（TrollStore 生态主流，SpringBoard 服务，实测可靠）
+        void *sbHandle = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", RTLD_LAZY);
+        if (sbHandle) {
+            int (*SBSLaunchFn)(CFStringRef, Boolean) = (int (*)(CFStringRef, Boolean))dlsym(sbHandle, "SBSLaunchApplicationWithIdentifier");
+            if (SBSLaunchFn) {
+                int sret = SBSLaunchFn((__bridge CFStringRef)bundleId, false);
+                opened = (sret == 0);
+                [self _appendHudLog:[NSString stringWithFormat:@"open SBS ret=%d bid=%@", sret, bundleId]];
+            }
+            dlclose(sbHandle);
         }
-        // v6.1.5-7：workspace 不可用或打开失败时，兜底走 openURL
-        if (!opened && url.length > 0) {
-            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:^(BOOL ok) {
+        // 2) LSApplicationWorkspace openApplicationWithBundleID 兜底
+        if (!opened) {
+            Class LSWorkspace = NSClassFromString(@"LSApplicationWorkspace");
+            id ws = LSWorkspace ? [LSWorkspace performSelector:@selector(defaultWorkspace)] : nil;
+            if (ws && [ws respondsToSelector:@selector(openApplicationWithBundleID:)]) {
+                id ret = [ws performSelector:@selector(openApplicationWithBundleID:) withObject:bundleId];
+                opened = (ret != nil);
+                [self _appendHudLog:[NSString stringWithFormat:@"open LSW ret=%@ bid=%@", ret, bundleId]];
+            }
+        }
+        // 3) 主 App 代开（trollagent://open?bid=）——主 App 是 TrollStore 有效签名+launchapplications，
+        //    HUD 自身权限万一失效时由主 App 打开
+        if (!opened) {
+            NSString *bidEnc = [bundleId stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet alphanumericCharacterSet]];
+            NSString *mainUrl = [NSString stringWithFormat:@"trollagent://open?bid=%@", bidEnc];
+            [self _appendHudLog:[NSString stringWithFormat:@"open mainApp fallback url=%@", mainUrl]];
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:mainUrl] options:@{} completionHandler:^(BOOL ok) {
                 if (!ok) [self _showToast:[NSString stringWithFormat:@"打不开 %@", target[@"name"] ?: @"该应用"]];
             }];
         }
-        // v6.1.5-14：打开失败且无 url scheme 时，明确提示"点了有反应"
-        if (!opened) {
-            [self _appendHudLog:[NSString stringWithFormat:@"open FAIL idx=%ld bid=%@", (long)idx, bundleId]];
-            if (url.length == 0) [self _showToast:[NSString stringWithFormat:@"打不开 %@", target[@"name"] ?: @"该应用"]];
-        }
     } else if (url.length > 0) {
-        // url scheme 打开
+        // url scheme 打开（AI 聊天/自定义 scheme）
         [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];
     } else {
         [self _showToast:@"该应用未配置打开方式"];
