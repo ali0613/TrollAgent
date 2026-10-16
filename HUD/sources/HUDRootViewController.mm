@@ -1281,11 +1281,10 @@ extern "C" const char *g_hud_char;
             // v6.1.5-10：扇面跨度自适应——每 app 至少 36° 间隔，最多 120°（app 多时扇面更展开不重叠）
             CGFloat span = (nk > 1) ? MAX(36.0, MIN(120.0, (nk - 1) * 36.0)) : 0;
             CGFloat stepA = (nk > 1) ? (span / (nk - 1)) : 0;
-            CGFloat startDeg = 0;
-            if (fromBottom) startDeg = -150;
-            else if (fromTop) startDeg = 30;
-            else if (fromLeft) startDeg = -60;
-            else startDeg = 120;
+            // v6.1.5-12：扇面中心始终指向屏幕中心——角色贴边/贴底时外层按钮也朝屏幕中央展开，
+            // 不会往屏幕外跑被 clamp 拉回边缘堆叠（旧四方向 startDeg 在边缘会混乱）
+            CGFloat centerAng = atan2(screenH / 2 - girlY, screenW / 2 - girlX) * 180.0 / M_PI;
+            CGFloat startDeg = centerAng - 60;
             // 内圈单个数居中；其它层按角度均分
             CGFloat deg = (nk == 1) ? (startDeg + 60) : (startDeg + stepA * posInLayer);
             CGFloat ang = deg * M_PI / 180;
