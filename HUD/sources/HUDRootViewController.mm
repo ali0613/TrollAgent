@@ -109,7 +109,6 @@ extern "C" const char *g_hud_char;
     BOOL _isDragging;
     BOOL _isHidden;
     CGPoint _dragOffset;
-    int _emojiTimer;      // 点击表情显示计时
     NSUInteger _moodSeqIndex;  // v6.0.9：待机有序循环当前帧序号（不再随机挑帧）
     CGFloat _charScale;        // v6.0.12：角色站姿放大系数（rabit 1.4 / cat 1.2 / girl 1.0）
     NSArray<UIImage *> *_liftFrames;   // v6.0.12：拖起悬空挣扎帧（lift1/lift2，拖拽时交替显示）
@@ -437,7 +436,7 @@ extern "C" const char *g_hud_char;
 }
 - (void)_autoMoodFire {
     _autoMoodTimer = nil;
-    if (_autoMoodPaused || _isDragging || _falling || _moodShowing) { [self _scheduleAutoMood]; return; }  // v6.1.5-14ab：掉落中不切表情
+    if (_autoMoodPaused || _isDragging || _falling || _isHidden || _moodShowing) { [self _scheduleAutoMood]; return; }  // v6.1.5-14ab/ad：掉落/隐藏中不切表情
     if (_girlView.image == _wallImage || _girlView.image == _wallImageV) { [self _scheduleAutoMood]; return; }
     if (_girlView.image != _idleFrames.firstObject) { [self _scheduleAutoMood]; return; }
     NSUInteger idx = _moodSeqIndex % _moodFrames.count;
@@ -501,6 +500,7 @@ extern "C" const char *g_hud_char;
     CGPoint p = [g locationInView:self.view];
     if (g.state == UIGestureRecognizerStateBegan) {
         _isDragging = YES;
+        if (_isHidden) { _isHidden = NO; self.view.alpha = 1.0; }   // v6.1.5-14ad：隐藏态拖拽即恢复显示（否则 0.1 小点被拖走还残留隐藏标志）
         _dragLastX = 0; _dragLastY = 0;  // v6.1.5-14o：拖拽倾斜速度基准重置
         [self _stopClimbTimer];    // v6.0.29：拖动时立刻停止所有攀爬
         [self _stopBottomAmbient]; // v6.1.5-14w：拖动时停止底部呼吸/横向挪动
@@ -772,7 +772,7 @@ extern "C" const char *g_hud_char;
 // 且吸附后常进攀爬态(_isClimbing)被跳过 → 用户反馈"吸附左右看不到气泡消息"。
 // 现在站立/趴墙任何姿势都弹，仅拖动/掉落/攀爬中不弹。
 - (void)_showRandomBubble {
-    if (_isDragging || _isClimbing || _falling) return;
+    if (_isHidden || _isDragging || _isClimbing || _falling) return;   // v6.1.5-14ad：隐藏态不冒气泡
     
     // v6.0.28：按时间段选问候（早/中/晚/深夜）
     NSArray *messages;
@@ -1298,6 +1298,8 @@ extern "C" const char *g_hud_char;
     // 必须仍在左右趴墙态且未被拖拽/掉落才爬；v6.1.5-14z：坐姿/跪姿展示中不爬
     // v6.1.5-14aa：展示中不丢弃排期——推迟 2-3 分钟再试（原直接 return 导致之后永不再攀爬）
     if (_poseShowing) { [self _scheduleClimbAfterDelay:120.0 + arc4random_uniform(60000) / 1000.0]; return; }
+    // v6.1.5-14ad：隐藏态（缩小成点）不攀爬，推迟再试
+    if (_isHidden) { [self _scheduleClimbAfterDelay:120.0 + arc4random_uniform(60000) / 1000.0]; return; }
     if (!_onSideWall || _isDragging || _falling || _isClimbing) return;
     [self _startClimbing];
 }
@@ -1340,6 +1342,7 @@ extern "C" const char *g_hud_char;
     _bottomCrawlTimer = nil;
     if (!_onBottomWall || _isDragging || _falling || _isClimbing) return;
     if (_poseShowing) { [self _scheduleBottomCrawl]; return; }   // v6.1.5-14z：坐姿/跪姿展示中跳过本次挪动
+    if (_isHidden) { [self _scheduleBottomCrawl]; return; }       // v6.1.5-14ad：隐藏态不挪动
     CGSize v = [UIScreen mainScreen].bounds.size;
     CGFloat halfW = _girlView.frame.size.width / 2;
     CGFloat curX = _girlView.center.x;
@@ -1690,7 +1693,6 @@ extern "C" const char *g_hud_char;
     [self.view insertSubview:blank atIndex:0];
     // v6.1.5-13：去掉毛玻璃大背景面板（用户反馈"大框背景"突兀）——菜单干净无框，
     // 精致感靠按钮本身（圆钮/白边框/真实图标/名称胶囊/弹性动画）
-    // 第二遍：创建按钮 + 名称胶囊，逐个弹性入场
     // 第二遍：创建按钮 + 名称胶囊，逐个弹性入场
     for (NSInteger i = 0; i < count; i++) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -2058,16 +2060,6 @@ static UIImage * _realAppIcon(NSString *bundleId) {
     if (!_isHidden) {
         [self _startBubbleTimer];
     }
-}
-
-- (void)_resetAfterEmoji {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (!self->_isDragging) {
-            self->_girlView.image = self->_idleFrames.firstObject;
-            self->_girlView.transform = CGAffineTransformIdentity;
-            [self _setFrameForImage:self->_idleFrames.firstObject];
-        }
-    });
 }
 
 // v6.0.30：键盘弹出/收起自动隐藏/恢复桌宠
