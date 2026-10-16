@@ -1257,6 +1257,25 @@ extern "C" const char *g_hud_char;
     NSInteger count = apps.count;
     NSInteger menuStyle = [[[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"] integerForKey:@"fanMenuStyle"];
     BOOL isList = (menuStyle == 1);
+    // v6.1.5-14n：菜单参数（图标整体透明度/散开角度/弧度）——读取顺序 全局文件 > suite > 默认
+    // 全局文件由主 App 写（/var/mobile/Documents/fanmenu_settings.json），绕开 App Group 权限不确定性
+    CGFloat fanAlpha = 1.0, fanSpan = 90.0, fanArc = 1.0;
+    NSData *stData = [NSData dataWithContentsOfFile:@"/var/mobile/Documents/fanmenu_settings.json"];
+    if (stData) {
+        NSDictionary *st = [NSJSONSerialization JSONObjectWithData:stData options:0 error:nil];
+        if ([st isKindOfClass:[NSDictionary class]]) {
+            if (st[@"alpha"]) fanAlpha = [st[@"alpha"] doubleValue];
+            if (st[@"span"]) fanSpan = [st[@"span"] doubleValue];
+            if (st[@"arc"]) fanArc = [st[@"arc"] doubleValue];
+        }
+    }
+    NSUserDefaults *menuPrefs = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"];
+    if ([menuPrefs objectForKey:@"fanMenuAlpha"]) fanAlpha = [menuPrefs doubleForKey:@"fanMenuAlpha"];
+    if ([menuPrefs objectForKey:@"fanMenuSpan"]) fanSpan = [menuPrefs doubleForKey:@"fanMenuSpan"];
+    if ([menuPrefs objectForKey:@"fanMenuArc"]) fanArc = [menuPrefs doubleForKey:@"fanMenuArc"];
+    if (fanAlpha < 0.2) fanAlpha = 0.2; if (fanAlpha > 1.0) fanAlpha = 1.0;
+    if (fanSpan < 40) fanSpan = 40; if (fanSpan > 160) fanSpan = 160;
+    if (fanArc < 0.7) fanArc = 0.7; if (fanArc > 1.4) fanArc = 1.4;
     // 第一遍：算所有按钮中心
     // v6.1.5-14l：弧带中心点 C = 角色中心沿 centerAng 移到角色轮廓外 30pt——菜单从角色侧面展开（不遮角色），
     // 所有层从 C 起算；提前声明供布局与防叠共用
@@ -1296,11 +1315,14 @@ extern "C" const char *g_hud_char;
                 acc += caps[L];
             }
             CGFloat radii[4] = {115, 175, 235, 295};
+            // v6.1.5-14n：弧度(半径)缩放——用户设置 fanMenuArc 整体缩放层半径
+            for (NSInteger L2 = 0; L2 < 4; L2++) radii[L2] = radii[L2] * fanArc;
             CGFloat layerR = radii[layer];
             NSInteger nk = caps[layer];
             CGFloat stepDegArr[4] = {30.0, 30.0, 22.0, 18.0};  // 内层30°→外层18°，外层更紧凑
             CGFloat stepDeg = (layer < 4) ? stepDegArr[layer] : 18.0;
-            CGFloat span = (nk > 1) ? (nk - 1) * stepDeg : 0;
+            // v6.1.5-14n：散开角度 = 用户设置值（所有层同一散开角度、层内均分；外层 app 多自然更紧凑）
+            CGFloat span = (nk > 1) ? fanSpan : 0;
             // v6.1.5-12：扇面中心始终指向屏幕中心——角色贴边/贴底时外层按钮也朝屏幕中央展开
             CGFloat centerAng = atan2(screenH / 2 - girlY, screenW / 2 - girlX) * 180.0 / M_PI;
             CGFloat startDeg = centerAng - span / 2;
@@ -1442,7 +1464,7 @@ extern "C" const char *g_hud_char;
         // v6.1.5-14：入场只做 alpha 淡入——不做 scale/位移动画，按钮创建即最终位置尺寸，
         // 动画期间点击区域完整可用（修复"视觉已放大但点不到"的命中错位）
         [UIView animateWithDuration:0.25 delay:0.05 + i*0.04 options:UIViewAnimationOptionCurveEaseOut animations:^{
-            btn.alpha = 1.0;
+            btn.alpha = fanAlpha;  // v6.1.5-14n：整体透明度（用户设置）
         } completion:nil];
     }
 }

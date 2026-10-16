@@ -8,6 +8,29 @@ struct GirlCharacterPickerView: View {
     // v6.1.5-3：与 HUD 进程共享快捷菜单数据（App Group）——主 App 与 TrollAgentHUD 是独立进程，
     // standardUserDefaults 是各自沙盒域，之前 HUD 读不到 fanMenuApps → 自定义 app 不进菜单
     private static let prefs: UserDefaults = UserDefaults(suiteName: "group.com.ai.iosxcode") ?? .standard
+    // v6.1.5-14n：菜单参数（透明度/散开角度/弧度）修改后自动重启 HUD 生效（正在运行才重启）
+    fileprivate static func restartHUDIfNeeded() {
+        if HUDManager.shared.isRunning {
+            _ = HUDManager.shared.stop()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                _ = HUDManager.shared.start()
+            }
+        }
+    }
+    // v6.1.5-14n：菜单参数统一保存——写 suite + 全局文件 /var/mobile/Documents/fanmenu_settings.json
+    // （HUD 独立进程优先读全局文件，绕开 App Group 权限不确定性）
+    fileprivate static func saveFanMenuSettings() {
+        let alpha = prefs.object(forKey: "fanMenuAlpha") as? Double ?? 1.0
+        let span = prefs.object(forKey: "fanMenuSpan") as? Double ?? 90.0
+        let arc = prefs.object(forKey: "fanMenuArc") as? Double ?? 1.0
+        prefs.synchronize()
+        let settingsFile = "/var/mobile/Documents/fanmenu_settings.json"
+        do {
+            let data = try JSONSerialization.data(withJSONObject: ["alpha": alpha, "span": span, "arc": arc])
+            try data.write(to: URL(fileURLWithPath: settingsFile), options: .atomic)
+        } catch {}
+        restartHUDIfNeeded()
+    }
     // v6.1.5-7：统一保存入口——双写(suite+standard) + 强制落盘 + 写后读回验证，诊断记入 fanMenuDiag
     // UserDefaults.set 默认异步落盘，添加后立刻切后台可能没写进 plist，HUD 直读文件时读不到 → 必须 synchronize
     // v6.1.5-14e：第三通道——写全局文件 /var/mobile/Documents/fanmenu.json（主 App no-sandbox 可写，
@@ -282,6 +305,52 @@ struct GirlCharacterPickerView: View {
                     Text("纵向列表").tag(1)
                 }
                 .pickerStyle(.segmented)
+                // v6.1.5-14n：菜单图标整体透明度 / 散开角度 / 弧度——写入 suite，HUD 读取并应用
+                HStack {
+                    Text("图标整体透明度").font(.subheadline)
+                    Spacer()
+                    Slider(value: Binding<Double>(
+                        get: { Self.prefs.object(forKey: "fanMenuAlpha") as? Double ?? 1.0 },
+                        set: {
+                            Self.prefs.set($0, forKey: "fanMenuAlpha")
+                            Self.prefs.synchronize()
+                            Self.saveFanMenuSettings()
+                        }
+                    ), in: 0.2...1.0)
+                    .frame(width: 140)
+                    Text(String(format: "%.0f%%", (Self.prefs.object(forKey: "fanMenuAlpha") as? Double ?? 1.0) * 100))
+                        .font(.caption).foregroundColor(.secondary).frame(width: 42)
+                }
+                HStack {
+                    Text("散开角度").font(.subheadline)
+                    Spacer()
+                    Slider(value: Binding<Double>(
+                        get: { Self.prefs.object(forKey: "fanMenuSpan") as? Double ?? 90.0 },
+                        set: {
+                            Self.prefs.set($0, forKey: "fanMenuSpan")
+                            Self.prefs.synchronize()
+                            Self.saveFanMenuSettings()
+                        }
+                    ), in: 40...160)
+                    .frame(width: 140)
+                    Text("\(Int(Self.prefs.object(forKey: "fanMenuSpan") as? Double ?? 90.0))°")
+                        .font(.caption).foregroundColor(.secondary).frame(width: 42)
+                }
+                HStack {
+                    Text("弧度(半径)").font(.subheadline)
+                    Spacer()
+                    Slider(value: Binding<Double>(
+                        get: { Self.prefs.object(forKey: "fanMenuArc") as? Double ?? 1.0 },
+                        set: {
+                            Self.prefs.set($0, forKey: "fanMenuArc")
+                            Self.prefs.synchronize()
+                            Self.saveFanMenuSettings()
+                        }
+                    ), in: 0.7...1.4)
+                    .frame(width: 140)
+                    Text(String(format: "%.1f×", Self.prefs.object(forKey: "fanMenuArc") as? Double ?? 1.0))
+                        .font(.caption).foregroundColor(.secondary).frame(width: 42)
+                }
                                 ForEach(0..<savedApps.count, id:\.self) { i in
                     HStack {
                         Text(savedApps[i]["name"] ?? "")
