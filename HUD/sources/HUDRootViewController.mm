@@ -699,7 +699,8 @@ extern "C" const char *g_hud_char;
 - (void)_startBubbleTimer {
     [self _stopBubbleTimer];
     // v6.0.28：隔30-60秒弹一次气泡，不要太频繁
-    NSTimeInterval interval = 30.0 + arc4random_uniform(30000) / 1000.0;
+    // v6.1.5-14s：改 15-30 秒（用户反馈看不到气泡，缩短间隔）
+    NSTimeInterval interval = 15.0 + arc4random_uniform(15000) / 1000.0;
     _bubbleTimer = [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *t) {
         [self _showRandomBubble];
     }];
@@ -714,8 +715,11 @@ extern "C" const char *g_hud_char;
 }
 
 // v6.0.27：显示随机气泡
+// v6.1.5-14s：去掉"仅趴墙"限制——之前只有吸附左右墙(_onSideWall)才弹气泡，
+// 且吸附后常进攀爬态(_isClimbing)被跳过 → 用户反馈"吸附左右看不到气泡消息"。
+// 现在站立/趴墙任何姿势都弹，仅拖动/掉落/攀爬中不弹。
 - (void)_showRandomBubble {
-    if (!_onSideWall || _isDragging || _isClimbing || _falling) return;
+    if (_isDragging || _isClimbing || _falling) return;
     
     // v6.0.28：按时间段选问候（早/中/晚/深夜）
     NSArray *messages;
@@ -1866,7 +1870,7 @@ static UIImage * _realAppIcon(NSString *bundleId) {
 - (void)keyboardWillShow:(NSNotification *)note {
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"autoHideWithKeyboard"]) {
         [UIView animateWithDuration:0.2 animations:^{
-            self.view.alpha = 0.2;
+            self.view.alpha = 0.55;  // v6.1.5-14s：0.2 太透明，调 0.55
         }];
     }
 }
@@ -1889,7 +1893,8 @@ static UIImage * _realAppIcon(NSString *bundleId) {
     NSString *kv = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/keyboard_state.json"
                                             encoding:NSUTF8StringEncoding error:nil];
     if (kv.length > 0) vis = [kv hasPrefix:@"1"];
-    CGFloat target = vis ? 0.2 : (self->_isHidden ? 0.7 : 1.0);
+    // v6.1.5-14s：键盘弹出时透明降到 0.55（原 0.2 太透明，用户反馈几乎看不见）
+    CGFloat target = vis ? 0.55 : (self->_isHidden ? 0.7 : 1.0);
     if (fabs(self.view.alpha - target) > 0.05) {
         [UIView animateWithDuration:0.2 animations:^{
             self.view.alpha = target;
