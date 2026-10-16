@@ -155,7 +155,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             let urlStr = value("url") ?? ""
             if !bid.isEmpty {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    _ = AdvancedTools.launchApp(bundleId: bid)
+                    _ = ProcessHelper.launchApp(bundleId: bid)
                 }
                 return true
             }
