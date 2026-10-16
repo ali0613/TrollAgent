@@ -1229,9 +1229,9 @@ extern "C" const char *g_hud_char;
 }
 
 - (void)_showFanMenu {
-    // 先关掉所有旧菜单按钮（统一tag=9000）
+    // v6.1.5-9：菜单精致化——毛玻璃背景面板 + 名称胶囊 + 逐个弹性入场（统一 tag 9000+ 便于清理）
     for (UIView *v in self.view.subviews) {
-        if (v.tag >= 9000 && v.tag < 9100) [v removeFromSuperview];
+        if (v.tag >= 9000) [v removeFromSuperview];
     }
     // 暂停气泡定时器，菜单弹出来的时候不弹气泡吵人
     [_bubbleTimer invalidate];
@@ -1250,14 +1250,70 @@ extern "C" const char *g_hud_char;
     BOOL fromRight = (girlX > screenW - 150);
     // 统一菜单数据源（v6.1.5-4：_showFanMenu 与 _fanBtnClick 共用，杜绝两处读不一致导致点击失效）
     NSArray *apps = [self _fanMenuApps];
-    // v6.1.5-8：扇形按钮 64→56pt、半径 120→105（用户反馈"图标太大占半个屏幕"）
+    // v6.1.5-8：扇形按钮 56pt、半径 105
     CGFloat radius = 105;
     CGFloat fanBtn = 56.0;
     NSInteger count = apps.count;
     NSInteger menuStyle = [[[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"] integerForKey:@"fanMenuStyle"];
+    BOOL isList = (menuStyle == 1);
+    // 第一遍：算所有按钮中心，收集范围（面板要包住按钮+名称胶囊）
+    NSMutableArray *centers = [NSMutableArray arrayWithCapacity:count];
+    CGFloat minX = CGFLOAT_MAX, maxX = -CGFLOAT_MAX, minY = CGFLOAT_MAX, maxY = -CGFLOAT_MAX;
+    CGFloat btnHalf = isList ? 28.0 : (fanBtn / 2);
+    for (NSInteger i = 0; i < count; i++) {
+        CGFloat x, y;
+        if (isList) {
+            CGFloat startY = girlY - (count * 64)/2;
+            CGFloat minYy = 30;
+            CGFloat maxYy = screenH - count * 64 - 30;
+            if (maxYy < minYy) maxYy = minYy;
+            startY = MAX(minYy, MIN(startY, maxYy));
+            x = fromRight ? girlX - 80 : girlX + 80;
+            y = startY + i * 64;
+        } else {
+            CGFloat angle;
+            CGFloat step = (count > 1) ? (120.0/(count-1)) : 0;
+            if (fromBottom) angle = (-150 + step*i) * M_PI/180;
+            else if (fromTop) angle = (30 + step*i) * M_PI/180;
+            else if (fromLeft) angle = (-60 + step*i) * M_PI/180;
+            else angle = (120 + step*i) * M_PI/180;
+            x = girlX + cos(angle)*radius;
+            y = girlY + sin(angle)*radius;
+        }
+        [centers addObject:[NSValue valueWithCGPoint:CGPointMake(x, y)]];
+        CGFloat capBottom = isList ? (y + btnHalf) : (y + btnHalf + 20); // 扇形含下方名称胶囊
+        minX = MIN(minX, x - (isList ? 110 : btnHalf));
+        maxX = MAX(maxX, x + (isList ? 110 : btnHalf));
+        minY = MIN(minY, y - btnHalf);
+        maxY = MAX(maxY, capBottom);
+    }
+    // 点空白处关菜单（最底层）
+    UIButton *blank = [UIButton buttonWithType:UIButtonTypeCustom];
+    blank.frame = self.view.bounds;
+    blank.tag = 9000;
+    [blank addTarget:self action:@selector(_closeFanMenu) forControlEvents:UIControlEventTouchUpInside];
+    [self.view insertSubview:blank atIndex:0];
+    // v6.1.5-9：毛玻璃面板（包住所有按钮+胶囊，控制中心质感）
+    CGFloat pad = isList ? 14 : 18;
+    CGRect panelFrame = CGRectMake(minX - pad, minY - pad, (maxX - minX) + pad*2, (maxY - minY) + pad*2);
+    UIVisualEffectView *panel = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterialDark]];
+    panel.frame = panelFrame;
+    panel.layer.cornerRadius = isList ? 16 : 22;
+    panel.layer.masksToBounds = YES;
+    panel.layer.borderWidth = 0.5;
+    panel.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15].CGColor;
+    panel.tag = 9001;
+    panel.userInteractionEnabled = NO; // 面板只是背景，触摸透传给最底层的 blank 关闭菜单
+    panel.alpha = 0;
+    panel.transform = CGAffineTransformMakeScale(0.85, 0.85);
+    [self.view addSubview:panel];
+    [UIView animateWithDuration:0.18 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        panel.alpha = 1.0;
+        panel.transform = CGAffineTransformIdentity;
+    } completion:nil];
+    // 第二遍：创建按钮 + 名称胶囊，逐个弹性入场
     for (NSInteger i = 0; i < count; i++) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-        BOOL isList = (menuStyle == 1);
         NSString *symName = [self _symbolForName:apps[i][@"name"] url:apps[i][@"url"]];
         if (isList) {
             // v6.1.5: 纵向列表——卡片式（圆角12、系统背景、阴影、左图标圆+名称+右侧url）
@@ -1281,7 +1337,7 @@ extern "C" const char *g_hud_char;
             iconWrap.backgroundColor = apps[i][@"color"];
             iconWrap.layer.masksToBounds = YES;
             [btn addSubview:iconWrap];
-            // v6.1.5-8：自定义 app 显示真实系统图标（TheBall/TrollStore 同款私有 API），默认项无 bundleId 才用 SF Symbol
+            // v6.1.5-8：自定义 app 显示真实系统图标，默认项无 bundleId 才用 SF Symbol
             UIImage *realIcon = _realAppIcon(apps[i][@"bundleId"]);
             if (realIcon) {
                 UIImageView *riv = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 36, 36)];
@@ -1305,29 +1361,24 @@ extern "C" const char *g_hud_char;
             urlLbl.lineBreakMode = NSLineBreakByTruncatingTail;
             [btn addSubview:urlLbl];
         } else {
-            // v6.1.5: 扇形——圆钮 + 阴影 + 白字描边 + 上方图标下方文字（v6.1.5-8 尺寸 56pt）
+            // v6.1.5-9：扇形——纯图标圆钮（名称移到下方胶囊），白细边框 + 阴影
             btn.frame = CGRectMake(0, 0, fanBtn, fanBtn);
             btn.layer.cornerRadius = fanBtn / 2;
             btn.backgroundColor = apps[i][@"color"];
+            btn.layer.borderWidth = 1.0;
+            btn.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.35].CGColor;
             btn.layer.shadowColor = [UIColor blackColor].CGColor;
-            btn.layer.shadowOpacity = 0.35;
+            btn.layer.shadowOpacity = 0.4;
             btn.layer.shadowOffset = CGSizeMake(0, 3);
             btn.layer.shadowRadius = 6;
-            btn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
-            btn.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-            [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            btn.titleLabel.shadowColor = [UIColor colorWithWhite:0 alpha:0.3];
-            btn.titleLabel.shadowOffset = CGSizeMake(0, 1);
-            [btn setTitle:apps[i][@"name"] forState:UIControlStateNormal];
-            btn.titleEdgeInsets = UIEdgeInsetsMake(24, 0, -24, 0);
             // v6.1.5-8：真实图标优先（自定义 app），SF Symbol 兜底（默认项）
             UIImage *realIcon = _realAppIcon(apps[i][@"bundleId"]);
             if (realIcon) {
-                UIView *wrap = [[UIView alloc] initWithFrame:CGRectMake((fanBtn - 34) / 2, 4, 34, 34)];
-                wrap.layer.cornerRadius = 7.5;
+                UIView *wrap = [[UIView alloc] initWithFrame:CGRectMake((fanBtn - 40) / 2, 8, 40, 40)];
+                wrap.layer.cornerRadius = 9;
                 wrap.layer.masksToBounds = YES;
                 wrap.backgroundColor = [UIColor whiteColor];
-                UIImageView *riv = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 34, 34)];
+                UIImageView *riv = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 40, 40)];
                 riv.image = realIcon;
                 riv.contentMode = UIViewContentModeScaleAspectFit;
                 [wrap addSubview:riv];
@@ -1335,56 +1386,46 @@ extern "C" const char *g_hud_char;
             } else {
                 UIImage *sym = [UIImage systemImageNamed:symName];
                 if (sym) {
-                    UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:18]]];
+                    UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:24]]];
                     iv.tintColor = [UIColor whiteColor];
-                    iv.frame = CGRectMake((fanBtn - 20) / 2, 7, 20, 20);
+                    iv.frame = CGRectMake((fanBtn - 26) / 2, 15, 26, 26);
                     [btn addSubview:iv];
                 }
             }
         }
         btn.tag = 9000 + i;
         btn.alpha = 0;
-        CGFloat x, y;
-        if (menuStyle == 1) {
-            // 纵向列表样式：垂直排列，在角色右侧（如果在右边缘就左侧）
-            // v6.0.30修复：列表整体上下限位，角色在底部时"隐藏"等按钮不会被顶出屏幕点不到
-            CGFloat startY = girlY - (count * 64)/2;
-            CGFloat minY = 30;
-            CGFloat maxY = screenH - count * 64 - 30;
-            if (maxY < minY) maxY = minY;
-            startY = MAX(minY, MIN(startY, maxY));
-            CGFloat listX = fromRight ? girlX - 80 : girlX + 80;
-            x = listX;
-            y = startY + i * 64;
-        } else {
-            // 扇形样式：按角度算，count=1的时候不除以0
-            CGFloat angle;
-            CGFloat step = (count > 1) ? (120.0/(count-1)) : 0;
-            if (fromBottom) {
-                angle = (-150 + step*i) * M_PI/180;
-            } else if (fromTop) {
-                angle = (30 + step*i) * M_PI/180;
-            } else if (fromLeft) {
-                angle = (-60 + step*i) * M_PI/180;
-            } else {
-                angle = (120 + step*i) * M_PI/180;
-            }
-            x = girlX + cos(angle)*radius;
-            y = girlY + sin(angle)*radius;
-        }
-        btn.center = CGPointMake(x, y);
+        btn.transform = CGAffineTransformMakeScale(0.3, 0.3);
+        CGPoint c = [centers[i] CGPointValue];
+        btn.center = c;
         [btn addTarget:self action:@selector(_fanBtnClick:) forControlEvents:UIControlEventTouchUpInside];
         [self.view addSubview:btn];
-        [UIView animateWithDuration:0.3 animations:^{
+        // v6.1.5-9：名称胶囊（半透明黑底白字，扇形专用；列表卡片自带标题不再加）
+        UILabel *cap = nil;
+        if (!isList) {
+            cap = [[UILabel alloc] initWithFrame:CGRectZero];
+            cap.text = apps[i][@"name"];
+            cap.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
+            cap.textColor = [UIColor whiteColor];
+            cap.backgroundColor = [UIColor colorWithWhite:0 alpha:0.42];
+            cap.textAlignment = NSTextAlignmentCenter;
+            cap.layer.cornerRadius = 7.5;
+            cap.clipsToBounds = YES;
+            cap.userInteractionEnabled = NO;
+            CGSize ts = [cap.text sizeWithAttributes:@{NSFontAttributeName: cap.font}];
+            CGFloat capW = ceil(ts.width) + 16;
+            cap.frame = CGRectMake(c.x - capW/2, c.y + fanBtn/2 + 5, capW, 15);
+            cap.tag = 9000 + i;
+            cap.alpha = 0;
+            [self.view addSubview:cap];
+        }
+        // v6.1.5-9：逐个弹性入场（stagger）
+        [UIView animateWithDuration:0.45 delay:0.06 + i*0.045 usingSpringWithDamping:0.65 initialSpringVelocity:0.7 options:UIViewAnimationOptionCurveEaseOut animations:^{
             btn.alpha = 1.0;
-        }];
+            btn.transform = CGAffineTransformIdentity;
+            if (cap) cap.alpha = 1.0;
+        } completion:nil];
     }
-    // 点空白处关菜单
-    UIButton *blank = [UIButton buttonWithType:UIButtonTypeCustom];
-    blank.frame = self.view.bounds;
-    blank.tag = 9000;
-    [blank addTarget:self action:@selector(_closeFanMenu) forControlEvents:UIControlEventTouchUpInside];
-    [self.view insertSubview:blank atIndex:0];
 }
 
 - (void)_fanBtnClick:(UIButton *)btn {
@@ -1534,11 +1575,20 @@ static UIImage * _realAppIcon(NSString *bundleId) {
 }
 
 - (void)_closeFanMenu {
-    for (UIView *v in self.view.subviews) {
-        if (v.tag >= 9000) {
-            [v removeFromSuperview];
-        }
+    // v6.1.5-9：淡出关闭（按钮点击后菜单优雅收起，再执行启动逻辑）
+    NSArray *subs = [NSArray arrayWithArray:self.view.subviews];
+    for (UIView *v in subs) {
+        if (v.tag >= 9000) v.userInteractionEnabled = NO;
     }
+    [UIView animateWithDuration:0.12 animations:^{
+        for (UIView *v in subs) {
+            if (v.tag >= 9000) v.alpha = 0;
+        }
+    } completion:^(BOOL finished) {
+        for (UIView *v in subs) {
+            if (v.tag >= 9000) [v removeFromSuperview];
+        }
+    }];
     // 恢复气泡定时器
     if (!_isHidden) {
         [self _startBubbleTimer];
