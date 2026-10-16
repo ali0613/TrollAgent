@@ -69,6 +69,27 @@ final class HUDManager {
     /// 主 App bundle 路径（供诊断显示）
     var bundlePath: String { Bundle.main.bundlePath }
 
+    /// v6.1.5-5：HUD 版本同步——覆盖安装新包后 launchd KeepAlive 不会自动换新二进制，
+    /// 旧 HUD 进程（内存里旧代码）继续跑，导致新功能（App Group 共享/菜单修复）不生效。
+    /// 记录包内 HUD 二进制的 mtime，回前台/启动时若发现"运行中但二进制已更新"则强制重启。
+    private let hudBinMtimeKey = "trollmcp2.hud_bin_mtime"
+    func syncAfterUpdate() {
+        guard isRunning else { return }
+        guard let bin = hudBinaryPath,
+              let attrs = try? FileManager.default.attributesOfItem(atPath: bin),
+              let mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 else { return }
+        let last = UserDefaults.standard.double(forKey: hudBinMtimeKey)
+        if last > 0 && abs(mtime - last) > 1 {
+            appendLog("HUD 二进制已更新（mtime \(last) → \(mtime)），旧进程在跑，强制重启换新")
+            _ = forceStop()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self = self else { return }
+                if !self.isRunning { _ = self.start() }
+            }
+        }
+        UserDefaults.standard.set(mtime, forKey: hudBinMtimeKey)
+    }
+
     private func appendLog(_ msg: String) {
         let line = "[\(Date())] \(msg)\n"
         let data = line.data(using: .utf8) ?? Data()
@@ -224,6 +245,10 @@ final class HUDManager {
         }
         lastStartError = nil
         appendLog("start OK (posix_spawn detach 不提权, 常驻, size=\(sizeArg), char=\(charArg))")
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: bin),
+           let mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 {
+            UserDefaults.standard.set(mtime, forKey: hudBinMtimeKey)
+        }
         return true
     }
 

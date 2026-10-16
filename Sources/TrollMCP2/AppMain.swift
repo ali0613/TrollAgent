@@ -61,6 +61,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         // v6.0.x：可爱助手开启则启动自动拉起桌面悬浮 HUD。
         // 直接读 UserDefaults（不经 GirlCompanion.shared 时序），延迟 2s 确保 UI/进程就绪再拉起。
+        // v6.1.5-5：覆盖安装后旧 HUD 进程仍在跑（launchd KeepAlive 不换新二进制），
+        // 启动先做版本同步：检测到二进制更新则强制重启换新
+        HUDManager.shared.syncAfterUpdate()
         let girlEnabled = UserDefaults.standard.bool(forKey: "trollmcp2.girl_companion_enabled")
         if girlEnabled {
             DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2) {
@@ -117,6 +120,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             backgroundTask = .invalid
         }
         BackgroundKeepAlive.cancelRefresh()
+        // v6.1.5-5：回前台先做 HUD 版本同步（覆盖安装后自动换新 HUD 进程）
+        HUDManager.shared.syncAfterUpdate()
         // v6.0.7：锁屏久了 HUD 进程可能被系统清理；回前台自动检查，若可爱助手开着但悬浮没跑则拉起
         if GirlCompanion.shared.enabled && !HUDManager.shared.isRunning {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
