@@ -605,4 +605,11 @@ final class CrashReproTool: MCPTool {
 
 
         %end
+        """
+
+        // 写模板到 Workspace
+        let templatePath = NSHomeDirectory().appendingPathComponent("Documents/Workspace/crash_repro_hook_\(bundleId).x")
+        try? template.write(toFile: templatePath, atomically: true, encoding: .utf8)
+        return ["template": template, "saved_to": templatePath]
     }
+}
