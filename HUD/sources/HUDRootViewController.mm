@@ -2115,8 +2115,6 @@ static UIImage * _realAppIcon(NSString *bundleId) {
     BOOL enabled = YES;
     NSString *sw = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/auto_hide_keyboard.txt"
                                              encoding:NSUTF8StringEncoding error:nil];
-    NSString *sw = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/auto_hide_keyboard.txt"
-                                             encoding:NSUTF8StringEncoding error:nil];
     if (sw.length > 0) enabled = [sw hasPrefix:@"1"];
     if (!enabled) {
         // v6.1.5-14ac：开关关闭也要恢复 alpha——原直接 return，键盘弹出时关开关会卡在半透明不恢复
