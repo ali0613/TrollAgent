@@ -128,6 +128,7 @@ extern "C" const char *g_hud_char;
     NSArray<UIImage *> *_climbFrames;  // v6.0.26：爬墙帧（左右边缘自动攀爬）
     BOOL _isClimbing;           // 正在攀爬中
     NSTimer *_climbTimer;        // 攀爬交替计时器
+    NSTimer *_climbSchedTimer;  // v6.1.5-14x：攀爬延迟排期定时器（可取消，替代不可取消的 dispatch_after——防止反复吸附堆积多个攀爬任务）
     int _climbIdx;              // 攀爬帧序号
     UILabel *_bubbleLabel;       // v6.0.27：侧边趴墙卡通聊天气泡文字
     UIView *_bubbleView;         // v6.0.28：卡通气泡背景（带小尾巴）
@@ -683,13 +684,12 @@ extern "C" const char *g_hud_char;
     }
     
     // v6.0.26：左右边缘趴墙时，随机启动自动攀爬（10分钟内3-5次，不要太频繁）
+    // v6.1.5-14x：改用可取消定时器排期（原 dispatch_after 无法取消，反复吸附会堆积多个延迟攀爬 → 爬得比气泡还频繁）
     if ((minD == dL || minD == dR) && _climbFrames.count >= 2) {
         [self _stopClimbTimer];
         // 第一次延迟30-60秒后开始攀爬
         NSTimeInterval delay = 30.0 + arc4random_uniform(30000) / 1000.0;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self _startClimbing];
-        });
+        [self _scheduleClimbAfterDelay:delay];
     }
     
     // v6.0.27：左右侧边趴墙时启动气泡，其他位置停止气泡
@@ -1241,22 +1241,32 @@ extern "C" const char *g_hud_char;
     }
     
     // 爬完之后，过2-3分钟自动再爬一次，10分钟内总共3-5次，不要太频繁
+    // v6.1.5-14x：改可取消定时器（原 dispatch_after 反复触发会堆积）
     NSTimeInterval nextDelay = 120.0 + arc4random_uniform(60000) / 1000.0;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(nextDelay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        // v6.0.29：自动再爬之前检查是不是还在左右墙，不在就不爬
-        CGSize v = [UIScreen mainScreen].bounds.size;
-        CGPoint c = _girlView.center;
-        CGFloat dL = c.x, dR = v.width - c.x, dT = c.y, dB = v.height - c.y;
-        CGFloat minD = MIN(MIN(dL, dR), MIN(dT, dB));
-        if (minD == dL || minD == dR) {
-            [self _startClimbing];
-        }
-    });
+    [self _scheduleClimbAfterDelay:nextDelay];
+}
+
+// v6.1.5-14x：攀爬延迟排期——可取消定时器，全局唯一（新排期会 invalidate 旧的，杜绝堆积）
+- (void)_scheduleClimbAfterDelay:(NSTimeInterval)delay {
+    [_climbSchedTimer invalidate];
+    _climbSchedTimer = nil;
+    _climbSchedTimer = [NSTimer scheduledTimerWithTimeInterval:delay
+                                                        target:self
+                                                      selector:@selector(_tryStartClimbing)
+                                                      userInfo:nil repeats:NO];
+}
+- (void)_tryStartClimbing {
+    _climbSchedTimer = nil;
+    // 必须仍在左右趴墙态且未被拖拽/掉落才爬
+    if (!_onSideWall || _isDragging || _falling || _isClimbing) return;
+    [self _startClimbing];
 }
 
 - (void)_stopClimbTimer {
     [_climbTimer invalidate];
     _climbTimer = nil;
+    [_climbSchedTimer invalidate];   // v6.1.5-14x：拖拽时连延迟排期一起清，避免拖走后还触发攀爬
+    _climbSchedTimer = nil;
     _isClimbing = NO;
 }
 
