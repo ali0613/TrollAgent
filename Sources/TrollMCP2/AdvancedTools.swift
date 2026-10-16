@@ -783,12 +783,14 @@ enum ProcessHelper {
             dlclose(handle)
         }
         // v6.1.5-14f：LSApplicationWorkspace 兜底（主 App 有 backboardd.launchapplications）
-        if let wsCls = NSClassFromString("LSApplicationWorkspace"),
-           let ws = wsCls.perform(NSSelectorFromString("defaultWorkspace")),
-           ws.responds(to: NSSelectorFromString("openApplicationWithBundleID:")) {
-            let ret = ws.perform(NSSelectorFromString("openApplicationWithBundleID:"), with: bundleId)
-            if ret != nil {
-                return (true, "LSApplicationWorkspace open OK")
+        if let wsCls = NSClassFromString("LSApplicationWorkspace") as? NSObject.Type,
+           let wsUnmanaged = wsCls.perform(NSSelectorFromString("defaultWorkspace")) {
+            let ws = wsUnmanaged.takeUnretainedValue()
+            if ws.responds(to: NSSelectorFromString("openApplicationWithBundleID:")) {
+                let ret = ws.perform(NSSelectorFromString("openApplicationWithBundleID:"), with: bundleId)
+                if let num = ret?.takeUnretainedValue() as? NSNumber, num.boolValue {
+                    return (true, "LSApplicationWorkspace open OK")
+                }
             }
         }
         if let url = URL(string: "trollmcp2://") {
