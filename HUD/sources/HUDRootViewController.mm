@@ -138,6 +138,10 @@ extern "C" const char *g_hud_char;
     NSTimeInterval _lastFanClickTime;   // v6.1.5-14i
     NSTimer *_kbTimer;                  // v6.1.5-14n：键盘全局文件轮询
     CGFloat _dragLastX, _dragLastY;     // v6.1.5-14o：拖拽倾斜速度基准
+    CAEmitterLayer *_particleLayer;     // v6.1.5-14p：氛围粒子层（闪电/萤火虫/星星/zZ）
+    UIView *_glowView;                  // v6.1.5-14p：昼夜光晕（深夜月光/傍晚暖光）
+    NSTimer *_ambientTimer;             // v6.1.5-14p：环境氛围定时器（60s 检查小时+充电态）
+    NSInteger _ambientBucket;           // v6.1.5-14p：当前环境时段桶（-1初始/0白天/1傍晚/2深夜/3充电）——变化才重置漂浮
 }
 
 + (BOOL)passthroughMode { return _passthrough; }
@@ -269,6 +273,9 @@ extern "C" const char *g_hud_char;
     // v6.1.5-14n：键盘轮询——独立 HUD 收不到其他 App 的键盘通知，
     // 由主 App 写 /var/mobile/Documents/keyboard_state.json，HUD 每 0.5s 轮询应用
     _kbTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 target:self selector:@selector(_pollKeyboardFile) userInfo:nil repeats:YES];
+
+    // v6.1.5-14p：环境氛围——粒子（充电闪电/深夜萤火虫星星/入睡zZ）+ 昼夜光影（月光/暖光）
+    [self _setupAmbient];
 
     // 呼吸动画（idle 缩放循环）
     [self _startBreathing];
@@ -556,6 +563,8 @@ extern "C" const char *g_hud_char;
             // ✅ 其他位置松手 → 走原来的贴边吸附逻辑（保留左右趴墙、底部趴墙等所有原有功能，每个角色独立配置）
             [self _snapToEdge];
         }
+        // v6.1.5-14p：粒子/光晕跟随新位置
+        [self _refreshAmbientPosition];
     }
 }
 
@@ -1887,6 +1896,167 @@ static UIImage * _realAppIcon(NSString *bundleId) {
             self.view.alpha = target;
         }];
     }
+}
+
+// v6.1.5-14p：emoji → UIImage（粒子素材，零图片资源）
+static UIImage *emojiImage(NSString *emoji, CGFloat size) {
+    UILabel *l = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, size, size)];
+    l.text = emoji;
+    l.font = [UIFont systemFontOfSize:size * 0.82f];
+    l.textAlignment = NSTextAlignmentCenter;
+    UIGraphicsBeginImageContextWithOptions(l.bounds.size, NO, 0);
+    [l drawViewHierarchyInRect:l.bounds afterScreenUpdates:YES];
+    UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return img;
+}
+
+// v6.1.5-14p：环境氛围初始化——粒子层+光晕层挂到根视图，60s 定时刷新（小时+充电态）
+- (void)_setupAmbient {
+    if (!_particleLayer) {
+        _particleLayer = [CAEmitterLayer layer];
+        _particleLayer.emitterMode = kCAEmitterLayerVolume;
+        _particleLayer.emitterSize = CGSizeMake(70, 10);
+        [self.view.layer insertSublayer:_particleLayer below:_girlView.layer];  // 粒子在角色后方
+    }
+    if (!_glowView) {
+        _glowView = [[UIView alloc] initWithFrame:CGRectZero];
+        _glowView.userInteractionEnabled = NO;
+        _glowView.layer.masksToBounds = NO;
+        [self.view insertSubview:_glowView belowSubview:_girlView];
+    }
+    [UIDevice currentDevice].batteryMonitoringEnabled = YES;
+    [self _updateAmbient];
+    _ambientTimer = [NSTimer scheduledTimerWithTimeInterval:60 target:self selector:@selector(_updateAmbient) userInfo:nil repeats:YES];
+}
+
+// v6.1.5-14p：环境决策——按小时选光晕+粒子，充电叠加闪电；粒子/光晕跟随角色位置
+- (void)_updateAmbient {
+    NSCalendar *cal = [NSCalendar currentCalendar];
+    NSInteger hour = [cal component:NSCalendarUnitHour fromDate:[NSDate date]];
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    CGFloat glowA = 0;
+    UIColor *glowC = nil;
+    CGFloat glowR = 60;
+    NSInteger bucket = 0;   // 白天
+    if (hour >= 21 || hour < 6) {
+        bucket = 2;  // 深夜
+        glowC = [UIColor colorWithRed:0.30 green:0.24 blue:0.55 alpha:1.0];
+        glowA = 0.38;
+        glowR = _girlView.frame.size.width * 0.75 + 30;
+        [parts addObject:@"✨"]; [parts addObject:@"⭐️"];
+        if (arc4random_uniform(3) == 0) [parts addObject:@"💤"];
+    } else if (hour >= 17 && hour < 19) {
+        bucket = 1;  // 傍晚
+        glowC = [UIColor colorWithRed:1.00 green:0.62 blue:0.28 alpha:1.0];
+        glowA = 0.28;
+        glowR = _girlView.frame.size.width * 0.6 + 20;
+        [parts addObject:@"✨"];
+    }
+    BOOL charging = ([UIDevice currentDevice].batteryState == UIDeviceBatteryStateCharging ||
+                     [UIDevice currentDevice].batteryState == UIDeviceBatteryStateFull);
+    if (charging) {
+        bucket = 3;  // 充电
+        [parts addObject:@"⚡️"];
+        glowC = [UIColor colorWithRed:0.35 green:0.78 blue:1.0 alpha:1.0];
+        glowA = 0.22;
+        glowR = _girlView.frame.size.width * 0.55 + 16;
+    }
+    // 漂浮时长只在环境时段切换时重置（避免每 60s 打断漂浮动画）
+    if (_ambientBucket != bucket) {
+        _ambientBucket = bucket;
+        if (bucket == 2) [self _startFloatWithDuration:2.6f];  // 深夜入睡慢呼吸
+        else [self _startFloatWithDuration:1.3f];
+    }
+    if (parts.count) {
+        [self _setParticles:parts];
+    } else {
+        [self _clearParticles];
+    }
+    if (glowC && glowA > 0.01) {
+        [self _setGlow:glowC alpha:glowA radius:glowR];
+    } else {
+        [self _setGlow:nil alpha:0 radius:0];
+    }
+    [self _refreshAmbientPosition];
+}
+
+// v6.1.5-14p：粒子/光晕跟随角色位置（拖拽/吸附后调用）
+- (void)_refreshAmbientPosition {
+    if (_particleLayer) {
+        _particleLayer.emitterPosition = CGPointMake(_girlView.center.x,
+                                                     _girlView.center.y - _girlView.frame.size.height / 2);
+        _particleLayer.emitterSize = CGSizeMake(_girlView.frame.size.width * 0.5 + 30, 10);
+    }
+    if (_glowView && !_glowView.hidden) {
+        _glowView.bounds = CGRectMake(0, 0, _glowView.frame.size.width, _glowView.frame.size.width);
+        _glowView.center = CGPointMake(_girlView.center.x, _girlView.center.y + _girlView.frame.size.height * 0.12);
+    }
+}
+
+// v6.1.5-14p：设置粒子（emoji 上飘粒）
+- (void)_setParticles:(NSArray<NSString *> *)emojis {
+    if (!_particleLayer) {
+        _particleLayer = [CAEmitterLayer layer];
+        _particleLayer.emitterMode = kCAEmitterLayerVolume;
+        _particleLayer.emitterSize = CGSizeMake(70, 10);
+        [self.view.layer insertSublayer:_particleLayer below:_girlView.layer];  // 粒子在角色后方
+    }
+    NSMutableArray *cells = [NSMutableArray array];
+    for (NSString *e in emojis) {
+        CAEmitterCell *cell = [CAEmitterCell emitterCell];
+        UIImage *img = emojiImage(e, 24);
+        if (!img) continue;
+        cell.contents = (id)img.CGImage;
+        cell.birthRate = 0.7;
+        cell.lifetime = 7;
+        cell.velocity = 26;
+        cell.velocityRange = 22;
+        cell.yAcceleration = -8;          // 上飘
+        cell.emissionRange = M_PI * 2;
+        cell.scale = 0.55;
+        cell.scaleRange = 0.35;
+        cell.scaleSpeed = -0.02;          // 越飘越小
+        cell.alphaSpeed = -0.09;          // 淡出
+        cell.spin = 0.4;
+        cell.spinRange = 0.8;
+        [cells addObject:cell];
+    }
+    if (!cells.count) { [self _clearParticles]; return; }
+    _particleLayer.emitterCells = cells;
+}
+- (void)_clearParticles {
+    [_particleLayer removeFromSuperlayer];
+    _particleLayer = nil;
+}
+
+// v6.1.5-14p：昼夜光晕（圆形呼吸辉光）
+- (void)_setGlow:(UIColor *)color alpha:(CGFloat)alpha radius:(CGFloat)radius {
+    if (!_glowView) {
+        _glowView = [[UIView alloc] initWithFrame:CGRectZero];
+        _glowView.userInteractionEnabled = NO;
+        _glowView.layer.masksToBounds = NO;
+        [self.view insertSubview:_glowView belowSubview:_girlView];
+    }
+    if (!color || radius < 1) {
+        _glowView.hidden = YES;
+        [_glowView.layer removeAnimationForKey:@"glowPulse"];
+        return;
+    }
+    _glowView.hidden = NO;
+    _glowView.backgroundColor = color;
+    _glowView.alpha = alpha;
+    _glowView.layer.cornerRadius = radius;
+    _glowView.bounds = CGRectMake(0, 0, radius * 2, radius * 2);
+    _glowView.center = CGPointMake(_girlView.center.x, _girlView.center.y + _girlView.frame.size.height * 0.12);
+    [_glowView.layer removeAnimationForKey:@"glowPulse"];
+    CABasicAnimation *a = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    a.fromValue = @(alpha);
+    a.toValue = @(alpha * 0.55);
+    a.duration = 2.2;
+    a.autoreverses = YES;
+    a.repeatCount = INFINITY;
+    [_glowView.layer addAnimation:a forKey:@"glowPulse"];
 }
 
 @end
