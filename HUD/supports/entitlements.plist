@@ -10,6 +10,12 @@
 	<true/>
 	<key>com.apple.backboard.client</key>
 	<true/>
+	<key>com.apple.backboardd.launchapplications</key>
+	<true/>
+	<key>com.apple.frontboard.debugapplications</key>
+	<true/>
+	<key>com.apple.springboard.launchapplications</key>
+	<true/>
 	<key>com.apple.private.allow-background-haptics</key>
 	<true/>
 	<key>com.apple.private.hid.client.event-dispatch</key>

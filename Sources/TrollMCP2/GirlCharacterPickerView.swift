@@ -8,12 +8,17 @@ struct GirlCharacterPickerView: View {
     // v6.1.5-3：与 HUD 进程共享快捷菜单数据（App Group）——主 App 与 TrollAgentHUD 是独立进程，
     // standardUserDefaults 是各自沙盒域，之前 HUD 读不到 fanMenuApps → 自定义 app 不进菜单
     private static let prefs: UserDefaults = UserDefaults(suiteName: "group.com.ai.iosxcode") ?? .standard
-    @State private var savedApps: [[String:String]] = (Self.prefs.array(forKey: "fanMenuApps") as? [[String:String]]) ?? [
-        ["name":"微信", "url":"weixin://"],
-        ["name":"抖音", "url":"snssdk1128://"],
-        ["name":"相机", "url":"camera://"],
-        ["name":"设置", "url":"App-prefs://"]
-    ]
+    @State private var savedApps: [[String:String]] = {
+        // v6.1.5-6：suite 优先，standard 兜底（HUD 进程 no-sandbox 直读主App容器偏好文件，双写保证两边都能拿到）
+        let suite = Self.prefs.array(forKey: "fanMenuApps") as? [[String:String]]
+        let std = UserDefaults.standard.array(forKey: "fanMenuApps") as? [[String:String]]
+        return (suite ?? std) ?? [
+            ["name":"微信", "url":"weixin://"],
+            ["name":"抖音", "url":"snssdk1128://"],
+            ["name":"相机", "url":"camera://"],
+            ["name":"设置", "url":"App-prefs://"]
+        ]
+    }()
 
     var body: some View {
         Form {
@@ -250,6 +255,7 @@ struct GirlCharacterPickerView: View {
                 .onDelete { indexSet in
                     savedApps.remove(atOffsets: indexSet)
                     Self.prefs.set(savedApps, forKey: "fanMenuApps")
+                    UserDefaults.standard.set(savedApps, forKey: "fanMenuApps") // v6.1.5-6 双写：主App容器 plist，HUD no-sandbox 直读
                 }
                 // 添加新应用
                 FanMenuAddView(savedApps: $savedApps)
@@ -293,6 +299,7 @@ struct FanMenuAddView: View {
                 savedApps.append(["name":app.name, "bundleId":app.bundleId])
                 // v6.1.5-3：写入 App Group 共享域，HUD 进程才能读到
                 (UserDefaults(suiteName: "group.com.ai.iosxcode") ?? .standard).set(savedApps, forKey: "fanMenuApps")
+                UserDefaults.standard.set(savedApps, forKey: "fanMenuApps") // v6.1.5-6 双写：主App容器 plist，HUD no-sandbox 直读
                 showPicker = false
             }
         }

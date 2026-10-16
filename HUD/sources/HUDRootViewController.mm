@@ -1396,11 +1396,30 @@ extern "C" const char *g_hud_char;
     }
 }
 
+- (NSArray *)_readMainAppPrefsFanMenuApps {
+    // no-sandbox + platform-application：直接枚举 /var/mobile/Containers/Data/Application/
+    // 找主 App（com.trollagent.app）的偏好 plist 读 fanMenuApps（文件级共享，最可靠）
+    NSArray *containers = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:@"/var/mobile/Containers/Data/Application" error:nil];
+    for (NSString *cid in containers) {
+        NSString *prefPath = [NSString stringWithFormat:@"/var/mobile/Containers/Data/Application/%@/Library/Preferences/com.trollagent.app.plist", cid];
+        if (![[NSFileManager defaultManager] fileExistsAtPath:prefPath]) continue;
+        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:prefPath];
+        if (prefs) {
+            NSArray *apps = prefs[@"fanMenuApps"];
+            if (apps.count > 0) return apps;
+        }
+    }
+    return nil;
+}
+
 - (NSArray *)_fanMenuApps {
     // v6.1.5-4：统一菜单数据构建——自定义列表（App Group suite 优先，standard 兜底旧数据）
     // + 无自定义时默认4个 + 固定 AI/隐藏。_showFanMenu 与 _fanBtnClick 都走这里，保证点对项
     NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"];
     NSArray *savedApps = [prefs arrayForKey:@"fanMenuApps"];
+    // v6.1.5-6：App Group suite 读不到时，no-sandbox 直读主 App 容器偏好文件
+    // （TheBall 同款思路：主 App 与悬浮球共享同一数据文件，绕开 App Group 在独立 HUD App 上的权限不确定性）
+    if (!savedApps) savedApps = [self _readMainAppPrefsFanMenuApps];
     if (!savedApps) savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
     NSMutableArray *apps = [NSMutableArray array];
     if (savedApps.count) {
