@@ -131,6 +131,7 @@ extern "C" const char *g_hud_char;
     int _climbIdx;              // 攀爬帧序号
     UILabel *_bubbleLabel;       // v6.0.27：侧边趴墙卡通聊天气泡文字
     UIView *_bubbleView;         // v6.0.28：卡通气泡背景（带小尾巴）
+    CAShapeLayer *_bubbleTailLayer;  // v6.1.5-14ah：气泡尖角（画在父视图绕开 masksToBounds 裁剪）
     NSTimer *_bubbleTimer;       // 气泡定时弹出计时器
     BOOL _onSideWall;           // 是否在左右侧边趴墙
     BOOL _onBottomWall;         // v6.1.5-14w：是否底部趴墙（底部呼吸/横向挪动专用）
@@ -765,6 +766,8 @@ extern "C" const char *g_hud_char;
     [_bubbleView removeFromSuperview];
     _bubbleView = nil;
     _bubbleLabel = nil;
+    [_bubbleTailLayer removeFromSuperlayer];   // v6.1.5-14ah：尖角随气泡一起销毁
+    _bubbleTailLayer = nil;
 }
 
 // v6.0.27：显示随机气泡
@@ -1027,6 +1030,8 @@ extern "C" const char *g_hud_char;
         [_bubbleView removeFromSuperview];
         _bubbleView = nil;
         _bubbleLabel = nil;
+        [_bubbleTailLayer removeFromSuperlayer];   // v6.1.5-14ah：尖角随旧气泡一起销毁
+        _bubbleTailLayer = nil;
     }
     // 创建卡通漫画气泡（带小尾巴）
     if (!_bubbleLabel) {
@@ -1120,36 +1125,52 @@ extern "C" const char *g_hud_char;
     }
     _bubbleView.center = CGPointMake(bubbleX, bubbleY);
     
-    // 用CAShapeLayer画小尾巴（在气泡底部中间，朝下指向角色头）
+    // v6.1.5-14ah：尖角（小尾巴）画到父视图 self.view 上——气泡本体 masksToBounds=YES 会把画在
+    // 边界外的三角顶点整个裁掉（用户反馈"气泡没有指向尖角"）。父视图不裁剪，尖角完整露出。
+    if (!_bubbleTailLayer) {
+        _bubbleTailLayer = [CAShapeLayer layer];
+        [self.view.layer addSublayer:_bubbleTailLayer];
+    }
+    CGRect bf = _bubbleView.frame;   // 气泡直接 add 到 self.view，frame 即父视图坐标
+    CGFloat tailX = bf.origin.x + bf.size.width / 2;
+    CGFloat tailY = bf.origin.y + bf.size.height;
     UIBezierPath *tailPath = [UIBezierPath bezierPath];
-    CGFloat tailX = bubbleW / 2;
-    [tailPath moveToPoint:CGPointMake(tailX - tailW/2, bubbleH)];
-    [tailPath addLineToPoint:CGPointMake(tailX, bubbleH + tailH)];
-    [tailPath addLineToPoint:CGPointMake(tailX + tailW/2, bubbleH)];
+    [tailPath moveToPoint:CGPointMake(tailX - tailW/2, tailY)];
+    [tailPath addLineToPoint:CGPointMake(tailX, tailY + tailH)];
+    [tailPath addLineToPoint:CGPointMake(tailX + tailW/2, tailY)];
     [tailPath closePath];
-    
-    CAShapeLayer *tailLayer = [CAShapeLayer layer];
-    tailLayer.path = tailPath.CGPath;
+    _bubbleTailLayer.path = tailPath.CGPath;
     // v6.0.28：尾巴颜色跟着气泡样式走
     if (bubbleStyle == 3) {
-        tailLayer.fillColor = [UIColor systemYellowColor].CGColor;
-        tailLayer.strokeColor = [UIColor blackColor].CGColor;
+        _bubbleTailLayer.fillColor = [UIColor systemYellowColor].CGColor;
+        _bubbleTailLayer.strokeColor = [UIColor blackColor].CGColor;
     } else if (bubbleStyle == 2) {
-        tailLayer.fillColor = [UIColor whiteColor].CGColor;
-        tailLayer.strokeColor = [UIColor blackColor].CGColor;
+        _bubbleTailLayer.fillColor = [UIColor whiteColor].CGColor;
+        _bubbleTailLayer.strokeColor = [UIColor blackColor].CGColor;
     } else if (bubbleStyle == 1) {
-        tailLayer.fillColor = [UIColor systemPinkColor].CGColor;
-        tailLayer.strokeColor = [UIColor clearColor].CGColor;
+        _bubbleTailLayer.fillColor = [UIColor systemPinkColor].CGColor;
+        _bubbleTailLayer.strokeColor = [UIColor clearColor].CGColor;
     } else {
-        tailLayer.fillColor = [UIColor whiteColor].CGColor;
-        tailLayer.strokeColor = [UIColor systemPinkColor].CGColor;
+        _bubbleTailLayer.fillColor = [UIColor whiteColor].CGColor;
+        _bubbleTailLayer.strokeColor = [UIColor systemPinkColor].CGColor;
     }
-    tailLayer.lineWidth = 2;
-    [_bubbleView.layer addSublayer:tailLayer];
+    _bubbleTailLayer.lineWidth = 2;
     
     if (!_bubbleView.superview) {
         [self.view addSubview:_bubbleView];
     }
+    
+    // v6.1.5-14ah：尖角与气泡同步淡入淡出（CABasicAnimation 走 opacity，CAShapeLayer 不跟 UIView 动画）
+    _bubbleTailLayer.opacity = 0;
+    CABasicAnimation *tf = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    tf.fromValue = @(0.0); tf.toValue = @(1.0); tf.duration = 0.3; tf.beginTime = 0;
+    tf.removedOnCompletion = NO; tf.fillMode = kCAFillModeForwards;
+    [_bubbleTailLayer addAnimation:tf forKey:@"tailFadeIn"];
+    CABasicAnimation *to = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    to.fromValue = @(1.0); to.toValue = @(0.0); to.duration = 0.3;
+    to.beginTime = CACurrentMediaTime() + 2.0;
+    to.removedOnCompletion = NO; to.fillMode = kCAFillModeForwards;
+    [_bubbleTailLayer addAnimation:to forKey:@"tailFadeOut"];
     
     // 淡入淡出
     [UIView animateWithDuration:0.3 animations:^{
@@ -1161,6 +1182,8 @@ extern "C" const char *g_hud_char;
             [_bubbleView removeFromSuperview];
             _bubbleView = nil;
             _bubbleLabel = nil;
+            [_bubbleTailLayer removeFromSuperlayer];  // v6.1.5-14ah：尖角随气泡一起销毁
+            _bubbleTailLayer = nil;
         }];
     }];
 }
