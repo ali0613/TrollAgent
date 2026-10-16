@@ -141,6 +141,7 @@ extern "C" const char *g_hud_char;
     NSTimer *_poseShowTimer;    // v6.1.5-14z：吸附态偶尔换姿势展示排期（1小时3-5次）
     NSTimer *_poseHoldTimer;    // v6.1.5-14z：姿势展示保持计时（2.5-3s后趴回）
     BOOL _poseShowing;          // v6.1.5-14z：正在展示站立/坐姿（展示中不触发攀爬/挪动）
+    NSArray<UIColor *> *_particleColors; // v6.1.5-14aa：粒子颜色持有（cell.color 是 assign 语义，防局部数组释放后 CGColor 悬垂）
     NSString *_charPrefix;      // v6.0.27：当前角色前缀（rabit/girl/cat）
     NSInteger _lastFanClickIdx;         // v6.1.5-14i：菜单点击去重（手势+按钮双触发只处理一次）
     NSTimeInterval _lastFanClickTime;   // v6.1.5-14i
@@ -1286,7 +1287,9 @@ extern "C" const char *g_hud_char;
 - (void)_tryStartClimbing {
     _climbSchedTimer = nil;
     // 必须仍在左右趴墙态且未被拖拽/掉落才爬；v6.1.5-14z：坐姿/跪姿展示中不爬
-    if (_poseShowing || !_onSideWall || _isDragging || _falling || _isClimbing) return;
+    // v6.1.5-14aa：展示中不丢弃排期——推迟 2-3 分钟再试（原直接 return 导致之后永不再攀爬）
+    if (_poseShowing) { [self _scheduleClimbAfterDelay:120.0 + arc4random_uniform(60000) / 1000.0]; return; }
+    if (!_onSideWall || _isDragging || _falling || _isClimbing) return;
     [self _startClimbing];
 }
 
@@ -1477,7 +1480,9 @@ extern "C" const char *g_hud_char;
 // v6.1.5-14o：被摸/长按/蹦跳结束后若切了 happy 帧且非特殊状态，回到待机帧
 - (void)_resetToIdleIfNeeded {
     [self _stopBottomAmbient];   // v6.1.5-14w：任何回待机路径都停底部动效
-    if (_isDragging || _falling || _isClimbing || _onSideWall) return;
+    // v6.1.5-14aa：加 _onBottomWall——原只判 _onSideWall，底部趴墙漏判，
+    // 长按捏扁弹回时把角色从趴底错误拉回站姿待机
+    if (_isDragging || _falling || _isClimbing || _onSideWall || _onBottomWall) return;
     if (_idleFrames.firstObject && _girlView.image != _idleFrames.firstObject) {
         _girlView.image = _idleFrames.firstObject;
         [self _setFrameForImage:_idleFrames.firstObject];
@@ -2180,6 +2185,7 @@ static UIImage *softParticleImage(CGFloat size) {
 
 // v6.1.5-14p/q：设置粒子（上飘粒）
 // v6.1.5-14v：柔和光点版——柔光渐变圆 + cell.color 染色；光点不旋转、缓慢淡出，更柔和
+// v6.1.5-14aa：持有颜色数组 _particleColors（cell.color 为 assign，保证 UIColor 存活、CGColor 不悬垂）
 - (void)_setParticles:(NSArray<UIColor *> *)colors {
     if (!_particleLayer) {
         _particleLayer = [CAEmitterLayer layer];
@@ -2187,6 +2193,7 @@ static UIImage *softParticleImage(CGFloat size) {
         _particleLayer.emitterSize = CGSizeMake(70, 10);
         [self.view.layer insertSublayer:_particleLayer below:_girlView.layer];  // 粒子在角色后方
     }
+    _particleColors = colors;
     NSMutableArray *cells = [NSMutableArray array];
     UIImage *dotImg = softParticleImage(24);
     for (UIColor *col in colors) {
@@ -2213,6 +2220,7 @@ static UIImage *softParticleImage(CGFloat size) {
 - (void)_clearParticles {
     [_particleLayer removeFromSuperlayer];
     _particleLayer = nil;
+    _particleColors = nil;   // v6.1.5-14aa：清粒子时释放颜色持有
 }
 
 @end
