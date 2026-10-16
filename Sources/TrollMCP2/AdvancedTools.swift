@@ -793,6 +793,19 @@ enum ProcessHelper {
                 }
             }
         }
+        // v6.1.5-14i：SBSLaunchApplicationWithIdentifierAndLaunchOptions 第二路（新版 SBS API，
+        // TheBall 二进制实测用这个打开 app，主 App 有 backboardd/frontboard launchapplications 权限）
+        if let handle2 = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", RTLD_LAZY) {
+            typealias SBSLaunch2Fn = @convention(c) (CFString, CFDictionary?, CFDictionary?, Bool) -> Int32
+            if let sym2 = dlsym(handle2, "SBSLaunchApplicationWithIdentifierAndLaunchOptions") {
+                let fn2 = unsafeBitCast(sym2, to: SBSLaunch2Fn.self)
+                let ret2 = fn2(bundleId as CFString, nil, nil, false)
+                if ret2 == 0 {
+                    return (true, "SBSLaunchApplicationWithIdentifierAndLaunchOptions launch OK")
+                }
+            }
+            dlclose(handle2)
+        }
         if let url = URL(string: "trollmcp2://") {
             if UIThreadBridge.openURL(url, timeout: 3) { return (true, "openURL launch OK") }
         }

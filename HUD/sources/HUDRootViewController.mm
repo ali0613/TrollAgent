@@ -134,6 +134,8 @@ extern "C" const char *g_hud_char;
     NSTimer *_bubbleTimer;       // 气泡定时弹出计时器
     BOOL _onSideWall;           // 是否在左右侧边趴墙
     NSString *_charPrefix;      // v6.0.27：当前角色前缀（rabit/girl/cat）
+    NSInteger _lastFanClickIdx;         // v6.1.5-14i：菜单点击去重（手势+按钮双触发只处理一次）
+    NSTimeInterval _lastFanClickTime;   // v6.1.5-14i
 }
 
 + (BOOL)passthroughMode { return _passthrough; }
@@ -1266,32 +1268,32 @@ extern "C" const char *g_hud_char;
             x = fromRight ? girlX - 80 : girlX + 80;
             y = startY + i * 64;
         } else {
-            // v6.1.5-14：自适应层数——app 少单层、多一点双层、再多三层，逐层往外扩散；
-            // 每层共享同一扇面区间并内部均分（整齐扇形）；越外围 app 越多
-            NSInteger layerCount = (count <= 4) ? 1 : (count <= 7) ? 2 : 3;
-            NSInteger caps[3] = {0, 0, 0};
-            if (layerCount == 1) caps[0] = count;
-            else if (layerCount == 2) { caps[0] = MIN(2, count - 2); caps[1] = count - caps[0]; }
-            else { caps[0] = 1; caps[1] = 2; caps[2] = count - 3; }
+            // v6.1.5-14i：彩虹式弧带（用户："类似彩虹排列一层一层的，第一排5个第二排6个第三排7个"）——
+            // 每层独立弧、逐层外扩：内层5个、中层6个、外层7个……每层 +1，外层 app 更多、弧更长，
+            // 每层以屏幕中心角为中心各自展开，从内到外像彩虹一样一层一层扩散
+            NSInteger layerCount = (count <= 5) ? 1 : (count <= 11) ? 2 : (count <= 18) ? 3 : 4;
+            NSInteger caps[4] = {0, 0, 0, 0};
+            NSInteger filled = 0;
+            for (NSInteger L = 0; L < layerCount; L++) {
+                NSInteger cap = 5 + L;
+                if (L == layerCount - 1) cap = count - filled;  // 最后一层装剩余
+                caps[L] = cap;
+                filled += cap;
+            }
             NSInteger layer = 0, posInLayer = 0, acc = 0;
             for (NSInteger L = 0; L < layerCount; L++) {
                 if (i < acc + caps[L]) { layer = L; posInLayer = i - acc; break; }
                 acc += caps[L];
             }
-            CGFloat radii[3] = {165, 0, 0};
-            if (layerCount == 2) { radii[0] = 96; radii[1] = 185; }
-            else if (layerCount == 3) { radii[0] = 76; radii[1] = 140; radii[2] = 205; }
+            CGFloat radii[4] = {85, 155, 225, 295};
             CGFloat layerR = radii[layer];
             NSInteger nk = caps[layer];
-            // v6.1.5-14f：扇面跨度收窄（120°→80°），半径收小——外层 app 不再"间隔太大"（用户反馈），
-            // 孔雀开屏保持紧凑：外层 5 个在 80° 内均分（20°×205 ≈ 72pt 间隔，按钮 56pt 不重叠）
-            NSInteger maxCaps = caps[0];
-            for (NSInteger L = 1; L < layerCount; L++) maxCaps = MAX(maxCaps, caps[L]);
-            CGFloat span = (maxCaps > 1) ? MAX(24.0, MIN(80.0, (maxCaps - 1) * 26.0)) : 0;
+            CGFloat stepDeg = 20.0;  // 每 app 间隔角——每层弧长 = (本层数-1)*20°，外层自动更长
+            CGFloat span = (nk > 1) ? (nk - 1) * stepDeg : 0;
             // v6.1.5-12：扇面中心始终指向屏幕中心——角色贴边/贴底时外层按钮也朝屏幕中央展开
             CGFloat centerAng = atan2(screenH / 2 - girlY, screenW / 2 - girlX) * 180.0 / M_PI;
             CGFloat startDeg = centerAng - span / 2;
-            // 层内均分同一扇面：单个数居中，多个均匀铺开
+            // 层内均分本层弧：单个数居中，多个均匀铺开
             CGFloat deg = (nk == 1) ? (startDeg + span / 2) : (startDeg + posInLayer * (span / (nk - 1)));
             CGFloat ang = deg * M_PI / 180;
             x = girlX + cos(ang) * layerR;
@@ -1402,6 +1404,11 @@ extern "C" const char *g_hud_char;
         CGPoint c = [centers[i] CGPointValue];
         btn.center = c;
         [btn addTarget:self action:@selector(_fanBtnClick:) forControlEvents:UIControlEventTouchUpInside];
+        // v6.1.5-14i：手势双保险——UIButton target-action 在系统级窗口偶发失效时，
+        // UITapGestureRecognizer 兜住点击（cancelsTouchesInView=NO 不吞按钮事件）
+        UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(_fanBtnTap:)];
+        tap.cancelsTouchesInView = NO;
+        [btn addGestureRecognizer:tap];
         [self.view addSubview:btn];
         // v6.1.5-14：菜单诊断——记录每个按钮 tag/名称/frame，定位"点不到"是否位置错位
         [self _appendHudLog:[NSString stringWithFormat:@"menu i=%ld name=%@ frame=%@", (long)i, apps[i][@"name"] ?: @"", NSStringFromCGRect(btn.frame)]];
@@ -1415,8 +1422,18 @@ extern "C" const char *g_hud_char;
     }
 }
 
+- (void)_fanBtnTap:(UITapGestureRecognizer *)g {
+    // v6.1.5-14i：手势保险——转发给按钮点击处理（frame 命中即触发）
+    if ([g.view isKindOfClass:[UIButton class]]) [self _fanBtnClick:(UIButton *)g.view];
+}
+
 - (void)_fanBtnClick:(UIButton *)btn {
     NSInteger idx = btn.tag - 9000;
+    // v6.1.5-14i：手势+按钮事件双保险会重复触发——1.2s 内同按钮只处理一次
+    NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
+    if (idx == _lastFanClickIdx && (now - _lastFanClickTime) < 1.2) return;
+    _lastFanClickIdx = idx;
+    _lastFanClickTime = now;
     [self _closeFanMenu];
     // v6.1.5-10：与 _showFanMenu 共用同一重排数据源（AI 内圈/隐藏次之），点对项不错位
     NSArray *apps = [self _orderedFanMenuApps];
