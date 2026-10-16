@@ -30,10 +30,12 @@ struct GirlCharacterPickerView: View {
         let suite = Self.prefs.array(forKey: "fanMenuApps") as? [[String:String]]
         let std = UserDefaults.standard.array(forKey: "fanMenuApps") as? [[String:String]]
         return (suite ?? std) ?? [
-            ["name":"微信", "url":"weixin://"],
-            ["name":"抖音", "url":"snssdk1128://"],
-            ["name":"相机", "url":"camera://"],
-            ["name":"设置", "url":"App-prefs://"]
+            // v6.1.5-8：默认项带 bundleId——点击走 LSApplicationWorkspace openApplicationWithBundleID
+            // （camera:// App-prefs:// 等 scheme 在 iOS 上不存在/被拒，之前默认项点击必"没反应"）
+            ["name":"微信", "url":"weixin://", "bundleId":"com.tencent.xin"],
+            ["name":"抖音", "url":"snssdk1128://", "bundleId":"com.ss.iphone.ugc.Aweme"],
+            ["name":"相机", "url":"camera://", "bundleId":"com.apple.camera"],
+            ["name":"设置", "url":"App-prefs://", "bundleId":"com.apple.Preferences"]
         ]
     }()
 

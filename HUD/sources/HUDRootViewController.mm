@@ -12,6 +12,7 @@
 #import <math.h>
 #import <QuartzCore/QuartzCore.h>
 #import <mach/mach.h>
+#import <objc/runtime.h> // v6.1.5-8：真实 app 图标（TrollStore/TheBall 同款私有 API）
 
 // v6.0.7：SpringBoardServices 是私有 framework（Xcode SDK 无头文件），直接 extern "C" 声明原型（.mm 是 C++，
 // 不加 extern "C" 会按 C++ 链接找不到 tbd 里的 C 符号），符号由 HUD/libraries/SpringBoardServices.framework/SpringBoardServices.tbd 链接提供
@@ -1249,7 +1250,9 @@ extern "C" const char *g_hud_char;
     BOOL fromRight = (girlX > screenW - 150);
     // 统一菜单数据源（v6.1.5-4：_showFanMenu 与 _fanBtnClick 共用，杜绝两处读不一致导致点击失效）
     NSArray *apps = [self _fanMenuApps];
-    CGFloat radius = 120;
+    // v6.1.5-8：扇形按钮 64→56pt、半径 120→105（用户反馈"图标太大占半个屏幕"）
+    CGFloat radius = 105;
+    CGFloat fanBtn = 56.0;
     NSInteger count = apps.count;
     NSInteger menuStyle = [[[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"] integerForKey:@"fanMenuStyle"];
     for (NSInteger i = 0; i < count; i++) {
@@ -1276,13 +1279,23 @@ extern "C" const char *g_hud_char;
             UIView *iconWrap = [[UIView alloc] initWithFrame:CGRectMake(10, 10, 36, 36)];
             iconWrap.layer.cornerRadius = 8;
             iconWrap.backgroundColor = apps[i][@"color"];
+            iconWrap.layer.masksToBounds = YES;
             [btn addSubview:iconWrap];
-            UIImage *sym = [UIImage systemImageNamed:symName];
-            if (sym) {
-                UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:18]]];
-                iv.tintColor = [UIColor whiteColor];
-                iv.frame = CGRectMake(9, 9, 18, 18);
-                [iconWrap addSubview:iv];
+            // v6.1.5-8：自定义 app 显示真实系统图标（TheBall/TrollStore 同款私有 API），默认项无 bundleId 才用 SF Symbol
+            UIImage *realIcon = _realAppIcon(apps[i][@"bundleId"]);
+            if (realIcon) {
+                UIImageView *riv = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 36, 36)];
+                riv.image = realIcon;
+                riv.contentMode = UIViewContentModeScaleAspectFit;
+                [iconWrap addSubview:riv];
+            } else {
+                UIImage *sym = [UIImage systemImageNamed:symName];
+                if (sym) {
+                    UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:18]]];
+                    iv.tintColor = [UIColor whiteColor];
+                    iv.frame = CGRectMake(9, 9, 18, 18);
+                    [iconWrap addSubview:iv];
+                }
             }
             UILabel *urlLbl = [[UILabel alloc] initWithFrame:CGRectMake(124, (56 - 16) / 2, 86, 16)];
             urlLbl.text = apps[i][@"url"];
@@ -1292,27 +1305,41 @@ extern "C" const char *g_hud_char;
             urlLbl.lineBreakMode = NSLineBreakByTruncatingTail;
             [btn addSubview:urlLbl];
         } else {
-            // v6.1.5: 扇形——64pt 圆钮 + 阴影 + 白字描边 + 上方图标下方文字
-            btn.frame = CGRectMake(0, 0, 64, 64);
-            btn.layer.cornerRadius = 32;
+            // v6.1.5: 扇形——圆钮 + 阴影 + 白字描边 + 上方图标下方文字（v6.1.5-8 尺寸 56pt）
+            btn.frame = CGRectMake(0, 0, fanBtn, fanBtn);
+            btn.layer.cornerRadius = fanBtn / 2;
             btn.backgroundColor = apps[i][@"color"];
             btn.layer.shadowColor = [UIColor blackColor].CGColor;
             btn.layer.shadowOpacity = 0.35;
             btn.layer.shadowOffset = CGSizeMake(0, 3);
             btn.layer.shadowRadius = 6;
-            btn.titleLabel.font = [UIFont boldSystemFontOfSize:12];
+            btn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
             btn.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
             [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             btn.titleLabel.shadowColor = [UIColor colorWithWhite:0 alpha:0.3];
             btn.titleLabel.shadowOffset = CGSizeMake(0, 1);
             [btn setTitle:apps[i][@"name"] forState:UIControlStateNormal];
-            btn.titleEdgeInsets = UIEdgeInsetsMake(26, 0, -26, 0);
-            UIImage *sym = [UIImage systemImageNamed:symName];
-            if (sym) {
-                UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:20]]];
-                iv.tintColor = [UIColor whiteColor];
-                iv.frame = CGRectMake((64 - 22) / 2, 8, 22, 22);
-                [btn addSubview:iv];
+            btn.titleEdgeInsets = UIEdgeInsetsMake(24, 0, -24, 0);
+            // v6.1.5-8：真实图标优先（自定义 app），SF Symbol 兜底（默认项）
+            UIImage *realIcon = _realAppIcon(apps[i][@"bundleId"]);
+            if (realIcon) {
+                UIView *wrap = [[UIView alloc] initWithFrame:CGRectMake((fanBtn - 34) / 2, 4, 34, 34)];
+                wrap.layer.cornerRadius = 7.5;
+                wrap.layer.masksToBounds = YES;
+                wrap.backgroundColor = [UIColor whiteColor];
+                UIImageView *riv = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 34, 34)];
+                riv.image = realIcon;
+                riv.contentMode = UIViewContentModeScaleAspectFit;
+                [wrap addSubview:riv];
+                [btn addSubview:wrap];
+            } else {
+                UIImage *sym = [UIImage systemImageNamed:symName];
+                if (sym) {
+                    UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:18]]];
+                    iv.tintColor = [UIColor whiteColor];
+                    iv.frame = CGRectMake((fanBtn - 20) / 2, 7, 20, 20);
+                    [btn addSubview:iv];
+                }
             }
         }
         btn.tag = 9000 + i;
@@ -1438,6 +1465,21 @@ extern "C" const char *g_hud_char;
     return nil;
 }
 
+// v6.1.5-8：真实 app 图标（TrollStore/TheBall 同款私有 API +[UIImage _applicationIconImageForBundleIdentifier:format:scale:]）
+// HUD 进程带 platform-application/no-sandbox 权限，MobileIcons 响应；参数：iPhone format=10、iPad=8、scale=屏幕倍率
+static UIImage * _realAppIcon(NSString *bundleId) {
+    if (bundleId.length == 0) return nil;
+    Class imgCls = NSClassFromString(@"UIImage");
+    if (!imgCls) return nil;
+    SEL sel = NSSelectorFromString(@"_applicationIconImageForBundleIdentifier:format:scale:");
+    Method m = class_getClassMethod(imgCls, sel);
+    if (!m) return nil;
+    typedef UIImage *(*IconFn)(id, SEL, NSString *, NSInteger, double);
+    IconFn fn = (IconFn)method_getImplementation(m);
+    NSInteger format = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) ? 8 : 10;
+    return fn(imgCls, sel, bundleId, format, [UIScreen mainScreen].scale);
+}
+
 - (NSArray *)_fanMenuApps {
     // v6.1.5-4：统一菜单数据构建——自定义列表（App Group suite 优先，standard 兜底旧数据）
     // + 无自定义时默认4个 + 固定 AI/隐藏。_showFanMenu 与 _fanBtnClick 都走这里，保证点对项
@@ -1472,12 +1514,13 @@ extern "C" const char *g_hud_char;
             }];
         }
     } else {
-        // 默认（与主 App 默认一致）
+        // 默认（与主 App 默认一致；v6.1.5-8 起带 bundleId，点击走 LSApplicationWorkspace，
+        // camera:// App-prefs:// 等 scheme 在 iOS 上不存在/被拒，旧默认项点击必"没反应"）
         [apps addObjectsFromArray:@[
-            @{@"name":@"微信", @"url":@"weixin://", @"bundleId":@"", @"color":[UIColor colorWithRed:0.19 green:0.78 blue:0.32 alpha:1.0]},
-            @{@"name":@"抖音", @"url":@"snssdk1128://", @"bundleId":@"", @"color":[UIColor blackColor]},
-            @{@"name":@"相机", @"url":@"camera://", @"bundleId":@"", @"color":[UIColor systemTealColor]},
-            @{@"name":@"设置", @"url":@"App-prefs://", @"bundleId":@"", @"color":[UIColor grayColor]}
+            @{@"name":@"微信", @"url":@"weixin://", @"bundleId":@"com.tencent.xin", @"color":[UIColor colorWithRed:0.19 green:0.78 blue:0.32 alpha:1.0]},
+            @{@"name":@"抖音", @"url":@"snssdk1128://", @"bundleId":@"com.ss.iphone.ugc.Aweme", @"color":[UIColor blackColor]},
+            @{@"name":@"相机", @"url":@"camera://", @"bundleId":@"com.apple.camera", @"color":[UIColor systemTealColor]},
+            @{@"name":@"设置", @"url":@"App-prefs://", @"bundleId":@"com.apple.Preferences", @"color":[UIColor grayColor]}
         ]];
     }
     // 最后固定加AI聊天和隐藏
