@@ -537,6 +537,7 @@ extern "C" const char *g_hud_char;
         c.x = MAX(gs.width/2, MIN(c.x, v.width - gs.width/2));
         c.y = MAX(gs.height/2, MIN(c.y, v.height - gs.height/2));
         _girlView.center = c;
+        [self _refreshAmbientPosition];   // v6.1.5-14ac：拖拽中粒子跟随角色（原只在松手后更新，拖拽时粒子脱节）
         // v6.1.5-14o：活物感——拖拽时朝移动方向微微倾斜（速度越大倾角越大，像被拽着挣扎）
         CGFloat vx = c.x - _dragLastX, vy = c.y - _dragLastY;
         _dragLastX = c.x; _dragLastY = c.y;
@@ -2090,8 +2091,19 @@ static UIImage * _realAppIcon(NSString *bundleId) {
     BOOL enabled = YES;
     NSString *sw = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/auto_hide_keyboard.txt"
                                              encoding:NSUTF8StringEncoding error:nil];
+    NSString *sw = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/auto_hide_keyboard.txt"
+                                             encoding:NSUTF8StringEncoding error:nil];
     if (sw.length > 0) enabled = [sw hasPrefix:@"1"];
-    if (!enabled) return;
+    if (!enabled) {
+        // v6.1.5-14ac：开关关闭也要恢复 alpha——原直接 return，键盘弹出时关开关会卡在半透明不恢复
+        CGFloat t = _isHidden ? 0.7 : 1.0;
+        if (fabs(self.view.alpha - t) > 0.05) {
+            [UIView animateWithDuration:0.2 animations:^{
+                self.view.alpha = t;
+            }];
+        }
+        return;
+    }
     BOOL vis = NO;
     NSString *kv = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/keyboard_state.json"
                                             encoding:NSUTF8StringEncoding error:nil];
@@ -2169,10 +2181,14 @@ static UIImage *softParticleImage(CGFloat size) {
         [colors addObject:[UIColor colorWithRed:0.7 green:0.85 blue:1.0 alpha:1.0]];
     }
     // 漂浮时长只在环境时段切换时重置（避免每 60s 打断漂浮动画）
+    // v6.1.5-14ac：趴墙/拖拽中不重置漂浮——原无条件 _startFloatWithDuration 会在
+    // 底部/侧边趴墙时重新加上上下漂浮动画，与趴墙（底部呼吸/静止贴墙）冲突
     if (_ambientBucket != bucket) {
         _ambientBucket = bucket;
-        if (bucket == 2) [self _startFloatWithDuration:2.6f];  // 深夜入睡慢呼吸
-        else [self _startFloatWithDuration:1.3f];
+        if (!_onSideWall && !_onBottomWall && !_isDragging) {
+            if (bucket == 2) [self _startFloatWithDuration:2.6f];  // 深夜入睡慢呼吸
+            else [self _startFloatWithDuration:1.3f];
+        }
     }
     if (colors.count) {
         [self _setParticles:colors];
