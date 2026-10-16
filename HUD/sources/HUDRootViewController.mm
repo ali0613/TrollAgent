@@ -1363,32 +1363,27 @@ extern "C" const char *g_hud_char;
             urlLbl.lineBreakMode = NSLineBreakByTruncatingTail;
             [btn addSubview:urlLbl];
         } else {
-            // v6.1.5-9：扇形——纯图标圆钮（名称移到下方胶囊），白细边框 + 阴影
+            // v6.1.5-9：扇形——纯图标圆钮
+            // v6.1.5-14j：图标圆形直接填充满按钮——去掉白色边框环、去掉 wrap 白底环（用户"圆形外面还有一个环"）
             btn.frame = CGRectMake(0, 0, fanBtn, fanBtn);
             btn.layer.cornerRadius = fanBtn / 2;
-            btn.backgroundColor = apps[i][@"color"];
-            btn.layer.borderWidth = 1.0;
-            btn.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.35].CGColor;
+            btn.backgroundColor = apps[i][@"color"];  // SF Symbol 兜底时用作底色；真实图标填满后置透明
+            btn.layer.borderWidth = 0;
             btn.layer.shadowColor = [UIColor blackColor].CGColor;
             btn.layer.shadowOpacity = 0.4;
             btn.layer.shadowOffset = CGSizeMake(0, 3);
             btn.layer.shadowRadius = 6;
             // v6.1.5-8：真实图标优先（自定义 app），SF Symbol 兜底（默认项）
-            // v6.1.5-14g：图标在方形图标里裁剪成圆形（wrap 与 riv 都 cornerRadius=20 圆形 mask）——
-            // 用户反馈"app图标不在方形图标里裁剪圆形"
+            // v6.1.5-14j：图标 56pt 圆形直接填满整个按钮（无环无边框无白底）
             UIImage *realIcon = _realAppIcon(apps[i][@"bundleId"]);
             if (realIcon) {
-                UIView *wrap = [[UIView alloc] initWithFrame:CGRectMake((fanBtn - 40) / 2, 8, 40, 40)];
-                wrap.layer.cornerRadius = 20;
-                wrap.layer.masksToBounds = YES;
-                wrap.backgroundColor = [UIColor whiteColor];
-                UIImageView *riv = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 40, 40)];
+                UIImageView *riv = [[UIImageView alloc] initWithFrame:btn.bounds];
                 riv.image = realIcon;
                 riv.contentMode = UIViewContentModeScaleAspectFill;
-                riv.layer.cornerRadius = 20;
+                riv.layer.cornerRadius = fanBtn / 2;
                 riv.layer.masksToBounds = YES;
-                [wrap addSubview:riv];
-                [btn addSubview:wrap];
+                [btn addSubview:riv];
+                btn.backgroundColor = [UIColor clearColor];
             } else {
                 UIImage *sym = [UIImage systemImageNamed:symName];
                 if (sym) {
