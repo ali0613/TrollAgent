@@ -19,14 +19,16 @@ struct GirlCharacterPickerView: View {
     }
     // v6.1.5-14n：菜单参数统一保存——写 suite + 全局文件 /var/mobile/Documents/fanmenu_settings.json
     // （HUD 独立进程优先读全局文件，绕开 App Group 权限不确定性）
+    // v6.1.5-14af：style 也并入全局文件（原只写 suite——HUD 读 suite 失败时 fanMenuStyle 恒为 0 → "切换纵向列表没用"）
     fileprivate static func saveFanMenuSettings() {
         let alpha = prefs.object(forKey: "fanMenuAlpha") as? Double ?? 1.0
         let span = prefs.object(forKey: "fanMenuSpan") as? Double ?? 90.0
         let arc = prefs.object(forKey: "fanMenuArc") as? Double ?? 1.0
+        let style = prefs.integer(forKey: "fanMenuStyle")
         prefs.synchronize()
         let settingsFile = "/var/mobile/Documents/fanmenu_settings.json"
         do {
-            let data = try JSONSerialization.data(withJSONObject: ["alpha": alpha, "span": span, "arc": arc])
+            let data = try JSONSerialization.data(withJSONObject: ["alpha": alpha, "span": span, "arc": arc, "style": style])
             try data.write(to: URL(fileURLWithPath: settingsFile), options: .atomic)
         } catch {}
         restartHUDIfNeeded()
@@ -314,13 +316,7 @@ struct GirlCharacterPickerView: View {
                     set: { 
                         Self.prefs.set($0, forKey: "fanMenuStyle")
                         Self.prefs.synchronize() // v6.1.5-7：强制落盘，HUD 重启后必然读到新样式
-                        // 如果桌宠正在运行，自动重启读新参数；没运行绝对不启动
-                        if HUDManager.shared.isRunning {
-                            _ = HUDManager.shared.stop()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                _ = HUDManager.shared.start()
-                            }
-                        }
+                        Self.saveFanMenuSettings() // v6.1.5-14af：样式一并写全局文件（HUD 读 suite 失败时也能生效）
                     }
                 )) {
                     Text("扇形展开").tag(0)

@@ -1584,7 +1584,16 @@ extern "C" const char *g_hud_char;
     // v6.1.5-8/10：扇形按钮 56pt；孔雀开屏半径 88/172/256（内1 中2 外N-3）
     CGFloat fanBtn = 56.0;
     NSInteger count = apps.count;
-    NSInteger menuStyle = [[[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"] integerForKey:@"fanMenuStyle"];
+    // v6.1.5-14af：样式读取顺序改为 全局文件 > suite > 默认（与滑块一致）——
+    // 原只读 suite：App Group 在独立 HUD 进程上权限不可用时恒为 0 → "切换纵向列表没用"
+    NSInteger menuStyle = 0;
+    NSData *styleData = [NSData dataWithContentsOfFile:@"/var/mobile/Documents/fanmenu_settings.json"];
+    if (styleData) {
+        NSDictionary *sd = [NSJSONSerialization JSONObjectWithData:styleData options:0 error:nil];
+        if ([sd isKindOfClass:[NSDictionary class]] && sd[@"style"]) menuStyle = [sd[@"style"] integerValue];
+    }
+    NSUserDefaults *stylePrefs = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"];
+    if ([stylePrefs objectForKey:@"fanMenuStyle"]) menuStyle = [stylePrefs integerForKey:@"fanMenuStyle"];
     BOOL isList = (menuStyle == 1);
     // v6.1.5-14n：菜单参数（图标整体透明度/散开角度/弧度）——读取顺序 全局文件 > suite > 默认
     // 全局文件由主 App 写（/var/mobile/Documents/fanmenu_settings.json），绕开 App Group 权限不确定性
