@@ -1144,7 +1144,9 @@ extern "C" const char *g_hud_char;
     } else {
         _girlView.transform = CGAffineTransformIdentity;
     }
-    [self _setFrameForImage:cf];
+    // v6.1.5-14u：攀爬帧按趴墙同款尺寸（50%高度×charScale）——原 _setFrameForImage 用站姿全尺寸，
+    // 猫娘手脚张开帧比趴墙大一倍、贴边时手脚被屏幕边缘裁掉
+    [self _setClimbFrameSize:cf];
     
     // 随机选择向上或向下攀爬
     BOOL climbUp = (arc4random_uniform(2) == 0);   // 50%概率向上，50%向下
@@ -1161,7 +1163,7 @@ extern "C" const char *g_hud_char;
         // 切换攀爬帧
         UIImage *nextFrame = _climbFrames[_climbIdx % 2];
         _girlView.image = nextFrame;
-        [self _setFrameForImage:nextFrame];
+        [self _setClimbFrameSize:nextFrame];
         
         // 边界检查：如果已经到底部/顶部，就不继续爬了
         CGFloat halfH = _girlView.frame.size.height / 2;
@@ -1174,8 +1176,27 @@ extern "C" const char *g_hud_char;
             return;
         }
         c.y = MAX(halfH, MIN(newY, v.height - halfH));
+        // v6.1.5-14u：爬动时保持贴边（x 不随帧宽变化漂移，避免手脚被边缘裁切/离墙）
+        CGFloat halfW = _girlView.frame.size.width / 2;
+        c.x = onLeftEdge ? halfW : (v.width - halfW);
         _girlView.center = c;
     }];
+}
+
+// v6.1.5-14u：攀爬帧尺寸=趴墙同款（左右墙 50% 高度 × MIN(charScale,1.2)），中心贴边
+- (void)_setClimbFrameSize:(UIImage *)img {
+    if (!img || !_girlView) return;
+    CGSize v = [UIScreen mainScreen].bounds.size;
+    CGFloat wallScale = MIN(_charScale, 1.2f);
+    CGFloat wallH = (CGFloat)g_hud_size * wallScale * 0.5;
+    CGFloat wa = (img.size.height > 0) ? (img.size.width / img.size.height) : 1.0;
+    _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
+    CGPoint c = _girlView.center;
+    // 重新贴边：左墙中心=半宽，右墙中心=屏宽-半宽（保持朝向由 transform 负责）
+    CGFloat halfW = _girlView.frame.size.width / 2;
+    if (c.x <= v.width / 2) c.x = halfW;
+    else c.x = v.width - halfW;
+    _girlView.center = c;
 }
 
 // v6.0.26：停止攀爬，恢复趴墙
