@@ -57,13 +57,18 @@ final class HUDManager {
     }()
     private let sysLogURL = URL(fileURLWithPath: "/var/mobile/Documents/hud.log")
 
-    /// HUD 可执行路径：优先独立 HUD 二进制（Resources/hud/TrollAgentHUD.app，TrollStore 随主 App 重签，
-    /// 签名有效 AMFI 放行——TrollSpeed 正解）；兜底主可执行 -hud（旧方案，主可执行二次 exec 可能被 AMFI 拒）
+    /// HUD 可执行路径：优先主可执行 -hud（v6.1.5-14d 反转）。
+    /// 主 App 是 TrollStore 直接签名的顶层 app——platform-application/no-sandbox/launchapplications/
+    /// application-groups 等 entitlements 100% 生效（AppMain main() 按 -hud 参数直接进 HUDMainStart，
+    /// 不 exec 不二次签名，AMFI 放行）。独立 HUD 子 app（hud/TrollAgentHUD.app）在 TrollStore 下
+    /// 嵌套重签时 entitlements 可能丢失/被剥离，导致 HUD 读不到 App Group、直读主 App plist 被沙箱挡、
+    /// 打开 app 无权限——正是"自定义不进菜单+点击没反应"的根因，故仅作兜底。
     var hudBinaryPath: String? {
+        let p = Bundle.main.executablePath ?? ""
+        if FileManager.default.fileExists(atPath: p) { return p }
         let hudApp = Bundle.main.bundlePath + "/hud/TrollAgentHUD.app/TrollAgentHUD"
         if FileManager.default.fileExists(atPath: hudApp) { return hudApp }
-        let p = Bundle.main.executablePath ?? ""
-        return FileManager.default.fileExists(atPath: p) ? p : nil
+        return nil
     }
 
     /// 主 App bundle 路径（供诊断显示）
