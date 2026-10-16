@@ -139,7 +139,6 @@ extern "C" const char *g_hud_char;
     NSTimer *_kbTimer;                  // v6.1.5-14n：键盘全局文件轮询
     CGFloat _dragLastX, _dragLastY;     // v6.1.5-14o：拖拽倾斜速度基准
     CAEmitterLayer *_particleLayer;     // v6.1.5-14p：氛围粒子层（闪电/萤火虫/星星/zZ）
-    UIView *_glowView;                  // v6.1.5-14p：昼夜光晕（深夜月光/傍晚暖光）
     NSTimer *_ambientTimer;             // v6.1.5-14p：环境氛围定时器（60s 检查小时+充电态）
     NSInteger _ambientBucket;           // v6.1.5-14p：当前环境时段桶（-1初始/0白天/1傍晚/2深夜/3充电）——变化才重置漂浮
 }
@@ -1899,19 +1898,21 @@ static UIImage * _realAppIcon(NSString *bundleId) {
 }
 
 // v6.1.5-14p：emoji → UIImage（粒子素材，零图片资源）
+// v6.1.5-14q：改直接字符串绘制——drawViewHierarchyInRect 要求视图在窗口树里，
+// 独立 HUD 进程里 UILabel 不在 window 上会生成空图 → 粒子完全不可见（用户反馈看不到粒子）
 static UIImage *emojiImage(NSString *emoji, CGFloat size) {
-    UILabel *l = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, size, size)];
-    l.text = emoji;
-    l.font = [UIFont systemFontOfSize:size * 0.82f];
-    l.textAlignment = NSTextAlignmentCenter;
-    UIGraphicsBeginImageContextWithOptions(l.bounds.size, NO, 0);
-    [l drawViewHierarchyInRect:l.bounds afterScreenUpdates:YES];
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(size, size), NO, 0);
+    [emoji drawInRect:CGRectMake(0, 0, size, size) withAttributes:@{
+        NSFontAttributeName: [UIFont systemFontOfSize:size * 0.88f],
+        NSForegroundColorAttributeName: [UIColor whiteColor]
+    }];
     UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
     return img;
 }
 
-// v6.1.5-14p：环境氛围初始化——粒子层+光晕层挂到根视图，60s 定时刷新（小时+充电态）
+// v6.1.5-14p：环境氛围初始化——粒子层挂到根视图，60s 定时刷新（小时+充电态）
+// v6.1.5-14q：去掉光晕（用户反馈"大圆环"不好看），只留粒子
 - (void)_setupAmbient {
     if (!_particleLayer) {
         _particleLayer = [CAEmitterLayer layer];
@@ -1919,38 +1920,23 @@ static UIImage *emojiImage(NSString *emoji, CGFloat size) {
         _particleLayer.emitterSize = CGSizeMake(70, 10);
         [self.view.layer insertSublayer:_particleLayer below:_girlView.layer];  // 粒子在角色后方
     }
-    if (!_glowView) {
-        _glowView = [[UIView alloc] initWithFrame:CGRectZero];
-        _glowView.userInteractionEnabled = NO;
-        _glowView.layer.masksToBounds = NO;
-        [self.view insertSubview:_glowView belowSubview:_girlView];
-    }
     [UIDevice currentDevice].batteryMonitoringEnabled = YES;
     [self _updateAmbient];
     _ambientTimer = [NSTimer scheduledTimerWithTimeInterval:60 target:self selector:@selector(_updateAmbient) userInfo:nil repeats:YES];
 }
 
-// v6.1.5-14p：环境决策——按小时选光晕+粒子，充电叠加闪电；粒子/光晕跟随角色位置
+// v6.1.5-14p/q：环境决策——按小时选粒子，充电叠加闪电；粒子跟随角色位置（无光晕）
 - (void)_updateAmbient {
     NSCalendar *cal = [NSCalendar currentCalendar];
     NSInteger hour = [cal component:NSCalendarUnitHour fromDate:[NSDate date]];
     NSMutableArray<NSString *> *parts = [NSMutableArray array];
-    CGFloat glowA = 0;
-    UIColor *glowC = nil;
-    CGFloat glowR = 60;
     NSInteger bucket = 0;   // 白天
     if (hour >= 21 || hour < 6) {
         bucket = 2;  // 深夜
-        glowC = [UIColor colorWithRed:0.30 green:0.24 blue:0.55 alpha:1.0];
-        glowA = 0.38;
-        glowR = _girlView.frame.size.width * 0.75 + 30;
         [parts addObject:@"✨"]; [parts addObject:@"⭐️"];
         if (arc4random_uniform(3) == 0) [parts addObject:@"💤"];
     } else if (hour >= 17 && hour < 19) {
         bucket = 1;  // 傍晚
-        glowC = [UIColor colorWithRed:1.00 green:0.62 blue:0.28 alpha:1.0];
-        glowA = 0.28;
-        glowR = _girlView.frame.size.width * 0.6 + 20;
         [parts addObject:@"✨"];
     }
     BOOL charging = ([UIDevice currentDevice].batteryState == UIDeviceBatteryStateCharging ||
@@ -1958,9 +1944,6 @@ static UIImage *emojiImage(NSString *emoji, CGFloat size) {
     if (charging) {
         bucket = 3;  // 充电
         [parts addObject:@"⚡️"];
-        glowC = [UIColor colorWithRed:0.35 green:0.78 blue:1.0 alpha:1.0];
-        glowA = 0.22;
-        glowR = _girlView.frame.size.width * 0.55 + 16;
     }
     // 漂浮时长只在环境时段切换时重置（避免每 60s 打断漂浮动画）
     if (_ambientBucket != bucket) {
@@ -1973,28 +1956,19 @@ static UIImage *emojiImage(NSString *emoji, CGFloat size) {
     } else {
         [self _clearParticles];
     }
-    if (glowC && glowA > 0.01) {
-        [self _setGlow:glowC alpha:glowA radius:glowR];
-    } else {
-        [self _setGlow:nil alpha:0 radius:0];
-    }
     [self _refreshAmbientPosition];
 }
 
-// v6.1.5-14p：粒子/光晕跟随角色位置（拖拽/吸附后调用）
+// v6.1.5-14p：粒子跟随角色位置（拖拽/吸附后调用）
 - (void)_refreshAmbientPosition {
     if (_particleLayer) {
         _particleLayer.emitterPosition = CGPointMake(_girlView.center.x,
                                                      _girlView.center.y - _girlView.frame.size.height / 2);
         _particleLayer.emitterSize = CGSizeMake(_girlView.frame.size.width * 0.5 + 30, 10);
     }
-    if (_glowView && !_glowView.hidden) {
-        _glowView.bounds = CGRectMake(0, 0, _glowView.frame.size.width, _glowView.frame.size.width);
-        _glowView.center = CGPointMake(_girlView.center.x, _girlView.center.y + _girlView.frame.size.height * 0.12);
-    }
 }
 
-// v6.1.5-14p：设置粒子（emoji 上飘粒）
+// v6.1.5-14p/q：设置粒子（emoji 上飘粒）——提高密度/尺寸让粒子肉眼可见
 - (void)_setParticles:(NSArray<NSString *> *)emojis {
     if (!_particleLayer) {
         _particleLayer = [CAEmitterLayer layer];
@@ -2005,19 +1979,19 @@ static UIImage *emojiImage(NSString *emoji, CGFloat size) {
     NSMutableArray *cells = [NSMutableArray array];
     for (NSString *e in emojis) {
         CAEmitterCell *cell = [CAEmitterCell emitterCell];
-        UIImage *img = emojiImage(e, 24);
+        UIImage *img = emojiImage(e, 28);
         if (!img) continue;
         cell.contents = (id)img.CGImage;
-        cell.birthRate = 0.7;
+        cell.birthRate = 1.4;
         cell.lifetime = 7;
-        cell.velocity = 26;
-        cell.velocityRange = 22;
-        cell.yAcceleration = -8;          // 上飘
+        cell.velocity = 30;
+        cell.velocityRange = 25;
+        cell.yAcceleration = -10;          // 上飘
         cell.emissionRange = M_PI * 2;
-        cell.scale = 0.55;
-        cell.scaleRange = 0.35;
-        cell.scaleSpeed = -0.02;          // 越飘越小
-        cell.alphaSpeed = -0.09;          // 淡出
+        cell.scale = 0.7;
+        cell.scaleRange = 0.4;
+        cell.scaleSpeed = -0.03;          // 越飘越小
+        cell.alphaSpeed = -0.1;           // 淡出
         cell.spin = 0.4;
         cell.spinRange = 0.8;
         [cells addObject:cell];
@@ -2028,35 +2002,6 @@ static UIImage *emojiImage(NSString *emoji, CGFloat size) {
 - (void)_clearParticles {
     [_particleLayer removeFromSuperlayer];
     _particleLayer = nil;
-}
-
-// v6.1.5-14p：昼夜光晕（圆形呼吸辉光）
-- (void)_setGlow:(UIColor *)color alpha:(CGFloat)alpha radius:(CGFloat)radius {
-    if (!_glowView) {
-        _glowView = [[UIView alloc] initWithFrame:CGRectZero];
-        _glowView.userInteractionEnabled = NO;
-        _glowView.layer.masksToBounds = NO;
-        [self.view insertSubview:_glowView belowSubview:_girlView];
-    }
-    if (!color || radius < 1) {
-        _glowView.hidden = YES;
-        [_glowView.layer removeAnimationForKey:@"glowPulse"];
-        return;
-    }
-    _glowView.hidden = NO;
-    _glowView.backgroundColor = color;
-    _glowView.alpha = alpha;
-    _glowView.layer.cornerRadius = radius;
-    _glowView.bounds = CGRectMake(0, 0, radius * 2, radius * 2);
-    _glowView.center = CGPointMake(_girlView.center.x, _girlView.center.y + _girlView.frame.size.height * 0.12);
-    [_glowView.layer removeAnimationForKey:@"glowPulse"];
-    CABasicAnimation *a = [CABasicAnimation animationWithKeyPath:@"opacity"];
-    a.fromValue = @(alpha);
-    a.toValue = @(alpha * 0.55);
-    a.duration = 2.2;
-    a.autoreverses = YES;
-    a.repeatCount = INFINITY;
-    [_glowView.layer addAnimation:a forKey:@"glowPulse"];
 }
 
 @end
