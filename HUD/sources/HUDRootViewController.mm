@@ -1256,6 +1256,13 @@ extern "C" const char *g_hud_char;
     NSInteger menuStyle = [[[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"] integerForKey:@"fanMenuStyle"];
     BOOL isList = (menuStyle == 1);
     // 第一遍：算所有按钮中心
+    // v6.1.5-14l：弧带中心点 C = 角色中心沿 centerAng 移到角色轮廓外 30pt——菜单从角色侧面展开（不遮角色），
+    // 所有层从 C 起算；提前声明供布局与防叠共用
+    CGFloat girlHalfW = (_girlView.frame.size.width > 0) ? _girlView.frame.size.width / 2.0 : 60.0;
+    CGFloat centerAngAll = atan2(screenH / 2 - girlY, screenW / 2 - girlX) * 180.0 / M_PI;
+    CGFloat centerRadAll = centerAngAll * M_PI / 180;
+    CGFloat cx = girlX + cos(centerRadAll) * (girlHalfW + 30);
+    CGFloat cy = girlY + sin(centerRadAll) * (girlHalfW + 30);
     NSMutableArray *centers = [NSMutableArray arrayWithCapacity:count];
     for (NSInteger i = 0; i < count; i++) {
         CGFloat x, y;
@@ -1268,8 +1275,9 @@ extern "C" const char *g_hud_char;
             x = fromRight ? girlX - 80 : girlX + 80;
             y = startY + i * 64;
         } else {
-            // v6.1.5-14k：彩虹弧带修正——内层起点=角色轮廓外（避免图标盖在角色身上），
-            // 间隔 24°、跨度上限 132°、出屏钳制放宽（避免外层图标重叠堆挤）
+            // v6.1.5-14l：弧带中心=角色轮廓外30pt（菜单从角色侧面展开，不遮角色）；
+            // 层半径 130/195/260；间隔 内26°/中22°/外20°（外层更紧凑，用户："第二排缩小间隙"）；
+            // 弧距验证：内 130×104°÷4≈59pt / 中 195×110°÷5≈75pt / 外 260×120°÷6≈91pt——均>56pt 按钮不叠
             NSInteger layerCount = (count <= 5) ? 1 : (count <= 11) ? 2 : (count <= 18) ? 3 : 4;
             NSInteger caps[4] = {0, 0, 0, 0};
             NSInteger filled = 0;
@@ -1284,27 +1292,44 @@ extern "C" const char *g_hud_char;
                 if (i < acc + caps[L]) { layer = L; posInLayer = i - acc; break; }
                 acc += caps[L];
             }
-            // v6.1.5-14k：内层半径 = 角色半宽 + 按钮半径(28) + 间隙(12)——图标弧带整体在角色轮廓外展开
-            CGFloat girlHalfW = (_girlView.frame.size.width > 0) ? _girlView.frame.size.width / 2.0 : 60.0;
-            CGFloat r0 = MAX(115.0, girlHalfW + 40.0);
-            CGFloat radii[4] = {r0, r0 + 70, r0 + 140, r0 + 210};
+            CGFloat radii[4] = {130, 195, 260, 325};
             CGFloat layerR = radii[layer];
             NSInteger nk = caps[layer];
-            CGFloat stepDeg = 24.0;  // 每 app 间隔角——每层弧长 = (本层数-1)*24°，外层自动更长
-            CGFloat span = (nk > 1) ? MIN(132.0, (nk - 1) * stepDeg) : 0;
+            CGFloat stepDegArr[4] = {26.0, 26.0, 22.0, 20.0};  // 内层26°→外层20°，外层更紧凑
+            CGFloat stepDeg = (layer < 4) ? stepDegArr[layer] : 20.0;
+            CGFloat span = (nk > 1) ? (nk - 1) * stepDeg : 0;
             // v6.1.5-12：扇面中心始终指向屏幕中心——角色贴边/贴底时外层按钮也朝屏幕中央展开
             CGFloat centerAng = atan2(screenH / 2 - girlY, screenW / 2 - girlX) * 180.0 / M_PI;
             CGFloat startDeg = centerAng - span / 2;
             // 层内均分本层弧：单个数居中，多个均匀铺开
             CGFloat deg = (nk == 1) ? (startDeg + span / 2) : (startDeg + posInLayer * (span / (nk - 1)));
             CGFloat ang = deg * M_PI / 180;
-            x = girlX + cos(ang) * layerR;
-            y = girlY + sin(ang) * layerR;
-            // 出屏保护（v6.1.5-14k：边界放宽到 15/30，减少外层图标堆挤）
+            x = cx + cos(ang) * layerR;
+            y = cy + sin(ang) * layerR;
+            // 出屏保护（v6.1.5-14k：边界放宽到 15/30）
             x = MAX(15, MIN(screenW - 15, x));
             y = MAX(30, MIN(screenH - 30, y));
         }
         [centers addObject:[NSValue valueWithCGPoint:CGPointMake(x, y)]];
+    }
+    // v6.1.5-14l：防叠兜底——任意两图标中心距 <58pt（按钮直径56+2）时，把后出现者沿弧外推12pt，最多3轮
+    for (NSInteger pass = 0; pass < 3; pass++) {
+        BOOL moved = NO;
+        for (NSInteger a = 0; a < count; a++) for (NSInteger b = a + 1; b < count; b++) {
+            CGPoint pa = [centers[a] CGPointValue];
+            CGPoint pb = [centers[b] CGPointValue];
+            CGFloat dx = pa.x - pb.x, dy = pa.y - pb.y;
+            if (dx * dx + dy * dy < 58.0 * 58.0) {
+                CGFloat ang2 = atan2(pb.y - cy, pb.x - cx);  // 沿弧带中心 C 外推
+                CGFloat newR = hypot(pb.x - cx, pb.y - cy) + 12;
+                CGPoint np = CGPointMake(cx + cos(ang2) * newR, cy + sin(ang2) * newR);
+                np.x = MAX(15, MIN(screenW - 15, np.x));
+                np.y = MAX(30, MIN(screenH - 30, np.y));
+                centers[b] = [NSValue valueWithCGPoint:np];
+                moved = YES;
+            }
+        }
+        if (!moved) break;
     }
     // 点空白处关菜单（最底层）
     UIButton *blank = [UIButton buttonWithType:UIButtonTypeCustom];
