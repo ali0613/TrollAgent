@@ -397,7 +397,6 @@ struct AttachmentBottomPanel: View {
 
 struct AutomationCenterView: View {
     @ObservedObject private var store = AutomationStore.shared
-    @State private var showEditor = false
     @State private var editing: AutomationStore.Task?
 
     var body: some View {

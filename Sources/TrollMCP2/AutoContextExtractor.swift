@@ -13,7 +13,6 @@ final class AutoContextExtractor: ObservableObject {
     @Published var lastBundleID: String?
     @Published var lastAppName: String?
     @Published var lastFilePath: String?
-    @Published var lastProject: String?
     @Published var lastAction: String?
 
     private init() {}

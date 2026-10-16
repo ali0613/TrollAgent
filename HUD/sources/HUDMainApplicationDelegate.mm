@@ -48,7 +48,6 @@
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-    // [_windowHostingController registerWindowWithContextID:_contextId atLevel:windowLevel];
     NSMethodSignature *signature = [NSMethodSignature signatureWithObjCTypes:"v@:Id"];
     NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
     [invocation setTarget:_windowHostingController];

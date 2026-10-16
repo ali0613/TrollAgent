@@ -11,7 +11,6 @@ struct DownloadsView: View {
     @State private var editMode = false
     @State private var showConfirm = false
     @State private var confirmMessage = ""
-    @State private var refreshTick = false
     @State private var toast: String?
 
     struct DownloadItem: Identifiable {
