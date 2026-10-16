@@ -1246,39 +1246,11 @@ extern "C" const char *g_hud_char;
     BOOL fromTop = (girlY < 150);
     BOOL fromLeft = (girlX < 150);
     BOOL fromRight = (girlX > screenW - 150);
-    // 从UserDefaults读取自定义应用列表，默认4个常用
-    // v6.1.5-3: 主 App 与 HUD 独立进程——fanMenuApps 由主 App 写入 App Group 共享域
-    //（group.com.ai.iosxcode），HUD 必须从同 suite 读；standardUserDefaults 兜底兼容旧数据
-    NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"];
-    NSArray *savedApps = [prefs arrayForKey:@"fanMenuApps"];
-    if (!savedApps) savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
-    NSMutableArray *apps = [NSMutableArray array];
-    if (savedApps.count) {
-        for (NSDictionary *a in savedApps) {
-            // v6.0.30修复：从已安装应用添加的条目只有bundleId没有url，
-            // 字典字面量遇nil值直接抛NSInvalidArgumentException崩溃（菜单弹不出）
-            NSString *name = a[@"name"] ?: @"应用";
-            NSString *url = a[@"url"] ?: @"";
-            [apps addObject:@{
-                @"name": name,
-                @"url": url,
-                @"color": [UIColor systemBlueColor]
-            }];
-        }
-    } else {
-        // 默认
-        [apps addObjectsFromArray:@[
-            @{@"name":@"微信", @"url":@"weixin://", @"color":[UIColor colorWithRed:0.19 green:0.78 blue:0.32 alpha:1.0]},
-            @{@"name":@"抖音", @"url":@"snssdk1128://", @"color":[UIColor blackColor]},
-            @{@"name":@"设置", @"url":@"App-prefs://", @"color":[UIColor grayColor]}
-        ]];
-    }
-    // 最后固定加AI聊天和隐藏
-    [apps addObject:@{@"name":@"AI", @"url":@"trollagent://chat", @"color":[UIColor systemBlueColor]}];
-    [apps addObject:@{@"name":@"隐藏", @"url":@"trollagent://hide", @"color":[UIColor systemRedColor]}];
+    // 统一菜单数据源（v6.1.5-4：_showFanMenu 与 _fanBtnClick 共用，杜绝两处读不一致导致点击失效）
+    NSArray *apps = [self _fanMenuApps];
     CGFloat radius = 120;
     NSInteger count = apps.count;
-    NSInteger menuStyle = [prefs integerForKey:@"fanMenuStyle"];
+    NSInteger menuStyle = [[[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"] integerForKey:@"fanMenuStyle"];
     for (NSInteger i = 0; i < count; i++) {
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
         BOOL isList = (menuStyle == 1);
@@ -1390,12 +1362,14 @@ extern "C" const char *g_hud_char;
 - (void)_fanBtnClick:(UIButton *)btn {
     NSInteger idx = btn.tag - 9000;
     [self _closeFanMenu];
-    // 读取应用列表（v6.1.5-3: App Group 共享域优先，standard 兜底旧数据）
-    NSArray *savedApps = [[[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"] arrayForKey:@"fanMenuApps"];
-    if (!savedApps) savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
-    NSInteger customCount = savedApps.count ?: 3;
-    if (idx == customCount + 1) {
-        // 最后一个是隐藏：缩小成小圆点贴屏幕边缘，不消失，点一下恢复
+    // v6.1.5-4：与 _showFanMenu 共用同一数据源，默认项/自定义/AI/隐藏统一对齐
+    NSArray *apps = [self _fanMenuApps];
+    if (idx < 0 || idx >= (NSInteger)apps.count) return;
+    NSDictionary *target = apps[idx];
+    NSString *url = target[@"url"] ?: @"";
+    NSString *bundleId = target[@"bundleId"] ?: @"";
+    if ([url isEqualToString:@"trollagent://hide"]) {
+        // 隐藏：缩小成小圆点贴屏幕边缘，不消失，点一下恢复
         [UIView animateWithDuration:0.3 animations:^{
             CGFloat screenW = [UIScreen mainScreen].bounds.size.width;
             CGFloat screenH = [UIScreen mainScreen].bounds.size.height;
@@ -1403,30 +1377,59 @@ extern "C" const char *g_hud_char;
             _girlView.center = CGPointMake(screenW - 30, screenH - 100);
             self.view.alpha = 0.7;
         }];
-        // 记下来现在是隐藏状态
         _isHidden = YES;
         return;
     }
-    if (idx == customCount) {
-        // 倒数第二个是AI聊天
+    if ([url isEqualToString:@"trollagent://chat"] || [target[@"name"] isEqualToString:@"AI"]) {
+        // AI聊天
         [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"trollagent://chat"] options:@{} completionHandler:nil];
         return;
     }
-    // 自定义应用
-    if (idx < savedApps.count) {
-        // 优先用bundleId直接打开（新添加的应用）
-        NSString *bundleId = savedApps[idx][@"bundleId"];
-        if (bundleId.length > 0) {
-            // 用LSApplicationWorkspace直接打开，不用URL scheme
-            Class LSWorkspace = NSClassFromString(@"LSApplicationWorkspace");
-            id ws = [LSWorkspace performSelector:@selector(defaultWorkspace)];
-            [ws performSelector:@selector(openApplicationWithBundleID:) withObject:bundleId];
-        } else {
-            // 兼容旧的url scheme
-            NSString *url = savedApps[idx][@"url"];
-            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];
-        }
+    if (bundleId.length > 0) {
+        // 用LSApplicationWorkspace直接打开，不用URL scheme
+        Class LSWorkspace = NSClassFromString(@"LSApplicationWorkspace");
+        id ws = [LSWorkspace performSelector:@selector(defaultWorkspace)];
+        [ws performSelector:@selector(openApplicationWithBundleID:) withObject:bundleId];
+    } else if (url.length > 0) {
+        // url scheme 打开
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];
     }
+}
+
+- (NSArray *)_fanMenuApps {
+    // v6.1.5-4：统一菜单数据构建——自定义列表（App Group suite 优先，standard 兜底旧数据）
+    // + 无自定义时默认4个 + 固定 AI/隐藏。_showFanMenu 与 _fanBtnClick 都走这里，保证点对项
+    NSUserDefaults *prefs = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"];
+    NSArray *savedApps = [prefs arrayForKey:@"fanMenuApps"];
+    if (!savedApps) savedApps = [[NSUserDefaults standardUserDefaults] arrayForKey:@"fanMenuApps"];
+    NSMutableArray *apps = [NSMutableArray array];
+    if (savedApps.count) {
+        for (NSDictionary *a in savedApps) {
+            // v6.0.30修复：从已安装应用添加的条目只有bundleId没有url，
+            // 字典字面量遇nil值直接抛NSInvalidArgumentException崩溃（菜单弹不出）
+            NSString *name = a[@"name"] ?: @"应用";
+            NSString *url = a[@"url"] ?: @"";
+            NSString *bid = a[@"bundleId"] ?: @"";
+            [apps addObject:@{
+                @"name": name,
+                @"url": url,
+                @"bundleId": bid,
+                @"color": [UIColor systemBlueColor]
+            }];
+        }
+    } else {
+        // 默认（与主 App 默认一致）
+        [apps addObjectsFromArray:@[
+            @{@"name":@"微信", @"url":@"weixin://", @"bundleId":@"", @"color":[UIColor colorWithRed:0.19 green:0.78 blue:0.32 alpha:1.0]},
+            @{@"name":@"抖音", @"url":@"snssdk1128://", @"bundleId":@"", @"color":[UIColor blackColor]},
+            @{@"name":@"相机", @"url":@"camera://", @"bundleId":@"", @"color":[UIColor systemTealColor]},
+            @{@"name":@"设置", @"url":@"App-prefs://", @"bundleId":@"", @"color":[UIColor grayColor]}
+        ]];
+    }
+    // 最后固定加AI聊天和隐藏
+    [apps addObject:@{@"name":@"AI", @"url":@"trollagent://chat", @"bundleId":@"", @"color":[UIColor systemBlueColor]}];
+    [apps addObject:@{@"name":@"隐藏", @"url":@"trollagent://hide", @"bundleId":@"", @"color":[UIColor systemRedColor]}];
+    return apps;
 }
 
 - (void)_closeFanMenu {
