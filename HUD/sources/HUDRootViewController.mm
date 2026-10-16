@@ -1248,10 +1248,9 @@ extern "C" const char *g_hud_char;
     BOOL fromTop = (girlY < 150);
     BOOL fromLeft = (girlX < 150);
     BOOL fromRight = (girlX > screenW - 150);
-    // 统一菜单数据源（v6.1.5-4：_showFanMenu 与 _fanBtnClick 共用，杜绝两处读不一致导致点击失效）
-    NSArray *apps = [self _fanMenuApps];
-    // v6.1.5-8：扇形按钮 56pt、半径 105
-    CGFloat radius = 105;
+    // 统一菜单数据源（v6.1.5-10：显示顺序重排——AI 置内圈、隐藏次之，其余按序）
+    NSArray *apps = [self _orderedFanMenuApps];
+    // v6.1.5-8/10：扇形按钮 56pt；孔雀开屏半径 88/172/256（内1 中2 外N-3）
     CGFloat fanBtn = 56.0;
     NSInteger count = apps.count;
     NSInteger menuStyle = [[[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"] integerForKey:@"fanMenuStyle"];
@@ -1271,14 +1270,30 @@ extern "C" const char *g_hud_char;
             x = fromRight ? girlX - 80 : girlX + 80;
             y = startY + i * 64;
         } else {
-            CGFloat angle;
-            CGFloat step = (count > 1) ? (120.0/(count-1)) : 0;
-            if (fromBottom) angle = (-150 + step*i) * M_PI/180;
-            else if (fromTop) angle = (30 + step*i) * M_PI/180;
-            else if (fromLeft) angle = (-60 + step*i) * M_PI/180;
-            else angle = (120 + step*i) * M_PI/180;
-            x = girlX + cos(angle)*radius;
-            y = girlY + sin(angle)*radius;
+            // v6.1.5-10：孔雀开屏——3 层同心弧：内圈 1 个、中圈 2 个、外圈 N-3 个；
+            // 半径递增（88/172/256），每层在 120° 扇面内均分 → 越外围 app 越多、越内围越少
+            NSInteger layer = 0, posInLayer = 0;
+            if (i == 0) { layer = 0; posInLayer = 0; }
+            else if (i <= 2) { layer = 1; posInLayer = i - 1; }
+            else { layer = 2; posInLayer = i - 3; }
+            CGFloat layerR = 88 + layer * 84;
+            NSInteger nk = (layer == 0) ? 1 : (layer == 1) ? 2 : MAX(1, count - 3);
+            // v6.1.5-10：扇面跨度自适应——每 app 至少 36° 间隔，最多 120°（app 多时扇面更展开不重叠）
+            CGFloat span = (nk > 1) ? MAX(36.0, MIN(120.0, (nk - 1) * 36.0)) : 0;
+            CGFloat stepA = (nk > 1) ? (span / (nk - 1)) : 0;
+            CGFloat startDeg = 0;
+            if (fromBottom) startDeg = -150;
+            else if (fromTop) startDeg = 30;
+            else if (fromLeft) startDeg = -60;
+            else startDeg = 120;
+            // 内圈单个数居中；其它层按角度均分
+            CGFloat deg = (nk == 1) ? (startDeg + 60) : (startDeg + stepA * posInLayer);
+            CGFloat ang = deg * M_PI / 180;
+            x = girlX + cos(ang) * layerR;
+            y = girlY + sin(ang) * layerR;
+            // 出屏保护（含下方名称胶囊）
+            x = MAX(30, MIN(screenW - 30, x));
+            y = MAX(45, MIN(screenH - 45, y));
         }
         [centers addObject:[NSValue valueWithCGPoint:CGPointMake(x, y)]];
         CGFloat capBottom = isList ? (y + btnHalf) : (y + btnHalf + 20); // 扇形含下方名称胶囊
@@ -1431,8 +1446,8 @@ extern "C" const char *g_hud_char;
 - (void)_fanBtnClick:(UIButton *)btn {
     NSInteger idx = btn.tag - 9000;
     [self _closeFanMenu];
-    // v6.1.5-4：与 _showFanMenu 共用同一数据源，默认项/自定义/AI/隐藏统一对齐
-    NSArray *apps = [self _fanMenuApps];
+    // v6.1.5-10：与 _showFanMenu 共用同一重排数据源（AI 内圈/隐藏次之），点对项不错位
+    NSArray *apps = [self _orderedFanMenuApps];
     if (idx < 0 || idx >= (NSInteger)apps.count) return;
     NSDictionary *target = apps[idx];
     NSString *url = target[@"url"] ?: @"";
@@ -1519,6 +1534,31 @@ static UIImage * _realAppIcon(NSString *bundleId) {
     IconFn fn = (IconFn)method_getImplementation(m);
     NSInteger format = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) ? 8 : 10;
     return fn(imgCls, sel, bundleId, format, [UIScreen mainScreen].scale);
+}
+
+// v6.1.5-10：孔雀开屏显示顺序——AI 聊天置内圈（最靠近角色）、隐藏次之，其余 app 按原序排外圈
+- (NSArray *)_orderedFanMenuApps {
+    NSMutableArray *arr = [NSMutableArray arrayWithArray:[self _fanMenuApps]];
+    NSInteger aiIdx = -1, hideIdx = -1;
+    for (NSInteger i = 0; i < (NSInteger)arr.count; i++) {
+        if ([arr[i][@"url"] isEqualToString:@"trollagent://chat"]) aiIdx = i;
+        if ([arr[i][@"url"] isEqualToString:@"trollagent://hide"]) hideIdx = i;
+    }
+    if (aiIdx > 0) {
+        id obj = arr[aiIdx];
+        [arr removeObjectAtIndex:aiIdx];
+        [arr insertObject:obj atIndex:0];
+    }
+    hideIdx = -1;
+    for (NSInteger i = 0; i < (NSInteger)arr.count; i++) {
+        if ([arr[i][@"url"] isEqualToString:@"trollagent://hide"]) hideIdx = i;
+    }
+    if (hideIdx > 0) {
+        id obj = arr[hideIdx];
+        [arr removeObjectAtIndex:hideIdx];
+        [arr insertObject:obj atIndex:1];
+    }
+    return arr;
 }
 
 - (NSArray *)_fanMenuApps {
