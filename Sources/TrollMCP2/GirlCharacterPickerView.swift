@@ -59,6 +59,10 @@ struct GirlCharacterPickerView: View {
         UserDefaults.standard.set(logs, forKey: "fanMenuDiag")
         UserDefaults.standard.synchronize()
     }
+    // v6.1.5-14r：菜单参数用 @State 驱动——Slider 拖动实时更新数值文本（UserDefaults 变化不触发 SwiftUI 刷新）
+    @State private var fanAlpha: Double = (prefs.object(forKey: "fanMenuAlpha") as? Double) ?? 1.0
+    @State private var fanSpan: Double = (prefs.object(forKey: "fanMenuSpan") as? Double) ?? 90.0
+    @State private var fanArc: Double = (prefs.object(forKey: "fanMenuArc") as? Double) ?? 1.0
     @State private var savedApps: [[String:String]] = {
         // v6.1.5-6：suite 优先，standard 兜底（HUD 进程 no-sandbox 直读主App容器偏好文件，双写保证两边都能拿到）
         let suite = Self.prefs.array(forKey: "fanMenuApps") as? [[String:String]]
@@ -305,50 +309,59 @@ struct GirlCharacterPickerView: View {
                     Text("纵向列表").tag(1)
                 }
                 .pickerStyle(.segmented)
-                // v6.1.5-14n：菜单图标整体透明度 / 散开角度 / 弧度——写入 suite，HUD 读取并应用
+                // v6.1.5-14n/r：菜单图标整体透明度 / 散开角度 / 弧度——@State 实时显示，松手才写文件+重启
                 HStack {
                     Text("图标整体透明度").font(.subheadline)
                     Spacer()
                     Slider(value: Binding<Double>(
-                        get: { Self.prefs.object(forKey: "fanMenuAlpha") as? Double ?? 1.0 },
+                        get: { fanAlpha },
                         set: {
+                            fanAlpha = $0
                             Self.prefs.set($0, forKey: "fanMenuAlpha")
                             Self.prefs.synchronize()
-                            Self.saveFanMenuSettings()
                         }
-                    ), in: 0.2...1.0)
+                    ), in: 0.2...1.0,
+                    onEditingChanged: { editing in
+                        if !editing { Self.saveFanMenuSettings() }
+                    })
                     .frame(width: 140)
-                    Text(String(format: "%.0f%%", (Self.prefs.object(forKey: "fanMenuAlpha") as? Double ?? 1.0) * 100))
+                    Text(String(format: "%.0f%%", fanAlpha * 100))
                         .font(.caption).foregroundColor(.secondary).frame(width: 42)
                 }
                 HStack {
                     Text("散开角度").font(.subheadline)
                     Spacer()
                     Slider(value: Binding<Double>(
-                        get: { Self.prefs.object(forKey: "fanMenuSpan") as? Double ?? 90.0 },
+                        get: { fanSpan },
                         set: {
+                            fanSpan = $0
                             Self.prefs.set($0, forKey: "fanMenuSpan")
                             Self.prefs.synchronize()
-                            Self.saveFanMenuSettings()
                         }
-                    ), in: 40...160)
+                    ), in: 40...160,
+                    onEditingChanged: { editing in
+                        if !editing { Self.saveFanMenuSettings() }
+                    })
                     .frame(width: 140)
-                    Text("\(Int(Self.prefs.object(forKey: "fanMenuSpan") as? Double ?? 90.0))°")
+                    Text("\(Int(fanSpan))°")
                         .font(.caption).foregroundColor(.secondary).frame(width: 42)
                 }
                 HStack {
                     Text("弧度(半径)").font(.subheadline)
                     Spacer()
                     Slider(value: Binding<Double>(
-                        get: { Self.prefs.object(forKey: "fanMenuArc") as? Double ?? 1.0 },
+                        get: { fanArc },
                         set: {
+                            fanArc = $0
                             Self.prefs.set($0, forKey: "fanMenuArc")
                             Self.prefs.synchronize()
-                            Self.saveFanMenuSettings()
                         }
-                    ), in: 0.7...1.4)
+                    ), in: 0.7...1.4,
+                    onEditingChanged: { editing in
+                        if !editing { Self.saveFanMenuSettings() }
+                    })
                     .frame(width: 140)
-                    Text(String(format: "%.1f×", Self.prefs.object(forKey: "fanMenuArc") as? Double ?? 1.0))
+                    Text(String(format: "%.1f×", fanArc))
                         .font(.caption).foregroundColor(.secondary).frame(width: 42)
                 }
                                 ForEach(0..<savedApps.count, id:\.self) { i in
