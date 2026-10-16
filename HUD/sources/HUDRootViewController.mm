@@ -1250,6 +1250,8 @@ extern "C" const char *g_hud_char;
     BOOL fromRight = (girlX > screenW - 150);
     // 统一菜单数据源（v6.1.5-10：显示顺序重排——AI 置内圈、隐藏次之，其余按序）
     NSArray *apps = [self _orderedFanMenuApps];
+    // v6.1.5-14m：最多显示 15 个（4+5+6 满配），超出截断（AI/隐藏已重排在前，自然保留）
+    if (apps.count > 15) apps = [apps subarrayWithRange:NSMakeRange(0, 15)];
     // v6.1.5-8/10：扇形按钮 56pt；孔雀开屏半径 88/172/256（内1 中2 外N-3）
     CGFloat fanBtn = 56.0;
     NSInteger count = apps.count;
@@ -1275,15 +1277,16 @@ extern "C" const char *g_hud_char;
             x = fromRight ? girlX - 80 : girlX + 80;
             y = startY + i * 64;
         } else {
-            // v6.1.5-14l：弧带中心=角色轮廓外30pt（菜单从角色侧面展开，不遮角色）；
-            // 层半径 130/195/260；间隔 内26°/中22°/外20°（外层更紧凑，用户："第二排缩小间隙"）；
-            // 弧距验证：内 130×104°÷4≈59pt / 中 195×110°÷5≈75pt / 外 260×120°÷6≈91pt——均>56pt 按钮不叠
-            NSInteger layerCount = (count <= 5) ? 1 : (count <= 11) ? 2 : (count <= 18) ? 3 : 4;
+            // v6.1.5-14m：彩虹弧带定稿（用户："第一排4个第二排5个第三排6个，最多15个"）——
+            // 每层 4/5/6 逐层+1；超过15个截断只显示15；
+            // 半径 115/175/235，间隔 内30°/中22°/外18°（外层更紧凑），每层跨度约90°整齐；
+            // 弧距验证：内 115×30°π/180=60pt / 中 175×22°=67pt / 外 235×18°=74pt——均>56pt 按钮不叠
+            NSInteger layerCount = (count <= 4) ? 1 : (count <= 9) ? 2 : 3;
             NSInteger caps[4] = {0, 0, 0, 0};
             NSInteger filled = 0;
             for (NSInteger L = 0; L < layerCount; L++) {
-                NSInteger cap = 5 + L;
-                if (L == layerCount - 1) cap = count - filled;  // 最后一层装剩余
+                NSInteger cap = 4 + L;
+                if (L == layerCount - 1) cap = count - filled;  // 最后一层装剩余（≤6）
                 caps[L] = cap;
                 filled += cap;
             }
@@ -1292,11 +1295,11 @@ extern "C" const char *g_hud_char;
                 if (i < acc + caps[L]) { layer = L; posInLayer = i - acc; break; }
                 acc += caps[L];
             }
-            CGFloat radii[4] = {130, 195, 260, 325};
+            CGFloat radii[4] = {115, 175, 235, 295};
             CGFloat layerR = radii[layer];
             NSInteger nk = caps[layer];
-            CGFloat stepDegArr[4] = {26.0, 26.0, 22.0, 20.0};  // 内层26°→外层20°，外层更紧凑
-            CGFloat stepDeg = (layer < 4) ? stepDegArr[layer] : 20.0;
+            CGFloat stepDegArr[4] = {30.0, 30.0, 22.0, 18.0};  // 内层30°→外层18°，外层更紧凑
+            CGFloat stepDeg = (layer < 4) ? stepDegArr[layer] : 18.0;
             CGFloat span = (nk > 1) ? (nk - 1) * stepDeg : 0;
             // v6.1.5-12：扇面中心始终指向屏幕中心——角色贴边/贴底时外层按钮也朝屏幕中央展开
             CGFloat centerAng = atan2(screenH / 2 - girlY, screenW / 2 - girlX) * 180.0 / M_PI;
@@ -1458,7 +1461,9 @@ extern "C" const char *g_hud_char;
     _lastFanClickTime = now;
     [self _closeFanMenu];
     // v6.1.5-10：与 _showFanMenu 共用同一重排数据源（AI 内圈/隐藏次之），点对项不错位
+    // v6.1.5-14m：与显示侧同截断到 15，idx 不错位
     NSArray *apps = [self _orderedFanMenuApps];
+    if (apps.count > 15) apps = [apps subarrayWithRange:NSMakeRange(0, 15)];
     if (idx < 0 || idx >= (NSInteger)apps.count) return;
     NSDictionary *target = apps[idx];
     NSString *url = target[@"url"] ?: @"";
