@@ -10,7 +10,7 @@ struct GirlCharacterPickerView: View {
     private static let prefs: UserDefaults = UserDefaults(suiteName: "group.com.ai.iosxcode") ?? .standard
     // v6.1.5-7：统一保存入口——双写(suite+standard) + 强制落盘 + 写后读回验证，诊断记入 fanMenuDiag
     // UserDefaults.set 默认异步落盘，添加后立刻切后台可能没写进 plist，HUD 直读文件时读不到 → 必须 synchronize
-    private static func saveFanMenu(_ apps: [[String:String]]) {
+    fileprivate static func saveFanMenu(_ apps: [[String:String]]) {
         prefs.set(apps, forKey: "fanMenuApps")
         prefs.synchronize()
         UserDefaults.standard.set(apps, forKey: "fanMenuApps")
