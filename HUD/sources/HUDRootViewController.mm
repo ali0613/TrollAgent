@@ -1268,9 +1268,8 @@ extern "C" const char *g_hud_char;
             x = fromRight ? girlX - 80 : girlX + 80;
             y = startY + i * 64;
         } else {
-            // v6.1.5-14i：彩虹式弧带（用户："类似彩虹排列一层一层的，第一排5个第二排6个第三排7个"）——
-            // 每层独立弧、逐层外扩：内层5个、中层6个、外层7个……每层 +1，外层 app 更多、弧更长，
-            // 每层以屏幕中心角为中心各自展开，从内到外像彩虹一样一层一层扩散
+            // v6.1.5-14k：彩虹弧带修正——内层起点=角色轮廓外（避免图标盖在角色身上），
+            // 间隔 24°、跨度上限 132°、出屏钳制放宽（避免外层图标重叠堆挤）
             NSInteger layerCount = (count <= 5) ? 1 : (count <= 11) ? 2 : (count <= 18) ? 3 : 4;
             NSInteger caps[4] = {0, 0, 0, 0};
             NSInteger filled = 0;
@@ -1285,11 +1284,14 @@ extern "C" const char *g_hud_char;
                 if (i < acc + caps[L]) { layer = L; posInLayer = i - acc; break; }
                 acc += caps[L];
             }
-            CGFloat radii[4] = {85, 155, 225, 295};
+            // v6.1.5-14k：内层半径 = 角色半宽 + 按钮半径(28) + 间隙(12)——图标弧带整体在角色轮廓外展开
+            CGFloat girlHalfW = (_girlView.frame.size.width > 0) ? _girlView.frame.size.width / 2.0 : 60.0;
+            CGFloat r0 = MAX(115.0, girlHalfW + 40.0);
+            CGFloat radii[4] = {r0, r0 + 70, r0 + 140, r0 + 210};
             CGFloat layerR = radii[layer];
             NSInteger nk = caps[layer];
-            CGFloat stepDeg = 20.0;  // 每 app 间隔角——每层弧长 = (本层数-1)*20°，外层自动更长
-            CGFloat span = (nk > 1) ? (nk - 1) * stepDeg : 0;
+            CGFloat stepDeg = 24.0;  // 每 app 间隔角——每层弧长 = (本层数-1)*24°，外层自动更长
+            CGFloat span = (nk > 1) ? MIN(132.0, (nk - 1) * stepDeg) : 0;
             // v6.1.5-12：扇面中心始终指向屏幕中心——角色贴边/贴底时外层按钮也朝屏幕中央展开
             CGFloat centerAng = atan2(screenH / 2 - girlY, screenW / 2 - girlX) * 180.0 / M_PI;
             CGFloat startDeg = centerAng - span / 2;
@@ -1298,9 +1300,9 @@ extern "C" const char *g_hud_char;
             CGFloat ang = deg * M_PI / 180;
             x = girlX + cos(ang) * layerR;
             y = girlY + sin(ang) * layerR;
-            // 出屏保护
-            x = MAX(30, MIN(screenW - 30, x));
-            y = MAX(45, MIN(screenH - 45, y));
+            // 出屏保护（v6.1.5-14k：边界放宽到 15/30，减少外层图标堆挤）
+            x = MAX(15, MIN(screenW - 15, x));
+            y = MAX(30, MIN(screenH - 30, y));
         }
         [centers addObject:[NSValue valueWithCGPoint:CGPointMake(x, y)]];
     }
