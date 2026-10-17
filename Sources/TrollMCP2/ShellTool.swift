@@ -2412,8 +2412,25 @@ final class ShellExecTool: MCPTool {
     private static func nativeToolProbe(_ command: String) -> [String: Any]? {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        // 按 ; && || 分段（原生管道还支持 |，探测不介入含 | 的段避免误吞管道执行）
-        let segs = trimmed.split(whereSeparator: { $0 == ";" || $0 == "&&" || $0 == "||" }).map { String($0).trimmingCharacters(in: .whitespaces) }
+        // 按 ; 与连续 &&/|| 分段（v6.1.5-14bw：修复 14br 引入的编译错——Character 不能 == "&&"；
+        // 扫描实现：连续两个同符号才分段，单个 &/|（含管道）不拆分，保真原意"| 段不介入探测"）
+        var segs: [String] = []
+        var cur = ""
+        for c in trimmed {
+            if c == ";" {
+                segs.append(cur); cur = ""; continue
+            }
+            if c == "&" || c == "|" {
+                if let prev = cur.last, prev == c {
+                    // 连续第二个 &&/||：第一个已在 cur 中，去掉它作为分段点
+                    segs.append(String(cur.dropLast())); cur = ""; continue
+                }
+                cur.append(c); continue
+            }
+            cur.append(c)
+        }
+        segs.append(cur)
+        segs = segs.map { $0.trimmingCharacters(in: .whitespaces) }
         if segs.count > 1 {
             // 批量链：全部非跳过段都必须是探测形态，否则整条不拦截（保留真实执行意图）
             var items: [(seg: String, target: String)] = []
