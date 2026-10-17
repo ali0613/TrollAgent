@@ -2289,10 +2289,15 @@ final class ShellExecTool: MCPTool {
         let word = firstWord(t)
         guard !word.isEmpty else { return nil }
         let body = t.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
+        // v6.1.5-14bu：重包检测命令放行真实执行——git/vim/curl/wget/make/cmake/gcc/clang/openssl/r2/radare2
+        // 已在 heavyPackages 禁自动装（走 Alpine 未装也只报错不装包→不闪退），且 git/curl 等 rootfs 预装或原生
+        // 可用（审计前即如此）。版本/裸命令形态直接放行，恢复真实执行；只有 command -v/which/type 仍走探测（原生无此命令）。
+        let passthrough: Set<String> = ["git", "vim", "vi", "curl", "wget", "make", "cmake", "gcc", "clang", "openssl", "r2", "radare2"]
         if probeNames.contains(word) {
             // 工具名 + 版本/无参数 = 探测；工具名 + 其他参数 = 真实执行（git status 等不得吞）
             if body.isEmpty || body == "--version" || body == "-v" || body == "-V" || body == "--help"
                 || body.hasPrefix("--version ") || body.hasPrefix("-v ") || body.hasPrefix("-V ") || body.hasPrefix("--help ") {
+                if passthrough.contains(word) { return nil }   // 放行：真实执行（rootfs 预装/原生可用，不闪退）
                 return word
             }
             return nil
@@ -2339,15 +2344,29 @@ final class ShellExecTool: MCPTool {
                     "stdout": "\(target): ✅ 已安装（App 原生命令实现，可直接 \(target) ... 执行）",
                     "ios_native": true, "note": note]
         }
-        // v6.1.5-14bt：git 特判——App 内置纯 Python git（bin/git.py，dulwich porcelain wrapper，
-        // build-ipa.sh 打包进 bin/）。iOS 沙箱拦 fork 真 git 跑不了，但 git.py 原生可用，不算"未安装"。
+        // v6.1.5-14bt/14bu：git 探测（command -v git / which git 形态）——查真实可用性：
+        // ① Alpine rootfs 预装 git（v4.3.74 起构建时预装，审计前即此状态）② App 内置纯 Python git（bin/git.py）。
+        // 直接 git 命令已放行（见 probeTargetOfSegment passthrough），这里只服务"检查环境"类查询。
         if target == "git" {
+            let fm = FileManager.default
+            let rootfs = NSHomeDirectory() + "/Documents/alpine-rootfs"
+            for sub in ["/usr/bin/", "/bin/"] {
+                let p = rootfs + sub + "git"
+                if fm.isExecutableFile(atPath: p) {
+                    return ["command": seg, "exit_code": 0,
+                            "stdout": "git: ✅ 已安装（Alpine rootfs 预装，直接 git ... 执行，不走自动装不闪退）\n用法：git clone/add/commit/push/log/status ...（Alpine 内，rootfs 自带无需 apk）",
+                            "ios_native": true, "note": "探测结果来自 alpine-rootfs 预装 git"]
+                }
+            }
             let gitPy = Bundle.main.bundlePath + "/bin/git.py"
-            if FileManager.default.fileExists(atPath: gitPy) {
+            if fm.fileExists(atPath: gitPy) {
                 return ["command": seg, "exit_code": 0,
                         "stdout": "git: ✅ 已安装（App 内置纯 Python git：python3 <app>/bin/git.py）\n用法：在仓库目录内执行 python3 <app>/bin/git.py clone/add/commit/push/log/status ...（原生，不走 Alpine 不闪退）",
                         "ios_native": true, "note": "探测结果来自 bin/git.py（dulwich 实现，iOS 沙箱拦 fork 真 git，但 git.py 原生可用）"]
             }
+            return ["command": seg, "exit_code": 1,
+                    "stdout": "git: ❌ 未安装（rootfs 未预装 git，也无 bin/git.py）\n安装提示：Alpine 里 tool.install git（手动装，自动装已禁用防闪退）；装好即可直接 git ...",
+                    "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体）"]
         }
         let fm = FileManager.default
         // 1) App 原生 bin
