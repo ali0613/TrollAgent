@@ -492,7 +492,15 @@ extern "C" const char *g_hud_char;
 - (void)unlockShow {
     _girlView.hidden = NO;
     _autoMoodPaused = NO;
-    [self _startBreathing];
+    // v6.1.5-14av：锁屏前若处于趴墙态（底部/侧边），解锁不启动待机漂浮——
+    // 原无条件 _startBreathing 会启动 hudFloat 上下漂浮 → 解锁后趴墙角色上下起伏。
+    // 改为：趴墙恢复贴墙呼吸（底部还恢复碎步排期）；非趴墙才走待机漂浮
+    if (_onBottomWall || _onSideWall) {
+        [self _startBottomBreath];
+        if (_onBottomWall) [self _scheduleBottomCrawl];
+    } else {
+        [self _startBreathing];
+    }
     [self _scheduleAutoMood];
 }
 
