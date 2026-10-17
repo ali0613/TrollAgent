@@ -2339,6 +2339,16 @@ final class ShellExecTool: MCPTool {
                     "stdout": "\(target): ✅ 已安装（App 原生命令实现，可直接 \(target) ... 执行）",
                     "ios_native": true, "note": note]
         }
+        // v6.1.5-14bt：git 特判——App 内置纯 Python git（bin/git.py，dulwich porcelain wrapper，
+        // build-ipa.sh 打包进 bin/）。iOS 沙箱拦 fork 真 git 跑不了，但 git.py 原生可用，不算"未安装"。
+        if target == "git" {
+            let gitPy = Bundle.main.bundlePath + "/bin/git.py"
+            if FileManager.default.fileExists(atPath: gitPy) {
+                return ["command": seg, "exit_code": 0,
+                        "stdout": "git: ✅ 已安装（App 内置纯 Python git：python3 <app>/bin/git.py）\n用法：在仓库目录内执行 python3 <app>/bin/git.py clone/add/commit/push/log/status ...（原生，不走 Alpine 不闪退）",
+                        "ios_native": true, "note": "探测结果来自 bin/git.py（dulwich 实现，iOS 沙箱拦 fork 真 git，但 git.py 原生可用）"]
+            }
+        }
         let fm = FileManager.default
         // 1) App 原生 bin
         let nativePath = Bundle.main.bundlePath + "/bin/" + target
