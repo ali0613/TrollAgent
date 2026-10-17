@@ -117,16 +117,15 @@ if [ -d "Resources/bin" ]; then
         cp "$MG" "$APP/bin/magic.mgc"
         echo ">>> magic.mgc bundled ($(du -h "$APP/bin/magic.mgc" | cut -f1))"
     fi
-    # 14c7 P5: busybox 静态 aarch64 ELF（elf-runner 的第一个嫁接对象）→ Resources/linux/busybox
-    # 14c7 fix8: **临时移除**——14c7b 真机启动即崩（14c5 全绿对照）。最大嫌疑：ELF 文件进 app bundle
-    #            （TrollStore 重签/系统启动校验对非 Mach-O 的处理）。14c7c 验证包：去 busybox 定位崩因。
-    # 验证通过后恢复：busybox 改放 Documents/Workspace（首次启动下载/解压），不进 bundle。
-    #if [ -f "native-tools-out/busybox-elf" ]; then
-    #    mkdir -p "$APP/Resources/linux"
-    #    cp "native-tools-out/busybox-elf" "$APP/Resources/linux/busybox"
-    #    chmod +x "$APP/Resources/linux/busybox"
-    #    echo ">>> linux/busybox (static aarch64 ELF) bundled ($(du -h "$APP/Resources/linux/busybox" | cut -f1))"
-    #fi
+    # 14c7 P5: busybox 静态 aarch64 ELF（elf-runner 的第一个嫁接对象）
+    # 14c7 fix8→fix9: **ELF 不能直接进 bundle**（14c7b 真机启动即崩——ELF 文件头被系统当未签名可执行拒绝；
+    #                14c7c 去 busybox 后验证正常启动，崩因确认）。fix9：gzip 成 busybox.gz 进 Resources/linux/
+    #                （纯数据文件，与 magic.mgc 同类安全）；app 首次调 elf-runner 时用 iOS zlib 解压到 Documents。
+    if [ -f "native-tools-out/busybox-elf" ]; then
+        mkdir -p "$APP/Resources/linux"
+        gzip -c "native-tools-out/busybox-elf" > "$APP/Resources/linux/busybox.gz"
+        echo ">>> linux/busybox.gz bundled ($(du -h "$APP/Resources/linux/busybox.gz" | cut -f1), ELF→gz 防启动崩)"
+    fi
     # fix3bo/fix3cl: node C wrapper 的运行时库（NodeMobile dylib）——install name 是
     # @rpath/NodeMobile.framework/NodeMobile，必须按 framework 目录结构放进 App/Frameworks/，
     # 放 bin/ 会让 dyld 按 @rpath 找 Frameworks/NodeMobile.framework 时 Library not loaded。

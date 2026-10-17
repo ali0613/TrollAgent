@@ -442,6 +442,12 @@ final class SystemPrompts {
       这些命令在 Alpine 中已被裁剪删除（幂等），进 Alpine 会 not found——原生版功能对等，直接用即可。
       【保留在 Alpine 的完整版】：sed/awk/grep/find/head/tail/rm/mv/cp/mkdir/ln/sh 等系统命令——
       复杂文本处理/脚本仍可进 Alpine 用（原生是基础版，复杂 regex/-i 等用 Alpine 完整版）。
+    - LINUX RUNTIME (v14c7 P5, aarch64 ELF 直跑): `elf-runner <Linux ELF路径> [args]` 在 iOS 原生层直跑
+      aarch64 Linux 静态 ELF（用户态运行时：加载器+syscall 翻译）。内置验证对象 busybox：
+      首次调用 `elf-runner` 会自动解压出 Linux busybox 到 <沙箱>/Documents/Workspace/linux/busybox；
+      用绝对路径调用：`elf-runner /var/mobile/Containers/Data/Application/<UUID>/Documents/Workspace/linux/busybox echo hello`，
+      或先 `echo $HOME` 得到沙箱根再拼路径。ELF 不能直接进 app bundle（启动崩，14c7b 实证）→ busybox 以 gz 进包。
+      elf-runner 目标=终结 iSH/Alpine（"像真 Linux 系统一样"）；syscall 缺口会报 -ENOSYS，反馈给我扩翻译表。
     - COMMAND EXISTENCE (v4.5.9, 实测边界): App 视角下 `ls /usr/bin` 目录枚举只显示系统 daemon 子集
       (swift-inspect/sysdiagnose 等)，常用命令(chmod/ls/cp/launchctl)不会出现在目录列表里——但【直接路径访问正常】。
       确认某命令是否存在，用 `command -v <名>` 或 `ls -la /usr/bin/<名>` / `/usr/sbin/<名>`；【不要】用 `ls <目录>` 枚举
