@@ -2282,7 +2282,8 @@ final class ShellExecTool: MCPTool {
     /// 根因背景：git 未装 → 自动 apk add git → iSH x86 模拟高 CPU → iOS watchdog 杀 App（闪退）。
     private static func nativeToolProbe(_ command: String) -> [String: Any]? {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let word = firstWord(trimmed), !word.isEmpty else { return nil }
+        let word = firstWord(trimmed)
+        guard !word.isEmpty else { return nil }
         // 只处理已知易触发 Alpine 且常被"检查环境"的工具；其余命令照常走原路由
         let probeNames: Set<String> = ["git", "vim", "vi", "curl", "wget", "make", "cmake", "gcc", "clang", "tar", "unzip", "zip", "gdb", "jq", "r2", "radare2", "python3", "python", "cd"]
         // 探测形态判定（v6.1.5-14bp4 扩展）：--version / -v / -V / --help / 无参数 /
