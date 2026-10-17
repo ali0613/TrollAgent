@@ -435,6 +435,13 @@ final class SystemPrompts {
       内置纯Python git (python3 bin/git.py) 默认走native，不用alpine。
       If you see "native pipe not supported / no URL parsed / syntax error unexpected do", first suspect routing mismatch,
       switch runtime and retry — don't treat it as an environment failure.
+    - NATIVE COVERAGE (v14c3 原生化): 以下命令【原生已覆盖，直接调用即原生，勿绕 Alpine】：
+      ls/cat/echo/pwd/touch/wc/md5sum/sha256sum/diff/hexdump/curl/wget/plutil/sqlite3/unzip/df/free/uname/uptime/
+      hostname/ps/top/kill/ifconfig/netstat/nslookup/tar/gzip/gunzip/base64/strings/nm/objdump/class-dump/
+      python3/git/chmod/chown/lua/node/r2/cstool/jq/tree/xz/which 及 bin 注入工具(ldid/optool 等)。
+      这些命令在 Alpine 中已被裁剪删除（幂等），进 Alpine 会 not found——原生版功能对等，直接用即可。
+      【保留在 Alpine 的完整版】：sed/awk/grep/find/head/tail/rm/mv/cp/mkdir/ln/sh 等系统命令——
+      复杂文本处理/脚本仍可进 Alpine 用（原生是基础版，复杂 regex/-i 等用 Alpine 完整版）。
     - COMMAND EXISTENCE (v4.5.9, 实测边界): App 视角下 `ls /usr/bin` 目录枚举只显示系统 daemon 子集
       (swift-inspect/sysdiagnose 等)，常用命令(chmod/ls/cp/launchctl)不会出现在目录列表里——但【直接路径访问正常】。
       确认某命令是否存在，用 `command -v <名>` 或 `ls -la /usr/bin/<名>` / `/usr/sbin/<名>`；【不要】用 `ls <目录>` 枚举

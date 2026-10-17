@@ -185,7 +185,9 @@ final class ShellExecTool: MCPTool {
                         "stdout": guardMsg,
                         "hint": "该命令会被路由到 Alpine，但 Alpine 读不到该 iOS 路径（非绑定目录(Workspace/Containers/System/App数据容器)，或文件>2MB）。三种解法：①先 cp 到 Workspace：`cp <file> /var/mobile/Documents/Workspace/`，再走 Alpine /ios_workspace 直读分析；②App 数据容器走 /ios_appdata 下 UUID 路径；③用原生 shell 工具（strings/nm/hexdump 直读大文件）；④对二进制用 binary.symbols / file analyze。"]
             }
-            let (output, exitCode, timedOut) = ISHEngine.exec(boundCmd, timeout: timeout)            // P3 按需补给：Alpine 输出显示缺工具(command not found)且命中白名单 → 自动 apk add 并重跑一次，
+            let (output, exitCode, timedOut) = ISHEngine.exec(boundCmd, timeout: timeout)
+            // 14c3 P1原生化: Alpine 工具裁剪（幂等）——原生已覆盖命令从 Alpine 移除，AI 只能走原生
+            _ = ShellExecTool.shrinkAlpineRootfs()            // P3 按需补给：Alpine 输出显示缺工具(command not found)且命中白名单 → 自动 apk add 并重跑一次，
             // 免 agent 反复探测缺什么、也避免"先探测→再装→再跑"的多轮试探。
             let (finalOut, finalExit, finalTimed, provisionNote) = ShellExecTool.provisionAndRerun(boundCmd, output: output, exitCode: exitCode, timedOut: timedOut, timeout: timeout)
             var stdout = ShellExecTool.filterNoise(finalOut)
@@ -676,6 +678,53 @@ final class ShellExecTool: MCPTool {
             i += 1
         }
         return false
+    }
+
+    /// 14c3 P1原生化: 原生已覆盖的"AI 用户命令"集合——Alpine 中同名工具将被裁剪删除。
+    /// 【铁律】系统命令(rm/mv/cp/mkdir/chmod/chown/ln/sh/ash/busybox/install/sed/awk/grep/find/
+    /// head/tail)【必须保留】——Alpine apk 装包脚本(post-install)依赖它们，删了装任何包都会挂。
+    /// 这里只删"AI 高频用户命令 + 原生功能对等"的（AI 走原生即可，Alpine 同名属重复）。
+    private static let nativeCoverage: Set<String> = [
+        // Swift 原生命令（功能对等）
+        "ls", "cat", "echo", "pwd", "touch", "wc", "md5sum", "sha256sum", "diff", "hexdump",
+        "curl", "wget", "plutil", "sqlite3", "unzip", "df", "free", "uname", "uptime",
+        "hostname", "ps", "top", "kill", "ifconfig", "netstat", "nslookup", "tar", "gzip",
+        "gunzip", "base64", "strings", "nm", "objdump", "class-dump", "python3", "git",
+        // bin/ 原生工具链
+        "lua", "node", "r2", "cstool", "jq", "tree", "xz", "which",
+        "ldid", "optool", "insert_dylib", "install_name_tool", "cp-15", "mv-15", "ct_bypass", "opainject"
+    ]
+
+    /// 14c3 P1原生化: Alpine rootfs 工具裁剪——原生已覆盖命令从 Alpine 移除，AI 只能走原生。
+    /// 幂等（标记文件 .native-shrunk-14c3）；只删 symlink/普通文件；busybox 本体保留。
+    static func shrinkAlpineRootfs() -> String {
+        let fm = FileManager.default
+        let rootfs = NSHomeDirectory() + "/Documents/alpine-rootfs"
+        let mark = rootfs + "/.native-shrunk-14c3"
+        guard fm.fileExists(atPath: rootfs + "/bin/busybox") else { return "" }
+        if fm.fileExists(atPath: mark) { return "" }
+        let dirs = ["usr/bin", "bin", "usr/sbin", "sbin", "usr/local/bin"]
+        var removed = 0
+        var kept = 0
+        for d in dirs {
+            let dirPath = rootfs + "/" + d
+            guard let entries = try? fm.contentsOfDirectory(atPath: dirPath) else { continue }
+            for e in entries where nativeCoverage.contains(e) {
+                if e == "busybox" { kept += 1; continue }
+                let p = dirPath + "/" + e
+                var isSymlink = false
+                if let dest = try? fm.destinationOfSymbolicLink(atPath: p) { _ = dest; isSymlink = true }
+                var isReg = false
+                var st = stat()
+                if stat(p, &st) == 0 { isReg = (st.st_mode & S_IFMT) == S_IFREG }
+                if isSymlink || isReg {
+                    if (try? fm.removeItem(atPath: p)) != nil { removed += 1 }
+                }
+            }
+        }
+        try? fm.createDirectory(atPath: rootfs, withIntermediateDirectories: true)
+        fm.createFile(atPath: mark, contents: nil)
+        return removed > 0 ? "Alpine 已裁剪 \(removed) 个原生重复工具（系统命令/busybox 保留）" : ""
     }
 
     /// P2 环境自动路由：按命令类型自动判定是否必须走 Alpine。
