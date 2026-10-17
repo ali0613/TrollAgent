@@ -176,12 +176,17 @@ enum ISHEngine {
         // 内核污染 → cpu_run_to_interrupt 段错误（4.0.6~4.0.9 守卫均未根治）。
         // 根治：只绑工作区(=/var/mobile/Documents/Workspace，rootfs 的兄弟目录，非 rootfs 本身)
         // + /var/containers(bundle 读，已验证不污染) + 只读 /System。
-        // jinx 等 App 的【数据容器】在 /var/mobile/Containers/Data，走原生 FS 工具(file/fs)读取，
-        // 不走 Alpine 绑定（避免再次暴露 /var/mobile）。
+        // v4.4.0(14c0): 追加 App 数据容器绑定——用户明确需要"访问其他 App 数据"：
+        //   /var/mobile/Containers/Data/Application → /ios_appdata（所有 App 数据容器，只读）
+        //   /var/mobile/Containers/Shared/AppGroup  → /ios_appgroups（Files 共享容器，只读）
+        //   两者均不含 /var/mobile/Documents（rootfs 所在）→ 无自引用 → 不污染内核。
+        //   只读绑定保证安全（分析/读取用）；要写其他 App 容器走 bindAppContainer(带备份)。
         let roots: [(String, String, Bool)] = [
             ("/var/mobile/Documents/Workspace", "/ios_workspace", false),
             ("/var/containers", "/ios_containers", false),
             ("/System", "/ios_system", true),
+            ("/var/mobile/Containers/Data/Application", "/ios_appdata", true),
+            ("/var/mobile/Containers/Shared/AppGroup", "/ios_appgroups", true),
         ]
         let fm = FileManager.default
         var result = command

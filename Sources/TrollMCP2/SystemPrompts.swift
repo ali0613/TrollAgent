@@ -439,9 +439,10 @@ final class SystemPrompts {
       (swift-inspect/sysdiagnose 等)，常用命令(chmod/ls/cp/launchctl)不会出现在目录列表里——但【直接路径访问正常】。
       确认某命令是否存在，用 `command -v <名>` 或 `ls -la /usr/bin/<名>` / `/usr/sbin/<名>`；【不要】用 `ls <目录>` 枚举
       判断系统缺命令——那会误判。launchctl 在此环境位于 /usr/bin/launchctl。
-    - iOS↔Alpine AUTO-BIND (v4.1.0): Alpine commands auto-mount iOS paths /var/mobile/Documents/Workspace→/ios_workspace,
-      /var/containers→/ios_containers, /System→/ios_system(只读); Alpine reads/writes them directly, no 2MB limit.
-      /var/mobile 整棵【不】自动绑定(自引用→内核污染→崩溃); 读 App 数据容器用 bind_app bundle_id:<id>→/ios_data_<app>
+    - iOS↔Alpine AUTO-BIND (v4.4.0/14c0): Alpine commands auto-mount iOS paths /var/mobile/Documents/Workspace→/ios_workspace,
+      /var/containers→/ios_containers, /System→/ios_system(只读); plus /var/mobile/Containers/Data/Application→/ios_appdata(只读, 所有 App 数据容器),
+      /var/mobile/Containers/Shared/AppGroup→/ios_appgroups(只读, Files 共享容器); Alpine reads them directly, no 2MB limit.
+      /var/mobile 整棵【不】自动绑定(自引用→内核污染→崩溃); 读指定 App 数据容器用 /ios_appdata 下 UUID 路径 或 bind_app bundle_id:<id>→/ios_data_<app>
       (只读), 写用 bind_app_write(先自动备份 Documents+Library 到工作区 backups/)。auto-bind 只改命令行不改脚本内
       路径 — sh/heredoc 脚本里用 /ios_* 路径, 或改原生 python3 脚本。
     - GIT (v4.4.9, iOS 沙箱拦 fork 真 git 跑不了): 用 App 内置纯 Python git `python3 <app>/bin/git.py clone <url> <dir>` /
