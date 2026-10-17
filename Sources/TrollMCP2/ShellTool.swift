@@ -405,8 +405,10 @@ final class ShellExecTool: MCPTool {
         }
         
         // 20. git 命令——iOS 原生实现 (App/bin/git.py，dulwich porcelain；iOS 拦 fork 真 git 跑不了)
-        if trimmed == "git" || trimmed.hasPrefix("git ") {
-            let result = ShellExecTool.runIOSGitPy(iosCmd)
+        // v6.1.5-14bz：cd&&git 组合（cd X && git status）此前命中 cd 分支导致 git 不执行——
+        // 分支判断须同时看 finalCmd（cd&& 已提取的命令），并传 workingDir 作 git cwd。
+        if trimmed == "git" || trimmed.hasPrefix("git ") || finalCmd == "git" || finalCmd.hasPrefix("git ") {
+            let result = ShellExecTool.runIOSGitPy(iosCmd, gitCwdOverride: workingDir.isEmpty ? nil : workingDir)
             AuditLog.shared.log("shell.exec (ios git)", detail: String(trimmed.prefix(100)))
             return result
         }
@@ -2301,7 +2303,7 @@ final class ShellExecTool: MCPTool {
     /// iOS 沙箱拦 fork()，真 git 跑不了；rootfs 预装 git 曾因 CI provision 失败降级未进包——
     /// 因此 git 命令一律路由到 git.py：原生 ARM64 跑，不走 Alpine 不装包不闪退。
     /// cwd 经 TROLL_GIT_CWD 注入（python3 原生子进程无 tty 且 spawn 不带 cwd，git 依赖进程目录）。
-    private static func runIOSGitPy(_ command: String) -> [String: Any] {
+    private static func runIOSGitPy(_ command: String, gitCwdOverride: String? = nil) -> [String: Any] {
         let gitPy = Bundle.main.bundlePath + "/bin/git.py"
         guard FileManager.default.fileExists(atPath: gitPy) else {
             return ["command": command, "exit_code": 1,
@@ -2318,7 +2320,8 @@ final class ShellExecTool: MCPTool {
         let pyCmd = "python3 \(gitPy) \(args.joined(separator: " "))".trimmingCharacters(in: .whitespaces)
         // v6.1.5-14by：TROLL_GIT_CWD 用 iOS 真实存在目录——ISHEngine.cwd 默认 /root（Alpine 概念路径，
         // iOS 沙箱无 /root），chdir 失败 git.py 落回 App 默认 cwd 行为错乱。不存在时回退 Workspace。
-        var gitCwd = ISHEngine.cwd
+        // v6.1.5-14bz：支持 cd X && git 组合——gitCwdOverride 优先（cd 的路径）。
+        var gitCwd = gitCwdOverride ?? ISHEngine.cwd
         if !FileManager.default.fileExists(atPath: gitCwd) {
             gitCwd = "/var/mobile/Documents/Workspace"
         }
