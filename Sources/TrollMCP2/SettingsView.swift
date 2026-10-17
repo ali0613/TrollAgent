@@ -15,6 +15,8 @@ struct SettingsItem: Identifiable {
     var onToggle: ((Bool) -> Void)?
     /// v4.3.39：行尾红点（新版提醒等），闭包返回是否显示
     var redDot: (() -> Bool)?
+    /// v6.1.5-14bf：行尾右侧数值（如版本号）——14ax 移除副标题渲染后版本号丢失，用独立 value 恢复且保持灰色可见
+    var value: String?
 }
 
 struct SettingsGroup {
@@ -276,7 +278,8 @@ struct SettingsView: View {
                          redDot: { UpdateManager.shared.hasUpdateRedDot }),
             SettingsItem(title: L10n.t("version"),
                          subtitle: ver, icon: "number.circle.fill", color: .gray,
-                         destination: nil)
+                         destination: nil,
+                         value: ver)   // v6.1.5-14bf：版本号行尾恢复显示（14ax 移除副标题后丢失）
         ]
         groups.append(SettingsGroup(header: L10n.t("sec_about"), items: aboutItems))
 
@@ -480,22 +483,28 @@ struct SettingRowContent: View {
     let item: SettingsItem
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(item.color)
-                    .frame(width: 34, height: 34)
+                    .frame(width: 44, height: 44)
                 Image(systemName: item.icon)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 21, weight: .semibold))
                     .foregroundColor(.white)
             }
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
                     .font(.headline)   // v6.1.5-14ay：去掉灰色副标题后黑色标题放大（body→headline）
                     .foregroundColor(.primary)
                 // v6.1.5-14ax：灰色副标题介绍已按用户要求移除
             }
             Spacer(minLength: 0)
+            // v6.1.5-14bf：行尾数值（版本号等）——灰字但字号足够可见
+            if let value = item.value {
+                Text(value)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundColor(.secondary)
+            }
             // v4.3.39：行尾红点提醒（新版更新等）——红点在行尾右侧，点击行即处理
             if let redDot = item.redDot, redDot() {
                 Circle()
@@ -503,6 +512,7 @@ struct SettingRowContent: View {
                     .frame(width: 9, height: 9)
             }
         }
+        .padding(.vertical, 6)
     }
 }
 
