@@ -22,6 +22,7 @@ struct ChatView: View {
     // UIKit 方案真机稳定。标记位 + sheet onDismiss 触发，保证面板完全关闭后再 present（不再猜时间延迟）。
     @State private var pendingFilePick = false
     @State private var showModelPicker = false  // v2.9.36：聊天框切换上游模型
+    @State private var showToolCenter = false  // v6.1.5-14bm：/tools 打开工具中心
     // v3.3.4：输入框 + 号展开"应用/相册/文件/浏览器"快捷行（点 + 变 x 收起）
     @State private var attachExpanded = false
 
@@ -277,6 +278,10 @@ struct ChatView: View {
         // v3.0.76：快捷标签 sheet
         .sheet(isPresented: Binding(get: { AppUIState.shared.quickTerminalPresented }, set: { AppUIState.shared.quickTerminalPresented = $0 })) {
             RemoteTerminalView()
+        }
+        // v6.1.5-14bm：/tools → 工具中心（三层工具总览，给用户看）
+        .sheet(isPresented: $showToolCenter) {
+            ToolCenterView()
         }
         .sheet(isPresented: Binding(get: { AppUIState.shared.quickToolsPresented }, set: { AppUIState.shared.quickToolsPresented = $0 })) {
             ToolsView()
@@ -1173,7 +1178,7 @@ struct ChatView: View {
         case "/clear": store.clearCurrent(); showToast("已清空当前会话")
         case "/new": store.newConversation(); showToast("已新建会话")
         case "/model": showModelPicker = true
-        case "/tools": showToast("已加载 \(ToolRegistry.shared.allToolNames().count) 个工具")
+        case "/tools": showToolCenter = true
         default: break
         }
         inputText = ""

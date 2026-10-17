@@ -126,6 +126,14 @@ struct SettingsView: View {
                          destination: AnyView(DeveloperInstructionsView()))
         ]))
 
+        // v6.1.5-14bm：工具中心——给用户看的分层工具总览（iOS/原生/Alpine）
+        groups.append(SettingsGroup(header: "工具", items: [
+            SettingsItem(title: "工具中心",
+                         subtitle: "\(ToolRegistry.shared.toolCount) 个工具 · iOS/原生/Alpine 分层",
+                         icon: "wrench.and.screwdriver.fill", color: .green,
+                         destination: AnyView(ToolCenterView()))
+        ]))
+
         // 网络与抓包（v3.3.1：独立分组，不依赖开发者模式——普通用户也能直接看到抓包入口）
         groups.append(SettingsGroup(header: "网络与抓包", items: [
             // v3.3.2：开关 + 点击进详情（Toggle 一键开/关，NavigationLink 进详情页）
