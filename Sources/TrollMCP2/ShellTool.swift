@@ -36,7 +36,7 @@ enum ShellDiag {
 final class ShellExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "shell.exec",
-        summary: "Run shell command (terminal/CLI). Params: command(必填), timeout(默认20s/max120), runtime(auto/ios/alpine). 自动路由(auto默认): 装包/解包/工具链/复杂脚本→Alpine(自动apk add, bind /ios_workspace /ios_containers); 纯文件/系统/网络→iOS原生. Use for: file ops, system info, network, text processing.",
+        summary: "Run shell command (terminal/CLI). Params: command(必填), timeout(默认20s/max120), runtime(auto/ios/alpine). 自动路由(auto默认): 装包/解包/工具链/复杂脚本→Alpine; 纯文件/系统/网络→iOS原生. 缺轻量工具(tar/jq/gdb等)自动apk add并重试一次; 重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)禁自动装(防iSH高CPU闪退)——git已rootfs预装可直接用, 其他需tool.install手动装. Use for: file ops, system info, network, text processing.",
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",
@@ -674,7 +674,8 @@ final class ShellExecTool: MCPTool {
             // 首词 python3 走 iOS 原生分支(runIOSPython3)。要 Alpine 版 Python 用 sh -c 'python3 ...'
             // (sh marker 命中仍走 Alpine)，或显式声明"在 Alpine 里跑"。
             #"^\s*(pip3?)\s+"#,        // pip / pip3 (装包仍在 Alpine)
-            #"^\s*(git|wget|make|cmake|gcc|clang)\s+"#,  // 工具链，所有git都走Alpine（原生没有git实现）
+            #"^\s*(git|make|cmake|gcc|clang)\s+"#,  // 工具链。git 走 Alpine(rootfs 预装 git, 审计前即此状态)；
+            // v6.1.5-14bv：wget 移出——原生 runIOSDownload 可用, Alpine 未预装 wget, 送 Alpine 会报"未装"误导(AI 绕圈)
             #"^\s*sh\s+"#,             // 任意 sh 脚本(含无 flag) → Alpine 全功能 shell
             #"^\s*bash\s+"#,
             #"^\s*file\s+"#,           // native 无 file 命令 → Alpine 的 file(真实现, autoBind 后能读 iOS 文件)
@@ -704,9 +705,10 @@ final class ShellExecTool: MCPTool {
             return true
         }
         // v6.0.30: 阻塞型联网/重命令自动切Alpine，避免原生跑阻塞命令闪退
+        // v6.1.5-14bv：wget / curl -O / curl -L 移出——原生 runIOSDownload(Swift URLSession) 即可下载，
+        // 送 Alpine 反而 wget 未预装报"未装"、curl 慢/高CPU。仅 git 联网仍走 Alpine。
         let blockingMarkers = [
             "git clone", "git pull", "git fetch",
-            "wget ", "curl -O", "curl -L",
             "$(", "`",  // 命令替换，原生不支持
             ">>"  // 重定向写文件，原生处理不一致
         ]
@@ -3544,6 +3546,15 @@ final class ShellExecTool: MCPTool {
     /// 抓取到 stdout (JS 渲染页检测 needs_render)；③解析失败报具体原因而非笼统 Invalid URL。
     private static func runIOSDownload(_ command: String) -> [String: Any] {
         let rawParts = command.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+
+        // v6.1.5-14bv：curl/wget --version / -v / -V 检测支持——原生下载器不做下载但如实回版本，
+        // 让"检查环境"类命令可用（探测已放行到原生，这里必须接住，否则报 Usage 误导）
+        if rawParts.count >= 2 && (rawParts[1] == "--version" || rawParts[1] == "-v" || rawParts[1] == "-V") {
+            let name = rawParts[0]
+            return ["command": command, "exit_code": 0,
+                    "stdout": "\(name) (TrollAgent 内置 iOS 原生实现，Swift URLSession)\n支持：-O <url> / -sL <url> / -o <path> <url> / -A <ua> <url>；不走 Alpine 不装包",
+                    "ios_native": true]
+        }
 
         guard rawParts.count >= 2 else {
             return ["command": command, "exit_code": 1, "stdout": "Usage: curl -O <url> / curl -sL <url> / curl -o <path> <url>", "ios_native": true]
