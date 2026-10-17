@@ -1344,11 +1344,11 @@ extern "C" const char *g_hud_char;
 // 改 scale.y 1.0→1.06 + scale.x 0.985→1.0（肚子鼓起更明显），时长 1.0s
 - (void)_startBottomBreath {
     [_girlView.layer removeAnimationForKey:@"hudBottomBreath"];
-    CAKeyframeAnimation *a = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
-    a.values = @[[NSValue valueWithCATransform3D:CATransform3DIdentity],
-                 [NSValue valueWithCATransform3D:CATransform3DConcat(CATransform3DMakeScale(0.985f, 1.06f, 1.0f),
-                                                                     _girlView.layer.transform)],
-                 [NSValue valueWithCATransform3D:CATransform3DIdentity]];
+    // v6.1.5-14au：修复 14at 引入的类型 bug——keyPath "transform.scale" 必须配 NSNumber 标量，
+    // 原误传 CATransform3D 导致 Core Animation 插值异常 → 呼吸"有时候不出现"。
+    // 改回 "transform.scale.y" + NSNumber（正确类型），幅度保持 1.06（比原 1.045 明显）
+    CAKeyframeAnimation *a = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale.y"];
+    a.values = @[@1.0f, @1.06f, @1.0f];
     a.keyTimes = @[@0.0f, @0.5f, @1.0f];
     a.duration = 1.0;
     a.repeatCount = INFINITY;
@@ -1523,10 +1523,12 @@ extern "C" const char *g_hud_char;
 }
 // v6.1.5-14o：被摸/长按/蹦跳结束后若切了 happy 帧且非特殊状态，回到待机帧
 - (void)_resetToIdleIfNeeded {
-    [self _stopBottomAmbient];   // v6.1.5-14w：任何回待机路径都停底部动效
+    // v6.1.5-14au：先判状态再停动效——原第一行就 _stopBottomAmbient 且置 _onBottomWall=NO，
+    // 底部趴墙时双击/长按会误停呼吸+碎步而角色仍趴着 → 呼吸"有时候不出现"
+    if (_isDragging || _falling || _isClimbing || _onSideWall || _onBottomWall) return;
+    [self _stopBottomAmbient];   // v6.1.5-14w：真正回待机才停底部动效
     // v6.1.5-14aa：加 _onBottomWall——原只判 _onSideWall，底部趴墙漏判，
     // 长按捏扁弹回时把角色从趴底错误拉回站姿待机
-    if (_isDragging || _falling || _isClimbing || _onSideWall || _onBottomWall) return;
     if (_idleFrames.firstObject && _girlView.image != _idleFrames.firstObject) {
         _girlView.image = _idleFrames.firstObject;
         [self _setFrameForImage:_idleFrames.firstObject];
