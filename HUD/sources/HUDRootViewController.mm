@@ -1137,7 +1137,9 @@ extern "C" const char *g_hud_char;
     }
     CGRect bf = _bubbleView.frame;   // 气泡直接 add 到 self.view，frame 即父视图坐标
     CGFloat tailX = bf.origin.x + bf.size.width / 2;
-    CGFloat tailY = bf.origin.y + bf.size.height;
+    // v6.1.5-14ao：顶边嵌入气泡内 2pt——气泡圆角/边框盖住三角形顶边接缝，
+    // 避免"尖角处有条线"（三角形平顶边 vs 气泡圆角底边的缝隙）
+    CGFloat tailY = bf.origin.y + bf.size.height - 2;
     UIBezierPath *tailPath = [UIBezierPath bezierPath];
     [tailPath moveToPoint:CGPointMake(tailX - tailW/2, tailY)];
     [tailPath addLineToPoint:CGPointMake(tailX, tailY + tailH)];
@@ -1145,20 +1147,19 @@ extern "C" const char *g_hud_char;
     [tailPath closePath];
     _bubbleTailLayer.path = tailPath.CGPath;
     // v6.0.28：尾巴颜色跟着气泡样式走
+    // v6.1.5-14ao：全部去描边（strokeColor=clear, lineWidth=0）——原黑/粉描边+2pt 线宽
+    // 在尖角轮廓上画一圈线，用户反馈"尖角那里拦着线"；纯填充与气泡同色融合
     if (bubbleStyle == 3) {
         _bubbleTailLayer.fillColor = [UIColor systemYellowColor].CGColor;
-        _bubbleTailLayer.strokeColor = [UIColor blackColor].CGColor;
     } else if (bubbleStyle == 2) {
         _bubbleTailLayer.fillColor = [UIColor whiteColor].CGColor;
-        _bubbleTailLayer.strokeColor = [UIColor blackColor].CGColor;
     } else if (bubbleStyle == 1) {
         _bubbleTailLayer.fillColor = [UIColor systemPinkColor].CGColor;
-        _bubbleTailLayer.strokeColor = [UIColor clearColor].CGColor;
     } else {
         _bubbleTailLayer.fillColor = [UIColor whiteColor].CGColor;
-        _bubbleTailLayer.strokeColor = [UIColor systemPinkColor].CGColor;
     }
-    _bubbleTailLayer.lineWidth = 2;
+    _bubbleTailLayer.strokeColor = [UIColor clearColor].CGColor;
+    _bubbleTailLayer.lineWidth = 0;
     
     if (!_bubbleView.superview) {
         [self.view addSubview:_bubbleView];
@@ -2247,16 +2248,16 @@ static UIImage *softParticleImage(CGFloat size) {
         CAEmitterCell *cell = [CAEmitterCell emitterCell];
         cell.contents = (id)dotImg.CGImage;
         cell.color = col.CGColor;
-        cell.birthRate = 3.2;         // v6.1.5-14am：1.8→3.2（白天也可见，总量约6.4/s）
-        cell.lifetime = 9;
-        cell.velocity = 26;
-        cell.velocityRange = 24;
-        cell.yAcceleration = -9;          // 轻柔上飘
+        cell.birthRate = 2.2;         // v6.1.5-14ao：3.2→2.2（14am 提太高像蒸汽机，回调）
+        cell.lifetime = 7;
+        cell.velocity = 20;
+        cell.velocityRange = 18;
+        cell.yAcceleration = -6;          // 轻柔上飘（放缓）
         cell.emissionRange = M_PI * 2;
-        cell.scale = 0.75;            // v6.1.5-14am：0.55→0.75（柔光点更大更明显）
-        cell.scaleRange = 0.30;
-        cell.scaleSpeed = -0.02;         // 越飘越小
-        cell.alphaSpeed = -0.06;          // 缓慢淡出
+        cell.scale = 0.5;             // v6.1.5-14ao：0.75→0.5（光点调小，柔和不抢眼）
+        cell.scaleRange = 0.22;
+        cell.scaleSpeed = -0.015;         // 越飘越小
+        cell.alphaSpeed = -0.07;          // 缓慢淡出
         cell.spin = 0;                    // 光点不旋转
         cell.spinRange = 0;
         [cells addObject:cell];
