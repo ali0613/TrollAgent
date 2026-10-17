@@ -25,10 +25,11 @@ struct GirlCharacterPickerView: View {
         let span = prefs.object(forKey: "fanMenuSpan") as? Double ?? 90.0
         let arc = prefs.object(forKey: "fanMenuArc") as? Double ?? 1.0
         let style = prefs.integer(forKey: "fanMenuStyle")
+        let size = prefs.object(forKey: "fanMenuSize") as? Double ?? 56.0   // v6.1.5-14aq：图标大小
         prefs.synchronize()
         let settingsFile = "/var/mobile/Documents/fanmenu_settings.json"
         do {
-            let data = try JSONSerialization.data(withJSONObject: ["alpha": alpha, "span": span, "arc": arc, "style": style])
+            let data = try JSONSerialization.data(withJSONObject: ["alpha": alpha, "span": span, "arc": arc, "style": style, "size": size])
             try data.write(to: URL(fileURLWithPath: settingsFile), options: .atomic)
         } catch {}
         restartHUDIfNeeded()
@@ -82,6 +83,7 @@ struct GirlCharacterPickerView: View {
     @State private var fanAlpha: Double = (prefs.object(forKey: "fanMenuAlpha") as? Double) ?? 1.0
     @State private var fanSpan: Double = (prefs.object(forKey: "fanMenuSpan") as? Double) ?? 90.0
     @State private var fanArc: Double = (prefs.object(forKey: "fanMenuArc") as? Double) ?? 1.0
+    @State private var fanSize: Double = (prefs.object(forKey: "fanMenuSize") as? Double) ?? 56.0   // v6.1.5-14aq：图标大小
     @State private var savedApps: [[String:String]] = {
         // v6.1.5-6：suite 优先，standard 兜底（HUD 进程 no-sandbox 直读主App容器偏好文件，双写保证两边都能拿到）
         let suite = Self.prefs.array(forKey: "fanMenuApps") as? [[String:String]]
@@ -376,6 +378,25 @@ struct GirlCharacterPickerView: View {
                     })
                     .frame(width: 140)
                     Text(String(format: "%.1f×", fanArc))
+                        .font(.caption).foregroundColor(.secondary).frame(width: 42)
+                }
+                // v6.1.5-14aq：图标大小（40-80pt，默认56）——扇钮/竖排圆钮直径 + 布局半径/间距联动
+                HStack {
+                    Text("图标大小").font(.subheadline)
+                    Spacer()
+                    Slider(value: Binding<Double>(
+                        get: { fanSize },
+                        set: {
+                            fanSize = $0
+                            Self.prefs.set($0, forKey: "fanMenuSize")
+                            Self.prefs.synchronize()
+                        }
+                    ), in: 40...80,
+                    onEditingChanged: { editing in
+                        if !editing { Self.saveFanMenuSettings() }
+                    })
+                    .frame(width: 140)
+                    Text("\(Int(fanSize))")
                         .font(.caption).foregroundColor(.secondary).frame(width: 42)
                 }
                                 // v6.1.5-14ae：ForEach 用稳定 id（app["id"]，ensureAppIDs 已保证唯一）——

@@ -1615,8 +1615,18 @@ extern "C" const char *g_hud_char;
     NSArray *apps = [self _orderedFanMenuApps];
     // v6.1.5-14m：最多显示 15 个（4+5+6 满配），超出截断（AI/隐藏已重排在前，自然保留）
     if (apps.count > 15) apps = [apps subarrayWithRange:NSMakeRange(0, 15)];
-    // v6.1.5-8/10：扇形按钮 56pt；孔雀开屏半径 88/172/256（内1 中2 外N-3）
+    // v6.1.5-8/10：扇形按钮默认 56pt；孔雀开屏半径 88/172/256（内1 中2 外N-3）
+    // v6.1.5-14aq：图标大小可调（40-80pt，设置页"图标大小"滑块）——读取顺序 全局文件 > suite > 默认
     CGFloat fanBtn = 56.0;
+    NSData *szData = [NSData dataWithContentsOfFile:@"/var/mobile/Documents/fanmenu_settings.json"];
+    if (szData) {
+        NSDictionary *szd = [NSJSONSerialization JSONObjectWithData:szData options:0 error:nil];
+        if ([szd isKindOfClass:[NSDictionary class]] && szd[@"size"]) fanBtn = [szd[@"size"] doubleValue];
+    }
+    NSUserDefaults *sizePrefs = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"];
+    if ([sizePrefs objectForKey:@"fanMenuSize"]) fanBtn = [sizePrefs doubleForKey:@"fanMenuSize"];
+    if (fanBtn < 40) fanBtn = 40; if (fanBtn > 80) fanBtn = 80;
+    CGFloat sizeRatio = fanBtn / 56.0;   // 布局联动系数：半径/纵向间距/防叠阈值随图标大小缩放
     NSInteger count = apps.count;
     // v6.1.5-14af：样式读取顺序改为 全局文件 > suite > 默认（与滑块一致）——
     // 原只读 suite：App Group 在独立 HUD 进程上权限不可用时恒为 0 → "切换纵向列表没用"
@@ -1662,13 +1672,15 @@ extern "C" const char *g_hud_char;
         if (isList) {
             // v6.1.5-14am：纵向列表=角色侧身纯图标竖排（与扇形同款圆钮，无名字无卡片）
             // 间距64pt 与扇钮直径56+8一致，不叠；y 从角色高度居中向上下排
-            CGFloat startY = girlY - (count * 64) / 2;
+            // v6.1.5-14aq：间距与整体范围随图标大小缩放
+            CGFloat step = 64 * sizeRatio;
+            CGFloat startY = girlY - (count * step) / 2;
             CGFloat minYy = 60;
-            CGFloat maxYy = screenH - count * 64 - 60;
+            CGFloat maxYy = screenH - count * step - 60;
             if (maxYy < minYy) maxYy = minYy;
             startY = MAX(minYy, MIN(startY, maxYy));
-            x = fromRight ? girlX - 64 : girlX + 64;
-            y = startY + i * 64;
+            x = fromRight ? girlX - 64 * sizeRatio : girlX + 64 * sizeRatio;
+            y = startY + i * step;   // v6.1.5-14aq：间距随图标大小缩放
         } else {
             // v6.1.5-14m：彩虹弧带定稿（用户："第一排4个第二排5个第三排6个，最多15个"）——
             // 每层 4/5/6 逐层+1；超过15个截断只显示15；
@@ -1690,7 +1702,8 @@ extern "C" const char *g_hud_char;
             }
             CGFloat radii[4] = {115, 175, 235, 295};
             // v6.1.5-14n：弧度(半径)缩放——用户设置 fanMenuArc 整体缩放层半径
-            for (NSInteger L2 = 0; L2 < 4; L2++) radii[L2] = radii[L2] * fanArc;
+            // v6.1.5-14aq：图标大小联动——半径 × sizeRatio（图标变大间距同步变大，防叠）
+            for (NSInteger L2 = 0; L2 < 4; L2++) radii[L2] = radii[L2] * fanArc * sizeRatio;
             CGFloat layerR = radii[layer];
             NSInteger nk = caps[layer];
             CGFloat stepDegArr[4] = {30.0, 30.0, 22.0, 18.0};  // 内层30°→外层18°，外层更紧凑
@@ -1718,7 +1731,7 @@ extern "C" const char *g_hud_char;
             CGPoint pa = [centers[a] CGPointValue];
             CGPoint pb = [centers[b] CGPointValue];
             CGFloat dx = pa.x - pb.x, dy = pa.y - pb.y;
-            if (dx * dx + dy * dy < 58.0 * 58.0) {
+            if (dx * dx + dy * dy < (fanBtn + 2) * (fanBtn + 2)) {   // v6.1.5-14aq：防叠阈值随图标大小
                 CGFloat ang2 = atan2(pb.y - cy, pb.x - cx);  // 沿弧带中心 C 外推
                 CGFloat newR = hypot(pb.x - cx, pb.y - cy) + 12;
                 CGPoint np = CGPointMake(cx + cos(ang2) * newR, cy + sin(ang2) * newR);
@@ -1765,9 +1778,9 @@ extern "C" const char *g_hud_char;
             } else {
                 UIImage *sym = [UIImage systemImageNamed:symName];
                 if (sym) {
-                    UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:24]]];
+                    UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:24 * sizeRatio]]];
                     iv.tintColor = [UIColor whiteColor];
-                    iv.frame = CGRectMake((fanBtn - 26) / 2, 15, 26, 26);
+                    iv.frame = CGRectMake((fanBtn - 26 * sizeRatio) / 2, 15 * sizeRatio, 26 * sizeRatio, 26 * sizeRatio);
                     [btn addSubview:iv];
                 }
             }
@@ -1796,9 +1809,9 @@ extern "C" const char *g_hud_char;
             } else {
                 UIImage *sym = [UIImage systemImageNamed:symName];
                 if (sym) {
-                    UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:24]]];
+                    UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:24 * sizeRatio]]];
                     iv.tintColor = [UIColor whiteColor];
-                    iv.frame = CGRectMake((fanBtn - 26) / 2, 15, 26, 26);
+                    iv.frame = CGRectMake((fanBtn - 26 * sizeRatio) / 2, 15 * sizeRatio, 26 * sizeRatio, 26 * sizeRatio);
                     [btn addSubview:iv];
                 }
             }
