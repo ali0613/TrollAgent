@@ -785,12 +785,9 @@ extern "C" const char *g_hud_char;
         // v6.1.5-14am：侧面吸附起伏——贴墙呼吸（scale.y 1.0→1.045，纯 layer 动画不位移，不破坏贴墙）
         // 与底部呼吸共用 hudBottomBreath key，不会同时叠加两套
         [self _startBottomBreath];
-        // v6.1.5-14aw：左墙镜像朝屏幕中心（翻转），右墙保持原始朝向——左侧/右侧趴墙区分开
-        if (minD == dL) {
-            _girlView.transform = CGAffineTransformMakeScale(-1, 1);
-        } else {
-            _girlView.transform = CGAffineTransformIdentity;
-        }
+        // v6.1.5-14bp：左墙朝向已在上面趴墙分支用"预镜像图+transform置空"根治，
+        // 这里**不能再**设 MakeScale(-1,1)（旧 14aw 残留会把预镜像图再水平翻转→回到原始朝向=脸朝墙/背对用户）。
+        // 右墙/兜底：保持上面分支已设置的 transform，无需改动。
     } else {
         _onSideWall = NO;
         [self _stopBubbleTimer];
