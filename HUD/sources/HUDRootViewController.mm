@@ -1353,11 +1353,13 @@ extern "C" const char *g_hud_char;
     
     // 用第一帧开始攀爬，保持朝向——v6.1.5-14aw：左墙镜像朝屏幕中心，右墙原始朝向（与趴墙一致）
     // v6.1.5-14bo：左墙攀爬改用预镜像帧 + transform 置空（与趴墙根治方案一致，不依赖 transform 镜像）
+    UIImage *cf = nil;
     if (onLeftEdge && _climbFramesMirrored.count) {
-        _girlView.image = _climbFramesMirrored[0];
+        cf = _climbFramesMirrored[0];
+        _girlView.image = cf;
         _girlView.transform = CGAffineTransformIdentity;
     } else {
-        UIImage *cf = _climbFrames[0];
+        cf = _climbFrames[0];
         _girlView.image = cf;
         if (onLeftEdge) {
             _girlView.transform = CGAffineTransformMakeScale(-1, 1);   // 兜底
