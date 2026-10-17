@@ -306,8 +306,7 @@ struct AddGitHubAccountView: View {
     }
 
     @ViewBuilder private var webLoginSection: some View {
-        Section(header: SettingSectionHeader(title: "网页登录（推荐）"),
-                footer: Text(L10n.t("ui_142"))) {
+        Section(header: SettingSectionHeader(title: "网页登录（推荐）")) {
             if deviceStep == 0 {
                 SettingRowButton(
                     title: "在浏览器中登录",
@@ -355,8 +354,7 @@ struct AddGitHubAccountView: View {
     }
 
     @ViewBuilder private var patLoginSection: some View {
-        Section(header: SettingSectionHeader(title: "手动 Token（备选）"),
-                footer: Text(L10n.t("ui_10"))) {
+        Section(header: SettingSectionHeader(title: "手动 Token（备选）")) {
             SecureField("ghp_…", text: $token)
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
@@ -446,8 +444,7 @@ struct GitHubRepoSettingsView: View {
 
     var body: some View {
         Form {
-            Section(header: SettingSectionHeader(title: "OAuth App（网页登录用）"),
-                    footer: Text(L10n.t("ui_53"))) {
+            Section(header: SettingSectionHeader(title: "OAuth App（网页登录用）")) {
                 TextField("OAuth App Client ID", text: $store.clientID)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
@@ -461,8 +458,7 @@ struct GitHubRepoSettingsView: View {
                 }
             }
 
-            Section(header: SettingSectionHeader(title: "目标仓库"),
-                    footer: Text(L10n.t("ui_122"))) {
+            Section(header: SettingSectionHeader(title: "目标仓库")) {
                 TextField("仓库 Owner（用户名）", text: $store.repoOwner)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)

@@ -9,7 +9,7 @@ struct RemoteDiagnosticsView: View {
 
     var body: some View {
         Form {
-            Section(footer: Text("开启后 TrollAgent 每 4 秒向服务器轮询一次指令；同时崩溃日志会在下次启动时自动上报到后台，无需手动复制。")) {
+            Section {
                 Toggle("启用远程诊断", isOn: $agent.enabled)
                     .onChange(of: agent.enabled) { _ in agent.save() }
                 TextField("服务器地址（https://你的域名:8766）", text: $agent.serverURL)

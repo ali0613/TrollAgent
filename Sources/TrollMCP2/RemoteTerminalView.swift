@@ -54,7 +54,7 @@ struct RemoteTerminalView: View {
                 }
             }
 
-            Section(header: Text("N1 公网映射"), footer: Text("1. 子域名 A 记录指向 N1 公网 IPv4；2. N1/路由器把公网端口 TCP 转发到手机局域网 IP:\(portText)；3. 云端访问 http://你的域名:公网端口，带 Authorization: Bearer <token>。")) {
+            Section(header: Text("N1 公网映射")) {   // v6.1.5-14ax：教程型灰色介绍已移除
                 Label("N1 只做端口转发，无需装任何服务", systemImage: "arrow.triangle.branch")
                     .font(.caption)
                     .foregroundColor(.secondary)

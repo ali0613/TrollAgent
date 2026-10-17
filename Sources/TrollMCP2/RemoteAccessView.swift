@@ -7,7 +7,7 @@ struct RemoteAccessView: View {
 
     var body: some View {
         Form {
-            Section(header: Text("主动连接"), footer: Text("通过 SSH 连接到远程 Linux 服务器执行命令")) {
+            Section(header: Text("主动连接")) {
                 NavigationLink(destination: SSHSettingsView()) {
                     HStack(spacing: 12) {
                         Image(systemName: "arrow.up.forward.circle.fill")
@@ -25,7 +25,7 @@ struct RemoteAccessView: View {
                 }
             }
 
-            Section(header: Text("被远程控制"), footer: Text("TrollAgent 开启 HTTP API，云端/远程可直接调用工具、读审计、查崩溃")) {
+            Section(header: Text("被远程控制")) {
                 NavigationLink(destination: RemoteTerminalView()) {
                     HStack(spacing: 12) {
                         Image(systemName: "arrow.down.left.circle.fill")
