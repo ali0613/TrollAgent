@@ -1107,7 +1107,7 @@ final class ShellExecTool: MCPTool {
                                     }
                                 }
                                 if ok {
-                                    _ = fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dst)
+                                    _ = try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dst)
                                 } else {
                                     return ["command": segment, "exit_code": 1,
                                             "stdout": "[elf-runner] busybox 解压失败（bundle 内无 busybox.gz？）",
