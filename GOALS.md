@@ -41,11 +41,13 @@ App 原生系统（AI 全走这里，零感知）
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | P0 | 14c1 引擎回退纯 arm64，Alpine 恢复 | ✅ 已交付装机（Alpine sh 实测恢复） |
-| P1 | 原生工具扩军（tree/xz/which 已进包；**剩余：busybox 全家桶一次 100+ 工具 + file/zip/diff**） | 🔧 tree/xz/which 已验证；busybox 等排队中 |
+| P1 | 原生工具扩军——**只做 iOS 语义对等类**（tree/xz/which ✅、file/zip 🔧14c6、diff/curl/wget 按需）；**不做 busybox 原生版** | 🔧 进行中 |
 | P3 | 原生 pip + CI 编译进包（"装包=更新"） | ⏳ 部分（pip 原生 Python 已内置） |
 | P4 | 路由废除 + Alpine rootfs 不打包 + 统一环境层 | ⏳ 14c3 裁剪已做，rootfs 移除未做 |
-| P5 | aarch64 ELF 运行时（复用 iSH 翻译层 + 新加载器）→ iSH 连二进制退役 | ⏳ 远期，参考 elfuse 设计 |
+| P5 | aarch64 ELF 运行时（复用 iSH 翻译层 + 新加载器）→ **首个验收目标 = busybox ELF 直跑（100+ Linux 工具白送）** | ⏳ 远期，参考 elfuse 设计 |
 | ~~P2~~ | ~~原生受限 shell（组合命令原生化）~~ **已并入 P5** | 2026-10-17 用户拍板"组合命令最后弄"：组合命令终极形态=P5 ELF 运行时（Linux shell 语义白送），自写 Swift shell 无必要；且 fork 实测在原生 iOS 挂起（python3 subprocess NO JSON），P2 的进程拉起路线本就要等 P5 |
+
+**关键决策（2026-10-17 用户确认"busybox直接弄"后推演出）**：busybox **不交叉编译成 Mach-O**——①编译要大量 patch（Linux 头缺失）②运行时是假 Linux 语义（ps/mount/sh 失真，fork 受限）③P5 做完即淘汰。正确姿势：**busybox 作为 P5 的首个验收对象**（静态单二进制 100+ 工具 = ELF 加载器+syscall 翻译层完整测试集），P1 只做 iOS 语义天然对等的工具。
 
 ## 当前进行中（2026-10-17）
 
