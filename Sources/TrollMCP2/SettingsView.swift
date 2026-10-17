@@ -491,13 +491,13 @@ struct SettingRowContent: View {
     let item: SettingsItem
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(item.color)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 40, height: 40)
                 Image(systemName: item.icon)
-                    .font(.system(size: 21, weight: .semibold))
+                    .font(.system(size: 19, weight: .semibold))
                     .foregroundColor(.white)
             }
             VStack(alignment: .leading, spacing: 3) {
@@ -520,7 +520,7 @@ struct SettingRowContent: View {
                     .frame(width: 9, height: 9)
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 5)
     }
 }
 
