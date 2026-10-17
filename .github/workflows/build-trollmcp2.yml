@@ -320,11 +320,12 @@ jobs:
 
       # 14c6 P1原生化: zip——Info-ZIP 纯 C 老牌压缩器（原生缺口：有 unzip 无 zip，Alpine zip 待裁）。
       # unix/Makefile generic target + CC wrapper（沿用 tree 模式）。
+      # 14c7 fix: SourceForge 直链不稳（实测下到 HTML 错误页 → tar unrecognized）→ 换 fossies mirror。
       - name: Build zip (iOS arm64)
         if: steps.tools-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p native-tools-out
-          curl -sL -o /tmp/zip.tar.gz "https://downloads.sourceforge.net/project/infozip/Zip%203.0%20%283%20July%202008%29/zip30.tar.gz"
+          curl -sL --max-time 60 -o /tmp/zip.tar.gz "https://fossies.org/linux/misc/zip30.tar.gz"
           tar -xzf /tmp/zip.tar.gz -C /tmp
           cd /tmp/zip30
           cat > /tmp/ioscc <<'WRAP'
