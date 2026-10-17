@@ -111,7 +111,7 @@ struct ChatView: View {
                         HStack(spacing: 14) {
                             // v4.4.18：全局朗读开关——开着时 AI 流式回复自动朗读
                             Button(action: { withAnimation { tts.speakerEnabled.toggle() } }) {
-                                Image(systemName: tts.speakerEnabled ? "speaker.wave.2.fill" : "speaker.wave.2")
+                                Image(systemName: tts.speakerEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")   // v6.1.5-14bg：关闭态用带斜杠喇叭（标准静音图标），不再普通喇叭灰显
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundColor(tts.speakerEnabled ? .tmCyan : .secondary)
                             }
