@@ -733,6 +733,9 @@ extern "C" const char *g_hud_char;
     if (minD == dL || minD == dR) {
         _onSideWall = YES;
         [self _startBubbleTimer];
+        // v6.1.5-14am：侧面吸附起伏——贴墙呼吸（scale.y 1.0→1.045，纯 layer 动画不位移，不破坏贴墙）
+        // 与底部呼吸共用 hudBottomBreath key，不会同时叠加两套
+        [self _startBottomBreath];
         // v6.0.29：左右墙翻转角色朝向——左墙朝左，右墙朝右
         if (minD == dL) {
             _girlView.transform = CGAffineTransformMakeScale(-1, 1);
@@ -742,6 +745,7 @@ extern "C" const char *g_hud_char;
     } else {
         _onSideWall = NO;
         [self _stopBubbleTimer];
+        [self _stopBottomBreath];   // v6.1.5-14am：离开侧边墙停贴墙呼吸
         // 离开侧边墙恢复正常朝向
         _girlView.transform = CGAffineTransformIdentity;
     }
@@ -1205,6 +1209,7 @@ extern "C" const char *g_hud_char;
     
     _isClimbing = YES;
     _climbIdx = 0;
+    [self _stopBottomBreath];   // v6.1.5-14am：攀爬中停贴墙呼吸，避免呼吸起伏与爬动帧叠加
     
     // 记录当前在哪一侧边缘，爬的时候保持朝向一致
     BOOL onLeftEdge = (minD == dL);
@@ -1649,12 +1654,14 @@ extern "C" const char *g_hud_char;
     for (NSInteger i = 0; i < count; i++) {
         CGFloat x, y;
         if (isList) {
-            CGFloat startY = girlY - (count * 64)/2;
-            CGFloat minYy = 30;
-            CGFloat maxYy = screenH - count * 64 - 30;
+            // v6.1.5-14am：纵向列表=角色侧身纯图标竖排（与扇形同款圆钮，无名字无卡片）
+            // 间距64pt 与扇钮直径56+8一致，不叠；y 从角色高度居中向上下排
+            CGFloat startY = girlY - (count * 64) / 2;
+            CGFloat minYy = 60;
+            CGFloat maxYy = screenH - count * 64 - 60;
             if (maxYy < minYy) maxYy = minYy;
             startY = MAX(minYy, MIN(startY, maxYy));
-            x = fromRight ? girlX - 80 : girlX + 80;
+            x = fromRight ? girlX - 64 : girlX + 64;
             y = startY + i * 64;
         } else {
             // v6.1.5-14m：彩虹弧带定稿（用户："第一排4个第二排5个第三排6个，最多15个"）——
@@ -1730,50 +1737,34 @@ extern "C" const char *g_hud_char;
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
         NSString *symName = [self _symbolForName:apps[i][@"name"] url:apps[i][@"url"]];
         if (isList) {
-            // v6.1.5: 纵向列表——卡片式（圆角12、系统背景、阴影、左图标圆+名称+右侧url）
-            btn.frame = CGRectMake(0, 0, 220, 56);
-            btn.layer.cornerRadius = 12;
-            btn.backgroundColor = [UIColor systemBackgroundColor];
-            btn.layer.borderWidth = 0.5;
-            btn.layer.borderColor = [[UIColor labelColor] colorWithAlphaComponent:0.12].CGColor;
+            // v6.1.5-14am：纵向列表=角色侧身纯图标圆钮（与扇形同款），无名字无 url 无卡片——
+            // 用户"app 不该有名字"+"纵向列表在角色侧身"
+            btn.frame = CGRectMake(0, 0, fanBtn, fanBtn);
+            btn.layer.cornerRadius = fanBtn / 2;
+            btn.backgroundColor = apps[i][@"color"];
+            btn.layer.borderWidth = 0;
             btn.layer.shadowColor = [UIColor blackColor].CGColor;
-            btn.layer.shadowOpacity = 0.18;
-            btn.layer.shadowOffset = CGSizeMake(0, 2);
-            btn.layer.shadowRadius = 5;
-            btn.titleLabel.font = [UIFont boldSystemFontOfSize:15];
-            btn.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-            [btn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
-            [btn setTitle:apps[i][@"name"] forState:UIControlStateNormal];
-            btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-            btn.titleEdgeInsets = UIEdgeInsetsMake(0, 60, 0, 44);
-            UIView *iconWrap = [[UIView alloc] initWithFrame:CGRectMake(10, 10, 36, 36)];
-            iconWrap.layer.cornerRadius = 8;
-            iconWrap.backgroundColor = apps[i][@"color"];
-            iconWrap.layer.masksToBounds = YES;
-            [btn addSubview:iconWrap];
-            // v6.1.5-8：自定义 app 显示真实系统图标，默认项无 bundleId 才用 SF Symbol
+            btn.layer.shadowOpacity = 0.4;
+            btn.layer.shadowOffset = CGSizeMake(0, 3);
+            btn.layer.shadowRadius = 6;
             UIImage *realIcon = _realAppIcon(apps[i][@"bundleId"]);
             if (realIcon) {
-                UIImageView *riv = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 36, 36)];
+                UIImageView *riv = [[UIImageView alloc] initWithFrame:btn.bounds];
                 riv.image = realIcon;
-                riv.contentMode = UIViewContentModeScaleAspectFit;
-                [iconWrap addSubview:riv];
+                riv.contentMode = UIViewContentModeScaleAspectFill;
+                riv.layer.cornerRadius = fanBtn / 2;
+                riv.layer.masksToBounds = YES;
+                [btn addSubview:riv];
+                btn.backgroundColor = [UIColor clearColor];
             } else {
                 UIImage *sym = [UIImage systemImageNamed:symName];
                 if (sym) {
-                    UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:18]]];
+                    UIImageView *iv = [[UIImageView alloc] initWithImage:[sym imageWithConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:24]]];
                     iv.tintColor = [UIColor whiteColor];
-                    iv.frame = CGRectMake(9, 9, 18, 18);
-                    [iconWrap addSubview:iv];
+                    iv.frame = CGRectMake((fanBtn - 26) / 2, 15, 26, 26);
+                    [btn addSubview:iv];
                 }
             }
-            UILabel *urlLbl = [[UILabel alloc] initWithFrame:CGRectMake(124, (56 - 16) / 2, 86, 16)];
-            urlLbl.text = apps[i][@"url"];
-            urlLbl.font = [UIFont systemFontOfSize:11];
-            urlLbl.textColor = [UIColor secondaryLabelColor];
-            urlLbl.textAlignment = NSTextAlignmentRight;
-            urlLbl.lineBreakMode = NSLineBreakByTruncatingTail;
-            [btn addSubview:urlLbl];
         } else {
             // v6.1.5-9：扇形——纯图标圆钮
             // v6.1.5-14j：图标圆形直接填充满按钮——去掉白色边框环、去掉 wrap 白底环（用户"圆形外面还有一个环"）
@@ -2181,12 +2172,13 @@ static UIImage *softParticleImage(CGFloat size) {
 }
 
 // v6.1.5-14p/q：环境决策——按小时选粒子，充电叠加粒子；粒子跟随角色位置（无光晕）
-// v6.1.5-14v：场景→颜色（素材统一柔白光点，cell.color 染色），白天无粒子
+// v6.1.5-14v：场景→颜色（素材统一柔白光点，cell.color 染色）
+// v6.1.5-14am：白天也出粒子（淡白柔光低密度）——用户"一直没见过粒子"根因是白天无粒子被 _clearParticles 清空
 - (void)_updateAmbient {
     NSCalendar *cal = [NSCalendar currentCalendar];
     NSInteger hour = [cal component:NSCalendarUnitHour fromDate:[NSDate date]];
     NSMutableArray<UIColor *> *colors = [NSMutableArray array];
-    NSInteger bucket = 0;   // 白天
+    NSInteger bucket = 0;   // 白天：淡白柔光（低密度，白墙上也能看出光晕）
     if (hour >= 21 || hour < 6) {
         bucket = 2;  // 深夜：冷银白 + 淡蓝，静谧萤光
         [colors addObject:[UIColor colorWithWhite:0.92 alpha:1.0]];
@@ -2194,6 +2186,10 @@ static UIImage *softParticleImage(CGFloat size) {
     } else if (hour >= 17 && hour < 19) {
         bucket = 1;  // 傍晚：暖金余晖
         [colors addObject:[UIColor colorWithRed:1.0 green:0.85 blue:0.55 alpha:1.0]];
+    } else {
+        // v6.1.5-14am：白天（6-17点）淡白柔光粒子——低密度但可见，满足"柔和光粒子"全天可看
+        [colors addObject:[UIColor colorWithWhite:1.0 alpha:1.0]];
+        [colors addObject:[UIColor colorWithRed:0.85 green:0.92 blue:1.0 alpha:1.0]];
     }
     BOOL charging = ([UIDevice currentDevice].batteryState == UIDeviceBatteryStateCharging ||
                      [UIDevice currentDevice].batteryState == UIDeviceBatteryStateFull);
@@ -2246,16 +2242,16 @@ static UIImage *softParticleImage(CGFloat size) {
         CAEmitterCell *cell = [CAEmitterCell emitterCell];
         cell.contents = (id)dotImg.CGImage;
         cell.color = col.CGColor;
-        cell.birthRate = 1.8;
-        cell.lifetime = 7;
-        cell.velocity = 22;
-        cell.velocityRange = 22;
-        cell.yAcceleration = -8;          // 轻柔上飘
+        cell.birthRate = 3.2;         // v6.1.5-14am：1.8→3.2（白天也可见，总量约6.4/s）
+        cell.lifetime = 9;
+        cell.velocity = 26;
+        cell.velocityRange = 24;
+        cell.yAcceleration = -9;          // 轻柔上飘
         cell.emissionRange = M_PI * 2;
-        cell.scale = 0.55;
-        cell.scaleRange = 0.35;
-        cell.scaleSpeed = -0.025;         // 越飘越小
-        cell.alphaSpeed = -0.08;          // 缓慢淡出
+        cell.scale = 0.75;            // v6.1.5-14am：0.55→0.75（柔光点更大更明显）
+        cell.scaleRange = 0.30;
+        cell.scaleSpeed = -0.02;         // 越飘越小
+        cell.alphaSpeed = -0.06;          // 缓慢淡出
         cell.spin = 0;                    // 光点不旋转
         cell.spinRange = 0;
         [cells addObject:cell];
