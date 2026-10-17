@@ -118,14 +118,12 @@ if [ -d "Resources/bin" ]; then
         echo ">>> magic.mgc bundled ($(du -h "$APP/bin/magic.mgc" | cut -f1))"
     fi
     # 14c7 P5: busybox 静态 aarch64 ELF（elf-runner 的第一个嫁接对象）
-    # 14c7 fix8→fix9: **ELF 不能直接进 bundle**（14c7b 真机启动即崩——ELF 文件头被系统当未签名可执行拒绝；
-    #                14c7c 去 busybox 后验证正常启动，崩因确认）。fix9：gzip 成 busybox.gz 进 Resources/linux/
-    #                （纯数据文件，与 magic.mgc 同类安全）；app 首次调 elf-runner 时用 iOS zlib 解压到 Documents。
-    if [ -f "native-tools-out/busybox-elf" ]; then
-        mkdir -p "$APP/Resources/linux"
-        gzip -c "native-tools-out/busybox-elf" > "$APP/Resources/linux/busybox.gz"
-        echo ">>> linux/busybox.gz bundled ($(du -h "$APP/Resources/linux/busybox.gz" | cut -f1), ELF→gz 防启动崩)"
-    fi
+    # 14c7 fix8→fix14: **busybox 彻底不进 bundle**——ELF 直接进包崩（14c7b）、gz 也崩（14c7e 实证）。
+    # 根因推论：Linux ELF 非 Mach-O，ldid 无法签名（bin/ 签名循环只对 Mach-O 生效）→ bundle 内出现
+    #           未授权"可执行内容" → iOS 启动校验拒绝（崩）。ELF 永远拿不到 iOS 签名 → 永远不能进 bundle。
+    # 方案：busybox-elf 由 release 发布段作为独立资产上传（busybox-elf），AI 首次使用时 curl 下载到
+    #       Documents/Workspace/linux/busybox 再交给 elf-runner。bundle 保持 14c7c 干净结构。
+    # 本段不打包任何 busybox 文件。
     # fix3bo/fix3cl: node C wrapper 的运行时库（NodeMobile dylib）——install name 是
     # @rpath/NodeMobile.framework/NodeMobile，必须按 framework 目录结构放进 App/Frameworks/，
     # 放 bin/ 会让 dyld 按 @rpath 找 Frameworks/NodeMobile.framework 时 Library not loaded。

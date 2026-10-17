@@ -443,10 +443,10 @@ final class SystemPrompts {
       【保留在 Alpine 的完整版】：sed/awk/grep/find/head/tail/rm/mv/cp/mkdir/ln/sh 等系统命令——
       复杂文本处理/脚本仍可进 Alpine 用（原生是基础版，复杂 regex/-i 等用 Alpine 完整版）。
     - LINUX RUNTIME (v14c7 P5, aarch64 ELF 直跑): `elf-runner <Linux ELF路径> [args]` 在 iOS 原生层直跑
-      aarch64 Linux 静态 ELF（用户态运行时：加载器+syscall 翻译）。内置验证对象 busybox 以 gz 形式打包在
-      <app>/Resources/linux/busybox.gz（ELF 直接进 bundle 会启动崩，14c7b 实证）。首次使用先解压到沙箱：
-      `python3 -m gzip -d -c <app>/Resources/linux/busybox.gz > $HOME/Documents/Workspace/linux/busybox`，
-      <app> 路径用 `echo $HOME` 拼（App 沙箱根下 TrollAgent.app）。解压后：
+      aarch64 Linux 静态 ELF（用户态运行时：加载器+syscall 翻译）。内置验证对象 busybox **不进 bundle**
+      （Linux ELF 非 Mach-O 无法签名，进包即启动崩——14c7b/14c7e 实证），作为 release 资产提供：
+      首次使用先下载到沙箱：`curl -L -o $HOME/Documents/Workspace/linux/busybox
+      https://github.com/zrrt/trollmcp2/releases/download/latest/busybox-elf`（先 mkdir -p），然后
       `elf-runner $HOME/Documents/Workspace/linux/busybox echo hello`。
       elf-runner 目标=终结 iSH/Alpine（"像真 Linux 系统一样"）；syscall 缺口会报 -ENOSYS，反馈给我扩翻译表。
     - COMMAND EXISTENCE (v4.5.9, 实测边界): App 视角下 `ls /usr/bin` 目录枚举只显示系统 daemon 子集

@@ -878,10 +878,20 @@ jobs:
           VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Support/Info.plist 2>/dev/null || echo "unknown")
           echo "version=$VER"
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest TrollAgent.tipa \
-            --title "TrollAgent latest (v${VER})" \
-            --notes "滚动构建（main 分支最新）。供 App 内多源自动更新使用：GitHub 被墙时经镜像前缀或 Releases 直链下载。下载地址：https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/TrollAgent.tipa" || \
-            { echo "RELEASE PUBLISH FAILED (non-fatal)"; exit 0; }
+          # 14c7 fix14: busybox-elf 作为独立资产上传（不进 tipa/bundle——ELF 非 Mach-O 无法签名，
+          #            bundle 内未授权可执行内容导致启动崩，14c7b/14c7e 实证）。
+          #            AI 首次使用 elf-runner 时 curl 下载到 Documents 再跑。
+          if [ -f native-tools-out/busybox-elf ]; then
+            gh release create latest TrollAgent.tipa native-tools-out/busybox-elf \
+              --title "TrollAgent latest (v${VER})" \
+              --notes "滚动构建（main 分支最新）。TrollAgent.tipa=App；busybox-elf=Linux 静态 ELF（elf-runner 下载用，勿装）。下载地址：https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/TrollAgent.tipa" || \
+              { echo "RELEASE PUBLISH FAILED (non-fatal)"; exit 0; }
+          else
+            gh release create latest TrollAgent.tipa \
+              --title "TrollAgent latest (v${VER})" \
+              --notes "滚动构建（main 分支最新）。供 App 内多源自动更新使用：GitHub 被墙时经镜像前缀或 Releases 直链下载。下载地址：https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/TrollAgent.tipa" || \
+              { echo "RELEASE PUBLISH FAILED (non-fatal)"; exit 0; }
+          fi
 
   # v4.4.3：原生 ARM64 Python（iOS 版 CPython，PEP 730 官方构建脚本）。
   # 目的：pandas/numpy 在 iSH 模拟器里 import 必段错误闪退（崩溃栈 cpu_run_to_interrupt，
