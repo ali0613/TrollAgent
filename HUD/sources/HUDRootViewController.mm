@@ -715,7 +715,12 @@ extern "C" const char *g_hud_char;
     // v6.0.24 撤销：UIViewContentModeBottom 是"内容不缩放、底部对齐"，会让 wall 原图(1024×1536)按原尺寸贴底→放大数倍。
     // 改用 aspectFit 默认居中显示（v6.0.23 行为）；贴底对齐改用下面 roto 显示不在此处理（吸附/尺寸已由 bounds 决定）。
     // 吸附左缘→镜像面向左墙；右缘→正常面向右墙；上下→保持原方向
-    if (minD == dL)      { c.x = _girlView.frame.size.width / 2; _girlView.transform = CGAffineTransformMakeScale(-1, 1); }  // v6.1.5-14aw：恢复左墙镜像（用户要求左侧吸附翻转朝屏幕中心）
+    // v6.1.5-14bo：诊断日志——左墙吸附时输出显示图尺寸与 transform 分量（a=左右镜像 x 轴，d=上下 y 轴；d 应为 1，若 d=-1 即上下翻转）
+    if (minD == dL) {
+        c.x = _girlView.frame.size.width / 2;
+        _girlView.transform = CGAffineTransformMakeScale(-1, 1);
+        NSLog(@"[HUDsnap] LEFT-WALL img=%.0fx%.0f tf_a=%.2f tf_d=%.2f (a<0 左右镜像正常, d<0 则上下翻转异常)", wallImg.size.width, wallImg.size.height, _girlView.transform.a, _girlView.transform.d);
+    }
     else if (minD == dR) { c.x = v.width - _girlView.frame.size.width / 2; _girlView.transform = CGAffineTransformIdentity; }
     else if (minD == dT) { c.y = _girlView.frame.size.height / 2; _girlView.transform = CGAffineTransformIdentity; }
     else                 { c.y = v.height - _girlView.frame.size.height / 2; _girlView.transform = CGAffineTransformIdentity; }
@@ -1368,7 +1373,7 @@ extern "C" const char *g_hud_char;
     CGSize v = [UIScreen mainScreen].bounds.size;
     CGFloat climbH;
     if (_isCatChar) {
-        climbH = (CGFloat)g_hud_size * MIN(_charScale, 1.2f) * 0.8f;   // v6.1.5-14bc：猫娘攀爬 0.7→0.8（137→144pt，站姿74%，用户直接要求80）
+        climbH = (CGFloat)g_hud_size * MIN(_charScale, 1.2f) * 0.88f;   // v6.1.5-14bo：猫娘攀爬 0.8→0.88（144→158pt，用户要求再+10%）
     } else {
         climbH = (CGFloat)g_hud_size * _charScale;                    // girl/rabit：站姿全尺寸
     }
