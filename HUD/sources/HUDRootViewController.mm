@@ -75,6 +75,20 @@ static UIImage * _trimTransparentPadding(UIImage *img) {
     return img;
 }
 
+// v6.1.5-14bo：水平镜像工具——生成预镜像素材（左墙专用），显示时 transform 置空，
+// 彻底摆脱对 transform 镜像的依赖（历史多轮"左墙吸附翻转"问题根治）
+static UIImage *mirroredImage(UIImage *img) {
+    if (!img) return img;
+    UIGraphicsBeginImageContextWithOptions(img.size, NO, img.scale);
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    CGContextTranslateCTM(ctx, img.size.width, 0);
+    CGContextScaleCTM(ctx, -1, 1);
+    [img drawInRect:CGRectMake(0, 0, img.size.width, img.size.height)];
+    UIImage *m = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return m;
+}
+
 
 // 锁屏状态回调（TrollSpeed 正解）：锁屏隐藏悬浮视图，解锁恢复显示
 static void SpringBoardLockStatusChanged(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
@@ -103,6 +117,8 @@ extern "C" const char *g_hud_char;
     NSArray<UIImage *> *_thinkFrames;
     UIImage *_wallImage;      // v6.0.8：扒墙姿势图（水平墙沿——顶/底边缘）
     UIImage *_wallImageV;     // v6.0.8：扒墙姿势图（竖直墙沿——左/右边缘）
+    UIImage *_wallImageVMirrored;  // v6.1.5-14bo：左墙专用——wall_v 预水平镜像版（左墙直接显示本图+transform 置空，根治左墙翻转，不再依赖 transform 镜像）
+    NSArray<UIImage *> *_climbFramesMirrored;  // v6.1.5-14bo：攀爬帧预水平镜像版（左墙攀爬显示本组+transform 置空）
     NSArray<UIImage *> *_moodFrames;  // v6.0.8：更多站立表情/动作帧（blink/wave/tilt/giggle/heart/surprise/angry/jump）
     BOOL _autoMoodPaused;             // 锁屏时暂停待机自动换表情
     BOOL _moodShowing;                // 待机表情显示中（防重复切换）
@@ -186,7 +202,11 @@ extern "C" const char *g_hud_char;
         UIImage *wall = [UIImage imageNamed:[NSString stringWithFormat:@"%@_wall", prefix]];
         if (wall) _wallImage = _trimTransparentPadding(wall);   // v6.0.8：水平扒墙（顶/底边缘）
         UIImage *wallV = [UIImage imageNamed:[NSString stringWithFormat:@"%@_wall_v", prefix]];
-        if (wallV) _wallImageV = _trimTransparentPadding(wallV);   // v6.0.8：竖直扒墙（左/右边缘）
+        if (wallV) {
+            _wallImageV = _trimTransparentPadding(wallV);   // v6.0.8：竖直扒墙（左/右边缘）
+            // v6.1.5-14bo：生成左墙专用预镜像趴墙图（左墙直接显示，transform 置空——根治左墙翻转）
+            _wallImageVMirrored = mirroredImage(_wallImageV);
+        }
         // v6.0.12：拖起悬空挣扎帧（lift1/lift2）——拖拽角色时交替显示"被凭空提起、双手双腿挣扎"
         NSMutableArray *lifts = [NSMutableArray array];
         for (int li = 1; li <= 2; li++) {
@@ -203,7 +223,13 @@ extern "C" const char *g_hud_char;
             UIImage *cf = [UIImage imageNamed:[NSString stringWithFormat:@"%@_climb%d", prefix, ci]];
             if (cf) [climbs addObject:_trimTransparentPadding(cf)];
         }
-        if (climbs.count) _climbFrames = climbs;
+        if (climbs.count) {
+            _climbFrames = climbs;
+            // v6.1.5-14bo：攀爬帧预镜像版（左墙攀爬直接显示，transform 置空）
+            NSMutableArray *m = [NSMutableArray array];
+            for (UIImage *cf in climbs) [m addObject:mirroredImage(cf)];
+            _climbFramesMirrored = m;
+        }
         // v6.0.9：待机动作改为【有序循环】（用户要求：睁眼idle放第一 → 眯眼微笑帧穿插在睁眼后面 → 下蹲/坐姿 → 回睁眼，循环），不再随机挑帧。
         // 顺序即播放顺序：睁眼段(站立睁眼表情) → 眯眼段(闭眼微笑/弯月眼) → 蹲坐段(蹲/跪/坐/趴姿势)，播完回 idle 再从头循环。
         NSArray *moodNames = @[
@@ -356,7 +382,7 @@ extern "C" const char *g_hud_char;
     if (!_enableChest || !_girlView.image) return;
     // v6.1.5-14t：防御——趴墙/攀爬态不启动胸前特效（用户反馈"侧边栏也会出现胸前特效"）
     if (_onSideWall || _isClimbing) return;
-    if (_girlView.image == _wallImage || _girlView.image == _wallImageV) return;
+    if (_girlView.image == _wallImage || _girlView.image == _wallImageV || _girlView.image == _wallImageVMirrored) return;
     CGFloat W = _girlView.bounds.size.width;
     CGFloat H = _girlView.bounds.size.height;
     if (W < 1 || H < 1) return;
@@ -440,7 +466,7 @@ extern "C" const char *g_hud_char;
 - (void)_autoMoodFire {
     _autoMoodTimer = nil;
     if (_autoMoodPaused || _isDragging || _falling || _isHidden || _moodShowing) { [self _scheduleAutoMood]; return; }  // v6.1.5-14ab/ad：掉落/隐藏中不切表情
-    if (_girlView.image == _wallImage || _girlView.image == _wallImageV) { [self _scheduleAutoMood]; return; }
+    if (_girlView.image == _wallImage || _girlView.image == _wallImageV || _girlView.image == _wallImageVMirrored) { [self _scheduleAutoMood]; return; }
     if (_girlView.image != _idleFrames.firstObject) { [self _scheduleAutoMood]; return; }
     NSUInteger idx = _moodSeqIndex % _moodFrames.count;
     _moodSeqIndex = (_moodSeqIndex + 1) % _moodFrames.count;
@@ -465,7 +491,7 @@ extern "C" const char *g_hud_char;
     _moodShowing = NO;
     if (!_isDragging && !_autoMoodPaused &&
         _girlView.image != _idleFrames.firstObject &&
-        _girlView.image != _wallImage && _girlView.image != _wallImageV) {
+        _girlView.image != _wallImage && _girlView.image != _wallImageV && _girlView.image != _wallImageVMirrored) {
         _girlView.image = _idleFrames.firstObject;
         _girlView.transform = CGAffineTransformIdentity;
         [self _setFrameForImage:_idleFrames.firstObject];
@@ -715,11 +741,17 @@ extern "C" const char *g_hud_char;
     // v6.0.24 撤销：UIViewContentModeBottom 是"内容不缩放、底部对齐"，会让 wall 原图(1024×1536)按原尺寸贴底→放大数倍。
     // 改用 aspectFit 默认居中显示（v6.0.23 行为）；贴底对齐改用下面 roto 显示不在此处理（吸附/尺寸已由 bounds 决定）。
     // 吸附左缘→镜像面向左墙；右缘→正常面向右墙；上下→保持原方向
-    // v6.1.5-14bo：诊断日志——左墙吸附时输出显示图尺寸与 transform 分量（a=左右镜像 x 轴，d=上下 y 轴；d 应为 1，若 d=-1 即上下翻转）
+    // v6.1.5-14bo：左墙根治——直接显示预镜像趴墙图 _wallImageVMirrored 且 transform 置空，
+    // 不再依赖 transform 镜像（历史多轮"左墙吸附翻转/头倒过来"投诉），物理上杜绝上下/左右翻转。
     if (minD == dL) {
         c.x = _girlView.frame.size.width / 2;
-        _girlView.transform = CGAffineTransformMakeScale(-1, 1);
-        NSLog(@"[HUDsnap] LEFT-WALL img=%.0fx%.0f tf_a=%.2f tf_d=%.2f (a<0 左右镜像正常, d<0 则上下翻转异常)", wallImg.size.width, wallImg.size.height, _girlView.transform.a, _girlView.transform.d);
+        if (_wallImageVMirrored) {
+            _girlView.image = _wallImageVMirrored;
+            _girlView.transform = CGAffineTransformIdentity;
+        } else {
+            _girlView.transform = CGAffineTransformMakeScale(-1, 1);   // 兜底：素材缺失时沿用旧镜像路径
+        }
+        NSLog(@"[HUDsnap] LEFT-WALL img=%.0fx%.0f mirrored=%@ (显示预镜像图+transform置空)", wallImg.size.width, wallImg.size.height, _wallImageVMirrored ? @"YES" : @"NO");
     }
     else if (minD == dR) { c.x = v.width - _girlView.frame.size.width / 2; _girlView.transform = CGAffineTransformIdentity; }
     else if (minD == dT) { c.y = _girlView.frame.size.height / 2; _girlView.transform = CGAffineTransformIdentity; }
@@ -1320,12 +1352,18 @@ extern "C" const char *g_hud_char;
     BOOL onLeftEdge = (minD == dL);
     
     // 用第一帧开始攀爬，保持朝向——v6.1.5-14aw：左墙镜像朝屏幕中心，右墙原始朝向（与趴墙一致）
-    UIImage *cf = _climbFrames[0];
-    _girlView.image = cf;
-    if (onLeftEdge) {
-        _girlView.transform = CGAffineTransformMakeScale(-1, 1);
-    } else {
+    // v6.1.5-14bo：左墙攀爬改用预镜像帧 + transform 置空（与趴墙根治方案一致，不依赖 transform 镜像）
+    if (onLeftEdge && _climbFramesMirrored.count) {
+        _girlView.image = _climbFramesMirrored[0];
         _girlView.transform = CGAffineTransformIdentity;
+    } else {
+        UIImage *cf = _climbFrames[0];
+        _girlView.image = cf;
+        if (onLeftEdge) {
+            _girlView.transform = CGAffineTransformMakeScale(-1, 1);   // 兜底
+        } else {
+            _girlView.transform = CGAffineTransformIdentity;
+        }
     }
     // v6.1.5-14u：攀爬帧按趴墙同款尺寸（50%高度×charScale）——原 _setFrameForImage 用站姿全尺寸，
     // 猫娘手脚张开帧比趴墙大一倍、贴边时手脚被屏幕边缘裁掉
@@ -1343,8 +1381,8 @@ extern "C" const char *g_hud_char;
             return;
         }
         
-        // 切换攀爬帧
-        UIImage *nextFrame = _climbFrames[_climbIdx % 2];
+        // 切换攀爬帧（v6.1.5-14bo：左墙用预镜像帧，transform 保持置空）
+        UIImage *nextFrame = (onLeftEdge && _climbFramesMirrored.count) ? _climbFramesMirrored[_climbIdx % 2] : _climbFrames[_climbIdx % 2];
         _girlView.image = nextFrame;
         [self _setClimbFrameSize:nextFrame];
         
@@ -1399,19 +1437,26 @@ extern "C" const char *g_hud_char;
     CGFloat dL = c.x, dR = v.width - c.x;
     UIImage *wallImg = _wallImageV;
     if (wallImg) {
-        _girlView.image = wallImg;
+        // v6.1.5-14bo：左墙恢复预镜像趴墙图 + transform 置空（与吸附根治方案一致）
+        BOOL onLeft = (dL < dR);
+        if (onLeft && _wallImageVMirrored) {
+            _girlView.image = _wallImageVMirrored;
+            _girlView.transform = CGAffineTransformIdentity;
+        } else {
+            _girlView.image = wallImg;
+            // v6.1.5-14aw：左墙镜像朝屏幕中心，右墙原始朝向（与趴墙一致）
+            _girlView.transform = onLeft ? CGAffineTransformMakeScale(-1, 1) : CGAffineTransformIdentity;
+        }
         // 重新设置趴墙尺寸
         CGFloat wallScale = MIN(_charScale, 1.2f);
         CGFloat wallH = (CGFloat)g_hud_size * wallScale * 0.5 * ((_isCatChar) ? 1.15f : 1.0f);   // v6.1.5-14as：猫娘趴墙×1.15
         CGFloat wa = (wallImg.size.height > 0) ? (wallImg.size.width / wallImg.size.height) : 1.0;
         _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
-        // 重新吸附到边缘——v6.1.5-14aw：左墙镜像朝屏幕中心，右墙原始朝向（与趴墙一致）
-        if (dL < dR) {
+        // 重新吸附到边缘
+        if (onLeft) {
             c.x = _girlView.frame.size.width / 2;
-            _girlView.transform = CGAffineTransformMakeScale(-1, 1);
         } else {
             c.x = v.width - _girlView.frame.size.width / 2;
-            _girlView.transform = CGAffineTransformIdentity;
         }
         _girlView.center = c;
     }
@@ -1585,7 +1630,7 @@ extern "C" const char *g_hud_char;
     _girlView.center = center;   // 保持中心，切换时不跳
     // v6.0.24：仅站立姿势保留胸部动效——蹲坐/悬空/趴墙帧时移除（用户只要站立有）；站立帧按新 bounds 重建
     if (_chestLayer || _chestLayerR) {
-        BOOL nonStand = (img == _wallImage || img == _wallImageV)
+        BOOL nonStand = (img == _wallImage || img == _wallImageV || img == _wallImageVMirrored)
                      || (_liftFrames && [_liftFrames containsObject:img])
                      || (_squatFrames && [_squatFrames containsObject:img]);
         if (nonStand) [self _stopChestBreath];
@@ -1597,7 +1642,7 @@ extern "C" const char *g_hud_char;
     if (_isDragging || _falling) return;
     [self _stopPoseShow];   // v6.1.5-14z：双击打断坐姿/跪姿展示
     if (_isHidden) return;  // 隐藏态交给单击恢复
-    if (_girlView.image == _wallImage || _girlView.image == _wallImageV) return;  // 趴墙时交给单击恢复站立
+    if (_girlView.image == _wallImage || _girlView.image == _wallImageV || _girlView.image == _wallImageVMirrored) return;  // 趴墙时交给单击恢复站立
     UIImage *hp = _happyFrames.firstObject;
     if (!hp && _idleFrames.firstObject) hp = _idleFrames.firstObject;
     if (hp) _girlView.image = hp;
