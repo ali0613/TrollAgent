@@ -897,7 +897,9 @@ final class ShellExecTool: MCPTool {
         // fix3v: nmap（native-nmap job 交叉编译，进 App bin/nmap）——原生直跑，无需 Alpine
         // fix3ac: nmap 源码 iOS 编不过, 已降级为 bin/nscan.py(Python 扫描, 无需原生命令声明)
         // fix3w: LLVM 工具链 + jtool2（native-llvm job）——llvm-objdump 等原生直跑
-        "llvm-objdump", "llvm-nm", "llvm-readelf", "llvm-size", "llvm-strings", "jtool2"
+        "llvm-objdump", "llvm-nm", "llvm-readelf", "llvm-size", "llvm-strings", "jtool2",
+        // v6.1.5-14bp5: 崩溃取证——读系统 CrashReporter 里 TrollAgent 最新崩溃日志关键行
+        "crash.tail"
     ]
     
     /// v4.3.9: 反向路径翻译——iOS 原生命令收到 Alpine 挂载路径时翻译回 iOS 真实路径。
@@ -970,6 +972,7 @@ final class ShellExecTool: MCPTool {
         case "objdump": return runIOSObjdump(iosCmd)
         case "class-dump": return runIOSClassDump(iosCmd)
         case "python3": return runIOSPython3(iosCmd)
+        case "crash.tail": return runIOSCrashTail(iosCmd)
         case "kfd_diag": return runIOSKfdDiag(iosCmd)
         // fix3q: 内置原生工具链（CI native-tools 交叉编译进 bin/）——AI 直接调用即走原生 ARM64
         case "lua", "node", "r2", "cstool": return runIOSBundled(word, iosCmd)
@@ -2419,6 +2422,67 @@ final class ShellExecTool: MCPTool {
         }
         return ["command": command, "exit_code": res.exitCode, "stdout": out,
                 "stderr": res.stderr, "ios_native": true]
+    }
+
+    /// v6.1.5-14bp5：崩溃取证——读系统 CrashReporter 目录里最新的 TrollAgent/主 App 崩溃日志，
+    /// 提取决定性证据行（Termination Reason / Exception Type / Triggered Thread / 崩溃线程栈 / 相关二进制）。
+    /// 用途：App 闪退时跑 crash.tail，把输出发回即可定位根因（watchdog/段错误/内存/签名），不再靠猜。
+    private static func runIOSCrashTail(_ command: String) -> [String: Any] {
+        let fm = FileManager.default
+        let dirs = ["/var/mobile/Library/Logs/CrashReporter",
+                    NSHomeDirectory() + "/Library/Logs/CrashReporter",
+                    "/private/var/mobile/Library/Logs/CrashReporter"]
+        // 收集候选崩溃文件：目录存在且文件名含 TrollAgent（或本 App 名）
+        var candidates: [(path: String, mtime: Date)] = []
+        let selfName = Bundle.main.bundleIdentifier ?? "TrollAgent"
+        for dir in dirs {
+            guard let files = try? fm.contentsOfDirectory(atPath: dir) else { continue }
+            for f in files where f.lowercased().contains("trollagent") || f.lowercased().contains(selfName.lowercased()) {
+                let p = dir + "/" + f
+                if let attrs = try? fm.attributesOfItem(atPath: p),
+                   let m = attrs[.modificationDate] as? Date {
+                    candidates.append((p, m))
+                }
+            }
+        }
+        candidates.sort { $0.mtime > $1.mtime }
+        guard !candidates.isEmpty else {
+            return ["command": command, "exit_code": 1,
+                    "stdout": "未找到 TrollAgent 崩溃日志。目录已检查：\(dirs.joined(separator: ", "))。\n如果闪退发生在 TrollStore 重装/被杀等场景，日志可能归到别的进程名下，可先跑: ls -lt /var/mobile/Library/Logs/CrashReporter/ | head -20",
+                    "ios_native": true]
+        }
+        // 读最新 2 个崩溃文件的关键行
+        var out = ""
+        for (idx, cand) in candidates.prefix(2).enumerated() {
+            guard let content = try? String(contentsOfFile: cand.path, encoding: .utf8) else { continue }
+            out += "\n===== 崩溃日志 #\(idx + 1): \(cand.path.split(separator: "/").last ?? "")（\(Int(Date().timeIntervalSince(cand.mtime)) / 60)分钟前）=====\n"
+            let lines = content.components(separatedBy: .newlines)
+            var grabbed: [String] = []
+            var inCrashThread = false
+            var stackCount = 0
+            for line in lines {
+                let t = line.trimmingCharacters(in: .whitespaces)
+                // 决定性头字段
+                if t.hasPrefix("Termination Reason:") || t.hasPrefix("Termination Details:") ||
+                    t.hasPrefix("Exception Type:") || t.hasPrefix("Exception Subtype:") ||
+                    t.hasPrefix("Exception Codes:") || t.hasPrefix("Triggered by Thread:") ||
+                    t.hasPrefix("Crashed Thread:") || t.hasPrefix("Hardware Model:") ||
+                    t.hasPrefix("Code Type:") || t.hasPrefix("Role:") || t.hasPrefix("Process:") ||
+                    t.hasPrefix("App Version:") || t.hasPrefix("Last Exception Backtrace:") {
+                    grabbed.append(t)
+                }
+                // 崩溃线程栈（含 Last Exception Backtrace 段）
+                if t.contains("Thread ") && t.contains("Crashed:") { inCrashThread = true }
+                if inCrashThread {
+                    if t.hasPrefix("Thread ") && !t.contains("Crashed") { inCrashThread = false }
+                    else if !t.isEmpty && stackCount < 15 { grabbed.append(t); stackCount += 1 }
+                }
+            }
+            out += (grabbed.isEmpty ? "（无关键行，可能为二进制/旧格式）\n" : grabbed.joined(separator: "\n") + "\n")
+        }
+        if out.isEmpty { out = "崩溃日志存在但解析为空（可能是 .ips JSON 格式）。可改用: cat \(candidates[0].path)（大文件用 tail）\n" }
+        out += "\n判定参考：Termination Reason 含 JETSAM/CPU/Elapsed CPU → 系统 watchdog 杀（iSH 高 CPU 嫌疑）；EXC_BAD_ACCESS/SIGSEGV → 段错误；EXC_CRASH(SIGKILL) → 被系统终止。把上面输出发回即可定论。"
+        return ["command": command, "exit_code": 0, "stdout": out, "ios_native": true]
     }
 
     private static func runIOSKfdDiag(_ command: String) -> [String: Any] {
