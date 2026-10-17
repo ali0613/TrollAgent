@@ -100,14 +100,20 @@ if [ -d "Resources/bin" ]; then
     # lua=源码编译, node=nodejs-mobile iOS 预编译, r2=radare2 r2ios-sdk 预编译, cstool=capstone 交叉编译,
     # jq=源码编译(v4.4.9-fix3cm 补, 消除提示词示例有/实物无的不一致)；
     # 14c2 P1原生化: tree/xz/which=v16 新增（14c4 曾编译成功但未进包——此处白名单漏加, 已补）
+    # 14c6 P1原生化: file/zip=v17 新增（扩军第二批；file 的 magic.mgc 数据文件随包）
     # 均随 tool.install 绑定）
-    for t in lua node r2 cstool jq tree xz which; do
+    for t in lua node r2 cstool jq tree xz which file zip; do
         if [ -f "native-tools-out/$t" ]; then
             cp "native-tools-out/$t" "$APP/bin/$t"
             chmod +x "$APP/bin/$t"
             echo ">>> native $t bundled ($(du -h "$APP/bin/$t" | cut -f1))"
         fi
     done
+    # 14c6: file 的 magic 数据文件（libmagic 运行时必需；ShellTool 调 file 时设 MAGIC 指向它）
+    if [ -f "native-tools-out/magic.mgc" ]; then
+        cp "native-tools-out/magic.mgc" "$APP/bin/magic.mgc"
+        echo ">>> magic.mgc bundled ($(du -h "$APP/bin/magic.mgc" | cut -f1))"
+    fi
     # fix3bo/fix3cl: node C wrapper 的运行时库（NodeMobile dylib）——install name 是
     # @rpath/NodeMobile.framework/NodeMobile，必须按 framework 目录结构放进 App/Frameworks/，
     # 放 bin/ 会让 dyld 按 @rpath 找 Frameworks/NodeMobile.framework 时 Library not loaded。

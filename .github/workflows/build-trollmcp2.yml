@@ -33,8 +33,8 @@ jobs:
           # fix3ch: v9——nodecli.c 加 C 层诊断(ndiag)、r2main.c -v/-h 加 fflush——强制再重编
           # fix3cn: v15——v14 缓存在 jq 编译步骤加入前生成(缓存内无 jq), AI 调用 jq 报 Command not found;
           #         bump 强制全量重编一次, 新缓存含 jq 1.7.1。与 native-wheels 的 dulwich 解包衔接同轮出包。
-          # 14c2 P1原生化: v16——新增 tree/xz/which 三工具（原生化扩军第一步），bump 强制重编含全工具
-          key: native-tools-v16
+          # 14c6 P1原生化: v17——新增 zip/file(+magic.mgc)（扩军第二批），bump 强制重编含全工具
+          key: native-tools-v17
           save-always: false
 
       - name: Build lua 5.4 (iOS arm64)
@@ -315,6 +315,65 @@ jobs:
           else
             echo "!!! which build failed" >&2
             exit 1
+          fi
+
+      # 14c6 P1原生化: zip——Info-ZIP 纯 C 老牌压缩器（原生缺口：有 unzip 无 zip，Alpine zip 待裁）。
+      # unix/Makefile generic target + CC wrapper（沿用 tree 模式）。
+      - name: Build zip (iOS arm64)
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p native-tools-out
+          curl -sL -o /tmp/zip.tar.gz "https://downloads.sourceforge.net/project/infozip/Zip%203.0%20%283%20July%202008%29/zip30.tar.gz"
+          tar -xzf /tmp/zip.tar.gz -C /tmp
+          cd /tmp/zip30
+          cat > /tmp/ioscc <<'WRAP'
+          #!/bin/sh
+          exec xcrun --sdk iphoneos clang -arch arm64 -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" -mios-version-min=15.0 -Wno-error "$@"
+          WRAP
+          chmod +x /tmp/ioscc
+          make -f unix/Makefile generic CC=/tmp/ioscc 2>&1 | tail -15
+          if [ -f zip ]; then
+            cp zip "$GITHUB_WORKSPACE/native-tools-out/zip"
+            chmod +x "$GITHUB_WORKSPACE/native-tools-out/zip"
+            echo ">>> zip built ($(du -h zip | cut -f1))"
+          else
+            echo "!!! zip build failed" >&2
+            exit 1
+          fi
+
+      # 14c6 P1原生化: file——libmagic 文件类型识别（AI 高频：判断文件/二进制/包类型）。
+      # configure 交叉模式沿用 xz；--disable-* 剥掉 zlib/bzlib/xzlib 依赖；magic.mgc 数据文件同打进包。
+      - name: Build file (iOS arm64, libmagic)
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p native-tools-out
+          curl -sL -o /tmp/file.tar.gz https://github.com/file/file/archive/refs/tags/FILE5_45.tar.gz
+          tar -xzf /tmp/file.tar.gz -C /tmp
+          cd /tmp/file-FILE5_45
+          cat > /tmp/ioscc <<'WRAP'
+          #!/bin/sh
+          exec xcrun --sdk iphoneos clang -arch arm64 -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" -mios-version-min=15.0 "$@"
+          WRAP
+          chmod +x /tmp/ioscc
+          ./configure --host=aarch64-apple-darwin --build=x86_64-apple-darwin CC=/tmp/ioscc \
+            --disable-shared --enable-static --disable-zlib --disable-bzlib --disable-xzlib --disable-libseccomp 2>&1 | tail -10
+          make -j4 2>&1 | tail -10
+          if [ -f src/file ]; then
+            cp src/file "$GITHUB_WORKSPACE/native-tools-out/file"
+            chmod +x "$GITHUB_WORKSPACE/native-tools-out/file"
+            echo ">>> file built ($(du -h src/file | cut -f1))"
+          else
+            echo "!!! file build failed" >&2
+            exit 1
+          fi
+          # magic 数据文件（file 运行时必需，默认路径编死为 /usr/share/misc → 打包时随 bin 放一起）
+          make install DESTDIR=/tmp/fileinst >/dev/null 2>&1 || true
+          MG=$(find /tmp/fileinst -name 'magic.mgc' 2>/dev/null | head -1)
+          if [ -n "$MG" ]; then
+            cp "$MG" "$GITHUB_WORKSPACE/native-tools-out/magic.mgc"
+            echo ">>> magic.mgc bundled ($(du -h "$MG" | cut -f1))"
+          else
+            echo "!!! magic.mgc not found (file 将无法识别类型)" >&2
           fi
 
       # v4.4.5: radare2 CLI（r2ios-sdk 是静态库 SDK，无现成 r2 可执行——写 main 链接 libr.a 全套）

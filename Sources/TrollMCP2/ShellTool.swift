@@ -692,6 +692,8 @@ final class ShellExecTool: MCPTool {
         "gunzip", "base64", "strings", "nm", "objdump", "class-dump", "python3", "git",
         // bin/ 原生工具链
         "lua", "node", "r2", "cstool", "jq", "tree", "xz", "which",
+        // 14c6 P1原生化: file/zip 进 bin/（v17；file 依赖 magic.mgc 数据文件，调用时注入 MAGIC）
+        "file", "zip",
         "ldid", "optool", "insert_dylib", "install_name_tool", "cp-15", "mv-15", "ct_bypass", "opainject"
     ]
 
@@ -1069,8 +1071,14 @@ final class ShellExecTool: MCPTool {
                     if FileManager.default.fileExists(atPath: p) {
                         let body = segment.dropFirst(word.count)
                         let args = shellSplitArgs(String(body))
+                        var env = ["PYTHONIOENCODING": "utf-8"]
+                        // 14c6: file 命令依赖 libmagic 数据文件（编死路径 /usr/share/misc 不可用）→ 注入 MAGIC
+                        if word == "file" {
+                            let magic = Bundle.main.bundlePath + "/bin/magic.mgc"
+                            if FileManager.default.fileExists(atPath: magic) { env["MAGIC"] = magic }
+                        }
                         let res = BuildRunner.shared.run(executable: p, args: args,
-                                                         env: ["PYTHONIOENCODING": "utf-8"], timeout: 120)
+                                                         env: env, timeout: 120)
                         var out = res.stdout
                         if res.timedOut { out += "\n[执行超时 120s 被终止]" }
                         return ["command": segment, "exit_code": res.exitCode, "stdout": out,
