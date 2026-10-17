@@ -1535,7 +1535,10 @@ extern "C" const char *g_hud_char;
     }
     if (!poseImg) { _poseShowing = NO; [self _schedulePoseShow]; return; }
     _girlView.image = poseImg;
-    _girlView.transform = CGAffineTransformIdentity;   // 站直/坐正（恢复朝向）
+    // v6.1.5-14be：坐/跪姿展示保持左墙镜像——原无条件 identity 会丢失 -1,1 镜像，
+    // 左侧吸附时姿势展示期角色朝向错乱（用户反馈"上下翻转"）
+    CGFloat _sw = [UIScreen mainScreen].bounds.size.width;
+    _girlView.transform = (_girlView.center.x < _sw / 2.0) ? CGAffineTransformMakeScale(-1, 1) : CGAffineTransformIdentity;
     [self _setFrameForImage:poseImg];
     _girlView.center = c;   // 保持吸附位置原地换姿势
     // 展示 2.5-3s 后趴回
