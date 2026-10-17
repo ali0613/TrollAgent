@@ -703,7 +703,7 @@ extern "C" const char *g_hud_char;
     // v6.0.24 撤销：UIViewContentModeBottom 是"内容不缩放、底部对齐"，会让 wall 原图(1024×1536)按原尺寸贴底→放大数倍。
     // 改用 aspectFit 默认居中显示（v6.0.23 行为）；贴底对齐改用下面 roto 显示不在此处理（吸附/尺寸已由 bounds 决定）。
     // 吸附左缘→镜像面向左墙；右缘→正常面向右墙；上下→保持原方向
-    if (minD == dL)      { c.x = _girlView.frame.size.width / 2; _girlView.transform = CGAffineTransformMakeScale(-1, 1); }
+    if (minD == dL)      { c.x = _girlView.frame.size.width / 2; _girlView.transform = CGAffineTransformIdentity; }  // v6.1.5-14ar：左墙不再镜像（用户反馈角色倒过来）
     else if (minD == dR) { c.x = v.width - _girlView.frame.size.width / 2; _girlView.transform = CGAffineTransformIdentity; }
     else if (minD == dT) { c.y = _girlView.frame.size.height / 2; _girlView.transform = CGAffineTransformIdentity; }
     else                 { c.y = v.height - _girlView.frame.size.height / 2; _girlView.transform = CGAffineTransformIdentity; }
@@ -736,12 +736,7 @@ extern "C" const char *g_hud_char;
         // v6.1.5-14am：侧面吸附起伏——贴墙呼吸（scale.y 1.0→1.045，纯 layer 动画不位移，不破坏贴墙）
         // 与底部呼吸共用 hudBottomBreath key，不会同时叠加两套
         [self _startBottomBreath];
-        // v6.0.29：左右墙翻转角色朝向——左墙朝左，右墙朝右
-        if (minD == dL) {
-            _girlView.transform = CGAffineTransformMakeScale(-1, 1);
-        } else {
-            _girlView.transform = CGAffineTransformIdentity;
-        }
+        // v6.1.5-14ar：左右墙不再镜像翻转（原 v6.0.29 左墙 -1,1 镜像，用户反馈角色倒过来）——保持原始朝向
     } else {
         _onSideWall = NO;
         [self _stopBubbleTimer];
@@ -1215,14 +1210,10 @@ extern "C" const char *g_hud_char;
     // 记录当前在哪一侧边缘，爬的时候保持朝向一致
     BOOL onLeftEdge = (minD == dL);
     
-    // 用第一帧开始攀爬，保持朝向——左墙朝左，右墙朝右
+    // 用第一帧开始攀爬，保持朝向——v6.1.5-14ar：左右墙都不镜像（原左墙 -1,1 翻转，用户反馈倒过来）
     UIImage *cf = _climbFrames[0];
     _girlView.image = cf;
-    if (onLeftEdge) {
-        _girlView.transform = CGAffineTransformMakeScale(-1, 1);
-    } else {
-        _girlView.transform = CGAffineTransformIdentity;
-    }
+    _girlView.transform = CGAffineTransformIdentity;
     // v6.1.5-14u：攀爬帧按趴墙同款尺寸（50%高度×charScale）——原 _setFrameForImage 用站姿全尺寸，
     // 猫娘手脚张开帧比趴墙大一倍、贴边时手脚被屏幕边缘裁掉
     [self _setClimbFrameSize:cf];
@@ -1301,10 +1292,10 @@ extern "C" const char *g_hud_char;
         CGFloat wallH = (CGFloat)g_hud_size * wallScale * 0.5;
         CGFloat wa = (wallImg.size.height > 0) ? (wallImg.size.width / wallImg.size.height) : 1.0;
         _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
-        // 重新吸附到边缘，左墙朝左（翻转），右墙朝右（正常）
+        // 重新吸附到边缘——v6.1.5-14ar：左右墙都不镜像（原左墙翻转，用户反馈角色倒过来）
         if (dL < dR) {
             c.x = _girlView.frame.size.width / 2;
-            _girlView.transform = CGAffineTransformMakeScale(-1, 1);
+            _girlView.transform = CGAffineTransformIdentity;
         } else {
             c.x = v.width - _girlView.frame.size.width / 2;
             _girlView.transform = CGAffineTransformIdentity;
