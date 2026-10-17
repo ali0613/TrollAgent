@@ -749,8 +749,9 @@ final class ShellExecTool: MCPTool {
             // rootfs 预装 git 因 CI provision 失败未进包, git 走原生 git.py(dulwich) 不 Alpine 不装包不闪退
             #"^\s*sh\s+"#,             // 任意 sh 脚本(含无 flag) → Alpine 全功能 shell
             #"^\s*bash\s+"#,
-            #"^\s*file\s+"#,           // native 无 file 命令 → Alpine 的 file(真实现, autoBind 后能读 iOS 文件)
             #"<<\s*[A-Za-z_][A-Za-z0-9_]*"#,  // heredoc
+            // 14c8 P4: file 移出 Alpine——bin/file(原生 ARM64 + magic.mgc) 真实现已就位，不再触发 iSH boot
+            // tar/unzip/zip 原生 runIOStar 仍为 stub → 保留 Alpine；P5 busybox ELF 直跑后由 busybox tar 原生替代
         ]
         for m in alpineMarkers {
             if c.range(of: m, options: .regularExpression) != nil { return true }
