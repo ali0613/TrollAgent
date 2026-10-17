@@ -491,7 +491,7 @@ struct SettingRowContent: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
-                    .font(.body)
+                    .font(.headline)   // v6.1.5-14ay：去掉灰色副标题后黑色标题放大（body→headline）
                     .foregroundColor(.primary)
                 // v6.1.5-14ax：灰色副标题介绍已按用户要求移除
             }
