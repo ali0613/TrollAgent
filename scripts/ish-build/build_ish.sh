@@ -37,7 +37,11 @@ BUILD_TYPE="${1:-release}"
 # v6.1.4: 双架构（arm64 + arm64e）——arm64e 切片让 App 在 A12+ 设备原生运行，
 # 修复 compat 模式下 MobileIcons/CoreImage 渲染分享扩展图标 SIGSEGV
 #（TrollStore/TrollFools 均双架构原生运行，故分享正常）。
-ARCHS="arm64 arm64e"
+# v6.1.5(14c1): 回退纯 arm64——14ca3ca 双架构后 libish 编入 arm64e 切片，
+# A15 原生 arm64e 执行 iSH x86 模拟器(guest 代码)即段错误 cpu_run_to_interrupt
+# （真机 10-17 实测 busybox/sh/file 全崩；崩溃时间线 10-16 前无 cpu_run_to_interrupt）。
+# 纯 arm64 compat 模式 = 6.0.25 时代行为（Alpine 正常）。分享面板 SIGSEGV 留待后续单独处理。
+ARCHS="arm64"
 IOS_DEPLOYMENT_TARGET="14.0"
 
 # Colors for output
