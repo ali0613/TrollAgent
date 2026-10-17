@@ -2306,8 +2306,14 @@ final class ShellExecTool: MCPTool {
         }
         let args = shellSplitArgs(body)
         let pyCmd = "python3 \(gitPy) \(args.joined(separator: " "))".trimmingCharacters(in: .whitespaces)
-        var r = runIOSPython3(pyCmd, extraEnv: ["TROLL_GIT_CWD": ISHEngine.cwd])
-        r["cwd"] = ISHEngine.cwd
+        // v6.1.5-14by：TROLL_GIT_CWD 用 iOS 真实存在目录——ISHEngine.cwd 默认 /root（Alpine 概念路径，
+        // iOS 沙箱无 /root），chdir 失败 git.py 落回 App 默认 cwd 行为错乱。不存在时回退 Workspace。
+        var gitCwd = ISHEngine.cwd
+        if !FileManager.default.fileExists(atPath: gitCwd) {
+            gitCwd = "/var/mobile/Documents/Workspace"
+        }
+        var r = runIOSPython3(pyCmd, extraEnv: ["TROLL_GIT_CWD": gitCwd])
+        r["cwd"] = gitCwd
         r["runtime_actual"] = "ios"
         r["hint"] = "git 走原生 Python git.py（dulwich）——iOS 沙箱拦 fork 真 git，纯 Python 原生直跑，不 Alpine 不装包不闪退"
         return r
