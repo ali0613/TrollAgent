@@ -133,6 +133,8 @@ extern "C" const char *g_hud_char;
     UIView *_bubbleView;         // v6.0.28：卡通气泡背景（带小尾巴）
     CAShapeLayer *_bubbleTailLayer;  // v6.1.5-14ah：气泡尖角（画在父视图绕开 masksToBounds 裁剪）
     NSTimer *_bubbleTimer;       // 气泡定时弹出计时器
+    NSString *_weatherType;      // v6.1.5-14bd：wttr.in 真实天气类型（sunny/cloudy/rain/snow/storm，nil=未获取）
+    NSTimeInterval _lastWeatherTs; // v6.1.5-14bd：上次天气请求时间戳（30分钟缓存）
     BOOL _onSideWall;           // 是否在左右侧边趴墙
     BOOL _onBottomWall;         // v6.1.5-14w：是否底部趴墙（底部呼吸/横向挪动专用）
     NSTimer *_bottomCrawlTimer; // v6.1.5-14w：底部横向挪动定时器
@@ -790,6 +792,7 @@ extern "C" const char *g_hud_char;
 // 现在站立/趴墙任何姿势都弹，仅拖动/掉落/攀爬中不弹。
 - (void)_showRandomBubble {
     if (_isHidden || _isDragging || _isClimbing || _falling) return;   // v6.1.5-14ad：隐藏态不冒气泡
+    [self _fetchWeather];   // v6.1.5-14bd：顺带拉真实天气（30分钟缓存，失败静默）
     
     // v6.0.28：按时间段选问候（早/中/晚/深夜）
     NSArray *messages;
@@ -1034,6 +1037,14 @@ extern "C" const char *g_hud_char;
         }
     }
     
+    // v6.1.5-14bd：场景扩展——真实天气(已拉取按天气匹配,未拉取随机) + 关怀/情绪/互动/节日，并入普通台词池
+    NSArray *extra = [self _sceneExtraLines];
+    if (extra.count) {
+        NSMutableArray *m = [messages mutableCopy];
+        [m addObjectsFromArray:extra];
+        messages = m;
+    }
+    
     NSString *msg = messages[arc4random_uniform((uint32_t)messages.count)];
     
     // v6.0.28：读取气泡样式设置（0=经典圆角 1=椭圆 2=方形硬边 3=爆炸吐槽）
@@ -1201,6 +1212,84 @@ extern "C" const char *g_hud_char;
             _bubbleTailLayer = nil;
         }];
     }];
+}
+
+// v6.1.5-14bd：拉取 wttr.in 真实天气（免费无 key、IP 自动定位、中文天气），30 分钟缓存，失败静默
+- (void)_fetchWeather {
+    NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
+    if (now - _lastWeatherTs < 1800) return;
+    _lastWeatherTs = now;
+    NSURL *url = [NSURL URLWithString:@"https://wttr.in/?format=j1&lang=zh"];
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
+                                                             completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
+        if (err || !data) return;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+        if (![json isKindOfClass:[NSDictionary class]]) return;
+        NSArray *cc = json[@"current_condition"];
+        if (![cc isKindOfClass:[NSArray class]] || cc.count == 0) return;
+        NSInteger code = [cc[0][@"weatherCode"] integerValue];
+        NSString *type = @"cloudy";
+        if (code == 0) type = @"sunny";
+        else if (code >= 1 && code <= 3) type = @"cloudy";
+        else if (code == 45 || code == 48) type = @"cloudy";
+        else if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) type = @"rain";
+        else if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) type = @"snow";
+        else if (code >= 95) type = @"storm";
+        dispatch_async(dispatch_get_main_queue(), ^{
+            _weatherType = type;
+        });
+    }];
+    [task resume];
+}
+
+// v6.1.5-14bd：场景扩展语录（每角色50条）——天气10(5类×2,按真实天气取2条/未拉取随机2条)+关怀10+情绪10+互动10+节日10
+- (NSArray *)_sceneExtraLines {
+    NSArray *w = @[]; NSArray *care = @[]; NSArray *mood = @[]; NSArray *act = @[]; NSArray *fest = @[];
+    if ([_charPrefix isEqualToString:@"rabit"]) {
+        w = @[@"今天阳光真好呀，晒得我耳朵都暖了", @"晴天的天空好蓝，心情也跟着变好了",
+              @"下雨了呢... 记得带伞，别淋湿了", @"下雨天适合窝在家里喝热茶呢",
+              @"下雪啦！好漂亮，你也要注意保暖哦", @"雪天路滑，出门要小心呀",
+              @"今天多云呢，风轻轻的，很舒服", @"云把太阳挡住了，但也不会冷呢",
+              @"打雷了... 别怕，我陪着你", @"天气有点糟糕呢，待在家里最安心了"];
+        care = @[@"坐了好久啦，起来伸个懒腰吧", @"喝口水休息一下吧，别累着了", @"到饭点啦，记得好好吃饭哦", @"别看太久屏幕，让眼睛歇一歇", @"今天有没有按时喝水呀？", @"肩颈酸不酸？揉一揉会舒服些", @"早点睡哦，明天才有精神", @"工作再忙也要照顾好自己", @"风有点大，出门记得加件衣服", @"感觉你有点累，快去休息一下吧"];
+        mood = @[@"今天也辛苦啦，摸摸头", @"遇到烦心事了吗？跟我说说", @"你已经做得很好了，真的", @"别给自己太大压力哦", @"我在这里陪着你，不是一个人", @"心情不好的话，抱抱我试试", @"深呼吸～ 一切都会好起来的", @"就算今天不顺，明天也会好的", @"你已经很努力了，奖励自己一下吧", @"想哭就哭出来，没关系的"];
+        act = @[@"你戳我一下，我就知道你在啦", @"拖着我走的时候，感觉在带我散步", @"轻轻摸我，我最喜欢了", @"再双击我，我就要跳高高啦", @"把我放到这里，是想让我看风景吗？", @"你躲起来了？我还能感觉到你哦", @"把我缩小放大都行，别把我弄丢就好", @"捏我的脸？好痛啦！", @"你偷偷看我，我也在偷偷看你哦", @"把我晾在一边... 我会无聊的"];
+        fest = @[@"周末啦！要不要一起放松一下", @"今天是特别的日子呢，开心吗？", @"月初啦，新的一月新的期待", @"月底了，这个月你辛苦啦", @"今天是你的节日哦，我来陪你庆祝", @"晚上啦，今天也快到尾声了", @"新的一天，要有好心情哦", @"过了一天，别忘了给自己一个微笑", @"今天也要过得像礼物一样呀", @"这个月快结束了，你做得超棒的"];
+    } else if ([_charPrefix isEqualToString:@"cat"]) {
+        w = @[@"...晴天，适合睡午觉", @"太阳这么好，本喵要晒太阳了",
+              @"下雨了...烦人，毛都湿了", @"这雨下得，本喵才懒得出去呢",
+              @"下雪了？...哼，还挺好看", @"雪天冷死了，本喵要钻被窝",
+              @"多云，风凉凉的，勉强舒服", @"阴天，最适合窝着不动了",
+              @"打雷了！...才、才没被吓到", @"这鬼天气，本喵心情不好，要小鱼干哄"];
+        care = @[@"喂，人类，该喝水了...才不是关心你", @"坐那么久，腰不酸吗？哼", @"到饭点了，本喵等着你吃饭", @"屏幕看太久，眼睛不要了？", @"你好像忘了喝水...本喵可没提醒你", @"起来走走，别像木头一样", @"这么晚还不睡，你想当夜猫子？", @"累了就去躺平，本喵准了", @"外面风大，穿厚点，别感冒", @"看你无精打采的...哼，准你休息"];
+        mood = @[@"...遇到什么烦心事了？说说看", @"不开心就来找本喵，勉强听一下", @"你已经很努力了，本喵都看在眼里", @"别皱眉，丑死了...但还是好看的", @"本喵在这，没人敢欺负你", @"深呼吸，天塌了本喵顶着", @"难过就哭出来，本喵当没看见", @"明天会好的，本喵说的，准了", @"你做得不错，本喵盖章认可", @"累了就靠过来，本喵勉强借你靠一下"];
+        act = @[@"你戳本喵干嘛？...再来一下也行", @"拖着本喵走，把本喵当行李了？", @"摸本喵...舒服，但别摸耳朵！", @"双击本喵，本喵就赏你跳一下", @"把本喵放这，是想让本喵看门？", @"藏起来了？本喵的鼻子可灵了", @"放大缩小随便你，本喵无所谓", @"捏本喵的脸？大胆人类！", @"你偷看本喵，本喵也偷看你了", @"晾着本喵？哼，本喵自己玩"];
+        fest = @[@"周末，本喵允许你陪着玩", @"特别的日子？本喵记着呢", @"月初了，本喵心情不错，赏你摸摸", @"月底，这个月你辛苦了，本喵知道", @"你的节日？本喵勉为其难陪你过", @"晚上啦，今天差不多得了", @"新的一天，本喵心情还行", @"忙一天了，本喵准你歇着", @"今天过得不错？本喵看着还行", @"月末总结：你表现还行，本喵认可"];
+    } else {
+        w = @[@"今天太阳好好呀，我们出去玩吧！", @"晴天最适合放风筝啦！",
+              @"下雨啦！我们一起听雨声吧", @"下雨天，我陪你在家躲雨呀",
+              @"下雪啦！好想堆雪人！", @"雪天好冷，我要钻进你怀里",
+              @"今天云朵好多，像棉花糖", @"阴阴的，但和你一起就不无聊啦",
+              @"打雷了！我有点怕怕...你保护我", @"天气不好，但我们有彼此呀"];
+        care = @[@"坐好久啦！起来蹦一蹦！", @"喝水喝水！我帮你数着哦", @"饭饭时间到！好好吃饭才长高高", @"眼睛累了吧？看看我放松一下", @"水水喝了吗？乖啦", @"脖子酸不酸？我帮你揉揉", @"该睡觉觉啦，明天才有精神玩", @"辛苦啦！我给你加油鼓劲", @"天冷了，要穿暖暖的哦", @"累了就躺一会，我陪你"];
+        mood = @[@"不开心吗？来抱抱！", @"谁欺负你啦？我去找他！", @"你已经超棒啦！真的！", @"别难过，我永远站在你这边", @"有我在，你不是一个人哦", @"抱抱我，心情就好了！", @"呼～ 深呼吸，我们一起", @"明天一定更棒！我保证！", @"你做得太好啦，给你小红花！", @"哭出来也没关系，我在呢"];
+        act = @[@"你戳我！痒痒的～", @"拖着我去散步啦？好耶！", @"摸我的头，好舒服～", @"双击我！我跳高高给你看！", @"把我放在这里，是想一起看风景呀", @"躲猫猫？我可会找了！", @"缩小放大都好玩！别弄丢我就行", @"捏我脸？哈哈好痒！", @"你偷看我，被我抓住啦！", @"晾着我？我要闹啦！"];
+        fest = @[@"周末啦！陪我玩一整天！", @"今天是个好日子！开心！", @"月初啦！新的冒险开始！", @"月底啦，这个月你好棒！", @"你的节日！我给你准备了表演！", @"晚上啦，今天过得好快呀", @"新的一天！元气满满！", @"过了一天，给你一个大大拥抱", @"今天也要像糖一样甜呀", @"月末啦！你值得最好的奖励！"];
+    }
+    // 天气：已拉取按类型取对应2条；未拉取/未知从10条随机2条（保证池总50条）
+    NSArray *weatherPick;
+    if ([_weatherType isEqualToString:@"sunny"]) weatherPick = @[w[0], w[1]];
+    else if ([_weatherType isEqualToString:@"rain"]) weatherPick = @[w[2], w[3]];
+    else if ([_weatherType isEqualToString:@"snow"]) weatherPick = @[w[4], w[5]];
+    else if ([_weatherType isEqualToString:@"cloudy"]) weatherPick = @[w[6], w[7]];
+    else if ([_weatherType isEqualToString:@"storm"]) weatherPick = @[w[8], w[9]];
+    else weatherPick = @[w[arc4random_uniform((uint32_t)w.count)], w[arc4random_uniform((uint32_t)w.count)]];
+    NSMutableArray *all = [weatherPick mutableCopy];
+    [all addObjectsFromArray:care];
+    [all addObjectsFromArray:mood];
+    [all addObjectsFromArray:act];
+    [all addObjectsFromArray:fest];
+    return all;
 }
 
 // v6.0.26：开始自动攀爬
