@@ -503,10 +503,8 @@ struct ModelEditorView: View {
                     editorRow("模型名", text: $model, placeholder: "gpt-5.6-terra")
                     pickerRow("鉴权方式", selection: $authMethod, options: ModelConfig.authMethods)
                     tokenRow
-                    // v3.5.13：可配置参数名别名（适配不同中转对参数名接受度不同）
-                    editorRow("参数别名", text: $paramAliasesText, placeholder: "max_tokens:max_completion_tokens")
-                    // v2.9.107：供应商分组（管理页按分组折叠展示）
-                    editorRow("分组", text: $group, placeholder: "默认")
+                    // v6.1.5-14bk：参数别名/分组 UI 移除（用户看不懂也不需要填）——
+                    // 别名兼容由 OpenAIClient compatLevel 0-4 自动降级覆盖，分组默认"默认"即可
                 }
 
                 // v6.1.5-14bi：参数(Temperature/Max Tokens/上下文预算)不再让用户填——
