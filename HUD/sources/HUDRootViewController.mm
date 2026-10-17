@@ -2351,11 +2351,11 @@ static UIImage *softParticleImage(CGFloat size) {
     [self _refreshAmbientPosition];
 }
 
-// v6.1.5-14p：粒子跟随角色位置（拖拽/吸附后调用）
+// v6.1.5-14bh：粒子发射位置改角色脚底（原在头顶上方 center.y - height/2 → 用户要求从脚下往上飘）
 - (void)_refreshAmbientPosition {
     if (_particleLayer) {
         _particleLayer.emitterPosition = CGPointMake(_girlView.center.x,
-                                                     _girlView.center.y - _girlView.frame.size.height / 2);
+                                                     _girlView.center.y + _girlView.frame.size.height / 2);
         _particleLayer.emitterSize = CGSizeMake(_girlView.frame.size.width * 0.5 + 30, 10);
     }
 }
@@ -2383,8 +2383,8 @@ static UIImage *softParticleImage(CGFloat size) {
         cell.velocityRange = 18;
         cell.yAcceleration = -6;          // 轻柔上飘（放缓）
         cell.emissionRange = M_PI * 2;
-        cell.scale = 0.5;             // v6.1.5-14ao：0.75→0.5（光点调小，柔和不抢眼）
-        cell.scaleRange = 0.22;
+        cell.scale = 0.32;            // v6.1.5-14bh：0.5→0.32（用户仍嫌大，光点更小更柔）
+        cell.scaleRange = 0.12;       // v6.1.5-14bh：0.22→0.12 同步收窄
         cell.scaleSpeed = -0.015;         // 越飘越小
         cell.alphaSpeed = -0.07;          // 缓慢淡出
         cell.spin = 0;                    // 光点不旋转
