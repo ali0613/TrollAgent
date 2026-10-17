@@ -692,8 +692,9 @@ final class ShellExecTool: MCPTool {
         "gunzip", "base64", "strings", "nm", "objdump", "class-dump", "python3", "git",
         // bin/ 原生工具链
         "lua", "node", "r2", "cstool", "jq", "tree", "xz", "which",
-        // 14c6 P1原生化: file/zip 进 bin/（v17；file 依赖 magic.mgc 数据文件，调用时注入 MAGIC）
-        "file", "zip",
+        // 14c6 P1原生化: file 进 bin/（v17；file 依赖 magic.mgc 数据文件，调用时注入 MAGIC）。
+        // zip 已放弃交叉编译（老代码坑多）→ 用原生 python3 -m zipfile 提供 zip 能力；Alpine zip 保留。
+        "file",
         "ldid", "optool", "insert_dylib", "install_name_tool", "cp-15", "mv-15", "ct_bypass", "opainject"
     ]
 

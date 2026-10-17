@@ -103,7 +103,7 @@ if [ -d "Resources/bin" ]; then
     # 14c6 P1原生化: file/zip=v17 新增（扩军第二批；file 的 magic.mgc 数据文件随包）
     # 14c7 P5: elf-runner=v18 新增（aarch64 ELF 运行时入口；busybox-elf 单独放 Resources/linux）
     # 均随 tool.install 绑定）
-    for t in lua node r2 cstool jq tree xz which file zip elf-runner; do
+    for t in lua node r2 cstool jq tree xz which file elf-runner; do
         if [ -f "native-tools-out/$t" ]; then
             cp "native-tools-out/$t" "$APP/bin/$t"
             chmod +x "$APP/bin/$t"

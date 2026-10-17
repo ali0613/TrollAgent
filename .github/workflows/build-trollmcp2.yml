@@ -318,40 +318,10 @@ jobs:
             exit 1
           fi
 
-      # 14c6 P1原生化: zip——Info-ZIP 纯 C 老牌压缩器（原生缺口：有 unzip 无 zip，Alpine zip 待裁）。
-      # unix/Makefile generic target + CC wrapper（沿用 tree 模式）。
-      # 14c7 fix1: SourceForge 直链不稳（实测下到 HTML 错误页 → tar unrecognized）→ 换 fossies mirror。
-      # 14c7 fix2: zip30(2008) 在新 clang 默认 C17 下"隐式函数声明/无原型"变 error（17 warnings 4 errors）
-      #            → 强制 -std=gnu89 旧标准编译；tail 15→40 防日志截断。
-      - name: Build zip (iOS arm64)
-        if: steps.tools-cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p native-tools-out
-          curl -sL --max-time 60 -o /tmp/zip.tar.gz "https://fossies.org/linux/misc/zip30.tar.gz"
-          tar -xzf /tmp/zip.tar.gz -C /tmp
-          cd /tmp/zip30
-          cat > /tmp/ioscc <<'WRAP'
-          #!/bin/sh
-          exec xcrun --sdk iphoneos clang -arch arm64 -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" -mios-version-min=15.0 -Wno-error "$@"
-          WRAP
-          chmod +x /tmp/ioscc
-          # 14c7 fix3: iOS SDK 把 system() 标 unavailable（error: 'system' is unavailable）
-          # → 全局替换 system( → troll_system( + 在 zip.c 末尾加 stub（返回 -1，禁用依赖它的 -T 等选项）
-          # 14c7 fix4: macOS 是 BSD sed——不支持 \b 单词边界、-i 必须带 '' 备份后缀（GNU 写法直接报错）
-          for f in *.c; do sed -i '' 's/system(/troll_system(/g' "$f"; done
-          cat >> zip.c <<'STUB'
-          #include <stdio.h>
-          int troll_system(const char *cmd) { (void)cmd; fprintf(stderr, "zip: system() unavailable on iOS\n"); return -1; }
-          STUB
-          make -f unix/Makefile generic CC=/tmp/ioscc CFLAGS="-std=gnu89 -O2" 2>&1 | tail -40
-          if [ -f zip ]; then
-            cp zip "$GITHUB_WORKSPACE/native-tools-out/zip"
-            chmod +x "$GITHUB_WORKSPACE/native-tools-out/zip"
-            echo ">>> zip built ($(du -h zip | cut -f1))"
-          else
-            echo "!!! zip build failed" >&2
-            exit 1
-          fi
+      # 14c6 P1原生化: zip——**已放弃交叉编译**（zip30 老代码连烧 4 轮构建：SourceForge 不可用→
+      # C17 隐式声明 error→iOS system() unavailable→BSD sed→CFLAGS 传递，成本远超收益）。
+      # 替代：原生 python3 自带 zipfile——python3 -m zipfile -c x.zip files（零编译完整 zip CLI）。
+      # Alpine zip 保留（不在 nativeCoverage，未裁剪）。
 
       # 14c6 P1原生化: file——libmagic 文件类型识别（AI 高频：判断文件/二进制/包类型）。
       # configure 交叉模式沿用 xz；--disable-* 剥掉 zlib/bzlib/xzlib 依赖；magic.mgc 数据文件同打进包。
