@@ -1339,13 +1339,18 @@ extern "C" const char *g_hud_char;
     _isClimbing = NO;
 }
 
-// v6.1.5-14w：底部趴墙动效——贴底呼吸（肚皮起伏，layer scale.y 关键帧，不影响翻转 transform）
+// v6.1.5-14w：底部趴墙动效——贴底呼吸（肚皮起伏，layer scale 关键帧，不影响翻转 transform）
+// v6.1.5-14at：呼吸加强——原 scale.y 1.0→1.045 幅度仅4.5%趴在屏底/侧墙视觉不可见（用户"动效不会出现/侧面没起伏"），
+// 改 scale.y 1.0→1.06 + scale.x 0.985→1.0（肚子鼓起更明显），时长 1.0s
 - (void)_startBottomBreath {
     [_girlView.layer removeAnimationForKey:@"hudBottomBreath"];
-    CAKeyframeAnimation *a = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale.y"];
-    a.values = @[@1.0f, @1.045f, @1.0f];
+    CAKeyframeAnimation *a = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
+    a.values = @[[NSValue valueWithCATransform3D:CATransform3DIdentity],
+                 [NSValue valueWithCATransform3D:CATransform3DConcat(CATransform3DMakeScale(0.985f, 1.06f, 1.0f),
+                                                                     _girlView.layer.transform)],
+                 [NSValue valueWithCATransform3D:CATransform3DIdentity]];
     a.keyTimes = @[@0.0f, @0.5f, @1.0f];
-    a.duration = 1.2;
+    a.duration = 1.0;
     a.repeatCount = INFINITY;
     a.calculationMode = kCAAnimationCubic;
     [_girlView.layer addAnimation:a forKey:@"hudBottomBreath"];
@@ -1354,12 +1359,12 @@ extern "C" const char *g_hud_char;
     [_girlView.layer removeAnimationForKey:@"hudBottomBreath"];
 }
 
-// v6.1.5-14w：底部趴墙动效——横向小碎步挪动（30-60s 一次，随机方向缓动 60-120pt）
+// v6.1.5-14w：底部趴墙动效——横向小碎步挪动（v6.1.5-14at：12-20s 一次更频繁，幅度加大到80-160pt，原30-60s/60-120pt 用户等不到）
 - (void)_scheduleBottomCrawl {
     [_bottomCrawlTimer invalidate];
     _bottomCrawlTimer = nil;
     if (!_onBottomWall) return;
-    NSTimeInterval delay = 30.0 + arc4random_uniform(30000) / 1000.0;
+    NSTimeInterval delay = 12.0 + arc4random_uniform(9000) / 1000.0;
     _bottomCrawlTimer = [NSTimer scheduledTimerWithTimeInterval:delay
                                                          target:self
                                                        selector:@selector(_doBottomCrawl)
@@ -1374,11 +1379,11 @@ extern "C" const char *g_hud_char;
     CGFloat halfW = _girlView.frame.size.width / 2;
     CGFloat curX = _girlView.center.x;
     int dir = (arc4random_uniform(2) == 0) ? -1 : 1;
-    CGFloat step = 60.0 + arc4random_uniform(61);   // 60-120pt
+    CGFloat step = 80.0 + arc4random_uniform(81);   // v6.1.5-14at：80-160pt（原60-120）
     CGFloat nx = curX + dir * step;
     nx = MAX(halfW, MIN(nx, v.width - halfW));
     if (fabs(nx - curX) < 8) { [self _scheduleBottomCrawl]; return; }   // 已到头：换方向下次再说
-    [UIView animateWithDuration:1.2 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+    [UIView animateWithDuration:1.5 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
         self->_girlView.center = CGPointMake(nx, self->_girlView.center.y);
     } completion:^(BOOL f) {
         [self _scheduleBottomCrawl];
