@@ -201,6 +201,11 @@ final class RemoteTerminalServer {
 
     private func handleClient(_ client: Int32) {
         defer { close(client) }
+        // fix15: recv 超时保护（10s）——客户端连上不发数据 / 只发半截请求 / 恶意占连接时，
+        // recv 10s 后返回 EAGAIN → readRequest 返回 nil → 连接关闭 → 串行 acceptLoop 不被永久阻塞
+        // （否则单连接 DoS 会让整个远程终端服务假死：端口在听但 HTTP 无响应）
+        var rcvTimeout = timeval(tv_sec: 10, tv_usec: 0)
+        setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &rcvTimeout, socklen_t(MemoryLayout<timeval>.size))
         guard let req = readRequest(client) else { return }
         let authOK = !token.isEmpty && (req.bearer == token || req.query["token"] == token)
         let path = req.path
