@@ -16,21 +16,25 @@ enum ToolLayer: String, CaseIterable {
         }
     }
 
-    /// 按工具名前缀/白名单映射到层
-    static func layer(for def: ToolDefinition) -> ToolLayer {
+    /// 按工具名前缀/白名单映射到层（可跨层：shell.exec 含 iOS 原生命令 + Alpine 命令两个分支）
+    static func layers(for def: ToolDefinition) -> [ToolLayer] {
         let n = def.name
+        // 跨层命令工具：shell.exec runtime=auto 路由——纯文件/系统/网络→iOS 原生命令；
+        // 装包/解包/编译/复杂脚本→Alpine。两层的命令工具都列出来。
+        if n == "shell.exec" {
+            return [.native, .alpine]
+        }
+        if n == "env.setup_re" {
+            return [.alpine]
+        }
         // iOS 系统层：直接操作设备/已装 App
         let iosPrefixes = ["app", "inject", "control.", "container.", "device.", "location.",
                            "memory", "process.", "scan.", "contacts.", "reminder", "calendar",
                            "phone", "bind.", "browser.", "diagnose.", "ssh"]
         if iosPrefixes.contains(where: { n == $0 || n.hasPrefix($0) }) {
-            return .ios
+            return [.ios]
         }
-        // Alpine 层：Linux 沙箱执行
-        if n == "env.setup_re" || n == "shell.exec" {
-            return .alpine
-        }
-        return .native
+        return [.native]
     }
 }
 
@@ -38,12 +42,19 @@ struct ToolCenterView: View {
     @ObservedObject private var registry = ToolRegistry.shared
     @Environment(\.presentationMode) private var presentationMode
 
-    private var grouped: [(layer: ToolLayer, tools: [ToolDefinition])] {
+    private var grouped: [(layer: ToolLayer, rows: [(def: ToolDefinition, branch: String?)])] {
         ToolLayer.allCases.compactMap { layer in
-            let list = registry.definitions
-                .filter { ToolLayer.layer(for: $0) == layer }
+            let rows = registry.definitions
+                .filter { ToolLayer.layers(for: $0).contains(layer) }
                 .sorted { $0.name < $1.name }
-            return list.isEmpty ? nil : (layer, list)
+                .map { def -> (ToolDefinition, String?) in
+                    // 跨层工具按所在层标注命令分支
+                    if def.name == "shell.exec" {
+                        return (def, layer == .native ? "iOS 原生命令" : "Alpine Linux 命令")
+                    }
+                    return (def, nil)
+                }
+            return rows.isEmpty ? nil : (layer, rows)
         }
     }
 
@@ -69,8 +80,8 @@ struct ToolCenterView: View {
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     }) {
-                        ForEach(item.tools, id: \.name) { def in
-                            ToolRow(def: def)
+                        ForEach(item.rows, id: \.def.name) { row in
+                            ToolRow(def: row.def, branch: row.branch)
                         }
                     }
                 }
@@ -90,12 +101,22 @@ struct ToolCenterView: View {
 
 private struct ToolRow: View {
     let def: ToolDefinition
+    var branch: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text(def.name)
                     .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                if let branch = branch {
+                    Text(branch)
+                        .font(.system(size: 9, weight: .bold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Color.green.opacity(0.15))
+                        .foregroundColor(.green)
+                        .clipShape(Capsule())
+                }
                 if def.verified {
                     Text("✅")
                         .font(.system(size: 11))
