@@ -306,12 +306,6 @@ struct GirlCharacterPickerView: View {
                 Text("快捷菜单")
                 Spacer()
                 EditButton()
-            }, footer: VStack(alignment: .leading, spacing: 4) {
-                Text("💡 提示：单击桌面上的桌宠就会弹出这个快捷菜单！点右上角编辑可删除应用，URL Scheme比如微信weixin://，抖音snssdk1128://")
-                // v6.1.5-7：写入诊断（写后读回验证结果），排查"自定义 app 不进菜单"直接截图发我
-                if let last = UserDefaults.standard.stringArray(forKey: "fanMenuDiag")?.last {
-                    Text("🩺 \(last)").font(.caption2).foregroundColor(.secondary)
-                }
             }) {
                 Picker("弹出样式", selection: Binding<Int>(
                     get: { Self.prefs.integer(forKey: "fanMenuStyle") },
@@ -423,10 +417,6 @@ struct GirlCharacterPickerView: View {
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(row.app["name"] ?? "")
                                                 .font(.body)
-                                            Text(row.app["url"] ?? "")
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                                .lineLimit(1)
                                         }
                                         Spacer()
                                     }
@@ -481,9 +471,7 @@ struct GirlCharacterPickerView: View {
                     }
                 ))
             }
-            Section(footer: Text("切换角色、调整尺寸或气泡样式后自动重启桌面悬浮生效。")) {
-                EmptyView()
-            }
+            Section {}
         }
         .navigationTitle("可爱助手角色")
         .navigationBarTitleDisplayMode(.inline)

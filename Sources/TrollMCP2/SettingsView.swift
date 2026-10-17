@@ -323,7 +323,7 @@ struct SettingsView: View {
         .sheet(isPresented: $showMirrorEditor) {
             NavigationView {
                 Form {
-                    Section(footer: Text("GitHub 被墙（国内常见）时，自动按顺序尝试这些镜像前缀来检查与下载更新。每行一个，用逗号分隔；留空恢复默认（ghfast.top、gh-proxy.com）。")) {
+                    Section {
                         TextEditor(text: $mirrorsText)
                             .font(.system(.body, design: .monospaced))
                             .frame(minHeight: 110)
@@ -493,11 +493,7 @@ struct SettingRowContent: View {
                 Text(item.title)
                     .font(.body)
                     .foregroundColor(.primary)
-                if !item.subtitle.isEmpty {
-                    Text(item.subtitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                // v6.1.5-14ax：灰色副标题介绍已按用户要求移除
                 }
             }
             Spacer(minLength: 0)
@@ -570,7 +566,7 @@ struct UpdateView: View {
                 }
             }
             
-            Section(header: Text("高级设置"), footer: Text("GitHub 被墙（国内常见）时，自动按顺序尝试这些镜像前缀来检查与下载更新。每行一个，用逗号分隔；留空恢复默认（ghfast.top、gh-proxy.com）。")) {
+            Section(header: Text("高级设置")) {
                 Button(action: {
                     mirrorsText = UpdateManager.shared.mirrorsText
                     showMirrorEditor = true
@@ -592,7 +588,7 @@ struct UpdateView: View {
         .sheet(isPresented: $showMirrorEditor) {
             NavigationView {
                 Form {
-                    Section(footer: Text("GitHub 被墙（国内常见）时，自动按顺序尝试这些镜像前缀来检查与下载更新。每行一个，用逗号分隔；留空恢复默认（ghfast.top、gh-proxy.com）。")) {
+                    Section {
                         TextEditor(text: $mirrorsText)
                             .font(.system(.body, design: .monospaced))
                             .frame(minHeight: 110)
@@ -681,9 +677,7 @@ struct SSHSettingsView: View {
             }
 
             Section(header: Text(L10n.t("ui_24"))) {
-                Text(L10n.t("ui_140"))
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
+                // v6.1.5-14ax：SSH 配置说明灰色介绍已移除
             }
         }
         .navigationTitle("SSH 远程连接")
