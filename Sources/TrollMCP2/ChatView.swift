@@ -1184,7 +1184,7 @@ struct ChatView: View {
         inputText = ""
     }
 
-    private func mentionApp(_ app: AppEntry) {
+    private func mentionApp(_ app: AppCatalog.AppEntry) {
         let icon = Self.appIcon(for: app.path)
         let att = PendingAttachment(kind: .app, displayName: app.name, dataURL: nil, thumbnail: icon, bundleId: app.bundleId, fileURL: nil)
         pendingAttachments.append(att)
