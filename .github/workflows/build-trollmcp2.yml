@@ -332,6 +332,11 @@ jobs:
           curl -sL -o /tmp/file.tar.gz https://github.com/file/file/archive/refs/tags/FILE5_45.tar.gz
           tar -xzf /tmp/file.tar.gz -C /tmp
           cd /tmp/file-FILE5_45
+          # 14c7 fix6: GitHub 源码包不含 configure（autotools 生成物）→ autoreconf 生成
+          #           （官方 ftp astron.com 超时、fossies 404，GitHub 包 + autoreconf 最稳）
+          if ! command -v autoreconf >/dev/null 2>&1; then brew install autoconf automake libtool >/dev/null 2>&1 || true; fi
+          autoreconf -fi 2>&1 | tail -5
+          ls -la configure 2>/dev/null || { echo "!!! configure 生成失败" >&2; exit 1; }
           cat > /tmp/ioscc <<'WRAP'
           #!/bin/sh
           exec xcrun --sdk iphoneos clang -arch arm64 -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" -mios-version-min=15.0 "$@"
