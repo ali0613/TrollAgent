@@ -296,6 +296,16 @@ final class ShellExecTool: MCPTool {
             return result
         }
         
+        // 5b. 普通 echo 命令（无重定向）——iOS 原生实现。
+        // v6.1.5-14bz：真机实测 echo hello-trollagent 触发 Segmentation fault 11——
+        // 根因：echo 不在 36 个原生分支 → 落 Alpine 兜底 ISHEngine.exec（iSH x86 模拟），
+        // iSH 内核执行不稳定导致段错误闪退。echo 是最常用命令之一，必须原生直跑（零 iSH）。
+        if trimmed == "echo" || trimmed.hasPrefix("echo ") {
+            let result = ShellExecTool.runIOSEcho(iosCmd)
+            AuditLog.shared.log("shell.exec (ios echo)", detail: String(trimmed.prefix(100)))
+            return result
+        }
+        
         // 6. mkdir 命令——iOS 原生实现 (建目录）
         if trimmed.hasPrefix("mkdir ") {
             let result = ShellExecTool.runIOSMkdir(iosCmd)
@@ -2590,10 +2600,13 @@ final class ShellExecTool: MCPTool {
                     "stdout": "未找到 TrollAgent 崩溃日志。目录已检查：\(dirs.joined(separator: ", "))。\n如果闪退发生在 TrollStore 重装/被杀等场景，日志可能归到别的进程名下，可先跑: ls -lt /var/mobile/Library/Logs/CrashReporter/ | head -20",
                     "ios_native": true]
         }
-        // 读最新 2 个崩溃文件的关键行
+        // 读最新 2 个崩溃文件的关键行（v6.1.5-14bz：限 60KB 分段读，防崩溃日志整文件读入内存触发二次崩溃）
         var out = ""
         for (idx, cand) in candidates.prefix(2).enumerated() {
-            guard let content = try? String(contentsOfFile: cand.path, encoding: .utf8) else { continue }
+            guard let fileHandle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: cand.path)) else { continue }
+            let chunk = (try? fileHandle.read(upToCount: 60 * 1024)) ?? nil
+            try? fileHandle.close()
+            guard let data = chunk, let content = String(data: data, encoding: .utf8) else { continue }
             out += "\n===== 崩溃日志 #\(idx + 1): \(cand.path.split(separator: "/").last ?? "")（\(Int(Date().timeIntervalSince(cand.mtime)) / 60)分钟前）=====\n"
             let lines = content.components(separatedBy: .newlines)
             var grabbed: [String] = []

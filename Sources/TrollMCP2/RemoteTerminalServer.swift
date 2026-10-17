@@ -89,10 +89,15 @@ final class RemoteTerminalServer {
     }
 
     private func acceptLoop() {
+        // v6.1.5-14bz：请求处理串行化——原 DispatchQueue.global 并发执行 handleClient，
+        // shell.exec 内共享状态（ISHEngine.cwd、guestCwd 等）无锁并发修改 → 数据竞争 →
+        // Segmentation fault 11（真机 CrashCatcher 记录 20+ 次）。改单串行队列，每次只处理一个
+        // 连接，杜绝并发竞争；远程测试是逐条串行调用，串行处理无吞吐损失。
+        let handlerQueue = DispatchQueue(label: "trollagent.remote-terminal.handler")
         while isRunning && serverSocket >= 0 {
             let client = accept(serverSocket, nil, nil)
             guard client >= 0 else { continue }
-            DispatchQueue.global(qos: .userInitiated).async {
+            handlerQueue.sync {
                 self.handleClient(client)
             }
         }
