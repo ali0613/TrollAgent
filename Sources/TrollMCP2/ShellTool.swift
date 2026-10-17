@@ -615,7 +615,7 @@ final class ShellExecTool: MCPTool {
             return (output, exitCode, timedOut, note)
         }
         ShellDiag.log("provision auto: apk add \(pkg) (missing in Alpine)")
-        let provisionTimeout = min(max(timeout, 60), 240)
+        let provisionTimeout = min(max(timeout, 60), 90)  // v6.1.5-14bs: 240→90s(用户实测"执行中…"挂起=装包慢无反馈, 收紧等待上限)
         let provisionStart = Date()
         InstallationRegistry.shared.start(key: pkg)
         let apkResult = ISHEngine.apkAdd([pkg], timeout: provisionTimeout) { line in
@@ -2280,78 +2280,62 @@ final class ShellExecTool: MCPTool {
     ///   ② Alpine rootfs（Documents/alpine-rootfs）的 usr/bin、bin、usr/local/bin
     /// 返回"已装/未装 + 如何运行"，绝不执行 Alpine 二进制、绝不自动 apk add。
     /// 根因背景：git 未装 → 自动 apk add git → iSH x86 模拟高 CPU → iOS watchdog 杀 App（闪退）。
-    private static func nativeToolProbe(_ command: String) -> [String: Any]? {
-        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
-        let word = firstWord(trimmed)
+    // v6.1.5-14bs：可被探测的工具集合（易触发 Alpine 且常被"检查环境"）
+    private static let probeNames: Set<String> = ["git", "vim", "vi", "curl", "wget", "make", "cmake", "gcc", "clang", "tar", "unzip", "zip", "gdb", "jq", "r2", "radare2", "python3", "python", "cd"]
+
+    /// 解析单个命令段是否为"纯探测形态"；是则返回目标工具名，否则返回 nil（= 真实执行，不拦截）
+    private static func probeTargetOfSegment(_ seg: String) -> String? {
+        let t = seg.trimmingCharacters(in: .whitespaces)
+        let word = firstWord(t)
         guard !word.isEmpty else { return nil }
-        // 只处理已知易触发 Alpine 且常被"检查环境"的工具；其余命令照常走原路由
-        let probeNames: Set<String> = ["git", "vim", "vi", "curl", "wget", "make", "cmake", "gcc", "clang", "tar", "unzip", "zip", "gdb", "jq", "r2", "radare2", "python3", "python", "cd"]
-        // 探测形态判定（v6.1.5-14bp4 扩展）：--version / -v / -V / --help / 无参数 /
-        // command -v X / which X / type X / 简单 cd（cd 是无参数状态查询，走原生 cwd 读取）
-        var probeTarget: String? = nil
-        let body = trimmed.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
+        let body = t.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
         if probeNames.contains(word) {
+            // 工具名 + 版本/无参数 = 探测；工具名 + 其他参数 = 真实执行（git status 等不得吞）
             if body.isEmpty || body == "--version" || body == "-v" || body == "-V" || body == "--help"
                 || body.hasPrefix("--version ") || body.hasPrefix("-v ") || body.hasPrefix("-V ") || body.hasPrefix("--help ") {
-                probeTarget = word
+                return word
+            }
+            return nil
+        }
+        // command -v X / which X / type X
+        let probeRegex = [
+            #"^\s*command\s+-[vV]\s+([A-Za-z0-9_.-]+)"#,
+            #"^\s*which\s+([A-Za-z0-9_.-]+)"#,
+            #"^\s*type\s+([A-Za-z0-9_.-]+)"#,
+        ]
+        for rx in probeRegex {
+            if let m = t.range(of: rx, options: .regularExpression) {
+                let s = String(t[m])
+                let words = s.split(separator: " ").map(String.init)
+                if let last = words.last, probeNames.contains(last) { return last }
             }
         }
-        if probeTarget == nil {
-            // command -v git / which git / type git / command -v git; ...（复合命令前段）
-            // 正则精确匹配工具探测形态，命中即探测（不执行 Alpine 二进制，杜绝闪退）
-            let probeRegex = [
-                #"^\s*command\s+-[vV]\s+([A-Za-z0-9_.-]+)"#,
-                #"^\s*which\s+([A-Za-z0-9_.-]+)"#,
-                #"^\s*type\s+([A-Za-z0-9_.-]+)"#,
-            ]
-            for rx in probeRegex {
-                if let m = trimmed.range(of: rx, options: .regularExpression) {
-                    let s = String(trimmed[m])
-                    let words = s.split(separator: " ").map(String.init)
-                    if let last = words.last, probeNames.contains(last) {
-                        probeTarget = last
-                        break
-                    }
-                }
-            }
-        }
-        guard let target = probeTarget else { return nil }
-        // v6.1.5-14br：①原生命令表检查——curl/wget/python3 等有 Swift 原生实现（iosNativeCommands），
-        // 探测必须先认它们，不能报"未安装"（用户实测 which curl 被误报未安装的 bug）。
-        // ②复合命令（含 ; | && ||）不拦截——AI 意图是执行干活命令（如 which curl; curl -s ...），
-        // 整条吞掉会丢真实执行；复合命令走原路由，由原生管道/路由处理。
-        if trimmed.contains(";") || trimmed.contains("|") || trimmed.contains("&&") || trimmed.contains("||") {
-            // 仅当整条命令本身就是纯探测形态时才拦（如 command -v git; echo $? 这类纯检测链）
-            let probeOnly = trimmed.split(separator: ";").allSatisfy { seg in
-                let t = String(seg).trimmingCharacters(in: .whitespaces)
-                if t.isEmpty || t.hasPrefix("echo") || t.hasPrefix("#") { return true }
-                if t.hasPrefix("command ") || t.hasPrefix("which ") || t.hasPrefix("type ") { return true }
-                if probeNames.contains(firstWord(t)) {
-                    let b = t.dropFirst(firstWord(t).count).trimmingCharacters(in: .whitespaces)
-                    return b.isEmpty || b.hasPrefix("--version") || b.hasPrefix("-v") || b.hasPrefix("-V") || b.hasPrefix("--help")
-                }
-                return false
-            }
-            if !probeOnly { return nil }
-        }
+        return nil
+    }
+
+    /// 单工具探测：python3 走原生执行器；cd 回 cwd；原生命令表/App bin/Alpine rootfs 直读；否则报未装+安装提示。
+    /// 绝不执行 Alpine 二进制、绝不自动 apk add（根因：git 未装 → 自动装 → iSH 高 CPU/装包 240s → 执行中挂起/被杀）。
+    private static func probeSingleTool(_ target: String, command seg: String) -> [String: Any] {
+        let t = seg.trimmingCharacters(in: .whitespaces)
+        let word = firstWord(t)
+        let body = t.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
         // python3/python 已有原生执行器（runIOSPython3），仅 --version/-V 走原生（裸 python3 会进 REPL 卡住，不拦截）
         if target == "python3" || target == "python" {
             if body == "--version" || body == "-V" {
-                return runIOSPython3(trimmed.hasPrefix("python3") ? trimmed : "python3 " + trimmed.dropFirst(word.count))
+                return runIOSPython3(t.hasPrefix("python3") ? t : "python3 " + t.dropFirst(word.count))
             }
         }
         // cd 纯状态查询 → 返回当前 cwd（原生，无副作用）
         if target == "cd" && body.isEmpty {
-            return ["command": trimmed, "exit_code": 0, "stdout": "当前工作目录：\(ISHEngine.cwd)\n（cd 需要在 Alpine 会话内生效；当前会话 cwd 已显示）",
-                    "ios_native": true]
+            return ["command": seg, "exit_code": 0, "stdout": "当前工作目录：\(ISHEngine.cwd)", "ios_native": true]
         }
-        // ①原生命令表：有 Swift 原生实现的命令（curl/wget/ta/base64/strings 等）直接报已装+可直跑
+        // 原生命令表：curl/wget/python3/ta/base64/strings 等有 Swift 原生实现，直接报已装+可直跑
         if iosNativeCommands.contains(target) {
             var note = "探测结果来自原生命令表（\(target) 有 App 内置 Swift 原生实现，无需 Alpine 无需装包）"
             if target == "curl" || target == "wget" {
-                note += "\n直接执行：\(target) 参数...（不走 iSH，不闪退）"
+                note += "\n直接执行：\(target) 参数...（不走 iSH，不闪退不挂起）"
             }
-            return ["command": trimmed, "exit_code": 0,
+            return ["command": seg, "exit_code": 0,
                     "stdout": "\(target): ✅ 已安装（App 原生命令实现，可直接 \(target) ... 执行）",
                     "ios_native": true, "note": note]
         }
@@ -2376,17 +2360,50 @@ final class ShellExecTool: MCPTool {
             } else {
                 out += "\n运行方式：\(runHint)"
             }
-            return ["command": trimmed, "exit_code": 0, "stdout": out,
+            return ["command": seg, "exit_code": 0, "stdout": out,
                     "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发 iSH 高 CPU 被系统杀）"]
         }
         var out = "\(target): ❌ 未安装（iOS 无原生 \(target)）"
         if target == "git" || target == "vim" || target == "curl" || target == "wget" {
-            out += "\n安装提示：自动安装会触发 iSH 模拟器高 CPU 被系统杀（闪退）。请用 tool.install 手动安装（Alpine: apk add \(target)），或减少同时执行的大命令。"
+            out += "\n安装提示：自动安装会触发 iSH 模拟器高 CPU 被系统杀（闪退）/装包 240s 挂起。请用 tool.install 手动安装（Alpine: apk add \(target)），或减少同时执行的大命令。"
         } else {
             out += "\n安装提示：用 tool.install 安装，或 runtime=alpine 下 apk add \(target)。"
         }
-        return ["command": trimmed, "exit_code": 1, "stdout": out,
+        return ["command": seg, "exit_code": 1, "stdout": out,
                 "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发 iSH 高 CPU 被系统杀）"]
+    }
+
+    /// v6.1.5-14bp/14br/14bs：原生工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令/
+    /// command -v X / which X / type X）不触发 iSH，改用 FileManager 直读探测：
+    ///   ① App 内置原生 bin/<name>（native-tools）  ② Alpine rootfs  ③ 原生命令表（Swift 实现）
+    /// 支持批量：一条命令探测多个工具（command -v git; command -v curl; python3 --version）逐个合并返回。
+    /// 任一段是真实执行（git status / curl 实际请求）→ 整条不拦截，走原路由。
+    private static func nativeToolProbe(_ command: String) -> [String: Any]? {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        // 按 ; && || 分段（原生管道还支持 |，探测不介入含 | 的段避免误吞管道执行）
+        let segs = trimmed.split(whereSeparator: { $0 == ";" || $0 == "&&" || $0 == "||" }).map { String($0).trimmingCharacters(in: .whitespaces) }
+        if segs.count > 1 {
+            // 批量链：全部非跳过段都必须是探测形态，否则整条不拦截（保留真实执行意图）
+            var items: [(seg: String, target: String)] = []
+            for seg in segs {
+                if seg.isEmpty || seg.hasPrefix("echo") || seg.hasPrefix("#") { continue }
+                guard let tg = probeTargetOfSegment(seg) else { return nil }
+                items.append((seg, tg))
+            }
+            guard !items.isEmpty else { return nil }
+            var stdout = ""
+            var exitCode = 0
+            for item in items {
+                let r = probeSingleTool(item.target, command: item.seg)
+                stdout += (r["stdout"] as? String ?? "") + "\n"
+                if (r["exit_code"] as? Int ?? 0) != 0 { exitCode = 1 }
+            }
+            return ["command": trimmed, "exit_code": exitCode, "stdout": stdout, "ios_native": true,
+                    "note": "批量探测结果来自文件系统/原生命令表（未执行命令本体，避免触发 iSH 高 CPU 被系统杀）"]
+        }
+        guard let target = probeTargetOfSegment(trimmed) else { return nil }
+        return probeSingleTool(target, command: trimmed)
     }
 
     /// fix3q: 内置原生工具链通用执行——lua/node/r2/cstool（native-tools 交叉编译进 App bin/）。

@@ -331,7 +331,7 @@ enum ISHEngine {
     /// ③大包(openblas/numpy 等 16 依赖)下载慢，默认 20s 超时必被 SIGKILL。
     /// 做法：先幂等切国内镜像源(阿里云 HTTPS，按 /etc/alpine-release 动态版本号)，再补 ca-certificates，
     /// 最后 apk add。超时默认 240s（大包可 1-3 分钟），由调用方按需调整。
-    static func apkAdd(_ pkgs: [String], timeout: TimeInterval = 240, onLine: ((String) -> Void)? = nil) -> (output: String, exitCode: Int32, timedOut: Bool) {
+    static func apkAdd(_ pkgs: [String], timeout: TimeInterval = 90, onLine: ((String) -> Void)? = nil) -> (output: String, exitCode: Int32, timedOut: Bool) {   // v6.1.5-14bs: 默认超时 240→90s
         let pk = pkgs.joined(separator: " ")
         // fix3bq: 根治"进度条卡死/单源挂死等 240s"——多镜像顺序快速失败切换 + 阶段化进度：
         //   ①ca-certificates（HTTPS 握手必需，失败不阻塞后续）②逐镜像 apk update（50s 无进展即换源）
