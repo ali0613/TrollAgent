@@ -695,9 +695,11 @@ extern "C" const char *g_hud_char;
     // v6.0.27：左右趴墙按角色放大恢复（MIN(charScale,1.2)）——用户反馈 v6.0.26 统一后猫娘左右趴墙缩小太多；
     // 底部趴墙保持统一 1.0；顶部趴墙已整体移除
     CGFloat wallScale = (wallImg == _wallImage) ? 1.0f : MIN(_charScale, 1.2f);
+    // v6.1.5-14as：猫娘侧边吸附单独放大15%（用户反馈偏小）；底部趴墙不受影响
+    CGFloat catSideScale = (_isCatChar && wallImg != _wallImage) ? 1.15f : 1.0f;
     CGFloat wallH = (wallImg == _wallImage)
         ? (CGFloat)g_hud_size * wallScale * 0.375
-        : (CGFloat)g_hud_size * wallScale * 0.5;
+        : (CGFloat)g_hud_size * wallScale * 0.5 * catSideScale;
     CGFloat wa = (wallImg.size.height > 0) ? (wallImg.size.width / wallImg.size.height) : 1.0;
     _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
     // v6.0.24 撤销：UIViewContentModeBottom 是"内容不缩放、底部对齐"，会让 wall 原图(1024×1536)按原尺寸贴底→放大数倍。
@@ -1260,7 +1262,7 @@ extern "C" const char *g_hud_char;
     CGSize v = [UIScreen mainScreen].bounds.size;
     CGFloat climbH;
     if (_isCatChar) {
-        climbH = (CGFloat)g_hud_size * MIN(_charScale, 1.2f) * 0.5;   // 猫娘：趴墙同款 50%
+        climbH = (CGFloat)g_hud_size * MIN(_charScale, 1.2f) * 0.5 * 1.15f;   // 猫娘：趴墙同款 50% ×1.15(14as 与侧边吸附一致)
     } else {
         climbH = (CGFloat)g_hud_size * _charScale;                    // girl/rabit：站姿全尺寸
     }
@@ -1289,7 +1291,7 @@ extern "C" const char *g_hud_char;
         _girlView.image = wallImg;
         // 重新设置趴墙尺寸
         CGFloat wallScale = MIN(_charScale, 1.2f);
-        CGFloat wallH = (CGFloat)g_hud_size * wallScale * 0.5;
+        CGFloat wallH = (CGFloat)g_hud_size * wallScale * 0.5 * ((_isCatChar) ? 1.15f : 1.0f);   // v6.1.5-14as：猫娘趴墙×1.15
         CGFloat wa = (wallImg.size.height > 0) ? (wallImg.size.width / wallImg.size.height) : 1.0;
         _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
         // 重新吸附到边缘——v6.1.5-14ar：左右墙都不镜像（原左墙翻转，用户反馈角色倒过来）
