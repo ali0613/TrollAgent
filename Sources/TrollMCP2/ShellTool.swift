@@ -153,6 +153,15 @@ final class ShellExecTool: MCPTool {
         let offsetParam = max(0, (params["offset"] as? Int) ?? 0)
         let outLimit = fullOutput ? 0 : (limitParam > 0 ? limitParam : 16000)
         
+        // v6.1.5-14bp2：工具探测拦截——在任何路由之前先识别"版本/存在性检查类"命令
+        // （git/vim/curl/wget --version、command -v git、which git 等）→ 原生文件系统探测，
+        // 不触发 iSH。根因：git 等未装 → 自动 apk add → iSH x86 模拟高 CPU → iOS watchdog 杀 App=闪退。
+        // python3 有原生执行器走原生；其余探测不执行任何 Alpine 二进制。
+        if let probe = ShellExecTool.nativeToolProbe(trimmed) {
+            AuditLog.shared.log("shell.exec (native tool probe)", detail: String(trimmed.prefix(100)))
+            return probe
+        }
+
         // P2 环境自动路由：不再由 agent 手动 env 指定切环境（横跳旋钮拆掉）。
         // 系统按命令类型自动判定：需 Alpine 工具(装包/解包/脚本/python) → Alpine；
         // 其余默认走 iOS 原生。agent 传的 env 参数被忽略(仅作弱提示，见 description)。
@@ -163,14 +172,6 @@ final class ShellExecTool: MCPTool {
             // 即使判定 Alpine，ta 也走宿主路由，杜绝"环境漂移"。
             if trimmed == "ta" || trimmed.hasPrefix("ta ") {
                 return OffloadRouter.run(trimmed)
-            }
-            // v6.1.5-14bp：版本/存在性探测类命令（git/vim/curl/wget --version/-v 等）→ 原生文件系统探测，
-            // 不触发 iSH 模拟器。根因：git 等未装 → 自动 apk add → iSH x86 模拟高 CPU →
-            // iOS watchdog(≈13s CPU)杀 App = "执行命令就闪退"（python3 原生已装所以不崩）。
-            // 纯探测：读 rootfs/原生 bin 文件存在性，不执行任何 Alpine 二进制。
-            if let probe = ShellExecTool.nativeToolProbe(trimmed) {
-                AuditLog.shared.log("shell.exec (native tool probe)", detail: String(trimmed.prefix(100)))
-                return probe
             }
             // v3.7.7: 自动 bind——Alpine 命令引用 iOS 路径时自动挂载顶层 + 改写路径，
             // 让 Alpine 直接读写 iOS 文件（消灭环境漂移，替代单向字节桥接）。
@@ -2280,45 +2281,77 @@ final class ShellExecTool: MCPTool {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let word = firstWord(trimmed), !word.isEmpty else { return nil }
         // 只处理已知易触发 Alpine 且常被"检查环境"的工具；其余命令照常走原路由
-        let probeNames: Set<String> = ["git", "vim", "vi", "curl", "wget", "make", "cmake", "gcc", "clang", "tar", "unzip", "zip", "gdb", "jq", "r2", "radare2"]
-        guard probeNames.contains(word) else { return nil }
-        // 仅限"纯版本/存在性"形态：--version / -v / -V / --help / 无参数（防止把 git status 等真实操作吞掉）
+        let probeNames: Set<String> = ["git", "vim", "vi", "curl", "wget", "make", "cmake", "gcc", "clang", "tar", "unzip", "zip", "gdb", "jq", "r2", "radare2", "python3", "python", "cd"]
+        // 探测形态判定（v6.1.5-14bp4 扩展）：--version / -v / -V / --help / 无参数 /
+        // command -v X / which X / type X / 简单 cd（cd 是无参数状态查询，走原生 cwd 读取）
+        var probeTarget: String? = nil
         let body = trimmed.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
-        if !body.isEmpty {
-            let versionish = (body == "--version" || body == "-v" || body == "-V" || body == "--help"
-                              || body.hasPrefix("--version ") || body.hasPrefix("-v ") || body.hasPrefix("-V ")
-                              || body.hasPrefix("--help "))
-            if !versionish { return nil }
+        if probeNames.contains(word) {
+            if body.isEmpty || body == "--version" || body == "-v" || body == "-V" || body == "--help"
+                || body.hasPrefix("--version ") || body.hasPrefix("-v ") || body.hasPrefix("-V ") || body.hasPrefix("--help ") {
+                probeTarget = word
+            }
+        }
+        if probeTarget == nil {
+            // command -v git / which git / type git / command -v git; ...（复合命令前段）
+            // 正则精确匹配工具探测形态，命中即探测（不执行 Alpine 二进制，杜绝闪退）
+            let probeRegex = [
+                #"^\s*command\s+-[vV]\s+([A-Za-z0-9_.-]+)"#,
+                #"^\s*which\s+([A-Za-z0-9_.-]+)"#,
+                #"^\s*type\s+([A-Za-z0-9_.-]+)"#,
+            ]
+            for rx in probeRegex {
+                if let m = trimmed.range(of: rx, options: .regularExpression) {
+                    let s = String(trimmed[m])
+                    let words = s.split(separator: " ").map(String.init)
+                    if let last = words.last, probeNames.contains(last) {
+                        probeTarget = last
+                        break
+                    }
+                }
+            }
+        }
+        guard let target = probeTarget else { return nil }
+        // python3/python 已有原生执行器（runIOSPython3），仅 --version/-V 走原生（裸 python3 会进 REPL 卡住，不拦截）
+        if target == "python3" || target == "python" {
+            if body == "--version" || body == "-V" {
+                return runIOSPython3(trimmed.hasPrefix("python3") ? trimmed : "python3 " + trimmed.dropFirst(word.count))
+            }
+        }
+        // cd 纯状态查询 → 返回当前 cwd（原生，无副作用）
+        if target == "cd" && body.isEmpty {
+            return ["command": trimmed, "exit_code": 0, "stdout": "当前工作目录：\(ISHEngine.cwd)\n（cd 需要在 Alpine 会话内生效；当前会话 cwd 已显示）",
+                    "ios_native": true]
         }
         let fm = FileManager.default
         // 1) App 原生 bin
-        let nativePath = Bundle.main.bundlePath + "/bin/" + word
+        let nativePath = Bundle.main.bundlePath + "/bin/" + target
         var foundAt: String? = nil
         if fm.isExecutableFile(atPath: nativePath) { foundAt = nativePath }
         // 2) Alpine rootfs
         if foundAt == nil {
             let rootfs = NSHomeDirectory() + "/Documents/alpine-rootfs"
             for sub in ["/usr/bin/", "/bin/", "/usr/local/bin/"] {
-                let p = rootfs + sub + word
+                let p = rootfs + sub + target
                 if fm.isExecutableFile(atPath: p) { foundAt = p; break }
             }
         }
-        let runHint = "Alpine 里运行：runtime=alpine + 'sh -c \"\(word) ...\"'；或原生若已内置直接 \(word) ..."
+        let runHint = "Alpine 里运行：runtime=alpine + 'sh -c \"\(target) ...\"'；或原生若已内置直接 \(target) ..."
         if let found = foundAt {
-            var out = "\(word): ✅ 已安装（\(found.replacingOccurrences(of: NSHomeDirectory(), with: "~"))）"
+            var out = "\(target): ✅ 已安装（\(found.replacingOccurrences(of: NSHomeDirectory(), with: "~"))）"
             if found.hasPrefix(Bundle.main.bundlePath) {
-                out += "\n运行方式：直接 \(word) ...（原生 ARM64，无需 Alpine）"
+                out += "\n运行方式：直接 \(target) ...（原生 ARM64，无需 Alpine）"
             } else {
                 out += "\n运行方式：\(runHint)"
             }
             return ["command": trimmed, "exit_code": 0, "stdout": out,
                     "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发 iSH 高 CPU 被系统杀）"]
         }
-        var out = "\(word): ❌ 未安装（iOS 无原生 \(word)）"
-        if word == "git" || word == "vim" || word == "curl" || word == "wget" {
-            out += "\n安装提示：自动安装会触发 iSH 模拟器高 CPU 被系统杀（闪退）。请用 tool.install 手动安装（Alpine: apk add \(word)），或减少同时执行的大命令。"
+        var out = "\(target): ❌ 未安装（iOS 无原生 \(target)）"
+        if target == "git" || target == "vim" || target == "curl" || target == "wget" {
+            out += "\n安装提示：自动安装会触发 iSH 模拟器高 CPU 被系统杀（闪退）。请用 tool.install 手动安装（Alpine: apk add \(target)），或减少同时执行的大命令。"
         } else {
-            out += "\n安装提示：用 tool.install 安装，或 runtime=alpine 下 apk add \(word)。"
+            out += "\n安装提示：用 tool.install 安装，或 runtime=alpine 下 apk add \(target)。"
         }
         return ["command": trimmed, "exit_code": 1, "stdout": out,
                 "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发 iSH 高 CPU 被系统杀）"]
