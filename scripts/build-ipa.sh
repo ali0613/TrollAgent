@@ -111,8 +111,10 @@ if [ -d "Resources/bin" ]; then
         fi
     done
     # 14c6: file 的 magic 数据文件（libmagic 运行时必需；ShellTool 调 file 时设 MAGIC 指向它）
-    if [ -f "native-tools-out/magic.mgc" ]; then
-        cp "native-tools-out/magic.mgc" "$APP/bin/magic.mgc"
+    # 14c7 fix7: CI 用 macOS file -C -m Magdir 生成 Magdir.mgc（交叉 file 在 runner 跑不了）→ 兼容 *.mgc
+    MG=$(ls native-tools-out/*.mgc 2>/dev/null | head -1)
+    if [ -n "$MG" ]; then
+        cp "$MG" "$APP/bin/magic.mgc"
         echo ">>> magic.mgc bundled ($(du -h "$APP/bin/magic.mgc" | cut -f1))"
     fi
     # 14c7 P5: busybox 静态 aarch64 ELF（elf-runner 的第一个嫁接对象）→ Resources/linux/busybox
