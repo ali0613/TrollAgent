@@ -173,17 +173,32 @@ if [ -d "Resources/bin" ]; then
             SIGN_TOOL=""
         fi
         if [ -n "$SIGN_TOOL" ]; then
+            FAILED=""
             for t in "$APP"/bin/*; do
                 [ -f "$t" ] || continue
                 case "$t" in *.dylib) continue;; esac
                 if [ "$SIGN_TOOL" = codesign ]; then
-                    codesign -s - -f --entitlements "Support/bin-entitlements.plist" "$t" 2>/dev/null || true
+                    codesign -s - -f --entitlements "Support/bin-entitlements.plist" "$t" 2>/dev/null || FAILED="$FAILED $(basename "$t")"
                 else
                     # xerub ldid 语法：-S 后必须紧跟文件名（-Sent.plist），否则 entitlements 写不进去
-                    "$SIGN_TOOL" -S"Support/bin-entitlements.plist" "$t" 2>/dev/null || true
+                    "$SIGN_TOOL" -S"Support/bin-entitlements.plist" "$t" 2>/dev/null || FAILED="$FAILED $(basename "$t")"
                 fi
             done
-            echo ">>> signed bin tools with no-sandbox entitlements (via $SIGN_TOOL)"
+            if [ -n "$FAILED" ]; then
+                echo "!!! bin tool signing FAILED for:$FAILED —— no-sandbox 未注入，真机网络/跨容器读写会被沙箱拦截" >&2
+                exit 1
+            fi
+            # fix19: 签名后验证关键工具 entitlements（ldid -e 抽查 no-sandbox 是否真注入），防静默签名失败
+            for key in "$APP/bin/python3" "$APP/bin/node"; do
+                [ -f "$key" ] || continue
+                if [ "$SIGN_TOOL" = ldid ]; then
+                    if ! ldid -e "$key" 2>/dev/null | grep -q no-sandbox; then
+                        echo "!!! no-sandbox NOT present in $(basename "$key") after signing —— 工具将套普通沙箱（网络/容器权限缺失）" >&2
+                        exit 1
+                    fi
+                fi
+            done
+            echo ">>> signed bin tools with no-sandbox entitlements (via $SIGN_TOOL, verified)"
         else
             echo "!!! ldid/codesign not available; bin tools stay sandboxed (injection may fail)" >&2
         fi
@@ -297,12 +312,16 @@ if [ -n "$XCF_DIR" ]; then
                 # → 启动即被 SIGKILL(137)。编译成功后必须补签一次 no-sandbox（动态/静态两条路径都覆盖）。
                 if [ -f "Support/bin-entitlements.plist" ]; then
                     if command -v ldid >/dev/null 2>&1; then
-                        ldid -S"Support/bin-entitlements.plist" "$APP/bin/python3" 2>/dev/null \
-                            && echo ">>> python3 re-signed no-sandbox (ldid)" \
-                            || echo "!!! python3 ldid re-sign failed" >&2
+                        if ! ldid -S"Support/bin-entitlements.plist" "$APP/bin/python3" 2>/dev/null \
+                            || ! ldid -e "$APP/bin/python3" 2>/dev/null | grep -q no-sandbox; then
+                            echo "!!! python3 no-sandbox re-sign FAILED —— 真机 python3 将套普通沙箱（网络/容器权限缺失）" >&2
+                            exit 1
+                        fi
+                        echo ">>> python3 re-signed no-sandbox (ldid, verified)"
                     elif command -v codesign >/dev/null 2>&1; then
                         codesign -s - -f --entitlements "Support/bin-entitlements.plist" "$APP/bin/python3" 2>/dev/null \
                             && echo ">>> python3 re-signed no-sandbox (codesign)" \
+                            || { echo "!!! python3 no-sandbox re-sign FAILED (codesign)" >&2; exit 1; }
                             || echo "!!! python3 codesign re-sign failed" >&2
                     else
                         echo "!!! no sign tool for python3 — stays sandboxed" >&2

@@ -97,8 +97,19 @@ final class RemoteTerminalServer {
         while isRunning && serverSocket >= 0 {
             let client = accept(serverSocket, nil, nil)
             guard client >= 0 else { continue }
-            handlerQueue.sync {
+            // fix17: 单连接看门狗——串行队列 + 30s 处理超时。
+            // 即使命令卡死在无法被 timeout 中断的系统调用（网络出站挂起等），
+            // 看门狗也强制 close 释放队列：后续请求不再被永久排队，服务端最多堵 30s 自动恢复。
+            let sem = DispatchSemaphore(value: 0)
+            handlerQueue.async {
                 self.handleClient(client)
+                sem.signal()
+            }
+            let waitResult = sem.wait(timeout: .now() + 30)
+            if waitResult == .timedOut {
+                // 强制关闭：handleClient 内的 recv/send 立即返回错误 → 函数尽快退出 → 队列释放
+                close(client)
+                _ = sem.wait(timeout: .now() + 5)
             }
         }
     }

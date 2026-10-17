@@ -537,7 +537,7 @@ final class ShellExecTool: MCPTool {
         // v4.4.9-fix3cd: python3/python 首词无管道也走原生——之前 36 个快捷路径都不匹配 → 兜底送 Alpine
         // (3.12)，与提示词"python3 首词走原生 ARM64 CPython(3.14+numpy/pandas)"矛盾。要 Alpine 版仍用 sh -c 'python3 ...'。
         if iosCmd == "python3" || iosCmd.hasPrefix("python3 ") || iosCmd == "python" || iosCmd.hasPrefix("python ") {
-            let result = ShellExecTool.runIOSPython3(iosCmd)
+            let result = ShellExecTool.runIOSPython3(iosCmd, timeout: timeout)
             AuditLog.shared.log("shell.exec (ios python3)", detail: String(trimmed.prefix(100)))
             return result
         }
@@ -1081,10 +1081,12 @@ final class ShellExecTool: MCPTool {
                         // 14c7 fix9→fix13: elf-runner 解压逻辑**临时移除**（14c7d 启动即崩，解压未执行；
                         // 二分定位：14c7e = 无 zlib 代码 + busybox.gz 文件——区分"文件"vs"主可执行"。
                         // 通过后恢复方案：解压改走原生 python3 -m gzip -d（避免主可执行加 zlib 依赖）。
+                        // fix18: 超时用 shell 的 timeout 参数（默认 20s）而非固定 120s——
+                        // python3 出站网络卡死时 20s SIGKILL 释放，配合远程终端看门狗，服务端最多堵 20s。
                         let res = BuildRunner.shared.run(executable: p, args: args,
-                                                         env: env, timeout: 120)
+                                                         env: env, timeout: timeout)
                         var out = res.stdout
-                        if res.timedOut { out += "\n[执行超时 120s 被终止]" }
+                        if res.timedOut { out += "\n[执行超时 \(Int(timeout))s 被终止]" }
                         return ["command": segment, "exit_code": res.exitCode, "stdout": out,
                                 "stderr": res.stderr, "ios_native": true]
                     }
@@ -2286,7 +2288,7 @@ final class ShellExecTool: MCPTool {
     /// v4.4.4: 原生 Python CLI——App/bin/python3（iPhone 芯片直跑，PEP 730 CPython iOS）。
     /// 未内置时给明确指引（不静默降级到 iSH，避免 AI 误以为原生可用）。
     /// v6.1.5-14bx: extraEnv 透传（git.py 用 TROLL_GIT_CWD 注入会话目录）。
-    private static func runIOSPython3(_ command: String, extraEnv: [String: String] = [:]) -> [String: Any] {
+    private static func runIOSPython3(_ command: String, extraEnv: [String: String] = [:], timeout: TimeInterval = 30) -> [String: Any] {
         let pythonPath = Bundle.main.bundlePath + "/bin/python3"
         guard FileManager.default.isExecutableFile(atPath: pythonPath) else {
             return ["command": command, "exit_code": 1,
@@ -2314,9 +2316,9 @@ final class ShellExecTool: MCPTool {
                    "TROLL_PY_DIAG": pyDiagPath]
         for (k, v) in extraEnv { env[k] = v }
         let res = BuildRunner.shared.run(executable: pythonPath, args: args,
-                                         env: env, timeout: 120)
+                                         env: env, timeout: timeout)
         var out = res.stdout
-        if res.timedOut { out += "\n[python3 执行超时 120s 被终止]" }
+        if res.timedOut { out += "\n[python3 执行超时 \(Int(timeout))s 被终止]" }
         if let serr = res.spawnError, !serr.isEmpty {
             out += "\n[spawn error: \(serr)]"
         }
@@ -3809,6 +3811,8 @@ final class ShellExecTool: MCPTool {
         var outputPath = ""
         var sawFlagO = false
         var userAgent: String? = nil
+        var maxSeconds: Double = 0          // fix18: -m <sec> 显式超时；0=按模式默认
+        var writeFormat: String? = nil       // fix18: -w <fmt> 输出格式（探测模式，如 %{http_code}）
         var i = 1
         while i < rawParts.count {
             let p = rawParts[i]
@@ -3820,6 +3824,10 @@ final class ShellExecTool: MCPTool {
                 if i + 1 < rawParts.count { outputPath = stripQuotes(rawParts[i + 1]); i += 1 }
             } else if p == "-A" {
                 if i + 1 < rawParts.count { userAgent = stripQuotes(rawParts[i + 1]); i += 1 }
+            } else if p == "-m" || p == "--max-time" {
+                if i + 1 < rawParts.count { maxSeconds = Double(stripQuotes(rawParts[i + 1])) ?? 0; i += 1 }
+            } else if p == "-w" || p == "--write-out" {
+                if i + 1 < rawParts.count { writeFormat = stripQuotes(rawParts[i + 1]); i += 1 }
             } else if pn.hasPrefix("http://") || pn.hasPrefix("https://") {
                 urlString = pn
             }
@@ -3840,7 +3848,8 @@ final class ShellExecTool: MCPTool {
         // 抓取到 stdout 模式（无 -O 且无 -o）
         if !sawFlagO && outputPath.isEmpty {
             var req = URLRequest(url: url)
-            req.timeoutInterval = 30
+            let netTimeout = maxSeconds > 0 ? maxSeconds : 30
+            req.timeoutInterval = netTimeout
             req.setValue(userAgent ?? "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
                          forHTTPHeaderField: "User-Agent")
             let sem = DispatchSemaphore(value: 0)
@@ -3849,12 +3858,12 @@ final class ShellExecTool: MCPTool {
             URLSession.shared.dataTask(with: req) { d, _, e in
                 data = d; fetchErr = e; sem.signal()
             }.resume()
-            _ = sem.wait(timeout: .now() + 35)
+            _ = sem.wait(timeout: .now() + netTimeout + 5)
             if let e = fetchErr {
                 return ["command": command, "exit_code": 1, "stdout": "curl: fetch failed: \(e.localizedDescription)", "ios_native": true]
             }
             guard let d = data else {
-                return ["command": command, "exit_code": 1, "stdout": "curl: fetch timed out after 35s for \(urlString)", "ios_native": true]
+                return ["command": command, "exit_code": 1, "stdout": "curl: fetch timed out after \(Int(netTimeout))s for \(urlString)", "ios_native": true]
             }
             guard !d.isEmpty else {
                 return ["command": command, "exit_code": 1, "stdout": "curl: fetch returned empty body for \(urlString)", "ios_native": true]
@@ -3880,6 +3889,31 @@ final class ShellExecTool: MCPTool {
             return out
         }
 
+        // fix18: 探测模式（-o /dev/null 配合 -w <fmt>）——下载后丢弃，输出 curl -w 风格结果。
+        // AI 常用 `curl -m 3 -o /dev/null -w '%{http_code}' <url>` 探活；原生实现直接支持。
+        if outputPath == "/dev/null" && writeFormat != nil {
+            var req = URLRequest(url: url)
+            let netTimeout = maxSeconds > 0 ? maxSeconds : 20
+            req.timeoutInterval = netTimeout
+            req.setValue(userAgent ?? "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
+                         forHTTPHeaderField: "User-Agent")
+            let sem = DispatchSemaphore(value: 0)
+            var code = 0
+            var bytes: Int64 = 0
+            URLSession.shared.dataTask(with: req) { d, resp, _ in
+                if let http = resp as? HTTPURLResponse { code = http.statusCode }
+                bytes = Int64(d?.count ?? 0)
+                sem.signal()
+            }.resume()
+            _ = sem.wait(timeout: .now() + netTimeout + 5)
+            var outFmt = writeFormat ?? ""
+            outFmt = outFmt.replacingOccurrences(of: "%{http_code}", with: "\(code)")
+            outFmt = outFmt.replacingOccurrences(of: "%{size_download}", with: "\(bytes)")
+            outFmt = outFmt.replacingOccurrences(of: "%{url_effective}", with: urlString)
+            return ["command": command, "exit_code": code == 0 ? 1 : 0,
+                    "stdout": outFmt, "ios_native": true, "http_code": code]
+        }
+
         // 下载模式
         if outputPath.isEmpty {
             let filename = url.lastPathComponent
@@ -3892,7 +3926,9 @@ final class ShellExecTool: MCPTool {
         let sem = DispatchSemaphore(value: 0)
         let cfg = URLSessionConfiguration.ephemeral
         cfg.timeoutIntervalForRequest = 30
-        cfg.timeoutIntervalForResource = 600   // 大文件最多等 10 分钟
+        // fix18: 支持 -m <sec> 显式超时（默认 600s 大文件上限）
+        let resourceTimeout = maxSeconds > 0 ? maxSeconds : 600
+        cfg.timeoutIntervalForResource = resourceTimeout
         let delegate = DownloadProgressDelegate()
         let session = URLSession(configuration: cfg, delegate: delegate, delegateQueue: nil)
         var dlLocation: URL? = nil
@@ -3906,7 +3942,7 @@ final class ShellExecTool: MCPTool {
         }
         let startedAt = Date()
         session.downloadTask(with: url).resume()
-        _ = sem.wait(timeout: .now() + 610)
+        _ = sem.wait(timeout: .now() + resourceTimeout + 10)
         session.invalidateAndCancel()
         if let e = dlErr {
             InstallationRegistry.shared.finish(ok: false, summary: "下载失败: \(e.localizedDescription)")
@@ -3914,9 +3950,9 @@ final class ShellExecTool: MCPTool {
                     "stdout": "curl: download failed: \(e.localizedDescription)", "ios_native": true]
         }
         guard let loc = dlLocation else {
-            InstallationRegistry.shared.finish(ok: false, summary: "下载超时(>10min)")
+            InstallationRegistry.shared.finish(ok: false, summary: "下载超时(>\(Int(resourceTimeout))s)")
             return ["command": command, "exit_code": 1,
-                    "stdout": "curl: download timed out after 600s for \(urlString)", "ios_native": true]
+                    "stdout": "curl: download timed out after \(Int(resourceTimeout))s for \(urlString)", "ios_native": true]
         }
         let dir = (outputPath as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
