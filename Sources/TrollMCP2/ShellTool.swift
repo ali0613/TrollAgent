@@ -2316,6 +2316,24 @@ final class ShellExecTool: MCPTool {
             }
         }
         guard let target = probeTarget else { return nil }
+        // v6.1.5-14br：①原生命令表检查——curl/wget/python3 等有 Swift 原生实现（iosNativeCommands），
+        // 探测必须先认它们，不能报"未安装"（用户实测 which curl 被误报未安装的 bug）。
+        // ②复合命令（含 ; | && ||）不拦截——AI 意图是执行干活命令（如 which curl; curl -s ...），
+        // 整条吞掉会丢真实执行；复合命令走原路由，由原生管道/路由处理。
+        if trimmed.contains(";") || trimmed.contains("|") || trimmed.contains("&&") || trimmed.contains("||") {
+            // 仅当整条命令本身就是纯探测形态时才拦（如 command -v git; echo $? 这类纯检测链）
+            let probeOnly = trimmed.split(separator: ";").allSatisfy { seg in
+                let t = String(seg).trimmingCharacters(in: .whitespaces)
+                if t.isEmpty || t.hasPrefix("echo") || t.hasPrefix("#") { return true }
+                if t.hasPrefix("command ") || t.hasPrefix("which ") || t.hasPrefix("type ") { return true }
+                if probeNames.contains(firstWord(t)) {
+                    let b = t.dropFirst(firstWord(t).count).trimmingCharacters(in: .whitespaces)
+                    return b.isEmpty || b.hasPrefix("--version") || b.hasPrefix("-v") || b.hasPrefix("-V") || b.hasPrefix("--help")
+                }
+                return false
+            }
+            if !probeOnly { return nil }
+        }
         // python3/python 已有原生执行器（runIOSPython3），仅 --version/-V 走原生（裸 python3 会进 REPL 卡住，不拦截）
         if target == "python3" || target == "python" {
             if body == "--version" || body == "-V" {
@@ -2326,6 +2344,16 @@ final class ShellExecTool: MCPTool {
         if target == "cd" && body.isEmpty {
             return ["command": trimmed, "exit_code": 0, "stdout": "当前工作目录：\(ISHEngine.cwd)\n（cd 需要在 Alpine 会话内生效；当前会话 cwd 已显示）",
                     "ios_native": true]
+        }
+        // ①原生命令表：有 Swift 原生实现的命令（curl/wget/ta/base64/strings 等）直接报已装+可直跑
+        if iosNativeCommands.contains(target) {
+            var note = "探测结果来自原生命令表（\(target) 有 App 内置 Swift 原生实现，无需 Alpine 无需装包）"
+            if target == "curl" || target == "wget" {
+                note += "\n直接执行：\(target) 参数...（不走 iSH，不闪退）"
+            }
+            return ["command": trimmed, "exit_code": 0,
+                    "stdout": "\(target): ✅ 已安装（App 原生命令实现，可直接 \(target) ... 执行）",
+                    "ios_native": true, "note": note]
         }
         let fm = FileManager.default
         // 1) App 原生 bin
