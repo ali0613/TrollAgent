@@ -307,8 +307,8 @@ struct ModelRow: View {
         var link = "trollagent://import?baseURL=\(enc(config.baseURL))&model=\(enc(config.model))&name=\(enc(config.name))"
         if !config.apiKey.isEmpty { link += "&apiKey=\(enc(config.apiKey))" }
         link += "&auth=\(enc(config.authMethod))&group=\(enc(config.group))&protocol=\(enc(config.apiProtocol))"
-        if config.temperature != 0.7 { link += "&temperature=\(config.temperature)" }
-        if config.maxTokens != 2048 { link += "&maxTokens=\(config.maxTokens)" }
+        if config.temperature != 0.2 { link += "&temperature=\(config.temperature)" }
+        if config.maxTokens != 16384 { link += "&maxTokens=\(config.maxTokens)" }
         if config.contextTokens != 16000 { link += "&contextTokens=\(config.contextTokens)" }
         return link
     }
@@ -482,8 +482,8 @@ struct ModelEditorView: View {
         _model = State(initialValue: config?.model ?? (p?.model ?? ""))
         _authMethod = State(initialValue: config?.authMethod ?? (p?.auth ?? "Bearer"))
         _isDefault = State(initialValue: config?.isDefault ?? false)
-        _temperature = State(initialValue: config?.temperature ?? 0.7)
-        _maxTokens = State(initialValue: config?.maxTokens ?? 2048)
+        _temperature = State(initialValue: config?.temperature ?? 0.2)
+        _maxTokens = State(initialValue: config?.maxTokens ?? 16384)
         _contextTokens = State(initialValue: config?.contextTokens ?? 16000)
         _group = State(initialValue: config?.group ?? "默认")
         _paramAliasesText = State(initialValue: ModelEditorView.aliasesString(config?.paramAliases))

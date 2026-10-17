@@ -16,8 +16,8 @@ struct ModelConfig: Codable, Identifiable, Hashable {
     var model: String             // gpt-4o-mini
     var authMethod: String        // Bearer / API Key / Body api_key / Body token / Query token / None
     var isDefault: Bool = false
-    var temperature: Double = 0.7
-    var maxTokens: Int = 2048
+    var temperature: Double = 0.2   // v6.1.5-14bj：执行任务型AI标准(参考Claude Agent SDK默认0/代码工具类0.1-0.3)，原0.7偏高输出飘
+    var maxTokens: Int = 16384      // v6.1.5-14bj：Agent场景需大输出(BytePlus官方推荐≥128000, 手机端取16384平衡; 原2048会截断长任务)
     /// v2.9.11：输入上下文预算 (token 估算）。发送前按预算自动裁剪最旧消息，
     /// 避免长会话请求体无限增长导致"一直请求中"。
     var contextTokens: Int = 16000
@@ -49,7 +49,7 @@ struct ModelConfig: Codable, Identifiable, Hashable {
 
     init(id: UUID = UUID(), name: String, provider: String, apiProtocol: String = "OpenAI Chat Completions",
          baseURL: String, apiKey: String, model: String, authMethod: String = "Bearer",
-         isDefault: Bool = false, temperature: Double = 0.7, maxTokens: Int = 2048, compatLevel: Int = 0,
+         isDefault: Bool = false, temperature: Double = 0.2, maxTokens: Int = 16384, compatLevel: Int = 0,
          contextTokens: Int = 16000, group: String = "默认", paramAliases: [String: String] = [:]) {
         self.id = id
         self.name = name
@@ -82,8 +82,8 @@ struct ModelConfig: Codable, Identifiable, Hashable {
         let decodedAuthMethod = (try? c.decode(String.self, forKey: .authMethod)) ?? "Bearer"
         authMethod = decodedAuthMethod.trimmingCharacters(in: .whitespaces).isEmpty ? "Bearer" : decodedAuthMethod
         isDefault = (try? c.decode(Bool.self, forKey: .isDefault)) ?? false
-        temperature = (try? c.decode(Double.self, forKey: .temperature)) ?? 0.7
-        maxTokens = (try? c.decode(Int.self, forKey: .maxTokens)) ?? 2048
+        temperature = (try? c.decode(Double.self, forKey: .temperature)) ?? 0.2
+        maxTokens = (try? c.decode(Int.self, forKey: .maxTokens)) ?? 16384
         contextTokens = (try? c.decode(Int.self, forKey: .contextTokens)) ?? 16000
         compatLevel = (try? c.decode(Int.self, forKey: .compatLevel)) ?? 0
         group = (try? c.decode(String.self, forKey: .group)) ?? "默认"
