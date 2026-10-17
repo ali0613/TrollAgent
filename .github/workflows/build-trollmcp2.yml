@@ -231,9 +231,9 @@ jobs:
         if: steps.tools-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p native-tools-out
-          curl -sL -o /tmp/tree.tar.gz https://github.com/Old-Man-Programmer/tree/archive/refs/tags/v2.2.1.tar.gz
+          curl -sL -o /tmp/tree.tar.gz https://github.com/Old-Man-Programmer/tree/archive/refs/tags/2.3.2.tar.gz
           tar -xzf /tmp/tree.tar.gz -C /tmp
-          cd /tmp/tree-2.2.1
+          cd /tmp/tree-2.3.2
           cat > /tmp/ioscc <<'WRAP'
           #!/bin/sh
           exec xcrun --sdk iphoneos clang -arch arm64 -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" -mios-version-min=15.0 "$@"
