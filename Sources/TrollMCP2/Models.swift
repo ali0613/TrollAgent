@@ -1834,8 +1834,24 @@ final class ConversationStore: ObservableObject {
     }
 
     private func applyLoaded(_ decoded: [ChatConversation]) {
-        conversations = decoded.sorted { $0.updatedAt > $1.updatedAt }
+        var convs = decoded.sorted { $0.updatedAt > $1.updatedAt }
+        // v6.1.5-14bp3：App 被系统终止（闪退）时工具调用卡"执行中…"且永不返回——
+        // 重启加载后把残留 running 工具消息统一标记为中断失败，避免 UI 永远挂着无结果。
+        var cleaned = false
+        for ci in convs.indices {
+            for mi in convs[ci].messages.indices where convs[ci].messages[mi].isRunning {
+                convs[ci].messages[mi].isRunning = false
+                convs[ci].messages[mi].isError = true
+                let c = convs[ci].messages[mi].content
+                if c.isEmpty || c == "…" {
+                    convs[ci].messages[mi].content = "⚠️ 执行中断：App 在工具运行期间被系统终止（闪退）。请重发该命令；git/vim/curl 等版本检查已改走原生探测不会再触发闪退。"
+                }
+                cleaned = true
+            }
+        }
+        conversations = convs
         selectedId = conversations.first?.id
+        if cleaned { save() }   // 持久化清理结果，避免下次启动重复标记
     }
 
     private func load() {
