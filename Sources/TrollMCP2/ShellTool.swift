@@ -3,7 +3,6 @@ import UIKit
 import Darwin
 import CommonCrypto
 import SQLite3
-import zlib
 
 /// 终端会话管理 (单例，v3.0.93: 已废弃 - iSH 引擎自己管理 cwd，这个类是死代码）
 final class ShellSession {
@@ -1079,42 +1078,9 @@ final class ShellExecTool: MCPTool {
                             let magic = Bundle.main.bundlePath + "/bin/magic.mgc"
                             if FileManager.default.fileExists(atPath: magic) { env["MAGIC"] = magic }
                         }
-                        // 14c7 fix9: elf-runner 调用前确保 Linux busybox 就绪。
-                        // ELF 不能直接进 bundle（启动崩，14c7b 实证）→ busybox.gz 进 Resources/linux/，
-                        // 首次调用时用 iOS zlib(gzopen) 解压到 Documents/Workspace/linux/busybox。
-                        if word == "elf-runner" {
-                            let fm = FileManager.default
-                            let dstDir = NSHomeDirectory() + "/Documents/Workspace/linux"
-                            let dst = dstDir + "/busybox"
-                            if !fm.fileExists(atPath: dst),
-                               let gzPath = Bundle.main.path(forResource: "busybox", ofType: "gz", inDirectory: "Resources/linux") {
-                                try? fm.createDirectory(atPath: dstDir, withIntermediateDirectories: true)
-                                let ok = gzPath.withCString { gzC in
-                                    dst.withCString { dstC in
-                                        guard let f = gzopen(gzC, "rb") else { return false }
-                                        defer { gzclose(f) }
-                                        guard let out = fopen(dstC, "wb") else { return false }
-                                        defer { fclose(out) }
-                                        var buf = [UInt8](repeating: 0, count: 65536)
-                                        while true {
-                                            let n = gzread(f, &buf, UInt32(buf.count))
-                                            if n <= 0 { break }
-                                            buf.withUnsafeBytes { ptr in
-                                                _ = fwrite(ptr.baseAddress, 1, Int(n), out)
-                                            }
-                                        }
-                                        return true
-                                    }
-                                }
-                                if ok {
-                                    _ = try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dst)
-                                } else {
-                                    return ["command": segment, "exit_code": 1,
-                                            "stdout": "[elf-runner] busybox 解压失败（bundle 内无 busybox.gz？）",
-                                            "stderr": "", "ios_native": true]
-                                }
-                            }
-                        }
+                        // 14c7 fix9→fix13: elf-runner 解压逻辑**临时移除**（14c7d 启动即崩，解压未执行；
+                        // 二分定位：14c7e = 无 zlib 代码 + busybox.gz 文件——区分"文件"vs"主可执行"。
+                        // 通过后恢复方案：解压改走原生 python3 -m gzip -d（避免主可执行加 zlib 依赖）。
                         let res = BuildRunner.shared.run(executable: p, args: args,
                                                          env: env, timeout: 120)
                         var out = res.stdout
