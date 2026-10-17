@@ -1279,7 +1279,7 @@ extern "C" const char *g_hud_char;
     CGSize v = [UIScreen mainScreen].bounds.size;
     CGFloat climbH;
     if (_isCatChar) {
-        climbH = (CGFloat)g_hud_size * MIN(_charScale, 1.2f) * 0.5 * 1.15f;   // 猫娘：趴墙同款 50% ×1.15(14as 与侧边吸附一致)
+        climbH = (CGFloat)g_hud_size * MIN(_charScale, 1.2f) * 0.65f;   // v6.1.5-14ba：猫娘攀爬 0.575→0.65（用户反馈仍偏小；趴墙尺寸保持 14as 不动）
     } else {
         climbH = (CGFloat)g_hud_size * _charScale;                    // girl/rabit：站姿全尺寸
     }
