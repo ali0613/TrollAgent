@@ -443,6 +443,22 @@ struct GirlCharacterPickerView: View {
                         } catch {}
                     }
                 ))
+                // v6.1.5-14ap：粒子特效开关——默认开；写全局文件让 HUD 轮询（与键盘开关同通道模式）
+                Toggle("粒子特效", isOn: Binding<Bool>(
+                    get: {
+                        if UserDefaults.standard.object(forKey: "particleEnabled") == nil {
+                            return true
+                        }
+                        return UserDefaults.standard.bool(forKey: "particleEnabled")
+                    },
+                    set: {
+                        UserDefaults.standard.set($0, forKey: "particleEnabled")
+                        do {
+                            try ($0 ? "1" : "0").write(to: URL(fileURLWithPath: "/var/mobile/Documents/particle_enabled.txt"),
+                                                        atomically: true, encoding: .utf8)
+                        } catch {}
+                    }
+                ))
             }
             Section(footer: Text("切换角色、调整尺寸或气泡样式后自动重启桌面悬浮生效。")) {
                 EmptyView()

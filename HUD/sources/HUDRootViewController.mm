@@ -2214,6 +2214,13 @@ static UIImage *softParticleImage(CGFloat size) {
             else [self _startFloatWithDuration:1.3f];
         }
     }
+    // v6.1.5-14ap：粒子开关——读全局文件（设置页"可爱助手→其他→粒子特效"写），
+    // 关闭则清空颜色数组 → 走 else _clearParticles；漂浮（入睡呼吸）不受影响
+    BOOL particleOn = YES;
+    NSString *pval = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/particle_enabled.txt"
+                                               encoding:NSUTF8StringEncoding error:nil];
+    if (pval.length > 0) particleOn = [pval hasPrefix:@"1"];
+    if (!particleOn) [colors removeAllObjects];
     if (colors.count) {
         [self _setParticles:colors];
     } else {
