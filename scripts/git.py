@@ -10,9 +10,19 @@ Usage (run inside the repo directory for add/commit/push/log/status):
   python3 git.py log
   python3 git.py status
 """
+import os
 import sys
 
 from dulwich import porcelain
+
+# v6.1.5-14bx: TROLL_GIT_CWD——TrollAgent 注入会话工作目录（原生 python3 子进程
+# 无 tty 且 spawn 不带 cwd，git add/commit/log/status 依赖进程 cwd，必须显式 chdir）
+_git_cwd = os.environ.get("TROLL_GIT_CWD")
+if _git_cwd:
+    try:
+        os.chdir(_git_cwd)
+    except OSError as e:
+        print("warning: cannot chdir to TROLL_GIT_CWD=%s (%s)" % (_git_cwd, e))
 
 
 def usage():

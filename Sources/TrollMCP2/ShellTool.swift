@@ -394,7 +394,14 @@ final class ShellExecTool: MCPTool {
             return result
         }
         
-        // 20. curl -O / wget 命令——iOS 原生实现 (下载文件）
+        // 20. git 命令——iOS 原生实现 (App/bin/git.py，dulwich porcelain；iOS 拦 fork 真 git 跑不了)
+        if trimmed == "git" || trimmed.hasPrefix("git ") {
+            let result = ShellExecTool.runIOSGitPy(iosCmd)
+            AuditLog.shared.log("shell.exec (ios git)", detail: String(trimmed.prefix(100)))
+            return result
+        }
+
+        // 21. curl -O / wget 命令——iOS 原生实现 (下载文件）
         if trimmed.hasPrefix("curl ") || trimmed.hasPrefix("wget ") {
             let result = ShellExecTool.runIOSDownload(iosCmd)
             AuditLog.shared.log("shell.exec (ios download)", detail: String(trimmed.prefix(100)))
@@ -674,8 +681,8 @@ final class ShellExecTool: MCPTool {
             // 首词 python3 走 iOS 原生分支(runIOSPython3)。要 Alpine 版 Python 用 sh -c 'python3 ...'
             // (sh marker 命中仍走 Alpine)，或显式声明"在 Alpine 里跑"。
             #"^\s*(pip3?)\s+"#,        // pip / pip3 (装包仍在 Alpine)
-            #"^\s*(git|make|cmake|gcc|clang)\s+"#,  // 工具链。git 走 Alpine(rootfs 预装 git, 审计前即此状态)；
-            // v6.1.5-14bv：wget 移出——原生 runIOSDownload 可用, Alpine 未预装 wget, 送 Alpine 会报"未装"误导(AI 绕圈)
+            #"^\s*(make|cmake|gcc|clang)\s+"#,  // 编译工具链走 Alpine。v6.1.5-14bx: git 移出——
+            // rootfs 预装 git 因 CI provision 失败未进包, git 走原生 git.py(dulwich) 不 Alpine 不装包不闪退
             #"^\s*sh\s+"#,             // 任意 sh 脚本(含无 flag) → Alpine 全功能 shell
             #"^\s*bash\s+"#,
             #"^\s*file\s+"#,           // native 无 file 命令 → Alpine 的 file(真实现, autoBind 后能读 iOS 文件)
@@ -706,9 +713,9 @@ final class ShellExecTool: MCPTool {
         }
         // v6.0.30: 阻塞型联网/重命令自动切Alpine，避免原生跑阻塞命令闪退
         // v6.1.5-14bv：wget / curl -O / curl -L 移出——原生 runIOSDownload(Swift URLSession) 即可下载，
-        // 送 Alpine 反而 wget 未预装报"未装"、curl 慢/高CPU。仅 git 联网仍走 Alpine。
+        // 送 Alpine 反而 wget 未预装报"未装"、curl 慢/高CPU。v6.1.5-14bx：git clone/pull/fetch 也移出——
+        // git 走原生 git.py（dulwich 原生直跑，克隆即 URLSession 系网络操作，不 Alpine）。
         let blockingMarkers = [
-            "git clone", "git pull", "git fetch",
             "$(", "`",  // 命令替换，原生不支持
             ">>"  // 重定向写文件，原生处理不一致
         ]
@@ -974,6 +981,7 @@ final class ShellExecTool: MCPTool {
         case "objdump": return runIOSObjdump(iosCmd)
         case "class-dump": return runIOSClassDump(iosCmd)
         case "python3": return runIOSPython3(iosCmd)
+        case "git": return runIOSGitPy(iosCmd)
         case "crash.tail": return runIOSCrashTail(iosCmd)
         case "kfd_diag": return runIOSKfdDiag(iosCmd)
         // fix3q: 内置原生工具链（CI native-tools 交叉编译进 bin/）——AI 直接调用即走原生 ARM64
@@ -2195,7 +2203,8 @@ final class ShellExecTool: MCPTool {
 
     /// v4.4.4: 原生 Python CLI——App/bin/python3（iPhone 芯片直跑，PEP 730 CPython iOS）。
     /// 未内置时给明确指引（不静默降级到 iSH，避免 AI 误以为原生可用）。
-    private static func runIOSPython3(_ command: String) -> [String: Any] {
+    /// v6.1.5-14bx: extraEnv 透传（git.py 用 TROLL_GIT_CWD 注入会话目录）。
+    private static func runIOSPython3(_ command: String, extraEnv: [String: String] = [:]) -> [String: Any] {
         let pythonPath = Bundle.main.bundlePath + "/bin/python3"
         guard FileManager.default.isExecutableFile(atPath: pythonPath) else {
             return ["command": command, "exit_code": 1,
@@ -2218,10 +2227,12 @@ final class ShellExecTool: MCPTool {
         try? FileManager.default.removeItem(atPath: pyOutPath)
         try? FileManager.default.removeItem(atPath: pyDiagPath)
         try? FileManager.default.removeItem(atPath: pyStartPath)
+        var env = ["PYTHONIOENCODING": "utf-8",
+                   "TROLL_PY_OUT": pyOutPath,
+                   "TROLL_PY_DIAG": pyDiagPath]
+        for (k, v) in extraEnv { env[k] = v }
         let res = BuildRunner.shared.run(executable: pythonPath, args: args,
-                                         env: ["PYTHONIOENCODING": "utf-8",
-                                               "TROLL_PY_OUT": pyOutPath,
-                                               "TROLL_PY_DIAG": pyDiagPath], timeout: 120)
+                                         env: env, timeout: 120)
         var out = res.stdout
         if res.timedOut { out += "\n[python3 执行超时 120s 被终止]" }
         if let serr = res.spawnError, !serr.isEmpty {
@@ -2276,6 +2287,32 @@ final class ShellExecTool: MCPTool {
                 "stderr": res.stderr, "ios_native": true]
     }
 
+    /// v6.1.5-14bx: 原生 git——App/bin/git.py（dulwich porcelain wrapper，纯 Python）。
+    /// iOS 沙箱拦 fork()，真 git 跑不了；rootfs 预装 git 曾因 CI provision 失败降级未进包——
+    /// 因此 git 命令一律路由到 git.py：原生 ARM64 跑，不走 Alpine 不装包不闪退。
+    /// cwd 经 TROLL_GIT_CWD 注入（python3 原生子进程无 tty 且 spawn 不带 cwd，git 依赖进程目录）。
+    private static func runIOSGitPy(_ command: String) -> [String: Any] {
+        let gitPy = Bundle.main.bundlePath + "/bin/git.py"
+        guard FileManager.default.fileExists(atPath: gitPy) else {
+            return ["command": command, "exit_code": 1,
+                    "stdout": "git: 原生 git.py 缺失（此构建未打包 App/bin/git.py）— 无法提供 git",
+                    "ios_native": true]
+        }
+        let body = command.dropFirst("git".count).trimmingCharacters(in: .whitespaces)
+        if body == "--version" || body == "-v" || body == "-V" || body.isEmpty {
+            return ["command": command, "exit_code": 0,
+                    "stdout": "git (TrollAgent 内置纯 Python git.py / dulwich porcelain)\n能力：clone/init/add/commit/push/log/status；原生 ARM64 直跑，不走 Alpine 不装包不闪退\n用法：git clone <url> [dir] ｜ git add <path> ｜ git commit -m <msg> ｜ git push ｜ git log ｜ git status",
+                    "ios_native": true, "runtime_actual": "ios"]
+        }
+        let args = shellSplitArgs(body)
+        let pyCmd = "python3 \(gitPy) \(args.joined(separator: " "))".trimmingCharacters(in: .whitespaces)
+        var r = runIOSPython3(pyCmd, extraEnv: ["TROLL_GIT_CWD": ISHEngine.cwd])
+        r["cwd"] = ISHEngine.cwd
+        r["runtime_actual"] = "ios"
+        r["hint"] = "git 走原生 Python git.py（dulwich）——iOS 沙箱拦 fork 真 git，纯 Python 原生直跑，不 Alpine 不装包不闪退"
+        return r
+    }
+
     /// v6.1.5-14bp：原生工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令）
     /// 不触发 iSH 模拟器执行，改用 FileManager 直读探测：
     ///   ① App 内置原生 bin/<name>（native-tools）
@@ -2291,9 +2328,10 @@ final class ShellExecTool: MCPTool {
         let word = firstWord(t)
         guard !word.isEmpty else { return nil }
         let body = t.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
-        // v6.1.5-14bu：重包检测命令放行真实执行——git/vim/curl/wget/make/cmake/gcc/clang/openssl/r2/radare2
-        // 已在 heavyPackages 禁自动装（走 Alpine 未装也只报错不装包→不闪退），且 git/curl 等 rootfs 预装或原生
-        // 可用（审计前即如此）。版本/裸命令形态直接放行，恢复真实执行；只有 command -v/which/type 仍走探测（原生无此命令）。
+        // v6.1.5-14bu/14bx：重包检测命令放行真实执行——git/vim/curl/wget/make/cmake/gcc/clang/openssl/r2/radare2
+        // 已在 heavyPackages 禁自动装（走 Alpine 未装也只报错不装包→不闪退）；git 走原生 git.py(dulwich)，
+        // curl/wget 走原生下载器，rootfs 无预装依赖。版本/裸命令形态直接放行，恢复真实执行；
+        // 只有 command -v/which/type 仍走探测（原生无此命令）。
         let passthrough: Set<String> = ["git", "vim", "vi", "curl", "wget", "make", "cmake", "gcc", "clang", "openssl", "r2", "radare2"]
         if probeNames.contains(word) {
             // 工具名 + 版本/无参数 = 探测；工具名 + 其他参数 = 真实执行（git status 等不得吞）
@@ -2347,10 +2385,17 @@ final class ShellExecTool: MCPTool {
                     "ios_native": true, "note": note]
         }
         // v6.1.5-14bt/14bu：git 探测（command -v git / which git 形态）——查真实可用性：
-        // ① Alpine rootfs 预装 git（v4.3.74 起构建时预装，审计前即此状态）② App 内置纯 Python git（bin/git.py）。
-        // 直接 git 命令已放行（见 probeTargetOfSegment passthrough），这里只服务"检查环境"类查询。
+        // v6.1.5-14bx：git 探测——真实可用性：①App 内置纯 Python git(bin/git.py，dulwich，原生直跑)
+        // ②Alpine rootfs 预装 git(CI provision 曾失败降级未进包，若未来修好则 Alpine git 也可用)。
+        // git 命令本身已原生路由 runIOSGitPy（见 probeTargetOfSegment passthrough + invoke git 分支）。
         if target == "git" {
             let fm = FileManager.default
+            let gitPy = Bundle.main.bundlePath + "/bin/git.py"
+            if fm.fileExists(atPath: gitPy) {
+                return ["command": seg, "exit_code": 0,
+                        "stdout": "git: ✅ 已安装（App 内置纯 Python git：git.py/dulwich，原生直跑）\n用法：直接 git clone/add/commit/push/log/status ...（原生 ARM64 路由，不走 Alpine 不装包不闪退；仓库目录 = 会话 cwd）",
+                        "ios_native": true, "note": "探测结果来自 bin/git.py（dulwich porcelain，iOS 沙箱拦 fork 真 git 但 git.py 原生可用）"]
+            }
             let rootfs = NSHomeDirectory() + "/Documents/alpine-rootfs"
             for sub in ["/usr/bin/", "/bin/"] {
                 let p = rootfs + sub + "git"
@@ -2360,14 +2405,8 @@ final class ShellExecTool: MCPTool {
                             "ios_native": true, "note": "探测结果来自 alpine-rootfs 预装 git"]
                 }
             }
-            let gitPy = Bundle.main.bundlePath + "/bin/git.py"
-            if fm.fileExists(atPath: gitPy) {
-                return ["command": seg, "exit_code": 0,
-                        "stdout": "git: ✅ 已安装（App 内置纯 Python git：python3 <app>/bin/git.py）\n用法：在仓库目录内执行 python3 <app>/bin/git.py clone/add/commit/push/log/status ...（原生，不走 Alpine 不闪退）",
-                        "ios_native": true, "note": "探测结果来自 bin/git.py（dulwich 实现，iOS 沙箱拦 fork 真 git，但 git.py 原生可用）"]
-            }
             return ["command": seg, "exit_code": 1,
-                    "stdout": "git: ❌ 未安装（rootfs 未预装 git，也无 bin/git.py）\n安装提示：Alpine 里 tool.install git（手动装，自动装已禁用防闪退）；装好即可直接 git ...",
+                    "stdout": "git: ❌ 不可用（无 bin/git.py 也无 rootfs git）\n说明：iOS 沙箱拦 fork 真 git 跑不了；git.py 是唯一原生路径（dulwich），若缺失请反馈构建打包问题",
                     "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体）"]
         }
         let fm = FileManager.default
