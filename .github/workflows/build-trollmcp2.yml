@@ -335,6 +335,13 @@ jobs:
           exec xcrun --sdk iphoneos clang -arch arm64 -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" -mios-version-min=15.0 -Wno-error "$@"
           WRAP
           chmod +x /tmp/ioscc
+          # 14c7 fix3: iOS SDK 把 system() 标 unavailable（error: 'system' is unavailable）
+          # → 全局替换 system( → troll_system( + 在 zip.c 末尾加 stub（返回 -1，禁用依赖它的 -T 等选项）
+          for f in *.c; do sed -i 's/\bsystem(/troll_system(/g' "$f"; done
+          cat >> zip.c <<'STUB'
+          #include <stdio.h>
+          int troll_system(const char *cmd) { (void)cmd; fprintf(stderr, "zip: system() unavailable on iOS\n"); return -1; }
+          STUB
           make -f unix/Makefile generic CC=/tmp/ioscc CFLAGS="-std=gnu89 -O2" 2>&1 | tail -40
           if [ -f zip ]; then
             cp zip "$GITHUB_WORKSPACE/native-tools-out/zip"
