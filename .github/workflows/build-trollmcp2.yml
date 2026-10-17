@@ -320,7 +320,9 @@ jobs:
 
       # 14c6 P1原生化: zip——Info-ZIP 纯 C 老牌压缩器（原生缺口：有 unzip 无 zip，Alpine zip 待裁）。
       # unix/Makefile generic target + CC wrapper（沿用 tree 模式）。
-      # 14c7 fix: SourceForge 直链不稳（实测下到 HTML 错误页 → tar unrecognized）→ 换 fossies mirror。
+      # 14c7 fix1: SourceForge 直链不稳（实测下到 HTML 错误页 → tar unrecognized）→ 换 fossies mirror。
+      # 14c7 fix2: zip30(2008) 在新 clang 默认 C17 下"隐式函数声明/无原型"变 error（17 warnings 4 errors）
+      #            → 强制 -std=gnu89 旧标准编译；tail 15→40 防日志截断。
       - name: Build zip (iOS arm64)
         if: steps.tools-cache.outputs.cache-hit != 'true'
         run: |
@@ -333,7 +335,7 @@ jobs:
           exec xcrun --sdk iphoneos clang -arch arm64 -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" -mios-version-min=15.0 -Wno-error "$@"
           WRAP
           chmod +x /tmp/ioscc
-          make -f unix/Makefile generic CC=/tmp/ioscc 2>&1 | tail -15
+          make -f unix/Makefile generic CC=/tmp/ioscc CFLAGS="-std=gnu89 -O2" 2>&1 | tail -40
           if [ -f zip ]; then
             cp zip "$GITHUB_WORKSPACE/native-tools-out/zip"
             chmod +x "$GITHUB_WORKSPACE/native-tools-out/zip"
