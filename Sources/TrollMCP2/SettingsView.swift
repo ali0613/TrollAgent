@@ -494,7 +494,6 @@ struct SettingRowContent: View {
                     .font(.body)
                     .foregroundColor(.primary)
                 // v6.1.5-14ax：灰色副标题介绍已按用户要求移除
-                }
             }
             Spacer(minLength: 0)
             // v4.3.39：行尾红点提醒（新版更新等）——红点在行尾右侧，点击行即处理
@@ -675,10 +674,7 @@ struct SSHSettingsView: View {
                 }
                 .foregroundColor(.blue)
             }
-
-            Section(header: Text(L10n.t("ui_24"))) {
-                // v6.1.5-14ax：SSH 配置说明灰色介绍已移除
-            }
+            // v6.1.5-14ax：SSH 配置说明区块已整体移除（原 ui_140 灰色介绍）
         }
         .navigationTitle("SSH 远程连接")
         .onAppear {
