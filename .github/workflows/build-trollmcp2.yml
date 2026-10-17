@@ -337,7 +337,8 @@ jobs:
           chmod +x /tmp/ioscc
           # 14c7 fix3: iOS SDK 把 system() 标 unavailable（error: 'system' is unavailable）
           # → 全局替换 system( → troll_system( + 在 zip.c 末尾加 stub（返回 -1，禁用依赖它的 -T 等选项）
-          for f in *.c; do sed -i 's/\bsystem(/troll_system(/g' "$f"; done
+          # 14c7 fix4: macOS 是 BSD sed——不支持 \b 单词边界、-i 必须带 '' 备份后缀（GNU 写法直接报错）
+          for f in *.c; do sed -i '' 's/system(/troll_system(/g' "$f"; done
           cat >> zip.c <<'STUB'
           #include <stdio.h>
           int troll_system(const char *cmd) { (void)cmd; fprintf(stderr, "zip: system() unavailable on iOS\n"); return -1; }
