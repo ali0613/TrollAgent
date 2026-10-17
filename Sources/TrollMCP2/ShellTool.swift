@@ -550,7 +550,7 @@ final class ShellExecTool: MCPTool {
            iosCmd == "node" || iosCmd.hasPrefix("node ") ||
            iosCmd == "r2" || iosCmd.hasPrefix("r2 ") ||
            iosCmd == "cstool" || iosCmd.hasPrefix("cstool ") {
-            let result = ShellExecTool.runIOSNativeSegment(iosCmd)
+            let result = ShellExecTool.runIOSNativeSegment(iosCmd, timeout: timeout)
             AuditLog.shared.log("shell.exec (ios bundled)", detail: String(trimmed.prefix(100)))
             return result
         }
@@ -570,7 +570,7 @@ final class ShellExecTool: MCPTool {
         if !firstWord.isEmpty, !firstWord.contains("/"), !firstWord.contains(".."), !genRouteExcludes.contains(firstWord) {
             let bundledRoots = [Bundle.main.bundlePath + "/bin", Bundle.main.bundlePath + "/Resources/bin"]
             if bundledRoots.contains(where: { FileManager.default.isExecutableFile(atPath: $0 + "/" + firstWord) }) {
-                let result = ShellExecTool.runIOSNativeSegment(iosCmd)
+                let result = ShellExecTool.runIOSNativeSegment(iosCmd, timeout: timeout)
                 AuditLog.shared.log("shell.exec (ios bundled gen)", detail: String(trimmed.prefix(100)))
                 return result
             }
@@ -1006,7 +1006,7 @@ final class ShellExecTool: MCPTool {
     }
     
     /// 执行单段 iOS 原生命令 (首段），返回 [String: Any]
-    private static func runIOSNativeSegment(_ segment: String) -> [String: Any] {
+    private static func runIOSNativeSegment(_ segment: String, timeout: TimeInterval = 30) -> [String: Any] {
         let trimmed = segment.trimmingCharacters(in: .whitespaces)
         // v4.3.9: 反向路径翻译——原生单段命令也统一应用(消除 /ios_workspace 等挂载路径找不到)
         let iosCmd = ShellExecTool.alpineToIOSPath(trimmed)
@@ -1174,7 +1174,7 @@ final class ShellExecTool: MCPTool {
                             result = ["command": body, "exit_code": 0, "stdout": msg, "ios_native": true]
                             redirect = false  // 已直接写二进制，跳过下方文本 writeRedirected
                         } else {
-                            result = runIOSNativeSegment(body)
+                            result = runIOSNativeSegment(body, timeout: timeout)
                             result["ios_native"] = true
                         }
                     } else {
