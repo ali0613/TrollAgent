@@ -284,7 +284,7 @@ struct ChatView: View {
             ToolCenterView()
         }
         .sheet(isPresented: Binding(get: { AppUIState.shared.quickToolsPresented }, set: { AppUIState.shared.quickToolsPresented = $0 })) {
-            ToolsView()
+            ToolCenterView()   // v6.1.5-14bo：快捷"工具"入口统一到工具中心（原 ToolsView 分类浏览与工具中心重复）
         }
         .sheet(isPresented: Binding(get: { AppUIState.shared.quickSkillsPresented }, set: { AppUIState.shared.quickSkillsPresented = $0 })) {
             AgentsAndSkillsView()

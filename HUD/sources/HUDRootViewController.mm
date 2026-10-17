@@ -2266,11 +2266,12 @@ static UIImage * _realAppIcon(NSString *bundleId) {
 static UIImage *softParticleImage(CGFloat size) {
     UIGraphicsBeginImageContextWithOptions(CGSizeMake(size, size), NO, 0);
     CGContextRef ctx = UIGraphicsGetCurrentContext();
-    CGFloat locs[3] = {0.0f, 0.55f, 1.0f};
+    // v6.1.5-14bo：清晰实心光点——中心到 80% 保持高亮不透明，80%~100% 快速收边（原柔光羽化太糊，用户要清晰）
+    CGFloat locs[3] = {0.0f, 0.80f, 1.0f};
     CGFloat comps[12] = {
-        1.0f, 1.0f, 1.0f, 1.0f,      // 中心：纯白高亮
-        1.0f, 1.0f, 1.0f, 0.55f,     // 中间：半透
-        1.0f, 1.0f, 1.0f, 0.0f       // 边缘：完全透明（柔光羽化）
+        1.0f, 1.0f, 1.0f, 1.0f,      // 中心：纯白实心
+        1.0f, 1.0f, 1.0f, 0.98f,     // 80%：仍高亮（实心主体）
+        1.0f, 1.0f, 1.0f, 0.0f       // 边缘：快速收边（干净轮廓）
     };
     CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
     CGGradientRef grad = CGGradientCreateWithColorComponents(cs, comps, locs, 3);
@@ -2383,8 +2384,8 @@ static UIImage *softParticleImage(CGFloat size) {
         cell.velocityRange = 18;
         cell.yAcceleration = -6;          // 轻柔上飘（放缓）
         cell.emissionRange = M_PI * 2;
-        cell.scale = 0.32;            // v6.1.5-14bh：0.5→0.32（用户仍嫌大，光点更小更柔）
-        cell.scaleRange = 0.12;       // v6.1.5-14bh：0.22→0.12 同步收窄
+        cell.scale = 0.22;            // v6.1.5-14bo：0.32→0.22（用户仍嫌大，继续缩小）
+        cell.scaleRange = 0.08;       // v6.1.5-14bo：0.12→0.08 同步收窄
         cell.scaleSpeed = -0.015;         // 越飘越小
         cell.alphaSpeed = -0.07;          // 缓慢淡出
         cell.spin = 0;                    // 光点不旋转
