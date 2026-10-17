@@ -711,6 +711,14 @@ struct ChatView: View {
             .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 2)
             .shadow(color: Color.black.opacity(0.06), radius: 10, x: 0, y: 4)
             .padding(.horizontal, 12)
+            // v6.1.5-14bl：/命令 与 @提及 快捷菜单（输入框上方弹出）
+            .overlay(alignment: .bottom) {
+                if inputText.hasPrefix("/") {
+                    commandQuickMenu
+                } else if inputText.hasPrefix("@") {
+                    appMentionQuickMenu
+                }
+            }
 
             // v3.4.2：点 + 底部弹出 应用/相册/文件/浏览器，把聊天框顶起来（位于输入框下方）
             if attachExpanded {
@@ -1077,6 +1085,106 @@ struct ChatView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             withAnimation { showToast = false }
         }
+    }
+
+    // v6.1.5-14bl：/命令 快捷菜单
+    private var commandQuickMenu: some View {
+        let items: [(String, String, String)] = [
+            ("/clear", "trash", "清空当前会话"),
+            ("/new", "square.and.pencil", "新建会话"),
+            ("/model", "cpu", "切换模型"),
+            ("/tools", "wrench.and.screwdriver", "查看已加载工具"),
+        ]
+        return VStack(spacing: 0) {
+            ForEach(items, id: \.0) { item in
+                Button(action: { runQuickCommand(item.0) }) {
+                    HStack(spacing: 10) {
+                        Image(systemName: item.1)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.blue)
+                            .frame(width: 22)
+                        Text(item.0)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Text(item.2)
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                if item.0 != items.last!.0 {
+                    Divider().padding(.leading, 46)
+                }
+            }
+        }
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(14)
+        .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 10)
+    }
+
+    // v6.1.5-14bl：@提及 应用快捷菜单（复用 AppCatalog 已装应用列表）
+    private var appMentionQuickMenu: some View {
+        let apps = AppCatalog.list()
+        return VStack(spacing: 0) {
+            ForEach(Array(apps.prefix(24).enumerated()), id: \.element.bundleId) { _, app in
+                Button(action: { mentionApp(app) }) {
+                    HStack(spacing: 10) {
+                        if let ic = Self.appIcon(for: app.path) {
+                            Image(uiImage: ic)
+                                .resizable()
+                                .frame(width: 22, height: 22)
+                                .cornerRadius(5)
+                        } else {
+                            Image(systemName: "app.fill")
+                                .foregroundColor(.secondary)
+                        }
+                        Text(app.name)
+                            .font(.system(size: 15, weight: .regular))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(app.bundleId)
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(14)
+        .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 10)
+    }
+
+    private func runQuickCommand(_ name: String) {
+        switch name {
+        case "/clear": store.clearCurrent(); showToast("已清空当前会话")
+        case "/new": store.newConversation(); showToast("已新建会话")
+        case "/model": showModelPicker = true
+        case "/tools": showToast("已加载 \(ToolRegistry.shared.allToolNames().count) 个工具")
+        default: break
+        }
+        inputText = ""
+    }
+
+    private func mentionApp(_ app: AppEntry) {
+        let icon = Self.appIcon(for: app.path)
+        let att = PendingAttachment(kind: .app, displayName: app.name, dataURL: nil, thumbnail: icon, bundleId: app.bundleId, fileURL: nil)
+        pendingAttachments.append(att)
+        inputText = inputText.replacingOccurrences(of: "@", with: "").trimmingCharacters(in: .whitespaces)
+        showToast("已提及 \(app.name)")
     }
 }
 
