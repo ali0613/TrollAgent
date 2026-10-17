@@ -913,8 +913,12 @@ final class ShellExecTool: MCPTool {
         "unzip", "df", "free", "uname", "uptime", "hostname", "ps", "top",
         "kill", "ifconfig", "netstat", "nslookup", "tar", "gzip", "gunzip",
         "ta", "base64", "strings", "nm", "kfd_diag", "python3", "objdump", "class-dump",
+        // 14c2 P1原生化: chmod（Swift 原生，POSIX chmod；bin 有 chown 缺 chmod，AI 高频 chmod +x）
+        "chmod",
         // fix3q: 内置原生工具链（native-tools 交叉编译进 App bin/）——AI 直接调用走原生 ARM64
-        "lua", "node", "r2", "cstool",
+        "lua", "node", "r2", "cstool", "jq",
+        // 14c2 P1原生化: 新增原生工具（native-tools-v16）——目录树/压缩/查找可执行
+        "tree", "xz", "which",
         // fix3v: nmap（native-nmap job 交叉编译，进 App bin/nmap）——原生直跑，无需 Alpine
         // fix3ac: nmap 源码 iOS 编不过, 已降级为 bin/nscan.py(Python 扫描, 无需原生命令声明)
         // fix3w: LLVM 工具链 + jtool2（native-llvm job）——llvm-objdump 等原生直跑
@@ -961,6 +965,7 @@ final class ShellExecTool: MCPTool {
         case "grep": return runIOSGrep(iosCmd)
         case "echo": return runIOSEcho(iosCmd)
         case "mkdir": return runIOSMkdir(iosCmd)
+        case "chmod": return runIOSChmod(iosCmd)
         case "rm": return runIOSRm(iosCmd)
         case "mv": return runIOSMv(iosCmd)
         case "cp": return runIOCp(iosCmd)
@@ -1001,7 +1006,7 @@ final class ShellExecTool: MCPTool {
         case "crash.tail": return runIOSCrashTail(iosCmd)
         case "kfd_diag": return runIOSKfdDiag(iosCmd)
         // fix3q: 内置原生工具链（CI native-tools 交叉编译进 bin/）——AI 直接调用即走原生 ARM64
-        case "lua", "node", "r2", "cstool": return runIOSBundled(word, iosCmd)
+        case "lua", "node", "r2", "cstool", "jq", "tree", "xz", "which": return runIOSBundled(word, iosCmd)
         case "ta": return OffloadRouter.run(trimmed)
         default:
             // fix3s: 内置 bin 兜底——命令名在 App bin/ 或 Resources/bin/ 存在可执行 → 原生直跑。
@@ -3102,6 +3107,96 @@ final class ShellExecTool: MCPTool {
         }
     }
     
+    /// 14c2 P1原生化: iOS 原生 chmod——改权限（数字八进制 + 符号模式，支持 -R 递归）
+    private static func runIOSChmod(_ command: String) -> [String: Any] {
+        let parts = command.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+        guard parts.count >= 2 else {
+            return ["command": command, "exit_code": 1, "stdout": "Usage: chmod [-R] <mode> <path...>", "ios_native": true]
+        }
+        var idx = 1
+        var recursive = false
+        while idx < parts.count && parts[idx].hasPrefix("-") {
+            if parts[idx].contains("R") { recursive = true }
+            if parts[idx] == "--" { idx += 1; break }
+            idx += 1
+        }
+        guard idx < parts.count else {
+            return ["command": command, "exit_code": 1, "stdout": "Usage: chmod [-R] <mode> <path...>", "ios_native": true]
+        }
+        let modeStr = parts[idx]
+        let paths = Array(parts.dropFirst(idx + 1))
+        guard !paths.isEmpty else {
+            return ["command": command, "exit_code": 1, "stdout": "Usage: chmod [-R] <mode> <path...>", "ios_native": true]
+        }
+        // 数字模式：755 等（八进制）
+        if let numeric = mode_t(modeStr, radix: 8) {
+            var okCount = 0
+            var errs: [String] = []
+            for p in paths {
+                let path = ShellExecTool.normalizePath((p as NSString).expandingTildeInPath)
+                let targets = recursive ? (FileManager.default.enumerator(atPath: path)?.allObjects as? [String] ?? []).map { path + "/" + $0 } + [path] : [path]
+                for t in targets {
+                    if chmod(t, numeric) == 0 { okCount += 1 } else { errs.append(t) }
+                }
+            }
+            return ["command": command, "exit_code": errs.isEmpty ? 0 : 1,
+                    "stdout": "chmod: \(okCount) paths updated" + (errs.isEmpty ? "" : "; failed: \(errs.prefix(5).joined(separator: ", "))"), "ios_native": true]
+        }
+        // 符号模式：[ugoa]*[+-][rwx]*（who 省略=全体；每级简化应用到对应组位）
+        var whoChars = Set<Character>()
+        var op: Character? = nil
+        var perms = Set<Character>()
+        var inWho = true
+        for c in modeStr {
+            if inWho && "ugoa".contains(c) { whoChars.insert(c); continue }
+            if inWho && c == "=" { // = 支持：全体置为给定权限（简化：忽略 ugo 差异）
+                inWho = false; op = "="; continue
+            }
+            if inWho && (c == "+" || c == "-") { inWho = false; op = c; continue }
+            if !inWho && op != nil && "rwx".contains(c) { perms.insert(c); continue }
+            inWho = false
+        }
+        guard let o = op else {
+            return ["command": command, "exit_code": 1, "stdout": "chmod: invalid mode '\(modeStr)'（支持 755 / +x / u+x / -x / +rwx / a=rwx）", "ios_native": true]
+        }
+        var whoMask: mode_t = 0
+        if whoChars.isEmpty || whoChars.contains("a") { whoMask = 0o777 }
+        if whoChars.contains("u") { whoMask |= 0o700 }
+        if whoChars.contains("g") { whoMask |= 0o070 }
+        if whoChars.contains("o") { whoMask |= 0o007 }
+        let permBase: mode_t = (perms.contains("r") ? 4 : 0) | (perms.contains("w") ? 2 : 0) | (perms.contains("x") ? 1 : 0)
+        func apply(_ t: String) -> Bool {
+            var st = stat()
+            if lstat(t, &st) != 0 { return false }
+            var m = st.st_mode
+            let groups: [(mode_t, Int)] = [(0o700, 6), (0o070, 3), (0o007, 0)]
+            if o == "=" {
+                // 简化：a=rwx 直接设全体（带 who 时按组）
+                for (mask, shift) in groups where whoMask & mask != 0 {
+                    let keep = m & ~mask
+                    m = (keep & ~mode_t(0)) | (permBase << shift)
+                }
+            } else {
+                for (mask, shift) in groups where whoMask & mask != 0 {
+                    if o == "+" { m |= mode_t(permBase) << mode_t(shift) }
+                    else { m &= ~(mode_t(permBase) << mode_t(shift)) }
+                }
+            }
+            return chmod(t, m) == 0
+        }
+        var okCount = 0
+        var errs: [String] = []
+        for p in paths {
+            let path = ShellExecTool.normalizePath((p as NSString).expandingTildeInPath)
+            let targets = recursive ? (FileManager.default.enumerator(atPath: path)?.allObjects as? [String] ?? []).map { path + "/" + $0 } + [path] : [path]
+            for t in targets {
+                if apply(t) { okCount += 1 } else { errs.append(t) }
+            }
+        }
+        return ["command": command, "exit_code": errs.isEmpty ? 0 : 1,
+                "stdout": "chmod: \(okCount) paths updated" + (errs.isEmpty ? "" : "; failed: \(errs.prefix(5).joined(separator: ", "))"), "ios_native": true]
+    }
+
     /// v3.1.32: iOS 原生 rm 命令——删文件/目录
     private static func runIOSRm(_ command: String) -> [String: Any] {
         let fm = FileManager.default
