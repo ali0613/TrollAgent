@@ -691,6 +691,9 @@ enum ISHEngine {
     /// v4.3.73：自动装包决策——只对白名单内已知包自动 apk add；
     /// 白名单外（如 jtool2 这类 iOS 逆向工具，Alpine 无此包）返回 unknown，
     /// 调用方跳过自动装包并给 AI 明确提示，避免 apk 拉索引卡网络/假死。
+    /// v6.1.5-14bp：重包禁止自动装——git/wget/make/cmake/gcc/clang/build-base/emacs 等
+    /// 体积大/依赖深，apk add 时 iSH x86 模拟高 CPU，实测触发 iOS watchdog(≈13s CPU)杀 App=闪退。
+    /// 改为 known=false 跳过自动装，调用方给明确提示（手动 tool.install / 手动 apk add）。
     static func autoProvision(_ output: String) -> (pkg: String?, known: Bool) {
         let map: [(cmd: String, pkg: String)] = [
             ("python3", "python3"), ("python", "python3"), ("pip", "py3-pip"),
@@ -703,8 +706,13 @@ enum ISHEngine {
             ("gcc", "build-base"), ("clang", "clang"), ("openssl", "openssl"),
             ("unzip", "unzip"), ("sqlite3", "sqlite"),  // v4.3.77: Alpine 包名是 sqlite（命令名 sqlite3）
         ]
+        // v6.1.5-14bp：高 CPU 重包——即使命中白名单也不自动装（防 watchdog 杀 App）
+        let heavyPackages: Set<String> = ["git", "wget", "make", "cmake", "build-base", "clang", "gcc", "openssl", "radare2"]
         for (cmd, pkg) in map {
             if hasNotFound(output, cmd) {
+                if heavyPackages.contains(pkg) {
+                    return (pkg, false)   // 重包：不自动装，调用方给手动安装提示
+                }
                 return (pkg, true)
             }
         }

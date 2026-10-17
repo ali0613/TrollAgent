@@ -164,6 +164,14 @@ final class ShellExecTool: MCPTool {
             if trimmed == "ta" || trimmed.hasPrefix("ta ") {
                 return OffloadRouter.run(trimmed)
             }
+            // v6.1.5-14bp：版本/存在性探测类命令（git/vim/curl/wget --version/-v 等）→ 原生文件系统探测，
+            // 不触发 iSH 模拟器。根因：git 等未装 → 自动 apk add → iSH x86 模拟高 CPU →
+            // iOS watchdog(≈13s CPU)杀 App = "执行命令就闪退"（python3 原生已装所以不崩）。
+            // 纯探测：读 rootfs/原生 bin 文件存在性，不执行任何 Alpine 二进制。
+            if let probe = ShellExecTool.nativeToolProbe(trimmed) {
+                AuditLog.shared.log("shell.exec (native tool probe)", detail: String(trimmed.prefix(100)))
+                return probe
+            }
             // v3.7.7: 自动 bind——Alpine 命令引用 iOS 路径时自动挂载顶层 + 改写路径，
             // 让 Alpine 直接读写 iOS 文件（消灭环境漂移，替代单向字节桥接）。
             // bind 后 iOS 路径不可见的旧约束不再成立。
@@ -596,7 +604,13 @@ final class ShellExecTool: MCPTool {
         let prov = ISHEngine.autoProvision(output)
         guard let pkg = prov.pkg else { return (output, exitCode, timedOut, note) }
         if !prov.known {
-            note = "工具 \(pkg) 不在自动装包白名单（可能不是 Alpine 包），已跳过自动安装；请确认工具名，或用 tool.install 指定 name/source。"
+            // v6.1.5-14bp：区分"白名单外"与"重包禁自动装"（git 等重包 apk add 高 CPU 触发 iOS watchdog 杀 App=闪退）
+            let heavy: Set<String> = ["git", "wget", "make", "cmake", "build-base", "clang", "gcc", "openssl", "radare2"]
+            if heavy.contains(pkg) {
+                note = "工具 \(pkg) 是重量级包：自动安装会触发 iSH 模拟器高 CPU 被 iOS 系统杀（App 闪退）。已跳过自动安装。请用 tool.install 手动安装（Alpine: apk add \(pkg)），装好后重跑命令即可。"
+            } else {
+                note = "工具 \(pkg) 不在自动装包白名单（可能不是 Alpine 包），已跳过自动安装；请确认工具名，或用 tool.install 指定 name/source。"
+            }
             return (output, exitCode, timedOut, note)
         }
         ShellDiag.log("provision auto: apk add \(pkg) (missing in Alpine)")
@@ -2254,6 +2268,60 @@ final class ShellExecTool: MCPTool {
         try? FileManager.default.removeItem(atPath: docsBase + "/troll_py_out.txt")
         return ["command": command, "exit_code": res.exitCode, "stdout": out,
                 "stderr": res.stderr, "ios_native": true]
+    }
+
+    /// v6.1.5-14bp：原生工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令）
+    /// 不触发 iSH 模拟器执行，改用 FileManager 直读探测：
+    ///   ① App 内置原生 bin/<name>（native-tools）
+    ///   ② Alpine rootfs（Documents/alpine-rootfs）的 usr/bin、bin、usr/local/bin
+    /// 返回"已装/未装 + 如何运行"，绝不执行 Alpine 二进制、绝不自动 apk add。
+    /// 根因背景：git 未装 → 自动 apk add git → iSH x86 模拟高 CPU → iOS watchdog 杀 App（闪退）。
+    private static func nativeToolProbe(_ command: String) -> [String: Any]? {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let word = firstWord(trimmed), !word.isEmpty else { return nil }
+        // 只处理已知易触发 Alpine 且常被"检查环境"的工具；其余命令照常走原路由
+        let probeNames: Set<String> = ["git", "vim", "vi", "curl", "wget", "make", "cmake", "gcc", "clang", "tar", "unzip", "zip", "gdb", "jq", "r2", "radare2"]
+        guard probeNames.contains(word) else { return nil }
+        // 仅限"纯版本/存在性"形态：--version / -v / -V / --help / 无参数（防止把 git status 等真实操作吞掉）
+        let body = trimmed.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
+        if !body.isEmpty {
+            let versionish = (body == "--version" || body == "-v" || body == "-V" || body == "--help"
+                              || body.hasPrefix("--version ") || body.hasPrefix("-v ") || body.hasPrefix("-V ")
+                              || body.hasPrefix("--help "))
+            if !versionish { return nil }
+        }
+        let fm = FileManager.default
+        // 1) App 原生 bin
+        let nativePath = Bundle.main.bundlePath + "/bin/" + word
+        var foundAt: String? = nil
+        if fm.isExecutableFile(atPath: nativePath) { foundAt = nativePath }
+        // 2) Alpine rootfs
+        if foundAt == nil {
+            let rootfs = NSHomeDirectory() + "/Documents/alpine-rootfs"
+            for sub in ["/usr/bin/", "/bin/", "/usr/local/bin/"] {
+                let p = rootfs + sub + word
+                if fm.isExecutableFile(atPath: p) { foundAt = p; break }
+            }
+        }
+        let runHint = "Alpine 里运行：runtime=alpine + 'sh -c \"\(word) ...\"'；或原生若已内置直接 \(word) ..."
+        if let found = foundAt {
+            var out = "\(word): ✅ 已安装（\(found.replacingOccurrences(of: NSHomeDirectory(), with: "~"))）"
+            if found.hasPrefix(Bundle.main.bundlePath) {
+                out += "\n运行方式：直接 \(word) ...（原生 ARM64，无需 Alpine）"
+            } else {
+                out += "\n运行方式：\(runHint)"
+            }
+            return ["command": trimmed, "exit_code": 0, "stdout": out,
+                    "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发 iSH 高 CPU 被系统杀）"]
+        }
+        var out = "\(word): ❌ 未安装（iOS 无原生 \(word)）"
+        if word == "git" || word == "vim" || word == "curl" || word == "wget" {
+            out += "\n安装提示：自动安装会触发 iSH 模拟器高 CPU 被系统杀（闪退）。请用 tool.install 手动安装（Alpine: apk add \(word)），或减少同时执行的大命令。"
+        } else {
+            out += "\n安装提示：用 tool.install 安装，或 runtime=alpine 下 apk add \(word)。"
+        }
+        return ["command": trimmed, "exit_code": 1, "stdout": out,
+                "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发 iSH 高 CPU 被系统杀）"]
     }
 
     /// fix3q: 内置原生工具链通用执行——lua/node/r2/cstool（native-tools 交叉编译进 App bin/）。
