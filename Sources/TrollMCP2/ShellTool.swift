@@ -1097,10 +1097,10 @@ final class ShellExecTool: MCPTool {
                                         defer { fclose(out) }
                                         var buf = [UInt8](repeating: 0, count: 65536)
                                         while true {
-                                            let n = gzread(f, &buf, buf.count)
+                                            let n = gzread(f, &buf, UInt32(buf.count))
                                             if n <= 0 { break }
                                             buf.withUnsafeBytes { ptr in
-                                                _ = fwrite(ptr.baseAddress, 1, n, out)
+                                                _ = fwrite(ptr.baseAddress, 1, UInt(n), out)
                                             }
                                         }
                                         return true
