@@ -1261,14 +1261,19 @@ extern "C" const char *g_hud_char;
     }];
 }
 
-// v6.1.5-14u：攀爬帧尺寸=趴墙同款（左右墙 50% 高度 × MIN(charScale,1.2)），中心贴边
+// v6.1.5-14u：攀爬帧尺寸——猫娘缩到趴墙 50% 高度（手脚不被屏幕边缘裁）；
+// v6.1.5-14am：girl/rabit 攀爬用站姿全尺寸（原"所有角色统一缩小"误伤其他角色，用户反馈恢复）
 - (void)_setClimbFrameSize:(UIImage *)img {
     if (!img || !_girlView) return;
     CGSize v = [UIScreen mainScreen].bounds.size;
-    CGFloat wallScale = MIN(_charScale, 1.2f);
-    CGFloat wallH = (CGFloat)g_hud_size * wallScale * 0.5;
+    CGFloat climbH;
+    if (_isCatChar) {
+        climbH = (CGFloat)g_hud_size * MIN(_charScale, 1.2f) * 0.5;   // 猫娘：趴墙同款 50%
+    } else {
+        climbH = (CGFloat)g_hud_size * _charScale;                    // girl/rabit：站姿全尺寸
+    }
     CGFloat wa = (img.size.height > 0) ? (img.size.width / img.size.height) : 1.0;
-    _girlView.bounds = CGRectMake(0, 0, wallH * wa, wallH);
+    _girlView.bounds = CGRectMake(0, 0, climbH * wa, climbH);
     CGPoint c = _girlView.center;
     // 重新贴边：左墙中心=半宽，右墙中心=屏宽-半宽（保持朝向由 transform 负责）
     CGFloat halfW = _girlView.frame.size.width / 2;
