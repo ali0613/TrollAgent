@@ -509,28 +509,9 @@ struct ModelEditorView: View {
                     editorRow("分组", text: $group, placeholder: "默认")
                 }
 
-                Section(header: sectionHeader("参数")) {
-                    HStack {
-                        Text("Temperature")
-                        Spacer()
-                        Text(String(format: "%.1f", temperature))
-                            .foregroundColor(.secondary)
-                    }
-                    Slider(value: $temperature, in: 0...2, step: 0.1)
-                    Stepper("Max Tokens: \(maxTokens)", value: $maxTokens, in: 256...32768, step: 256)
-                    Stepper("上下文预算: \(contextTokens)", value: $contextTokens, in: 4000...128000, step: 2000)
-                }
-                Section(header: sectionHeader("参数说明")) {
-                    Text(L10n.t("ui_7"))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(L10n.t("ui_18"))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(L10n.t("ui_72"))
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
+                // v6.1.5-14bi：参数(Temperature/Max Tokens/上下文预算)不再让用户填——
+                // 按行业标准默认值自动生效(参考Codex等AI同行)：temperature 0.7 / maxTokens 2048 / 上下文预算默认，
+                // 保存时沿用默认值，无需手动配置
 
                 Section(header: sectionHeader("操作")) {
                     Button(action: fetchUpstreamModels) {
