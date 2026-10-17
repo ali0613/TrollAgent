@@ -101,8 +101,9 @@ if [ -d "Resources/bin" ]; then
     # jq=源码编译(v4.4.9-fix3cm 补, 消除提示词示例有/实物无的不一致)；
     # 14c2 P1原生化: tree/xz/which=v16 新增（14c4 曾编译成功但未进包——此处白名单漏加, 已补）
     # 14c6 P1原生化: file/zip=v17 新增（扩军第二批；file 的 magic.mgc 数据文件随包）
+    # 14c7 P5: elf-runner=v18 新增（aarch64 ELF 运行时入口；busybox-elf 单独放 Resources/linux）
     # 均随 tool.install 绑定）
-    for t in lua node r2 cstool jq tree xz which file zip; do
+    for t in lua node r2 cstool jq tree xz which file zip elf-runner; do
         if [ -f "native-tools-out/$t" ]; then
             cp "native-tools-out/$t" "$APP/bin/$t"
             chmod +x "$APP/bin/$t"
@@ -113,6 +114,13 @@ if [ -d "Resources/bin" ]; then
     if [ -f "native-tools-out/magic.mgc" ]; then
         cp "native-tools-out/magic.mgc" "$APP/bin/magic.mgc"
         echo ">>> magic.mgc bundled ($(du -h "$APP/bin/magic.mgc" | cut -f1))"
+    fi
+    # 14c7 P5: busybox 静态 aarch64 ELF（elf-runner 的第一个嫁接对象）→ Resources/linux/busybox
+    if [ -f "native-tools-out/busybox-elf" ]; then
+        mkdir -p "$APP/Resources/linux"
+        cp "native-tools-out/busybox-elf" "$APP/Resources/linux/busybox"
+        chmod +x "$APP/Resources/linux/busybox"
+        echo ">>> linux/busybox (static aarch64 ELF) bundled ($(du -h "$APP/Resources/linux/busybox" | cut -f1))"
     fi
     # fix3bo/fix3cl: node C wrapper 的运行时库（NodeMobile dylib）——install name 是
     # @rpath/NodeMobile.framework/NodeMobile，必须按 framework 目录结构放进 App/Frameworks/，

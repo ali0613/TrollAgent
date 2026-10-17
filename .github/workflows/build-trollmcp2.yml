@@ -34,7 +34,8 @@ jobs:
           # fix3cn: v15——v14 缓存在 jq 编译步骤加入前生成(缓存内无 jq), AI 调用 jq 报 Command not found;
           #         bump 强制全量重编一次, 新缓存含 jq 1.7.1。与 native-wheels 的 dulwich 解包衔接同轮出包。
           # 14c6 P1原生化: v17——新增 zip/file(+magic.mgc)（扩军第二批），bump 强制重编含全工具
-          key: native-tools-v17
+          # 14c7 P5: v18——新增 elf-runner（aarch64 ELF 运行时）+ busybox 静态 ELF（首个嫁接对象）
+          key: native-tools-v18
           save-always: false
 
       - name: Build lua 5.4 (iOS arm64)
@@ -494,6 +495,47 @@ jobs:
             echo ">>> r2 CLI built"
           else
             echo "!!! r2 link failed (libr.a 依赖可能缺 capstone 等)" >&2
+            exit 1
+          fi
+
+      # 14c7 P5: elf-runner——aarch64 Linux 静态 ELF 用户态运行时（WSL1 式：加载器 + svc→brk patch + SIGTRAP syscall 翻译）
+      # 第一个验收对象: busybox 静态 ELF 直跑（100+ Linux 工具白送）。源码在 Support/elf-runner.c。
+      - name: Build elf-runner (iOS arm64)
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p native-tools-out
+          xcrun -sdk iphoneos clang -arch arm64 -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            -mios-version-min=15.0 -O2 -o "$GITHUB_WORKSPACE/native-tools-out/elf-runner" \
+            Support/elf-runner.c 2>&1 | tail -8
+          if [ -f "$GITHUB_WORKSPACE/native-tools-out/elf-runner" ]; then
+            chmod +x "$GITHUB_WORKSPACE/native-tools-out/elf-runner"
+            echo ">>> elf-runner built ($(du -h "$GITHUB_WORKSPACE/native-tools-out/elf-runner" | cut -f1))"
+            file "$GITHUB_WORKSPACE/native-tools-out/elf-runner"
+          else
+            echo "!!! elf-runner build failed" >&2
+            exit 1
+          fi
+
+      # 14c7 P5: 静态 busybox aarch64 ELF（第一个嫁接对象）——Alpine busybox-static 包解包提取
+      # busybox-static 是静态链接 musl ELF（CONFIG_STATIC=y），无需 iSH 即可由 elf-runner 直跑。
+      - name: Fetch static busybox (aarch64 ELF)
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p native-tools-out
+          curl -sL --max-time 30 "https://dl-cdn.alpinelinux.org/alpine/v3.19/main/aarch64/" -o /tmp/apklist.html
+          PKG=$(grep -o 'busybox-static-[0-9][^"]*\.apk' /tmp/apklist.html | sort -V | tail -1)
+          if [ -z "$PKG" ]; then echo "!!! busybox-static pkg not found" >&2; exit 1; fi
+          echo ">>> static busybox pkg: $PKG"
+          curl -sL --max-time 60 -o /tmp/busybox-static.apk "https://dl-cdn.alpinelinux.org/alpine/v3.19/main/aarch64/$PKG"
+          rm -rf /tmp/bb && mkdir -p /tmp/bb && tar -xzf /tmp/busybox-static.apk -C /tmp/bb
+          BB=$(find /tmp/bb -name 'busybox*' -type f | head -1)
+          echo ">>> candidate: $BB"; file "$BB" 2>/dev/null | head -1
+          if [ -n "$BB" ]; then
+            cp "$BB" "$GITHUB_WORKSPACE/native-tools-out/busybox-elf"
+            chmod +x "$GITHUB_WORKSPACE/native-tools-out/busybox-elf"
+            echo ">>> busybox-elf bundled ($(du -h "$BB" | cut -f1))"
+          else
+            echo "!!! busybox-static extraction failed" >&2
             exit 1
           fi
 
