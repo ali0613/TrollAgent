@@ -1100,7 +1100,7 @@ final class ShellExecTool: MCPTool {
                                             let n = gzread(f, &buf, UInt32(buf.count))
                                             if n <= 0 { break }
                                             buf.withUnsafeBytes { ptr in
-                                                _ = fwrite(ptr.baseAddress, 1, UInt(n), out)
+                                                _ = fwrite(ptr.baseAddress, 1, Int(n), out)
                                             }
                                         }
                                         return true
