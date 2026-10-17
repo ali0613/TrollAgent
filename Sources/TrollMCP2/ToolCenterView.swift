@@ -38,24 +38,34 @@ enum ToolLayer: String, CaseIterable {
     }
 }
 
+/// 工具中心一行（工具 + 可选命令分支标注）
+struct ToolRowItem: Identifiable {
+    let def: ToolDefinition
+    let branch: String?
+    var id: String { def.name }
+}
+
 struct ToolCenterView: View {
     @ObservedObject private var registry = ToolRegistry.shared
     @Environment(\.presentationMode) private var presentationMode
 
-    private var grouped: [(layer: ToolLayer, rows: [(def: ToolDefinition, branch: String?)])] {
-        ToolLayer.allCases.compactMap { layer in
-            let rows = registry.definitions
-                .filter { ToolLayer.layers(for: $0).contains(layer) }
-                .sorted { $0.name < $1.name }
-                .map { def -> (ToolDefinition, String?) in
-                    // 跨层工具按所在层标注命令分支
-                    if def.name == "shell.exec" {
-                        return (def, layer == .native ? "iOS 原生命令" : "Alpine Linux 命令")
-                    }
-                    return (def, nil)
+    private var grouped: [(layer: ToolLayer, rows: [ToolRowItem])] {
+        var result: [(layer: ToolLayer, rows: [ToolRowItem])] = []
+        for layer in ToolLayer.allCases {
+            var rows: [ToolRowItem] = []
+            for def in registry.definitions.sorted(by: { $0.name < $1.name }) {
+                guard ToolLayer.layers(for: def).contains(layer) else { continue }
+                var branch: String? = nil
+                if def.name == "shell.exec" {
+                    branch = (layer == .native) ? "iOS 原生命令" : "Alpine Linux 命令"
                 }
-            return rows.isEmpty ? nil : (layer, rows)
+                rows.append(ToolRowItem(def: def, branch: branch))
+            }
+            if !rows.isEmpty {
+                result.append((layer, rows))
+            }
         }
+        return result
     }
 
     var body: some View {
@@ -80,7 +90,7 @@ struct ToolCenterView: View {
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     }) {
-                        ForEach(item.rows, id: \.def.name) { row in
+                        ForEach(item.rows) { row in
                             ToolRow(def: row.def, branch: row.branch)
                         }
                     }
