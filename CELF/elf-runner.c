@@ -33,8 +33,9 @@
 #include <sys/ucontext.h>
 #include <signal.h>
 /* iOS SDK 缺 sys/ptrace.h（ptrace 为 Darwin 私有 API）——手写声明与常量，符号在 libSystem */
-#define PT_ATTACHEXC 19
-#define PT_DETACH    11
+#define PT_TRACE_ME   0
+#define PT_ATTACHEXC  19
+#define PT_DETACH     11
 extern int ptrace(int request, pid_t pid, char *addr, int data);
 #include <stdbool.h>
 #ifndef _DARWIN_C_SOURCE
@@ -523,38 +524,37 @@ int elf_runner_main(int argc, char **argv) {
     const char *elf_path = argv[1];
     fprintf(stderr, "[elf-runner] START argc=%d elf=%s\n", argc, elf_path);
 
-    /* 14c8 JIT：iOS 第三方 App 的 MAP_JIT 无法靠 dynamic-codesigning entitlement 激活
-       （Apple-only；实证非固定 MAP_JIT mmap EINVAL）。TrollStore 的 JIT 机制 =
-       ptrace(PT_ATTACHEXC) attach/detach 伪装调试，内核因"被调试"允许 JIT 内存。
-       需 get-task-allow + task_for_pid（entitlements 已加）+ iOS16 需 Developer Mode。 */
-    if (ptrace(PT_ATTACHEXC, getpid(), 0, 0) == 0) {
-        usleep(100000);
-        ptrace(PT_DETACH, getpid(), 0, 0);
-        fprintf(stderr, "[elf-runner] JIT enabled via ptrace self-attach\n");
-    } else {
-        fprintf(stderr, "[elf-runner] ptrace self-attach 失败 (%s)——MAP_JIT 将不可用\n",
-                strerror(errno));
-    }
+    /* 14d0 JIT：iOS 禁止进程自 attach（14c8 实证 EPERM）。照搬 TrollStore 机制：
+       父进程 fork 子进程跑 ELF，父对子 ptrace(PT_ATTACHEXC) attach/detach
+       （父子关系 attach 合法），内核因"被调试"给子进程开 JIT → 子内 MAP_JIT 成功。
+       需 get-task-allow + task_for_pid（已加）+ iOS16 需 Developer Mode（用户已开）。 */
+    pid_t child = fork();
+    if (child < 0) { perror("fork"); return 1; }
 
-    uintptr_t entry = 0;
-    if (load_elf(elf_path, &entry) != 0) return 1;
+    if (child == 0) {
+        /* 子进程：先 PT_TRACE_ME + SIGSTOP 暂停，等父 attach 开 JIT 后 resume */
+        ptrace(PT_TRACE_ME, 0, 0, 0);
+        raise(SIGSTOP);
 
-    /* 先 patch svc（段仍 RW），再设只读/执行保护 */
-    int npatch = patch_svc();
-    if (apply_seg_prot() != 0) return 1;
-    fprintf(stderr, "[elf-runner] svc patched: %d syscall sites\n", npatch);
+        uintptr_t entry = 0;
+        if (load_elf(elf_path, &entry) != 0) _exit(2);
 
-    /* 注册 SIGTRAP handler（SA_SIGINFO 才能拿 ucontext 寄存器） */
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_sigaction = trap_handler;
-    sa.sa_flags = SA_SIGINFO;
-    sigaction(SIGTRAP, &sa, NULL);
+        /* 先 patch svc（段仍 RW），再设只读/执行保护 */
+        int npatch = patch_svc();
+        if (apply_seg_prot() != 0) _exit(2);
+        fprintf(stderr, "[elf-runner] svc patched: %d syscall sites\n", npatch);
 
-    /* 14c8: SIGBUS/SIGSEGV handler 抓崩溃 PC（若 entry 后仍崩，靠它定位） */
-    sa.sa_sigaction = crash_handler;
-    sigaction(SIGBUS, &sa, NULL);
-    sigaction(SIGSEGV, &sa, NULL);
+        /* 注册 SIGTRAP handler（SA_SIGINFO 才能拿 ucontext 寄存器） */
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_sigaction = trap_handler;
+        sa.sa_flags = SA_SIGINFO;
+        sigaction(SIGTRAP, &sa, NULL);
+
+        /* SIGBUS/SIGSEGV handler 抓崩溃 PC（若 entry 后仍崩，靠它定位） */
+        sa.sa_sigaction = crash_handler;
+        sigaction(SIGBUS, &sa, NULL);
+        sigaction(SIGSEGV, &sa, NULL);
 
     /* 布置 Linux 初始栈（aarch64 Linux ABI）：
        sp→[argc][argv[0..n-1]][NULL][envp NULL][auxv: AT_* 对][AT_NULL]
@@ -602,5 +602,23 @@ int elf_runner_main(int argc, char **argv) {
         : [sp] "r" ((uintptr_t)slot), [entry] "r" (entry)
         : "memory");
     fprintf(stderr, "[elf-runner] UNREACHABLE（entry 未返回）\n");
+    _exit(1);
+    }
+
+    /* 父进程：等子 SIGSTOP → PT_ATTACHEXC attach → detach（JIT 激活）→ resume 子 */
+    int st;
+    waitpid(child, &st, WUNTRACED);
+    if (ptrace(PT_ATTACHEXC, child, 0, 0) == 0) {
+        usleep(100000);
+        ptrace(PT_DETACH, child, 0, 0);
+        fprintf(stderr, "[elf-runner] JIT enabled for child %d\n", child);
+    } else {
+        fprintf(stderr, "[elf-runner] attach child 失败 (%s)——MAP_JIT 将不可用\n",
+                strerror(errno));
+    }
+    kill(child, SIGCONT);          /* resume 子（attach 失败也要放行） */
+    waitpid(child, &st, 0);
+    if (WIFEXITED(st)) return WEXITSTATUS(st);
+    fprintf(stderr, "[elf-runner] child exited abnormally\n");
     return 1;
 }
