@@ -32,7 +32,10 @@
 #include <time.h>
 #include <sys/ucontext.h>
 #include <signal.h>
-#include <sys/ptrace.h>
+/* iOS SDK 缺 sys/ptrace.h（ptrace 为 Darwin 私有 API）——手写声明与常量，符号在 libSystem */
+#define PT_ATTACHEXC 19
+#define PT_DETACH    11
+extern int ptrace(int request, pid_t pid, char *addr, int data);
 #include <stdbool.h>
 #ifndef _DARWIN_C_SOURCE
 #define _DARWIN_C_SOURCE
