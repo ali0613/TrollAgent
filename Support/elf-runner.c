@@ -397,6 +397,14 @@ static int patch_svc(void) {
 /* ---- patch 完成后统一按段设保护 ---- */
 static int apply_seg_prot(void) {
     for (int i = 0; i < g_nsegs; i++) {
+        // 14c8: mmap 初始即 PROT_READ|PROT_WRITE，R|W 段已是目标权限→无需 mprotect。
+        // (iOS 上对含未写入 gap 页的区域 mprotect R|W 实测 EINVAL——seg0 R|X 成功、seg1 R|W 失败)。
+        // 只需对含 X(或去 W) 的段改权限。
+        if (g_segs[i].prot == (PROT_READ | PROT_WRITE)) {
+            fprintf(stderr, "[elf-runner] seg%d rw(初始即RW,跳过) off=0x%lx len=%zu\n",
+                    i, (unsigned long)g_segs[i].off, g_segs[i].len);
+            continue;
+        }
         fprintf(stderr, "[elf-runner] mprotect seg%d off=0x%lx len=%zu prot=%d\n",
                 i, (unsigned long)g_segs[i].off, g_segs[i].len, g_segs[i].prot);
         if (mprotect((void *)(g_base + g_segs[i].off), g_segs[i].len, g_segs[i].prot) != 0) {
