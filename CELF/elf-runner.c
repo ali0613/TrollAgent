@@ -533,8 +533,11 @@ int elf_runner_main(int argc, char **argv) {
 
     if (child == 0) {
         /* 子进程：先 PT_TRACE_ME + SIGSTOP 暂停，等父 attach 开 JIT 后 resume */
-        ptrace(PT_TRACE_ME, 0, 0, 0);
+        int tr = ptrace(PT_TRACE_ME, 0, 0, 0);
+        fprintf(stderr, "[elf-runner][child] PT_TRACE_ME=%d errno=%d pid=%d\n",
+                tr, errno, (int)getpid());
         raise(SIGSTOP);
+        fprintf(stderr, "[elf-runner][child] resumed pid=%d\n", (int)getpid());
 
         uintptr_t entry = 0;
         if (load_elf(elf_path, &entry) != 0) _exit(2);
@@ -607,7 +610,11 @@ int elf_runner_main(int argc, char **argv) {
 
     /* 父进程：等子 SIGSTOP → PT_ATTACHEXC attach → detach（JIT 激活）→ resume 子 */
     int st;
-    waitpid(child, &st, WUNTRACED);
+    pid_t r1 = waitpid(child, &st, WUNTRACED);
+    fprintf(stderr, "[elf-runner] wait1 r=%d st=0x%x %s%s%s\n", (int)r1, st,
+            WIFEXITED(st) ? "exited" : "", WIFSIGNALED(st) ? "killed" : "",
+            WIFSTOPPED(st) ? "stopped" : "");
+    if (WIFSIGNALED(st)) fprintf(stderr, "[elf-runner] child killed by signal %d\n", WTERMSIG(st));
     if (ptrace(PT_ATTACHEXC, child, 0, 0) == 0) {
         usleep(100000);
         ptrace(PT_DETACH, child, 0, 0);
@@ -617,7 +624,10 @@ int elf_runner_main(int argc, char **argv) {
                 strerror(errno));
     }
     kill(child, SIGCONT);          /* resume 子（attach 失败也要放行） */
-    waitpid(child, &st, 0);
+    pid_t r2 = waitpid(child, &st, 0);
+    fprintf(stderr, "[elf-runner] wait2 r=%d st=0x%x %s%s%s\n", (int)r2, st,
+            WIFEXITED(st) ? "exited" : "", WIFSIGNALED(st) ? "killed" : "",
+            WIFSTOPPED(st) ? "stopped" : "");
     if (WIFEXITED(st)) return WEXITSTATUS(st);
     fprintf(stderr, "[elf-runner] child exited abnormally\n");
     return 1;
