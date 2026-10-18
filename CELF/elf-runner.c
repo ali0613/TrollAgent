@@ -359,8 +359,12 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
         if (ph->p_flags & PF_R) prot |= PROT_READ;
         if (ph->p_flags & PF_W) prot |= PROT_WRITE;
         if (ph->p_flags & PF_X) prot |= PROT_EXEC;
-        g_segs[g_nsegs].off = dst - g_base;
-        g_segs[g_nsegs].len = (ph->p_memsz + 4095) & ~(size_t)4095;
+        // 14c8 fix: mprotect 要求 addr 页对齐(4KB)。ELF 段 vaddr 可非页对齐(seg1 0x51d2d0)，
+        // 直接 g_base+off 未对齐→mprotect EINVAL。段起止对齐到页供 mprotect(memcpy 仍用精确 dst)。
+        uintptr_t seg_start = dst & ~(uintptr_t)4095;
+        uintptr_t seg_end = (dst + ph->p_memsz + 4095) & ~(uintptr_t)4095;
+        g_segs[g_nsegs].off = seg_start - g_base;
+        g_segs[g_nsegs].len = seg_end - seg_start;
         g_segs[g_nsegs].prot = prot;
         g_nsegs++;
     }
