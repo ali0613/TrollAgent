@@ -341,6 +341,8 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
            iOS 上 MAP_FIXED 到低地址(0x400000) 会 Cannot allocate memory，必须走非固定+相对偏移。 */
     }
     g_base = m;   /* 实际映射基址：MAP_FIXED 成功=lo 原址；失败=任意地址 */
+    fprintf(stderr, "[elf-runner] mmap: base=0x%lx g_load_vaddr=0x%lx total=%zu\n",
+            (unsigned long)g_base, (unsigned long)g_load_vaddr, g_total_size);
 
     /* 拷贝段 + 记录段信息（先全部保持 RW 以便 patch_svc；patch 后统一 mprotect） */
     g_nsegs = 0;
@@ -348,6 +350,9 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
         Elf64_Phdr *ph = (Elf64_Phdr *)(raw + eh->e_phoff + i * eh->e_phentsize);
         if (ph->p_type != PT_LOAD) continue;
         uintptr_t dst = g_base + (ph->p_vaddr - g_load_vaddr);
+        fprintf(stderr, "[elf-runner] seg#%d: vaddr=0x%lx rel_off=%zu filesz=%zu dst=0x%lx\n",
+                g_nsegs, (unsigned long)ph->p_vaddr, (size_t)(dst - g_base),
+                (size_t)ph->p_filesz, (unsigned long)dst);
         if (ph->p_filesz > 0)
             memcpy((void *)dst, raw + ph->p_offset, ph->p_filesz);
         int prot = 0;
@@ -362,6 +367,7 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
 
     /* 入口需加基址偏移（g_load_vaddr 为原始 vaddr；g_base 为实际映射基址） */
     *entry_out = g_base + (eh->e_entry - g_load_vaddr);
+    fprintf(stderr, "[elf-runner] load done: entry=0x%lx\n", (unsigned long)*entry_out);
     free(raw);
     return 0;
 }
@@ -369,19 +375,26 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
 /* ---- patch: svc #0 → brk #1（在加载内存内扫描；此时段仍 RW） ---- */
 static int patch_svc(void) {
     int patched = 0;
+    fprintf(stderr, "[elf-runner] patch scanning 0..0x%zx (base 0x%lx)\n",
+            g_total_size, (unsigned long)g_base);
     for (size_t off = 0; off + 4 <= g_total_size; off += 4) {
+        if ((off & 0xfffff) == 0)
+            fprintf(stderr, "[elf-runner]   scan off=0x%lx\n", (unsigned long)off);
         uint32_t *insn = (uint32_t *)(g_base + off);
         if (*insn == SVC_0) {
             *insn = BRK_1;
             patched++;
         }
     }
+    fprintf(stderr, "[elf-runner] patch done: %d svc sites\n", patched);
     return patched;
 }
 
 /* ---- patch 完成后统一按段设保护 ---- */
 static int apply_seg_prot(void) {
     for (int i = 0; i < g_nsegs; i++) {
+        fprintf(stderr, "[elf-runner] mprotect seg%d off=0x%lx len=%zu prot=%d\n",
+                i, (unsigned long)g_segs[i].off, g_segs[i].len, g_segs[i].prot);
         if (mprotect(g_base + g_segs[i].off, g_segs[i].len, g_segs[i].prot) != 0) {
             perror("mprotect seg");
             return -1;
@@ -396,6 +409,7 @@ int main(int argc, char **argv) {
         return 2;
     }
     const char *elf_path = argv[1];
+    fprintf(stderr, "[elf-runner] START argc=%d elf=%s\n", argc, elf_path);
 
     uintptr_t entry = 0;
     if (load_elf(elf_path, &entry) != 0) return 1;
@@ -433,6 +447,7 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "[elf-runner] loading %s entry=0x%lx base=0x%lx size=%zu\n",
             elf_path, (unsigned long)entry, (unsigned long)g_base, g_total_size);
+    fprintf(stderr, "[elf-runner] jumping to entry=0x%lx\n", (unsigned long)entry);
 
     /* 跳到入口（aarch64 函数指针） */
     typedef int (*entry_fn)(int, char **, char **);
