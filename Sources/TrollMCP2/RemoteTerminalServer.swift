@@ -93,7 +93,7 @@ final class RemoteTerminalServer {
         // shell.exec 内共享状态（ISHEngine.cwd、guestCwd 等）无锁并发修改 → 数据竞争 →
         // Segmentation fault 11（真机 CrashCatcher 记录 20+ 次）。改单串行队列，每次只处理一个
         // 连接，杜绝并发竞争；远程测试是逐条串行调用，串行处理无吞吐损失。
-        let handlerQueue = DispatchQueue(label: "trollagent.remote-terminal.handler")
+        var handlerQueue = DispatchQueue(label: "trollagent.remote-terminal.handler")
         while isRunning && serverSocket >= 0 {
             let client = accept(serverSocket, nil, nil)
             guard client >= 0 else { continue }
@@ -110,6 +110,12 @@ final class RemoteTerminalServer {
                 // 强制关闭：handleClient 内的 recv/send 立即返回错误 → 函数尽快退出 → 队列释放
                 close(client)
                 _ = sem.wait(timeout: .now() + 5)
+                // fix22: 卡死在工具执行（posix_spawn/waitpid 卡内核不可中断状态）时 close 无效——
+                // 旧 async 块仍占着 handlerQueue → 后续所有请求（含 health/echo）永久排队假死。
+                // 重建队列丢弃卡死块：新连接立即进入新队列处理，服务端从假死自动恢复（最多堵 35s）。
+                // 旧块若真卡在 waitpid 则无共享状态写入，重建后竞争风险可接受；若它后续又恢复写
+                // 共享状态，重启 App 清理（卡死是异常路径，优先保服务可用）。
+                handlerQueue = DispatchQueue(label: "trollagent.remote-terminal.handler")
             }
         }
     }
