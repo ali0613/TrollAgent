@@ -1456,7 +1456,10 @@ jobs:
           # 报 "-r and -pie may not be used together"。开 CONFIG_PIE，busybox 内部处理 PIE 编译/链接。
           sed -i 's/^# CONFIG_PIE is not set$/CONFIG_PIE=y/' .config
           sed -i 's/^CONFIG_PIE=n$/CONFIG_PIE=y/' .config
-          grep -E '^CONFIG_(STATIC|PIE)' .config
+          # tc(traffic control) applet 与新版 linux 内核头不兼容(CBQ/TCA_CBQ_* 被移除)，编译报错→禁用
+          sed -i 's/^CONFIG_TC=y$/CONFIG_TC=n/' .config
+          sed -i 's/^CONFIG_TC=y/CONFIG_TC=n/' .config
+          grep -E '^CONFIG_(STATIC|PIE|TC)' .config
           make -j$(nproc) CC=aarch64-linux-gnu-gcc CROSS_COMPILE=aarch64-linux-gnu- 2>&1 | tee /tmp/bb.log
           rc=${PIPESTATUS[0]}
           if [ $rc -ne 0 ] || [ ! -f busybox ]; then
