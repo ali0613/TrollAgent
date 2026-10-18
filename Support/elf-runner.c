@@ -409,14 +409,17 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
     g_load_vaddr = lo;
     g_total_size = total;
 
-    /* 映射整块（MAP_FIXED 到 ELF 期望地址；低地址通常空闲） */
+    /* 映射整块（MAP_FIXED 到 ELF 期望地址；低地址通常空闲）。
+       14c8 MAP_JIT：iOS 16 执行 mmap 代码必须 MAP_JIT+dynamic-codesigning，
+       否则 mprotect(RX) 后取指仍 SIGBUS（allow-unsigned-executable-memory 仅 macOS 有效）。 */
     void *m = mmap((void *)lo, total, PROT_READ | PROT_WRITE,
-                   MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+                   MAP_PRIVATE | MAP_ANON | MAP_JIT | MAP_FIXED, -1, 0);
     if (m == MAP_FAILED) {
         /* 地址冲突时退回任意地址并重定位（静态 ELF 假设固定地址，先试 MAP_FIXED） */
         fprintf(stderr, "elf-runner: mmap 0x%lx 失败 (%s)，尝试非固定映射\n",
                 (unsigned long)lo, strerror(errno));
-        m = mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+        m = mmap(NULL, total, PROT_READ | PROT_WRITE,
+                 MAP_PRIVATE | MAP_ANON | MAP_JIT, -1, 0);
         if (m == MAP_FAILED) { free(raw); return -1; }
         /* 修复(iOS)：非固定映射时不得覆盖 g_load_vaddr(原始 vaddr)。
            否则下方段拷贝 dst=lo+(p_vaddr-g_load_vaddr) 回落为 p_vaddr(0x400000 未映射)→SIGSEGV。
