@@ -326,7 +326,6 @@ if [ -n "$XCF_DIR" ]; then
                         codesign -s - -f --entitlements "Support/bin-entitlements.plist" "$APP/bin/python3" 2>/dev/null \
                             && echo ">>> python3 re-signed no-sandbox (codesign)" \
                             || { echo "!!! python3 no-sandbox re-sign FAILED (codesign)" >&2; exit 1; }
-                            || echo "!!! python3 codesign re-sign failed" >&2
                     else
                         echo "!!! no sign tool for python3 — stays sandboxed" >&2
                     fi
