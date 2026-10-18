@@ -406,12 +406,15 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
     }
     if (lo == UINTPTR_MAX) { free(raw); return -1; }
     size_t total = hi - lo;
+    /* 14c8: MAP_JIT 要求 size 页对齐——arm64 iOS 页 16KB(0x4000)，非对齐 mmap 报 EINVAL */
+    total = (total + 0x3fff) & ~(size_t)0x3fff;
     g_load_vaddr = lo;
     g_total_size = total;
 
     /* 映射整块（MAP_FIXED 到 ELF 期望地址；低地址通常空闲）。
        14c8 MAP_JIT：iOS 16 执行 mmap 代码必须 MAP_JIT+dynamic-codesigning，
-       否则 mprotect(RX) 后取指仍 SIGBUS（allow-unsigned-executable-memory 仅 macOS 有效）。 */
+       否则 mprotect(RX) 后取指仍 SIGBUS（allow-unsigned-executable-memory 仅 macOS 有效）。
+       iOS 禁止 MAP_JIT+MAP_FIXED（EINVAL）→ 首试固定地址仅用于诊断，正常走非固定。 */
     void *m = mmap((void *)lo, total, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANON | MAP_JIT | MAP_FIXED, -1, 0);
     if (m == MAP_FAILED) {
@@ -420,7 +423,11 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
                 (unsigned long)lo, strerror(errno));
         m = mmap(NULL, total, PROT_READ | PROT_WRITE,
                  MAP_PRIVATE | MAP_ANON | MAP_JIT, -1, 0);
-        if (m == MAP_FAILED) { free(raw); return -1; }
+        if (m == MAP_FAILED) {
+            fprintf(stderr, "elf-runner: 非固定 MAP_JIT mmap 失败 (%s) total=0x%zx\n",
+                    strerror(errno), total);
+            free(raw); return -1;
+        }
         /* 修复(iOS)：非固定映射时不得覆盖 g_load_vaddr(原始 vaddr)。
            否则下方段拷贝 dst=lo+(p_vaddr-g_load_vaddr) 回落为 p_vaddr(0x400000 未映射)→SIGSEGV。
            iOS 上 MAP_FIXED 到低地址(0x400000) 会 Cannot allocate memory，必须走非固定+相对偏移。 */
