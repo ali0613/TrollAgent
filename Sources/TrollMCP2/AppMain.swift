@@ -7,6 +7,9 @@ import SwiftUI
 @_silgen_name("HUDMainStart") func HUDMainStart()
 @_silgen_name("HUDExit") func HUDExit()
 @_silgen_name("HUDCheck") func HUDCheck() -> Int32
+// 14c8: elf-runner 编进主二进制（CELF target）——Swift @main 走 --elf-runner 模式调 elf_runner_main。
+// 绕开 TrollStore 不替换 bin/ + iOS 拒绝 spawn Documents 独立二进制：主二进制覆盖安装即替换 + 被信任。
+@_silgen_name("elf_runner_main") func elf_runner_main(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
 
 @main
 struct TrollAgentApp {
@@ -18,6 +21,17 @@ struct TrollAgentApp {
             HUDExit()             // 关闭悬浮（读 pid 杀）
         } else if args.contains("-check") {
             exit(HUDCheck())      // 查悬浮存活（EXIT_FAILURE=存活 / EXIT_SUCCESS=未跑）
+        } else if args.count >= 3, args[1] == "--elf-runner" {
+            // 命令名 elf-runner → spawn 主二进制 --elf-runner <linux-elf> [args...]
+            // 编进主二进制，避开 bin/（TrollStore 不替换）与 Documents（AMFI 拒绝 spawn）死结。
+            // argv 去掉 "--elf-runner"：elf_runner_main 期待 argv[0]=exe, argv[1]=elf路径, argv[2..]=参数。
+            var cargs: [UnsafeMutablePointer<CChar>?] = [strdup(args[0])]
+            for i in 2..<args.count { cargs.append(strdup(args[i])) }
+            cargs.append(nil)
+            let code = cargs.withUnsafeMutableBufferPointer { buf -> Int32 in
+                elf_runner_main(Int32(buf.count - 1), buf.baseAddress!)
+            }
+            exit(code)
         } else {
             UIApplicationMain(
                 CommandLine.argc,

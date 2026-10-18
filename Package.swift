@@ -60,6 +60,14 @@ let package = Package(
             path: "CLaunch",
             publicHeadersPath: "."
         ),
+        // 14c8: CELF——elf-runner 编进主二进制（Swift @main --elf-runner 模式调 elf_runner_main）。
+        //   绕开 TrollStore 不替换 bin/ + iOS 拒绝 spawn Documents 独立二进制两个死结：
+        //   主二进制覆盖安装即替换 + 自带 App 特权 entitlement（platform-application/no-sandbox）被信任。
+        .target(
+            name: "CELF",
+            path: "CELF",
+            publicHeadersPath: "include"
+        ),
         // fix3cy16 (P1)：CHev——hev-socks5-tunnel 桥接层（iOS 真机 slice 手动链接，
         //   避开 SwiftPM binaryTarget 平台选择问题）。依赖 scripts/build-ipa.sh 下载解压的
         //   hev-stage/lib/libhev-socks5-tunnel.a（ios-arm64 slice，Tun2SocksKit 5.16.0 release）
@@ -89,7 +97,8 @@ let package = Package(
                 "CISH",
                 "MitmCore",
                 "CMitm",
-                "CLaunch"
+                "CLaunch",
+                "CELF"
             ],
             path: "Sources/TrollMCP2",
             exclude: ["Resources"],

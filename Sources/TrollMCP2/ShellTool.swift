@@ -1093,6 +1093,18 @@ final class ShellExecTool: MCPTool {
                         let magic = Bundle.main.bundlePath + "/bin/magic.mgc"
                         if FileManager.default.fileExists(atPath: magic) { env["MAGIC"] = magic }
                     }
+                    // 14c8: elf-runner 编进主二进制——spawn 主二进制 --elf-runner 模式。
+                    // 绕开 bin/(TrollStore 覆盖/重装不替换) 与 Documents(AMFI 拒绝 spawn 独立二进制) 双死结：
+                    // 主二进制覆盖安装即替换 + 自带 App 特权 entitlement 被 iOS 信任。
+                    if word == "elf-runner" {
+                        let exe = Bundle.main.executablePath ?? (Bundle.main.bundlePath + "/TrollAgent")
+                        let r = BuildRunner.shared.run(executable: exe, args: [exe, "--elf-runner"] + args,
+                                                       env: env, timeout: timeout)
+                        var out = r.stdout
+                        if r.timedOut { out += "\n[执行超时 \(Int(timeout))s 被终止]" }
+                        return ["command": segment, "exit_code": r.exitCode, "stdout": out,
+                                "stderr": r.stderr, "ios_native": true]
+                    }
                     let res = BuildRunner.shared.run(executable: p, args: args,
                                                      env: env, timeout: timeout)
                     var out = res.stdout
