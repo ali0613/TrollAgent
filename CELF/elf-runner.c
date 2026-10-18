@@ -501,34 +501,36 @@ int elf_runner_main(int argc, char **argv) {
     sa.sa_flags = SA_SIGINFO;
     sigaction(SIGTRAP, &sa, NULL);
 
-    /* 布置 Linux 初始栈：argc, argv[], NULL, envp[] */
+    /* 布置 Linux 初始栈（aarch64 Linux ABI）：
+       sp→[argc][argv[0..n-1]][NULL][envp NULL][auxv AT_NULL]
+       musl/glibc _start 从 [sp] 读 argc，argv=sp+8 —— 必须 mov sp 再 br，
+       不能 C 函数调用（那 sp 是 iOS 栈，[sp] 是返回地址 → argc 垃圾 → SIGBUS）。 */
     int narg = argc - 1;
-    /* 简化：栈上放 [argc][argv0..n][NULL][envp...]（aarch64 Linux ABI） */
     uint8_t *stack = mmap(NULL, 1 << 20, PROT_READ | PROT_WRITE,
                           MAP_PRIVATE | MAP_ANON, -1, 0);
     if (stack == MAP_FAILED) { perror("stack"); return 1; }
-    uintptr_t sp = (uintptr_t)stack + (1 << 20);
-    sp &= ~(uintptr_t)15;                     /* 16 字节对齐 */
-
-    uintptr_t *argv_slot = (uintptr_t *)(sp - 8 * (narg + 2));
-    argv_slot[0] = (uintptr_t)narg;           /* argc */
-    for (int i = 0; i < narg; i++) argv_slot[i + 1] = (uintptr_t)argv[i + 1];
-    argv_slot[narg + 1] = 0;                  /* NULL 终止 argv */
-
-    /* envp：空（放一个 NULL） */
-    uintptr_t *envp_slot = (uintptr_t *)(argv_slot - 2);
-    envp_slot[0] = 0;
-    sp = (uintptr_t)envp_slot;
+    uintptr_t sp_top = (uintptr_t)stack + (1 << 20);
+    sp_top &= ~(uintptr_t)15;                     /* 16 字节对齐 */
+    uintptr_t *slot = (uintptr_t *)(sp_top - 256);
+    slot[0] = (uintptr_t)narg;                    /* argc */
+    for (int i = 0; i < narg; i++) slot[1 + i] = (uintptr_t)argv[i + 1];
+    slot[1 + narg] = 0;                           /* argv NULL */
+    slot[2 + narg] = 0;                           /* envp NULL(空) */
+    slot[3 + narg] = 0;                           /* auxv AT_NULL */
 
     fprintf(stderr, "[elf-runner] loading %s entry=0x%lx base=0x%lx size=%zu\n",
             elf_path, (unsigned long)entry, (unsigned long)g_base, g_total_size);
     fprintf(stderr, "[elf-runner] jumping to entry=0x%lx\n", (unsigned long)entry);
 
-    /* 跳到入口（aarch64 函数指针） */
-    typedef int (*entry_fn)(int, char **, char **);
-    entry_fn fn = (entry_fn)entry;
-    int rc = fn(narg, argv + 1, (char **)envp_slot);
-
-    fprintf(stderr, "[elf-runner] exit rc=%d\n", rc);
-    return rc;
+    /* 手动跳转：mov sp = Linux 初始栈，br entry（aarch64；不回返） */
+    register uintptr_t a0 __asm__("x0") = (uintptr_t)narg;
+    (void)a0;
+    __asm__ volatile(
+        "mov sp, %[sp]\n\t"
+        "br %[entry]\n\t"
+        :
+        : [sp] "r" ((uintptr_t)slot), [entry] "r" (entry)
+        : "memory");
+    fprintf(stderr, "[elf-runner] UNREACHABLE（entry 未返回）\n");
+    return 1;
 }
