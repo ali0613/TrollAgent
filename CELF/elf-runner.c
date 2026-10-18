@@ -532,10 +532,9 @@ int elf_runner_main(int argc, char **argv) {
     if (child < 0) { perror("fork"); return 1; }
 
     if (child == 0) {
-        /* 子进程：先 PT_TRACE_ME + SIGSTOP 暂停，等父 attach 开 JIT 后 resume */
-        int tr = ptrace(PT_TRACE_ME, 0, 0, 0);
-        fprintf(stderr, "[elf-runner][child] PT_TRACE_ME=%d errno=%d pid=%d\n",
-                tr, errno, (int)getpid());
+        /* 子进程：SIGSTOP 暂停等父 attach（14d1 实证：App 进程调 PT_TRACE_ME 直接被 SIGBUS 杀，
+           去掉；父子 attach 由父侧 PT_ATTACHEXC 完成，detach 后 SIGCONT resume） */
+        fprintf(stderr, "[elf-runner][child] pid=%d pre-stop\n", (int)getpid());
         raise(SIGSTOP);
         fprintf(stderr, "[elf-runner][child] resumed pid=%d\n", (int)getpid());
 
