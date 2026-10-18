@@ -518,7 +518,8 @@ jobs:
       # ET_EXEC(固定地址)在 iOS 无法 MAP_FIXED 0x400000 → 非固定加载后绝对地址 SIGBUS。
       # 改为 musl -static-pie 编译 → ET_DYN 位置无关，elf-runner 可加载到任意地址直跑。
       - name: Build static-PIE busybox (aarch64, musl -static-pie)
-        if: steps.tools-cache.outputs.cache-hit != 'true'
+        # 强制每次重编(不用 tools-cache)：缓存会跳过导致旧 ET_EXEC busybox 残留
+        if: always()
         run: |
           mkdir -p native-tools-out
           echo ">>> download musl aarch64 toolchain"
