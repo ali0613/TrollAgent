@@ -1067,30 +1067,38 @@ final class ShellExecTool: MCPTool {
             // install_name_tool/chown/mkdir/mv/rm/cp 等)。Alpine(iSH x86) 跑不了 arm64 原生二进制，
             // 此兜底让"下载→ldid 签名→放置→调用"闭环。路径含 / 或 .. 的不匹配(防误判)。
             if !word.contains("/"), !word.contains("..") {
-                let bundledRoots = [Bundle.main.bundlePath + "/bin", Bundle.main.bundlePath + "/Resources/bin"]
-                for root in bundledRoots {
-                    let p = root + "/" + word
-                    if FileManager.default.fileExists(atPath: p) {
-                        let body = segment.dropFirst(word.count)
-                        let args = shellSplitArgs(String(body))
-                        var env = ["PYTHONIOENCODING": "utf-8"]
-                        // 14c6: file 命令依赖 libmagic 数据文件（编死路径 /usr/share/misc 不可用）→ 注入 MAGIC
-                        if word == "file" {
-                            let magic = Bundle.main.bundlePath + "/bin/magic.mgc"
-                            if FileManager.default.fileExists(atPath: magic) { env["MAGIC"] = magic }
-                        }
-                        // 14c7 fix9→fix13: elf-runner 解压逻辑**临时移除**（14c7d 启动即崩，解压未执行；
-                        // 二分定位：14c7e = 无 zlib 代码 + busybox.gz 文件——区分"文件"vs"主可执行"。
-                        // 通过后恢复方案：解压改走原生 python3 -m gzip -d（避免主可执行加 zlib 依赖）。
-                        // fix18: 超时用 shell 的 timeout 参数（默认 20s）而非固定 120s——
-                        // python3 出站网络卡死时 20s SIGKILL 释放，配合远程终端看门狗，服务端最多堵 20s。
-                        let res = BuildRunner.shared.run(executable: p, args: args,
-                                                         env: env, timeout: timeout)
-                        var out = res.stdout
-                        if res.timedOut { out += "\n[执行超时 \(Int(timeout))s 被终止]" }
-                        return ["command": segment, "exit_code": res.exitCode, "stdout": out,
-                                "stderr": res.stderr, "ios_native": true]
+                // 14c8: TrollStore 覆盖/重装不替换 bin/（实证：新包 efaa847 装后 bin/elf-runner 仍旧 92611，
+                // 行为=旧 bug：mmap 0x400000 失败后覆盖 g_load_vaddr→段拷贝 SIGSEGV，无 svc patched 日志）。
+                // → 可写区优先：Documents/Workspace/linux/<word> 若存在(用户/App 放置的更新版)优先使用，
+                //   绕开 TrollStore 不替换 bundle bin 的死结。工具更新直接放 Documents 即生效。
+                let docsDir = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first
+                              ?? (NSHomeDirectory() + "/Documents")
+                let docsOverride = docsDir + "/Workspace/linux/" + word
+                var resolved: String? = nil
+                if FileManager.default.fileExists(atPath: docsOverride) {
+                    resolved = docsOverride
+                } else {
+                    let bundledRoots = [Bundle.main.bundlePath + "/bin", Bundle.main.bundlePath + "/Resources/bin"]
+                    for root in bundledRoots {
+                        let p = root + "/" + word
+                        if FileManager.default.fileExists(atPath: p) { resolved = p; break }
                     }
+                }
+                if let p = resolved {
+                    let body = segment.dropFirst(word.count)
+                    let args = shellSplitArgs(String(body))
+                    var env = ["PYTHONIOENCODING": "utf-8"]
+                    // 14c6: file 命令依赖 libmagic 数据文件（编死路径 /usr/share/misc 不可用）→ 注入 MAGIC
+                    if word == "file" {
+                        let magic = Bundle.main.bundlePath + "/bin/magic.mgc"
+                        if FileManager.default.fileExists(atPath: magic) { env["MAGIC"] = magic }
+                    }
+                    let res = BuildRunner.shared.run(executable: p, args: args,
+                                                     env: env, timeout: timeout)
+                    var out = res.stdout
+                    if res.timedOut { out += "\n[执行超时 \(Int(timeout))s 被终止]" }
+                    return ["command": segment, "exit_code": res.exitCode, "stdout": out,
+                            "stderr": res.stderr, "ios_native": true]
                 }
             }
             return [
