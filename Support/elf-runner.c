@@ -84,6 +84,28 @@ typedef struct {
     uint64_t p_align;
 } Elf64_Phdr;
 
+typedef struct {
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint64_t sh_flags;
+    uint64_t sh_addr;
+    uint64_t sh_offset;
+    uint64_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint64_t sh_addralign;
+    uint64_t sh_entsize;
+} Elf64_Shdr;
+
+typedef struct {
+    uint64_t r_offset;
+    uint64_t r_info;
+    int64_t  r_addend;
+} Elf64_Rela;
+
+#define SHT_RELA           4
+#define R_AARCH64_RELATIVE 1027  /* *(base+r_offset) = base + r_addend */
+
 /* ---- 运行时状态 ---- */
 static uintptr_t g_base = 0;             /* 加载基址（存地址；按整数运算避免指针算术混用） */
 static uintptr_t g_load_vaddr = 0;      /* 第一个段的 vaddr */
@@ -294,6 +316,43 @@ static void trap_handler(int sig, siginfo_t *si, void *ucv) {
 }
 
 /* ---- ELF 加载 ---- */
+/* ---- 14c8: PIE(ET_DYN) 重定位(.rela.dyn, R_AARCH64_RELATIVE) ----
+ * PIE 的 GOT/数据含"相对加载基址"的项，需 *(base+r_offset)=base+r_addend 填入，
+ * 否则跳入 entry 访问 GOT 指向未映射区 → SIGBUS。musl 静态 PIE 仅 RELATIVE 类型。
+ * 必须在 load_elf 内 raw(free 前)调用：section header 表可能在 LOAD 段外未加载到 g_base。 */
+static int apply_relocations(const uint8_t *raw, const Elf64_Ehdr *eh) {
+    if (!eh || eh->e_shoff == 0 || eh->e_shnum == 0 || eh->e_shstrndx >= eh->e_shnum) {
+        fprintf(stderr, "[elf-runner] reloc: 无 section headers(ET_EXEC?) 跳过\n");
+        return 0;
+    }
+    const Elf64_Shdr *sh = (const Elf64_Shdr *)(raw + eh->e_shoff);
+    const char *shstr = (const char *)(raw + sh[eh->e_shstrndx].sh_offset);
+    for (unsigned i = 0; i < eh->e_shnum; i++) {
+        if (sh[i].sh_type != SHT_RELA) continue;
+        const char *secname = shstr + sh[i].sh_name;
+        const Elf64_Rela *rela = (const Elf64_Rela *)(raw + sh[i].sh_offset);
+        size_t n = sh[i].sh_size / sizeof(Elf64_Rela);
+        size_t done = 0, skipped = 0;
+        for (size_t j = 0; j < n; j++) {
+            uint64_t type = rela[j].r_info & 0xffffffffULL;
+            if (type == R_AARCH64_RELATIVE) {
+                uint64_t *p = (uint64_t *)(g_base + rela[j].r_offset);
+                *p = g_base + (uint64_t)rela[j].r_addend;
+                done++;
+            } else {
+                if (skipped < 5)
+                    fprintf(stderr, "[elf-runner] reloc %s: 未处理 type=%llu off=0x%llx\n",
+                            secname, (unsigned long long)type,
+                            (unsigned long long)rela[j].r_offset);
+                skipped++;
+            }
+        }
+        fprintf(stderr, "[elf-runner] reloc %s: %zu entries, %zu RELATIVE applied, %zu skipped\n",
+                secname, n, done, skipped);
+    }
+    return 0;
+}
+
 static int load_elf(const char *path, uintptr_t *entry_out) {
     int fd = open(path, O_RDONLY);
     if (fd < 0) { perror("elf-runner: open"); return -1; }
@@ -372,6 +431,10 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
     /* 入口需加基址偏移（g_load_vaddr 为原始 vaddr；g_base 为实际映射基址） */
     *entry_out = g_base + (eh->e_entry - g_load_vaddr);
     fprintf(stderr, "[elf-runner] load done: entry=0x%lx\n", (unsigned long)*entry_out);
+
+    /* 14c8: PIE 重定位(RELATIVE) 须在 free(raw) 前、段仍 RW 时执行 */
+    if (apply_relocations(raw, eh) != 0) { free(raw); return -1; }
+
     free(raw);
     return 0;
 }
