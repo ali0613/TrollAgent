@@ -1438,11 +1438,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install musl cross toolchain
+      - name: Install aarch64 cross toolchain (glibc)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq gcc-aarch64-linux-musl
-          aarch64-linux-musl-gcc --version | head -1
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu
+          aarch64-linux-gnu-gcc --version | head -1
       - name: Fetch busybox source
         run: |
           curl -sL -o /tmp/bb.tar.bz2 "https://busybox.net/downloads/busybox-1.36.1.tar.bz2"
@@ -1453,7 +1453,7 @@ jobs:
           make defconfig
           sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
           grep '^CONFIG_STATIC' .config
-          make -j$(nproc) CC=aarch64-linux-musl-gcc CROSS_COMPILE=aarch64-linux-musl- EXTRA_LDFLAGS="-static-pie" 2>&1 | tail -20
+          make -j$(nproc) CC=aarch64-linux-gnu-gcc CROSS_COMPILE=aarch64-linux-gnu- EXTRA_LDFLAGS="-static-pie" 2>&1 | tail -20
           echo ">>> result"
           file busybox
           readelf -h busybox | grep -E "Type|Entry|Machine"
