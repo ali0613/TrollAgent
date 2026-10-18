@@ -15,6 +15,8 @@ import SwiftUI
 struct TrollAgentApp {
     static func main() {
         let args = CommandLine.arguments
+        // 14c8 diag: 确认 spawn 后是否进入主入口(区分"主二进制启动卡死" vs "elf-runner 逻辑卡死")
+        fputs("[appmain] entry args=\(args)\n", stderr)
         if args.contains("-hud") {
             HUDMainStart()        // 进悬浮模式（内部 runloop，不返回）
         } else if args.contains("-exit") {
@@ -22,6 +24,7 @@ struct TrollAgentApp {
         } else if args.contains("-check") {
             exit(HUDCheck())      // 查悬浮存活（EXIT_FAILURE=存活 / EXIT_SUCCESS=未跑）
         } else if args.count >= 3, args[1] == "--elf-runner" {
+            fputs("[appmain] elf-runner mode\n", stderr)
             // 命令名 elf-runner → spawn 主二进制 --elf-runner <linux-elf> [args...]
             // 编进主二进制，避开 bin/（TrollStore 不替换）与 Documents（AMFI 拒绝 spawn）死结。
             // argv 去掉 "--elf-runner"：elf_runner_main 期待 argv[0]=exe, argv[1]=elf路径, argv[2..]=参数。

@@ -1098,7 +1098,10 @@ final class ShellExecTool: MCPTool {
                     // 主二进制覆盖安装即替换 + 自带 App 特权 entitlement 被 iOS 信任。
                     if word == "elf-runner" {
                         let exe = Bundle.main.executablePath ?? (Bundle.main.bundlePath + "/TrollAgent")
-                        let r = BuildRunner.shared.run(executable: exe, args: [exe, "--elf-runner"] + args,
+                        // 14c8 fix: BuildRunner.run 已把 executable 作为 argv[0](argvList=[path]+args)，
+                        // args 只传 --elf-runner 标记+ELF参数，不能重复带 exe(否则 argv[1]=exe 非 --elf-runner，
+                        // AppMain 分支不匹配→主二进制进 UI 模式后台卡死超时无输出)。
+                        let r = BuildRunner.shared.run(executable: exe, args: ["--elf-runner"] + args,
                                                        env: env, timeout: timeout)
                         var out = r.stdout
                         if r.timedOut { out += "\n[执行超时 \(Int(timeout))s 被终止]" }
