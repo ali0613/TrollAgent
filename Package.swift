@@ -111,6 +111,8 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("z"),
                 .linkedFramework("NetworkExtension"),
+                // 14d3: TrollStore JIT URL scheme（apple-magnifier://enable-jit）——LaunchServices API
+                .linkedFramework("CoreServices"),
                 // v4.5.2：桌面悬浮 HUD 单可执行双模式（TrollSpeed 正解）——链接 libHUD.a
                 //（HUD/sources 编出的 ObjC++ 悬浮核心）+ 私有 framework tbd（HUD/libraries）。
                 // build-ipa.sh 在 swift build 前先编 libHUD.a → hud-stage/lib/libHUD.a。
