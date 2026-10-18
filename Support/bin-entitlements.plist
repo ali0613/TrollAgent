@@ -37,6 +37,8 @@
 	<array>
 		<string>/</string>
 	</array>
+	<key>get-task-allow</key>
+	<true/>
 	<key>task_for_pid-allow</key>
 	<true/>
 	<!-- 14c8: elf-runner 需把 ELF 段 mprotect 成 PROT_EXEC 直跑 → 缺此 entitlement 真机 mprotect 报 EACCES -->

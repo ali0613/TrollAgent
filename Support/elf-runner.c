@@ -32,6 +32,7 @@
 #include <time.h>
 #include <sys/ucontext.h>
 #include <signal.h>
+#include <sys/ptrace.h>
 #include <stdbool.h>
 #ifndef _DARWIN_C_SOURCE
 #define _DARWIN_C_SOURCE
@@ -518,6 +519,19 @@ int main(int argc, char **argv) {
     }
     const char *elf_path = argv[1];
     fprintf(stderr, "[elf-runner] START argc=%d elf=%s\n", argc, elf_path);
+
+    /* 14c8 JIT：iOS 第三方 App 的 MAP_JIT 无法靠 dynamic-codesigning entitlement 激活
+       （Apple-only；实证非固定 MAP_JIT mmap EINVAL）。TrollStore 的 JIT 机制 =
+       ptrace(PT_ATTACHEXC) attach/detach 伪装调试，内核因"被调试"允许 JIT 内存。
+       需 get-task-allow + task_for_pid（entitlements 已加）+ iOS16 需 Developer Mode。 */
+    if (ptrace(PT_ATTACHEXC, getpid(), 0, 0) == 0) {
+        usleep(100000);
+        ptrace(PT_DETACH, getpid(), 0, 0);
+        fprintf(stderr, "[elf-runner] JIT enabled via ptrace self-attach\n");
+    } else {
+        fprintf(stderr, "[elf-runner] ptrace self-attach 失败 (%s)——MAP_JIT 将不可用\n",
+                strerror(errno));
+    }
 
     uintptr_t entry = 0;
     if (load_elf(elf_path, &entry) != 0) return 1;

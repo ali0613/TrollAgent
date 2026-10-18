@@ -223,6 +223,8 @@
 	<true/>
 	<key>platform-application</key>
 	<true/>
+	<key>get-task-allow</key>
+	<true/>
 	<key>task_for_pid-allow</key>
 	<true/>
 	<key>com.apple.developer.networking.networkextension</key>
