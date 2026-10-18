@@ -177,6 +177,10 @@ if [ -d "Resources/bin" ]; then
             for t in "$APP"/bin/*; do
                 [ -f "$t" ] || continue
                 case "$t" in *.dylib) continue;; esac
+                # fix19b: 只签 Mach-O 二进制——git.py/nscan.py(python脚本)/libcapstone.a(静态库)/magic.mgc(magic数据) 非 Mach-O，
+                # ldid 无法签名（此前原代码 || true 静默跳过；fix19 严格化后误伤非二进制导致构建失败）。
+                # macOS runner 的 file 识别 Mach-O；非二进制跳过签名（它们不是可执行，无沙箱计算）。
+                if ! file "$t" 2>/dev/null | grep -q "Mach-O"; then continue; fi
                 if [ "$SIGN_TOOL" = codesign ]; then
                     codesign -s - -f --entitlements "Support/bin-entitlements.plist" "$t" 2>/dev/null || FAILED="$FAILED $(basename "$t")"
                 else
