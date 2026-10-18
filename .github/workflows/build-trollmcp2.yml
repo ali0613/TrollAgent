@@ -1457,7 +1457,13 @@ jobs:
           sed -i 's/^# CONFIG_PIE is not set$/CONFIG_PIE=y/' .config
           sed -i 's/^CONFIG_PIE=n$/CONFIG_PIE=y/' .config
           grep -E '^CONFIG_(STATIC|PIE)' .config
-          make -j$(nproc) CC=aarch64-linux-gnu-gcc CROSS_COMPILE=aarch64-linux-gnu- 2>&1 | tail -20
+          make -j$(nproc) CC=aarch64-linux-gnu-gcc CROSS_COMPILE=aarch64-linux-gnu- 2>&1 | tee /tmp/bb.log
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ] || [ ! -f busybox ]; then
+            echo "### BUILD FAILED (rc=$rc) ###"
+            grep -iE "error:|undefined reference|No such file|\*\*\* |collect2|ld: |cannot find" /tmp/bb.log | head -40
+            exit 1
+          fi
           echo ">>> result"
           file busybox
           readelf -h busybox | grep -E "Type|Entry|Machine"
