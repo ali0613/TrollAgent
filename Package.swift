@@ -66,7 +66,13 @@ let package = Package(
         .target(
             name: "CELF",
             path: "CELF",
-            publicHeadersPath: "include"
+            publicHeadersPath: "include",
+            cSettings: [
+                // 14c8: g_base 声明为 uint8_t*（指针），但 load_elf 段拷贝/patch 按整数地址运算
+                //（dst=g_base+偏移、dst-g_base 求 rel_off）。语义正确（指针算术结果=地址），
+                // bin 直编(无 -Werror)不报错；SwiftPM C 编译默认 -Werror 告警转错 → 这里抑制。
+                .unsafeFlags(["-Wno-int-conversion", "-Wno-incompatible-pointer-types"])
+            ]
         ),
         // fix3cy16 (P1)：CHev——hev-socks5-tunnel 桥接层（iOS 真机 slice 手动链接，
         //   避开 SwiftPM binaryTarget 平台选择问题）。依赖 scripts/build-ipa.sh 下载解压的
