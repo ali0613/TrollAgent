@@ -111,6 +111,9 @@ static uintptr_t g_base = 0;             /* 加载基址（存地址；按整数
 static uintptr_t g_load_vaddr = 0;      /* 第一个段的 vaddr */
 static size_t   g_total_size = 0;       /* 覆盖全部段的内存区域大小 */
 static uint64_t g_syscall_num = 0;      /* 由 svc patch 记录（brk 号带 syscall#） */
+static uint64_t g_phoff = 0;           /* 14c8: program header 信息（auxv AT_PHDR/AT_PHENT/AT_PHNUM） */
+static uint64_t g_phentsize = 0;
+static uint64_t g_phnum = 0;
 
 /* 段保护信息（patch 完成后统一 mprotect） */
 #define MAX_SEGS 32
@@ -315,6 +318,23 @@ static void trap_handler(int sig, siginfo_t *si, void *ucv) {
 #endif
 }
 
+/* ---- 14c8: SIGBUS/SIGSEGV handler：抓崩溃点（PC/LR/SP/FAR）定位 ---- */
+static void crash_handler(int sig, siginfo_t *si, void *ucv) {
+    ucontext_t *ctx = (ucontext_t *)ucv;
+#if defined(__aarch64__)
+    fprintf(stderr, "[elf-runner] CRASH sig=%d pc=0x%llx lr=0x%llx sp=0x%llx far=0x%llx\n",
+            sig,
+            (unsigned long long)ctx->uc_mcontext->__ss.__pc,
+            (unsigned long long)ctx->uc_mcontext->__ss.__lr,
+            (unsigned long long)ctx->uc_mcontext->__ss.__sp,
+            (unsigned long long)(si ? (uintptr_t)si->si_addr : 0));
+#else
+    (void)ctx; (void)si;
+    fprintf(stderr, "[elf-runner] CRASH sig=%d\n", sig);
+#endif
+    _exit(128 + sig);
+}
+
 /* ---- ELF 加载 ---- */
 /* ---- 14c8: PIE(ET_DYN) 重定位(.rela.dyn, R_AARCH64_RELATIVE) ----
  * PIE 的 GOT/数据含"相对加载基址"的项，需 *(base+r_offset)=base+r_addend 填入，
@@ -370,6 +390,9 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
         free(raw);
         return -1;
     }
+    g_phoff = eh->e_phoff;
+    g_phentsize = eh->e_phentsize;
+    g_phnum = eh->e_phnum;
 
     /* 计算覆盖全部 PT_LOAD 的 [低 vaddr, 高 vaddr] */
     uintptr_t lo = UINTPTR_MAX, hi = 0;
@@ -501,22 +524,42 @@ int elf_runner_main(int argc, char **argv) {
     sa.sa_flags = SA_SIGINFO;
     sigaction(SIGTRAP, &sa, NULL);
 
+    /* 14c8: SIGBUS/SIGSEGV handler 抓崩溃 PC（若 entry 后仍崩，靠它定位） */
+    sa.sa_sigaction = crash_handler;
+    sigaction(SIGBUS, &sa, NULL);
+    sigaction(SIGSEGV, &sa, NULL);
+
     /* 布置 Linux 初始栈（aarch64 Linux ABI）：
-       sp→[argc][argv[0..n-1]][NULL][envp NULL][auxv AT_NULL]
-       musl/glibc _start 从 [sp] 读 argc，argv=sp+8 —— 必须 mov sp 再 br，
-       不能 C 函数调用（那 sp 是 iOS 栈，[sp] 是返回地址 → argc 垃圾 → SIGBUS）。 */
+       sp→[argc][argv[0..n-1]][NULL][envp NULL][auxv: AT_* 对][AT_NULL]
+       musl/glibc _start 从 [sp] 读 argc，argv=sp+8；auxv 需完整
+       (AT_PHDR/AT_PHENT/AT_PHNUM/AT_PAGESZ/AT_ENTRY/AT_RANDOM 等)，
+       缺 AT_PHDR/AT_RANDOM 时 musl 静态 PIE 启动路径会读错 → SIGBUS。 */
     int narg = argc - 1;
     uint8_t *stack = mmap(NULL, 1 << 20, PROT_READ | PROT_WRITE,
                           MAP_PRIVATE | MAP_ANON, -1, 0);
     if (stack == MAP_FAILED) { perror("stack"); return 1; }
     uintptr_t sp_top = (uintptr_t)stack + (1 << 20);
     sp_top &= ~(uintptr_t)15;                     /* 16 字节对齐 */
-    uintptr_t *slot = (uintptr_t *)(sp_top - 256);
+    uintptr_t *slot = (uintptr_t *)(sp_top - 512);
+    uint64_t *aux = (uint64_t *)(slot + 2 + narg);  /* argv NULL 之后 */
+    uint64_t rand16[2] = { 0x1234, 0x5678 };        /* AT_RANDOM（栈上） */
+    int i;
     slot[0] = (uintptr_t)narg;                    /* argc */
-    for (int i = 0; i < narg; i++) slot[1 + i] = (uintptr_t)argv[i + 1];
+    for (i = 0; i < narg; i++) slot[1 + i] = (uintptr_t)argv[i + 1];
     slot[1 + narg] = 0;                           /* argv NULL */
     slot[2 + narg] = 0;                           /* envp NULL(空) */
-    slot[3 + narg] = 0;                           /* auxv AT_NULL */
+    int a = 0;
+    aux[a++] = 3;  aux[a++] = g_base + g_phoff;    /* AT_PHDR */
+    aux[a++] = 4;  aux[a++] = g_phentsize;         /* AT_PHENT */
+    aux[a++] = 5;  aux[a++] = g_phnum;             /* AT_PHNUM */
+    aux[a++] = 6;  aux[a++] = 4096;                /* AT_PAGESZ */
+    aux[a++] = 7;  aux[a++] = 0;                   /* AT_BASE(静态链接=0) */
+    aux[a++] = 8;  aux[a++] = 0;                   /* AT_FLAGS */
+    aux[a++] = 9;  aux[a++] = entry;               /* AT_ENTRY */
+    aux[a++] = 23; aux[a++] = 0;                   /* AT_SECURE */
+    aux[a++] = 25; aux[a++] = (uintptr_t)rand16;   /* AT_RANDOM(16B) */
+    aux[a++] = 31; aux[a++] = (uintptr_t)elf_path; /* AT_EXECFN */
+    aux[a++] = 0;                                  /* AT_NULL */
 
     fprintf(stderr, "[elf-runner] loading %s entry=0x%lx base=0x%lx size=%zu\n",
             elf_path, (unsigned long)entry, (unsigned long)g_base, g_total_size);
