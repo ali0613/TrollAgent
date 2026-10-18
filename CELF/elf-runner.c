@@ -85,7 +85,7 @@ typedef struct {
 } Elf64_Phdr;
 
 /* ---- 运行时状态 ---- */
-static uint8_t *g_base = NULL;          /* 加载基址（第一个段 vaddr 对齐页） */
+static uintptr_t g_base = 0;             /* 加载基址（存地址；按整数运算避免指针算术混用） */
 static uintptr_t g_load_vaddr = 0;      /* 第一个段的 vaddr */
 static size_t   g_total_size = 0;       /* 覆盖全部段的内存区域大小 */
 static uint64_t g_syscall_num = 0;      /* 由 svc patch 记录（brk 号带 syscall#） */
@@ -340,7 +340,7 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
            否则下方段拷贝 dst=lo+(p_vaddr-g_load_vaddr) 回落为 p_vaddr(0x400000 未映射)→SIGSEGV。
            iOS 上 MAP_FIXED 到低地址(0x400000) 会 Cannot allocate memory，必须走非固定+相对偏移。 */
     }
-    g_base = m;   /* 实际映射基址：MAP_FIXED 成功=lo 原址；失败=任意地址 */
+    g_base = (uintptr_t)m;   /* 实际映射基址：MAP_FIXED 成功=lo 原址；失败=任意地址 */
     fprintf(stderr, "[elf-runner] mmap: base=0x%lx g_load_vaddr=0x%lx total=%zu\n",
             (unsigned long)g_base, (unsigned long)g_load_vaddr, g_total_size);
 
@@ -395,7 +395,7 @@ static int apply_seg_prot(void) {
     for (int i = 0; i < g_nsegs; i++) {
         fprintf(stderr, "[elf-runner] mprotect seg%d off=0x%lx len=%zu prot=%d\n",
                 i, (unsigned long)g_segs[i].off, g_segs[i].len, g_segs[i].prot);
-        if (mprotect(g_base + g_segs[i].off, g_segs[i].len, g_segs[i].prot) != 0) {
+        if (mprotect((void *)(g_base + g_segs[i].off), g_segs[i].len, g_segs[i].prot) != 0) {
             perror("mprotect seg");
             return -1;
         }
