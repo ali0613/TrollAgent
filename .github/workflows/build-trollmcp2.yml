@@ -514,28 +514,33 @@ jobs:
             exit 1
           fi
 
-      # 14c7 P5: 静态 busybox aarch64 ELF（第一个嫁接对象）——Alpine busybox-static 包解包提取
-      # busybox-static 是静态链接 musl ELF（CONFIG_STATIC=y），无需 iSH 即可由 elf-runner 直跑。
-      - name: Fetch static busybox (aarch64 ELF)
+      # 14c7 P5 + 14c8: 静态 PIE busybox aarch64 ELF（第一个嫁接对象）。
+      # ET_EXEC(固定地址)在 iOS 无法 MAP_FIXED 0x400000 → 非固定加载后绝对地址 SIGBUS。
+      # 改为 musl -static-pie 编译 → ET_DYN 位置无关，elf-runner 可加载到任意地址直跑。
+      - name: Build static-PIE busybox (aarch64, musl -static-pie)
         if: steps.tools-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p native-tools-out
-          curl -sL --max-time 30 "https://dl-cdn.alpinelinux.org/alpine/v3.19/main/aarch64/" -o /tmp/apklist.html
-          PKG=$(grep -o 'busybox-static-[0-9][^"]*\.apk' /tmp/apklist.html | sort -V | tail -1)
-          if [ -z "$PKG" ]; then echo "!!! busybox-static pkg not found" >&2; exit 1; fi
-          echo ">>> static busybox pkg: $PKG"
-          curl -sL --max-time 60 -o /tmp/busybox-static.apk "https://dl-cdn.alpinelinux.org/alpine/v3.19/main/aarch64/$PKG"
-          rm -rf /tmp/bb && mkdir -p /tmp/bb && tar -xzf /tmp/busybox-static.apk -C /tmp/bb
-          BB=$(find /tmp/bb -name 'busybox*' -type f | head -1)
-          echo ">>> candidate: $BB"; file "$BB" 2>/dev/null | head -1
-          if [ -n "$BB" ]; then
-            cp "$BB" "$GITHUB_WORKSPACE/native-tools-out/busybox-elf"
-            chmod +x "$GITHUB_WORKSPACE/native-tools-out/busybox-elf"
-            echo ">>> busybox-elf bundled ($(du -h "$BB" | cut -f1))"
-          else
-            echo "!!! busybox-static extraction failed" >&2
-            exit 1
-          fi
+          echo ">>> download musl aarch64 toolchain"
+          curl -sL -o /tmp/musl.tgz "https://musl.cc/aarch64-linux-musl-cross.tgz"
+          tar xzf /tmp/musl.tgz -C /tmp
+          export PATH="/tmp/aarch64-linux-musl-cross/bin:$PATH"
+          aarch64-linux-musl-gcc --version | head -1
+          echo ">>> download busybox source"
+          curl -sL -o /tmp/bb.tar.bz2 "https://busybox.net/downloads/busybox-1.36.1.tar.bz2"
+          tar xjf /tmp/bb.tar.bz2 -C /tmp
+          cd /tmp/busybox-1.36.1
+          make defconfig >/dev/null 2>&1
+          sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
+          grep '^CONFIG_STATIC' .config
+          echo ">>> build (static-pie)"
+          make -j4 CC=aarch64-linux-musl-gcc CROSS_COMPILE=aarch64-linux-musl- EXTRA_LDFLAGS="-static-pie" 2>&1 | tail -15
+          echo ">>> result"
+          file busybox
+          readelf -h busybox | grep -E "Type|Entry|Machine"
+          cp busybox "$GITHUB_WORKSPACE/native-tools-out/busybox-elf"
+          chmod +x "$GITHUB_WORKSPACE/native-tools-out/busybox-elf"
+          echo ">>> busybox-elf bundled ($(du -h "$GITHUB_WORKSPACE/native-tools-out/busybox-elf" | cut -f1))"
 
       - name: List native tools
         run: ls -la native-tools-out/
