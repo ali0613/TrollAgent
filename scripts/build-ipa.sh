@@ -39,6 +39,10 @@ bash scripts/build-hud.sh
 # v4.3.54: 双架构（arm64 + arm64e）——TrollAgent 纯 arm64 在 A12+(arm64e 芯片)
 # 设备上以兼容模式运行，MobileIcons/CoreImage 在 compat 模式下处理图标异常 →
 # 分享面板 LICreateIconForImages SIGSEGV（与 TrollFools 双架构原生运行对比）。
+# fix19d(24b1994+): 取消双架构——iSH 引擎 14c1 起纯 arm64（ARCHS="arm64"），libish.a 无 arm64e 切片，
+# arm64e swift build 链接必然失败→每次构建白跑 10min 后 fallback。且 libish 若编 arm64e，
+# A15 原生 arm64e 执行 iSH x86 模拟即段错误(cpu_run_to_interrupt，14c1 已回退)。
+# 因此主 app 定纯 arm64；分享面板 SIGSEGV 留待后续单独处理（与 TrollFools 双架构对比另行解决）。
 echo ">>> swift build (arm64-apple-ios15.0, release)"
 # fix3cy18: --product TrollAgent——只构建主 app；VpnTunnel appex 由下方 P1 专属段构建
 #   （其链接需要先下载 hev-stage/lib；主 build 不带 product 会连 VpnTunnel 一起编，链接失败）
@@ -50,24 +54,7 @@ swift build -c release --product TrollAgent \
 
 BIN=".build/release/TrollAgent"
 test -f "$BIN"
-cp "$BIN" /tmp/TrollAgent-arm64 2>/dev/null || cp "$BIN" "$BIN.arm64"
 echo ">>> binary: $(du -h "$BIN" | cut -f1)"
-
-echo ">>> swift build (arm64e-apple-ios15.0, release)"
-swift build -c release --scratch-path .build-arm64e --product TrollAgent \
-    -Xswiftc -sdk -Xswiftc "$SDK" \
-    -Xswiftc -target -Xswiftc arm64e-apple-ios15.0 \
-    -Xcc -isysroot -Xcc "$SDK" \
-    -Xcc -target -Xcc arm64e-apple-ios15.0 || echo "!!! arm64e build failed"
-
-BIN64E=".build-arm64e/release/TrollAgent"
-if [ -f "$BIN64E" ] && lipo -info "$BIN64E" 2>/dev/null | grep -q "arm64e"; then
-    echo ">>> lipo -create (arm64 + arm64e)"
-    lipo -create /tmp/TrollAgent-arm64 "$BIN64E" -output "$BIN" 2>/dev/null || lipo -create "$BIN.arm64" "$BIN64E" -output "$BIN"
-else
-    echo ">>> arm64e unavailable -> fallback arm64 only"
-fi
-lipo -info "$BIN" | head -1
 
 APP="TrollAgent.app"
 IPA="TrollAgent.ipa"
