@@ -1,6 +1,5 @@
 import UIKit
 import SwiftUI
-import CoreServices
 
 // 桌面悬浮 HUD 单可执行双模式（TrollSpeed 正解）：主 App 可执行（TrollStore 有效签名）
 // 由 HUDManager 以 root persona 拉起，argv 带 -hud 进悬浮模式；-exit/-check 关闭/查存活。
@@ -11,6 +10,8 @@ import CoreServices
 // 14c8: elf-runner 编进主二进制（CELF target）——Swift @main 走 --elf-runner 模式调 elf_runner_main。
 // 绕开 TrollStore 不替换 bin/ + iOS 拒绝 spawn Documents 独立二进制：主二进制覆盖安装即替换 + 被信任。
 @_silgen_name("elf_runner_main") func elf_runner_main(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
+// 14d3: 请求 TrollStore 为本进程开 JIT（CLaunch/jit.c，LaunchServices C API，Swift overlay 不暴露）
+@_silgen_name("troll_request_jit") func troll_request_jit(_ bundleID: UnsafePointer<CChar>) -> Int32
 
 @main
 struct TrollAgentApp {
@@ -30,17 +31,12 @@ struct TrollAgentApp {
             // 走 TrollStore 官方 JIT 通道: apple-magnifier://enable-jit（RootHelper 以 root 权限
             // ptrace attach 本进程开 JIT；JIT 状态随 csflags 继承给后续 fork 子进程）。
             // 前提: get-task-allow（已加）+ TrollStore v2.0.12+ + TrollStore 设置开 URL scheme
-            //      + iOS16 Developer Mode（用户已开）。LSOpenCFURLRef 不依赖 UIApplicationMain。
+            //      + iOS16 Developer Mode（用户已开）。CLaunch 包装 LSOpenCFURLRef，不依赖 UIApplicationMain。
             let bundleID = Bundle.main.bundleIdentifier ?? "org.python.python"
-            let jitURLStr = "apple-magnifier://enable-jit?bundle-id=\(bundleID)" as CFString
-            if let jitURL = CFURLCreateWithString(kCFAllocatorDefault, jitURLStr, nil) {
-                let os = LSOpenCFURLRef(jitURL, nil)
-                fputs("[appmain] TrollStore JIT request sent (LSOpen err=\(os))——等待切回\n", stderr)
-                Thread.sleep(forTimeInterval: 3.0)
-                fputs("[appmain] JIT round-trip wait done\n", stderr)
-            } else {
-                fputs("[appmain] JIT URL create failed\n", stderr)
-            }
+            let os = bundleID.withCString { troll_request_jit($0) }
+            fputs("[appmain] TrollStore JIT request sent (LSOpen err=\(os))——等待切回\n", stderr)
+            Thread.sleep(forTimeInterval: 3.0)
+            fputs("[appmain] JIT round-trip wait done\n", stderr)
             // 命令名 elf-runner → spawn 主二进制 --elf-runner <linux-elf> [args...]
             // 编进主二进制，避开 bin/（TrollStore 不替换）与 Documents（AMFI 拒绝 spawn）死结。
             // argv 去掉 "--elf-runner"：elf_runner_main 期待 argv[0]=exe, argv[1]=elf路径, argv[2..]=参数。
