@@ -336,30 +336,32 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
                 (unsigned long)lo, strerror(errno));
         m = mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
         if (m == MAP_FAILED) { free(raw); return -1; }
-        lo = (uintptr_t)m;
-        g_load_vaddr = lo;
+        /* 修复(iOS)：非固定映射时不得覆盖 g_load_vaddr(原始 vaddr)。
+           否则下方段拷贝 dst=lo+(p_vaddr-g_load_vaddr) 回落为 p_vaddr(0x400000 未映射)→SIGSEGV。
+           iOS 上 MAP_FIXED 到低地址(0x400000) 会 Cannot allocate memory，必须走非固定+相对偏移。 */
     }
-    g_base = m;
+    g_base = m;   /* 实际映射基址：MAP_FIXED 成功=lo 原址；失败=任意地址 */
 
     /* 拷贝段 + 记录段信息（先全部保持 RW 以便 patch_svc；patch 后统一 mprotect） */
     g_nsegs = 0;
     for (int i = 0; i < eh->e_phnum && g_nsegs < MAX_SEGS; i++) {
         Elf64_Phdr *ph = (Elf64_Phdr *)(raw + eh->e_phoff + i * eh->e_phentsize);
         if (ph->p_type != PT_LOAD) continue;
-        uintptr_t dst = lo + (ph->p_vaddr - g_load_vaddr);
+        uintptr_t dst = g_base + (ph->p_vaddr - g_load_vaddr);
         if (ph->p_filesz > 0)
             memcpy((void *)dst, raw + ph->p_offset, ph->p_filesz);
         int prot = 0;
         if (ph->p_flags & PF_R) prot |= PROT_READ;
         if (ph->p_flags & PF_W) prot |= PROT_WRITE;
         if (ph->p_flags & PF_X) prot |= PROT_EXEC;
-        g_segs[g_nsegs].off = dst - lo;
+        g_segs[g_nsegs].off = dst - g_base;
         g_segs[g_nsegs].len = (ph->p_memsz + 4095) & ~(size_t)4095;
         g_segs[g_nsegs].prot = prot;
         g_nsegs++;
     }
 
-    *entry_out = eh->e_entry;
+    /* 入口需加基址偏移（g_load_vaddr 为原始 vaddr；g_base 为实际映射基址） */
+    *entry_out = g_base + (eh->e_entry - g_load_vaddr);
     free(raw);
     return 0;
 }
