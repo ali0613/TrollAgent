@@ -1438,29 +1438,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install aarch64 cross toolchain (glibc)
+      - name: Install musl cross toolchain (download, retry)
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq gcc-aarch64-linux-gnu
-          aarch64-linux-gnu-gcc --version | head -1
+          # musl 的 -static -pie 才能出 ET_DYN static-pie；glibc 需 -static-pie(gcc 选项)，busybox CONFIG_PIE 给 -pie -static 不出 PIE。
+          for i in 1 2 3; do
+            curl -sL --max-time 300 -o /tmp/musl.tgz "https://musl.cc/aarch64-linux-musl-cross.tgz" && break
+            echo ">>> musl download retry $i"; sleep 5
+          done
+          tar xzf /tmp/musl.tgz -C /tmp
+          export PATH="/tmp/aarch64-linux-musl-cross/bin:$PATH"
+          aarch64-linux-musl-gcc --version | head -1
       - name: Fetch busybox source
         run: |
           curl -sL -o /tmp/bb.tar.bz2 "https://busybox.net/downloads/busybox-1.36.1.tar.bz2"
           tar xjf /tmp/bb.tar.bz2 -C /tmp
       - name: Build static-PIE busybox
         run: |
+          export PATH="/tmp/aarch64-linux-musl-cross/bin:$PATH"
           cd /tmp/busybox-1.36.1
           make defconfig
           sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
-          # busybox 自带 CONFIG_PIE：手动 EXTRA_LDFLAGS=-static-pie 会打到 -r(relocatable) 链接上
-          # 报 "-r and -pie may not be used together"。开 CONFIG_PIE，busybox 内部处理 PIE 编译/链接。
+          # busybox 自带 CONFIG_PIE：musl 下 -pie -static 出 ET_DYN static-pie(glibc 需 -static-pie 故之前 ET_EXEC)
           sed -i 's/^# CONFIG_PIE is not set$/CONFIG_PIE=y/' .config
           sed -i 's/^CONFIG_PIE=n$/CONFIG_PIE=y/' .config
           # tc(traffic control) applet 与新版 linux 内核头不兼容(CBQ/TCA_CBQ_* 被移除)，编译报错→禁用
           sed -i 's/^CONFIG_TC=y$/CONFIG_TC=n/' .config
           sed -i 's/^CONFIG_TC=y/CONFIG_TC=n/' .config
           grep -E '^CONFIG_(STATIC|PIE|TC)' .config
-          make -j$(nproc) CC=aarch64-linux-gnu-gcc CROSS_COMPILE=aarch64-linux-gnu- 2>&1 | tee /tmp/bb.log
+          make -j$(nproc) CC=aarch64-linux-musl-gcc CROSS_COMPILE=aarch64-linux-musl- 2>&1 | tee /tmp/bb.log
           rc=${PIPESTATUS[0]}
           if [ $rc -ne 0 ] || [ ! -f busybox ]; then
             echo "### BUILD FAILED (rc=$rc) ###"
