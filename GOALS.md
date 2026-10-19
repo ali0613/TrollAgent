@@ -236,3 +236,12 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
   （对齐离线 test_emu 跑通配置）。
 - **本地复现验证**：test_emu 临时改 aux 为 &sp[a-1]（模拟错位）→ 崩溃输出与真机逐字节一致
   （x0=0x0 x1=0x218 x2=0x8148 mem fault @0xfd64）；恢复后 echo hello 正常。
+
+## 2026-10-20 突破3：真机第二崩 0xbd30（x19 垃圾）= 调试打点漂移 + syscall stub 缺失（已修复）
+- 真机 auxv 修复版：过了 reloc（1379 RELATIVE），interpreter entry 正常，推进到 0xbd28-0xbd30 崩
+  （x19=0x283ce1e5e 垃圾指针，mem fault far=0x0），崩溃前有 [dbg] LDP/STP 打点风暴 + unsupported 96/73。
+- **分析**：emu.c 有 2 处无条件打点（LDP/STP branch + stp x19/after 跟踪，每个 LDP/STP 都 fprintf）→
+  大量 fprintf 副作用漂移 guest 路径（离线已证）；真机 elf-runner translate_syscall 缺 96(getrlimit)/73/135/144/146/214/198 → -ENOSYS。
+- **修复**：① 全部调试打点门控到 EMU_DBG/EMU_LDP（默认关，本地验证 dbg 行=0）；② 补 syscall stub 96/73/135/144/146/214/198 返回 0。
+- 本地无打点干净路径：echo hello 正常输出，0 [dbg] 行。退出码 218（-38）为独立遗留
+  （退出路径遇 UNSUPPORTED madd 0x1b027c82，后续补解码）。

@@ -351,7 +351,7 @@ static int exec_one(void) {
         if (nr == 0 && E.r[16] != 0) nr = E.r[16];   /* 兜底：部分旧封装只放 x16 */
         uint64_t ret = translate_syscall(nr, E.r[0], E.r[1], E.r[2],
                                          E.r[3], E.r[4], E.r[5]);
-        if (nr == 64 && g_base)
+        if (nr == 64 && g_base && getenv("EMU_DBG"))
             fprintf(stderr, "[svc] write fd=%llu pc-off=%#llx lr-off=%#llx n=%llu buf='%.20s' chain=%#llx/%#llx/%#llx/%#llx\n",
                 (unsigned long long)E.r[0],
                 (unsigned long long)(E.pc - (uint64_t)g_base),
@@ -713,7 +713,7 @@ static int exec_one(void) {
     }
     {
         if (rd(i) == 19 && (i & 0x1F) == 19 && ((i >> 10) & 0x1F) == 20 && (i >> 31) == 1 && ((i >> 22) & 0xFF) == 0xA6)
-            fprintf(stderr, "[dbg] LDP/STP branch pc=%#llx insn=%08x\n", (unsigned long long)E.pc, i);
+            if (getenv("EMU_LDP")) fprintf(stderr, "[dbg] LDP/STP branch pc=%#llx insn=%08x\n", (unsigned long long)E.pc, i);
         int sf = (i >> 31) & 1, is_ld = ((i >> 22) & 1);   /* 奇数 = LDP */
         int rt = rd(i), rt2 = (i >> 10) & 0x1F;
         int64_t imm7 = sext(((i >> 15) & 0x7F), 7) * (sf ? 8 : 4);
@@ -733,11 +733,11 @@ static int exec_one(void) {
             if (getenv("EMU_LDP")) fprintf(stderr, "[dbg] ldp after: x19=%#llx x20=%#llx\n", (unsigned long long)E.r[19], (unsigned long long)E.r[20]);
         } else {
             if (rt == 19 && is_ld == 0 && ((i >> 22) & 0xFF) == 0xA6 && (i & 0x1F) == 19 && ((i >> 10) & 0x1F) == 20) {
-                fprintf(stderr, "[dbg] stp x19 pc=%#llx addr=%#llx v=%#llx sp=%#llx pre=%d post=%d\n",
+                if (getenv("EMU_LDP")) fprintf(stderr, "[dbg] stp x19 pc=%#llx addr=%#llx v=%#llx sp=%#llx pre=%d post=%d\n",
                     (unsigned long long)E.pc, (unsigned long long)addr, (unsigned long long)RZR(rt), (unsigned long long)E.sp, pre, post);
                 mem_st(addr, RZR(rt), 8);
                 mem_st(addr + 8, RZR(rt2), 8);
-                fprintf(stderr, "[dbg] after: mem[addr]=%#llx mem[addr+8]=%#llx\n",
+                if (getenv("EMU_LDP")) fprintf(stderr, "[dbg] after: mem[addr]=%#llx mem[addr+8]=%#llx\n",
                     (unsigned long long)*(uint64_t*)(uintptr_t)addr,
                     (unsigned long long)*(uint64_t*)(uintptr_t)(addr + 8));
             } else {

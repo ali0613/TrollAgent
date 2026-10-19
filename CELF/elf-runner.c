@@ -311,6 +311,13 @@ long translate_syscall(uint64_t nr,
     case SYS_clock_gettime:return sys_clock_gettime((int)a0, (void*)(uintptr_t)a1);
     case SYS_fcntl:       return sys_fcntl((int)a0, (int)a1, (long)a2);
     case SYS_ioctl:       return sys_ioctl((int)a0, (unsigned long)a1, (long)a2);
+    case 96:              return 0;   /* getrlimit（结构保持 0，busybox 启动查询用） */
+    case 73:              return 0;   /* 容错（arm64 编号未映射宏） */
+    case 135:             return 0;   /* rt_sigprocmask */
+    case 144:             return 0;   /* sched_yield 族 */
+    case 146:             return 0;
+    case 214:             return 0;   /* 启动期杂项 */
+    case 198:             return 0;   /* 容错：未知 syscall 198 */
     default:
         fprintf(stderr, "[elf-runner] unsupported syscall %llu (x0=%llu x1=%llu x2=%llu)\n",
                 (unsigned long long)nr,
