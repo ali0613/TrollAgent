@@ -58,7 +58,11 @@ let package = Package(
         .target(
             name: "CLaunch",
             path: "CLaunch",
-            publicHeadersPath: "."
+            publicHeadersPath: ".",
+            linkerSettings: [
+                // 14db: objc runtime（LSApplicationWorkspace 私有类）
+                .linkedLibrary("objc")
+            ]
         ),
         // 14c8: CELF——elf-runner 编进主二进制（Swift @main --elf-runner 模式调 elf_runner_main）。
         //   绕开 TrollStore 不替换 bin/ + iOS 拒绝 spawn Documents 独立二进制两个死结：

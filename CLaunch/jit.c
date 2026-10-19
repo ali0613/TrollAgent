@@ -2,19 +2,21 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <dlfcn.h>
 
+#include <objc/runtime.h>
+#include <objc/message.h>
 #include <CoreFoundation/CoreFoundation.h>
 
 /*
- * 14d6: 请求 TrollStore 为本进程开启 JIT（apple-magnifier://enable-jit URL scheme）。
- * LSOpenCFURLRef 不在 iOS 公开 SDK 头文件（14d4 实证），且 14d5 实证 RTLD_DEFAULT
- * dlsym 找不到——App 进程默认未加载 LaunchServices。改 dlopen 显式加载
- * /System/Library/Frameworks/LaunchServices.framework 再取符号（iOS 固定路径）。
+ * 14db: 请求 TrollStore 为本进程开启 JIT（apple-magnifier://enable-jit URL scheme）。
+ * 14d6/14d8 实证：iOS16 LaunchServices.framework 不在文件系统（全进 dyld shared cache，
+ * dlopen 固定路径失败，LSOpen err=-1）。改 LSApplicationWorkspace 私有类：
+ * objc_getClass 查类（随 UIKit 依赖链自动加载），无需 dlopen；openURL: 接受 NSURL
+ * （CFURL toll-free bridge）。
  *
  * bundle_id: 当前 App 的 bundle id（如 org.python.python）
  *
- * 返回 0 = 成功投递；<0 = 失败阶段（-1 dlopen/-2 dlsym/-3 调用）。
+ * 返回 0 = 成功投递；<0 = 失败阶段（-1 类不存在/-2 workspace 空/-3 URL 创建失败/-4 openURL 返回 NO）。
  */
 int troll_request_jit(const char *bundle_id) {
     char buf[512];
@@ -25,27 +27,11 @@ int troll_request_jit(const char *bundle_id) {
     CFRelease(s);
     if (!url) return -3;
 
-    /* LaunchServices 是私有 framework：先 PrivateFrameworks，fallback Frameworks */
-    const char *paths[] = {
-        "/System/Library/PrivateFrameworks/LaunchServices.framework/LaunchServices",
-        "/System/Library/Frameworks/LaunchServices.framework/LaunchServices",
-        NULL
-    };
-    void *h = NULL;
-    int st = -1;
-    for (int i = 0; paths[i]; i++) {
-        h = dlopen(paths[i], RTLD_LAZY | RTLD_GLOBAL);
-        if (h) break;
-    }
-    if (!h) { CFRelease(url); return -1; }
-
-    typedef int (*OpenURLFn)(CFURLRef, void *);
-    OpenURLFn fn = (OpenURLFn)dlsym(h, "LSOpenCFURLRef");
-    st = -2;
-    if (fn) {
-        st = fn(url, NULL);
-    }
-    dlclose(h);
+    Class cls = objc_getClass("LSApplicationWorkspace");
+    if (!cls) { CFRelease(url); return -1; }
+    id ws = ((id(*)(id, SEL))objc_msgSend)((id)cls, sel_registerName("defaultWorkspace"));
+    if (!ws) { CFRelease(url); return -2; }
+    BOOL ok = ((BOOL(*)(id, SEL, id))objc_msgSend)(ws, sel_registerName("openURL:"), (id)url);
     CFRelease(url);
-    return st;
+    return ok ? 0 : -4;
 }
