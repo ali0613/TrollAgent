@@ -61,3 +61,53 @@ App 原生系统（AI 全走这里，零感知）
 - 发布：release latest = TrollAgent.tipa（每次构建覆盖）
 - 真机远程测试：N1 SSH 跳板 root@121.31.139.125 / 密码 1335612901 → iPhone 终端 192.168.31.108:8790（/health 免认证查 build）
 - a-Shell 结论：主 App 源码未公开；a-Shell-commands 是 WASM 命令（非 iOS 原生 ARM 二进制），可作工具清单参考
+
+---
+
+## VPN/抓包主线交接留档（2026-10-19 归档）
+
+### 背景
+- 用户上传《巨魔Fuck法克工具箱_1.8.5.tipa》（TrollStore 生态抓包工具），目标是让 TrollAgent 具备同等 VPN 抓包能力，解决"点注入信任就黑屏"问题。
+- **最终定案：放弃 kfd 注入路线，改走 VpnTunnel 自带 entitlements 直接起隧道。** 本主线已整体交接另一 AI，不再由本会话推进。
+
+### Fuck 工具箱原理（分析结论）
+1. Fuck 是**注入型抓包工具**：`fuck_helper`（信任自己的黑盒 helper）通过 **kfd（kernel read/write 漏洞）** 注入抓包代理到目标 App 进程。
+2. VPN 隧道：NetworkExtension `NEPacketTunnelProvider` 起 utun；HTTPS 解密靠 **mitm 证书**（系统装 mitm CA）。
+3. **黑屏根因（已钉死）**："点注入信任就黑屏" = kfd 注入目标不匹配 → **DMA panic → 黑屏重启**。`fuck_helper` 只信任自己，无法对 VpnTunnel 定向信任；每次开 VPN 触发注入 → 不匹配 → panic。
+4. Fuck 的抓包 VPN 用户侧可用：隧道+证书正常，崩的只是注入 hook 步。→ 取舍：**隧道保留、注入砍掉**。
+
+### 已放弃路线（死路，勿重试）
+**核心放弃：kfd 注入**（注入信任 → DMA panic 黑屏），连带整套注入 hook 路线。iOS 16.3 / iPhone14,3 / TrollStore 6.0.25 实测锁死清单：
+| 路线 | 实测结果 |
+|---|---|
+| kfd 注入（fuck 同款） | 目标不匹配 → DMA panic 黑屏 |
+| MAP_JIT（含 16KB 对齐/MAP_FIXED） | 全部 EINVAL |
+| ptrace 自 attach | EPERM |
+| fork 子进程 | iOS16 必 SIGBUS |
+| dlopen 固定 LaunchServices 路径 | iOS16 无实体文件 |
+| apple-magnifier://enable-jit 切 TrollStore | LSOpen err=0 仍 EINVAL，闪切闪退 |
+| allow-jit entitlement | 已签但 AMFI 不认（csops allow-jit-check=0） |
+| RWX mmap | 成功但取指 SIGBUS，**csflags=0x32007005 铁证** |
+
+### 新方向：VpnTunnel 直接起隧道（自研 vs 复刻判断）
+- **判断：借鉴概念 + 自研实现，非照搬源码**（tipa 是二进制，无源码，只能反汇编参考机制）。
+- 新方案 = NEPacketTunnelProvider 子类 + 系统 VPN 配置 + TrollStore 签名 entitlements（no-sandbox / platform-application / networkextension packet-tunnel-provider）；开 VPN 不再触发 kfd 注入，纯系统 VPN 路由抓包。
+- **代价**：放弃注入 = 放弃定向 hook 目标 App，只能抓 VPN 路由到的流量。
+- **复刻 Fuck 最小清单**：①NEPacketTunnelProvider 子类起 utun 读写隧道包；②NETunnelProviderProtocol + NEVPNManager 装配置（显示名自定义，苹果设置里显示我们起的名字）；③entitlements（networkextension packet-tunnel-provider + no-sandbox/platform-application）；④mitm 证书安装（抓 HTTPS 必需）；⑤无需 helper、无需 kfd。
+- 参考 Fuck 二进制手段：`ldid -e` 看 entitlements、反汇编（capstone/Hopper）看隧道启动与包处理、`strings` 找 VPN 配置/证书文件名。
+
+### 项目硬事实（供新 AI 继续）
+- 仓库：github.com/zrrt/trollmcp2；本地 checkout `/home/user/Doubao/chats/38444602897901314/trollmcp2_audit`
+- 可用 PAT 存会话记忆/环境变量（勿写入本文件——Push Protection 拦截）；已失效 PAT 列表存会话记忆
+- 公网跳板 IP（当前）：`121.31.136.34`（旧 121.31.141.66 / 121.31.139.125 已超时；IP 变了必须问用户要新）；SSH root / 密码 `1335612901`
+- iPhone 远程终端：`http://192.168.31.108:8790` token `1335612901`；API `POST /api/tool` body `{"name":"shell.exec","params":{"command":"…","runtime":"ios"}}`（经跳板 sftp 写 /tmp/body.json 再 curl）
+- 设备端：bundle `org.python.python`；App `TrollAgent.app`；真机 busybox `/var/mobile/Documents/Workspace/linux/busybox`；日志 `elf_out.log`；崩溃 `crash/sig_*.txt`
+- 用户习惯：每个构建走 commit → CI → release asset+aka → 手动 TrollStore 安装 → 真机验证；留档走 commit 历史 + GOALS.md；不绕路反复试死路。
+
+### 当前主线状态（elf-runner，顺带留档）
+- 目标：elf-runner（arm64 静态 PIE ELF 加载器 + syscall 翻译 + CELF 解释器，编进 TrollAgent）跑通 aarch64 静态 PIE busybox → **iSH 逐步退场**。
+- iOS16 W^X/AMFI 锁死一切可执行内存 → **解释器路线 A 定案**（逐指令模拟 arm64，指令当数据处理）。
+- 离线调试现状（Linux harness `busybox-test/test_emu.c` + `CELF/emu.c`）：
+  - 已修复：寄存器 ADD/SUB extended 形式（envp 计算）、NEON、LDP/STP 寻址、auxv 栈布局。
+  - 当前崩溃点：**musl 静态自举内嵌 RELOC 循环区 0xf4dd0 `str x0,[x21,x22]`**；0xf4d8c 从 ldso 结构读出的 reloc 边界槽位全零/垃圾（[0x13da08]=0、[0x13da10]=栈顶值），根因未钉死；最大嫌疑 = harness 预应用 1379 条 R_AARCH64_RELATIVE 与 musl 内嵌循环**双重加基址**，或节地址/vaddr 布局理解有误。
+  - 本地改动（CELF/emu.c 新增、CELF/elf-runner.c、ShellTool.swift）未 push、未走 CI→release→真机流程。
