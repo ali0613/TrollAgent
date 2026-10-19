@@ -139,3 +139,26 @@ App 原生系统（AI 全走这里，零感知）
 ### 构建/交付现状
 - CELF/emu.c、CELF/elf-runner.c、Sources/TrollMCP2/ShellTool.swift、busybox-test/test_emu.c：**本地改动，未 push**（含本段 stub 修复与 BP 打点）。
 - 跳板公网 IP：`121.31.136.34`（2026-10-19）；root 密码 `1335612901`；真机远程终端 `http://192.168.31.108:8790` token `1335612901`。
+
+---
+
+## elf-runner 离线调试进展（2026-10-20 凌晨续：指令覆盖补齐 + 新卡点）
+
+### 本段补齐的指令族（emu.c，全部本地未 push）
+1. **CSEL/CSINC/CSINV/CSNEG**：掩码 `0xFFE00000 == 0x1A800000/0x5A800000/0x9A800000/0xDA800000`（W/X × base/inv 四系），op（bit22-21）+op2（bit11-10）区分语义。**教训：早期 0x7F800000 掩码误吃 SDIV（0x1AC10E81 实为 sdiv，capstone 验证）**。
+2. **SDIV/UDIV + LSLV/LSRV/ASRV/RORV**：统一 `0xFFE00000 == 0x1AC00000/0x9AC00000`；**bit13=1→variable shift（op2 00/01/10/11），bit13=0→div（op2=11 为 SDIV，其余 UDIV）**。编码表经 capstone 逐一反查（0x1AC32800=asr、0x1AC30800=udiv、0x1AC32000=lsl、0x1AC32C00=ror、0x1AC30C00=sdiv）。
+3. **RBIT/CLZ 拆分**：`0x5AC00000`（RBIT）/`0x5AC01000`（CLZ）W，`0xDAC00000`/`0xDAC01000` X；**教训：0xFFE00000 粗掩码把 CLZ（0x5AC01000）当 RBIT 执行 → 0xdd578 类别查表返回 0x3fd 越界（cls-ret 实测 0x3fd→修后 0x1d）**。
+4. **BFM/BFI/BFXIL**：`0x33000000`（W）/`0xB3000000`（X）；imms>=immr→BFI 插入，否则 BFXIL 提取。
+5. **LDUR/STUR（unscaled imm9）**：opt(bit11-10)==0/2 且 bit21=0 → 带符号 imm9；**教训：之前归入 reg offset 的 unprivileged 拒绝（UNSUPPORTED 0xf85f8087=ldur x7,[x4,#-8]）**。
+6. **stub syscall 补 135/144/146**（sched/rt_sig 系，返回 0）。
+
+### 当前状态（2026-10-20）
+- **指令解码全通**：TRACE/BP 模式均不再 UNSUPPORTED insn；启动路径从"stub 越界 SIGSEGV"推进到 **busybox main 的 argv/basename 处理**（BP 0x10914 实测 x0="busybox" applet 名正确，x19=base+0x13d000 正确）。
+- **新卡点 1（BP 模式崩溃）**：pc-off≈0x31468，`x0=0x7600000000000000`（"v" 开头无效指针）、x1=模块内 0x...1b04、x2/x19/x20=0x1110、x21=0x3e8(1000)、x30=0x31484。上下文：0x31464 `tbz w0,#0` → 0x31468 adrp → 0x3146c add（x0=base+0x10fd9e "got UDP packet"）→ 0x31470 bl 0x112c4（printf("%s", x1) 系，0x11250 为 printf 展开）。**busybox echo 却走到 udhcpc 的 "got UDP packet"——执行流错乱（applet 分发/跳转错）或 printf 参数污染**；0x11250 内 str q 大量压栈（0x3d80 系 SIMD 已支持）。
+- **新卡点 2（applet not found）**：TRACE 模式曾走到 exit_group(127)（applet not found，applet 名读成宿主 env 串）；0xfd00 实测 argc/argv 正确，污染点在 musl 栈重构（0xfc3c-0xfd00）或 __libc_start_main 传参链路，**未定位**。
+- TRACE/BP 两模式路径不一致（TRACE 曾 exit 127、BP 崩 0x31468）：疑似某处读宿主环境/未初始化值导致分支不同。
+
+### 下一步（续接指针）
+1. BP/TRACE 对比 0x31468 崩溃链：打印 0x31460（[sp+0x98]）与 0x31474 strb 的 x22/w25；或先修 "applet not found"（定位 musl 传参污染）——二者可能同源（执行流错乱）。
+2. 补 printf（0x11250）内部缺失指令（若 UNSUPPORTED 再现）。
+3. 跑通 echo hello（exit 0）→ commit→CI→release+aka→真机 TrollStore 装→elf-runner busybox echo hello 验证。
