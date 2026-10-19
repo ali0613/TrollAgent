@@ -578,6 +578,21 @@ int main(int argc, char **argv) {
     const char *elf_path = argv[1];
     fprintf(stderr, "[elf-runner] START argc=%d elf=%s\n", argc, elf_path);
 
+    /* 14e0: 诊断进程实际 csflags（CS_DEBUGGED=0x800）——TrollStore 手动 JIT 启动/URL 激活后
+       到底有没有被 attach。csops(CS_OPS_STATUS) 是唯一可靠的运行时查询。 */
+    extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
+#define CS_OPS_STATUS 0
+#define CS_DEBUGGED  0x800
+    {
+        unsigned int csflags = 0;
+        if (csops(getpid(), CS_OPS_STATUS, &csflags, sizeof(csflags)) == 0) {
+            fprintf(stderr, "[elf-runner] csflags=0x%x debugged=%d allow-jit-check=%d\n",
+                    csflags, (csflags & CS_DEBUGGED) != 0, (csflags & 0x4000000) != 0);
+        } else {
+            fprintf(stderr, "[elf-runner] csops failed: %s\n", strerror(errno));
+        }
+    }
+
     /* 14d7: JIT 激活由本进程外部完成（TrollStore 手动"以 JIT 启动"或 apple-magnifier URL，
        进程内带 CS_DEBUGGED 进入）。单进程直跑——14d0-14d2 的 fork 方案已实证死路：
        iOS16 App fork 子进程必被 SIGBUS 杀（st=0xa 三版复现，pre-stop 日志未出）。 */
