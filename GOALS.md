@@ -162,3 +162,9 @@ App 原生系统（AI 全走这里，零感知）
 1. BP/TRACE 对比 0x31468 崩溃链：打印 0x31460（[sp+0x98]）与 0x31474 strb 的 x22/w25；或先修 "applet not found"（定位 musl 传参污染）——二者可能同源（执行流错乱）。
 2. 补 printf（0x11250）内部缺失指令（若 UNSUPPORTED 再现）。
 3. 跑通 echo hello（exit 0）→ commit→CI→release+aka→真机 TrollStore 装→elf-runner busybox echo hello 验证。
+
+### 续：0xDD468 定位（2026-10-20 凌晨二段）
+- **BP 实证**：0xffbc（applet 查找）x0="busybox"（applet 名正确）；0x10914 x0=basename 结果 "busybox" 正确——**applet 名链路无污染**。
+- **fault 实际在 0xDD468**（非 0x31468，此前 base 推算误）：`ldrh w0, [x1, x0, lsl#1]`，x1=base+0xFFB04（映射内，adrp #0xff000+0xb04 正确）、索引 x0=fault 时=0x7600000000000000（异常）。上下文 0xdd43c-0xdd474 = musl malloc 系函数（tst #0x1f / and #-0x1000 / ubfx x0,#6,#6 → ldrh 查表 / ubfiz <<4）。**"got UDP packet"（0x31464 区）与 0xDD468 是不同地点**：执行流先到 udhcpc debug 打印、后续 malloc 内 fault。
+- **疑点**：0xdd45c `ubfx x0,x0,#6,#6`（0xd3462c00，imms=11 immr=6，UBFX lsb=6 width=6）输出应为 0（0x7600... 位 6-11=0），fault 时 x0 却=0x7600...——**UBFM 分支对 imms>=immr 的特例语义需复核（UBFIZ vs UBFX）**；或 E.pc 打印滞后（fault 在 ldrh 之后某处）。
+- **未决**：applet 分发为何走到 udhcpc（0x31464 debug 打印触发，[x0+0x1e8] bit0=1，x0=[sp+0x98] 来自 main 之后）；TRACE/BP 路径差异。
