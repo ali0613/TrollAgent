@@ -25,13 +25,23 @@ int troll_request_jit(const char *bundle_id) {
     CFRelease(s);
     if (!url) return -3;
 
-    void *h = dlopen("/System/Library/Frameworks/LaunchServices.framework/LaunchServices",
-                     RTLD_LAZY | RTLD_GLOBAL);
+    /* LaunchServices 是私有 framework：先 PrivateFrameworks，fallback Frameworks */
+    const char *paths[] = {
+        "/System/Library/PrivateFrameworks/LaunchServices.framework/LaunchServices",
+        "/System/Library/Frameworks/LaunchServices.framework/LaunchServices",
+        NULL
+    };
+    void *h = NULL;
+    int st = -1;
+    for (int i = 0; paths[i]; i++) {
+        h = dlopen(paths[i], RTLD_LAZY | RTLD_GLOBAL);
+        if (h) break;
+    }
     if (!h) { CFRelease(url); return -1; }
 
     typedef int (*OpenURLFn)(CFURLRef, void *);
     OpenURLFn fn = (OpenURLFn)dlsym(h, "LSOpenCFURLRef");
-    int st = -2;
+    st = -2;
     if (fn) {
         st = fn(url, NULL);
     }
