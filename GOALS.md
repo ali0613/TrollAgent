@@ -177,3 +177,9 @@ App 原生系统（AI 全走这里，零感知）
   - stdout 实测 = `echo^@^@^@^@^@^@: `（"echo"+6 NUL+": "）——**echo_main 收到的 argv[1] 被污染成 "echo\0..."（应为 "hello"）**，echo 打印 argv[1]+": "。
   - 污染点在 busybox main 的 applet 分发链（0x1091c ldr [x19+0x370] → 0x10924 bl 0x10538 附近；BP 0x10928 未触发，路径在 0x10538 内部）。
 - **下一步**：BP 0x10538 入口/内部定位 argv 污染（x0=applet 名、x1=argv[0]、"echo" 从何写入 argv 区）；修好后应输出 "hello"、exit 0。
+
+### 续：argv 分发点实证正确（2026-10-20 四段）
+- BP 0x1091c/0x10924/0x10538：**argv 在 applet 查找入口完全正确**（argv0='bp2/busybox' argv1='echo' argv2='hello'，x0="busybox"）。[x19+0x370]（base+0x13d370）存 applet 名指针正确。
+- 0x10928（bl 0x10538 返回点）BP 始终不触发——0x10538 返回路径异常（待查，可能 0x10538 内部 ret 逻辑或 bl 目标差异）。
+- **echo 污染（"echo\0..."）发生在 0x10538 之后到 echo_main 之间**（argv 进入 0x10538 时正确）。候选：0x10538 内部写 argv/全局、或 main 在调 echo_main 时重排参数。
+- **已闭环**：UBFM/SIMD/syscall198 全部修复入 main（5cc88df）；echo 执行+输出+exit（内容/退出码待修）。

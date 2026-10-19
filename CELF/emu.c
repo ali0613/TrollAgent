@@ -171,12 +171,23 @@ static int exec_one(void) {
 
     if (getenv("EMU_BP")) {
         uint64_t off = E.pc - g_base;
-        if (off == 0x10928ULL || off == 0x3146cULL || off == 0xffbcULL || off == 0x31460ULL || off == 0x31474ULL || off == 0xddf54ULL || off == 0xdd5e4ULL || off == 0xddf88ULL || off == 0x9304ULL || off == 0x9300ULL || off == 0xfd00ULL || off == 0xfc08ULL || off == 0xfc04ULL || off == 0xfc3cULL || off == 0xf4e18ULL || off == 0xf4d70ULL || off == 0xf4f2cULL || off == 0xf4d8cULL || off == 0xf4d90ULL || off == 0xf4f44ULL || off == 0xf4f60ULL || off == 0xf4f5cULL || off == 0xf4fb4ULL || off == 0xf4fb8ULL || off == 0xf4fbcULL || off == 0xf4ee4ULL || off == 0xf4ef0ULL || off == 0xf4f08ULL || off == 0xf4ea0ULL || off == 0xf4ee8ULL || off == 0xf4e5cULL || off == 0xf4ea8ULL || off == 0xf4eacULL || off == 0xf4ed0ULL || off == 0xf4d00ULL || off == 0xf4d04ULL || off == 0xf4cf0ULL || off == 0x10914ULL || off == 0x10918ULL || off == 0xffbcULL || off == 0x10078ULL || off == 0x1008cULL || off == 0xffc0ULL || off == 0xffd4ULL || off == 0xfff4ULL || off == 0x10028ULL || off == 0x10060ULL || off == 0x1006cULL || off == 0xffd8ULL || off == 0xfff8ULL || off == 0x1002cULL || off == 0x10064ULL) {
+        if (off == 0x1091cULL || off == 0x10924ULL || off == 0x10538ULL || off == 0x10928ULL || off == 0x3146cULL || off == 0xffbcULL || off == 0x31460ULL || off == 0x31474ULL || off == 0xddf54ULL || off == 0xdd5e4ULL || off == 0xddf88ULL || off == 0x9304ULL || off == 0x9300ULL || off == 0xfd00ULL || off == 0xfc08ULL || off == 0xfc04ULL || off == 0xfc3cULL || off == 0xf4e18ULL || off == 0xf4d70ULL || off == 0xf4f2cULL || off == 0xf4d8cULL || off == 0xf4d90ULL || off == 0xf4f44ULL || off == 0xf4f60ULL || off == 0xf4f5cULL || off == 0xf4fb4ULL || off == 0xf4fb8ULL || off == 0xf4fbcULL || off == 0xf4ee4ULL || off == 0xf4ef0ULL || off == 0xf4f08ULL || off == 0xf4ea0ULL || off == 0xf4ee8ULL || off == 0xf4e5cULL || off == 0xf4ea8ULL || off == 0xf4eacULL || off == 0xf4ed0ULL || off == 0xf4d00ULL || off == 0xf4d04ULL || off == 0xf4cf0ULL || off == 0x10914ULL || off == 0x10918ULL || off == 0xffbcULL || off == 0x10078ULL || off == 0x1008cULL || off == 0xffc0ULL || off == 0xffd4ULL || off == 0xfff4ULL || off == 0x10028ULL || off == 0x10060ULL || off == 0x1006cULL || off == 0xffd8ULL || off == 0xfff8ULL || off == 0x1002cULL || off == 0x10064ULL) {
             if (off == 0xf4ee4ULL || off == 0xf4ef0ULL)
                 fprintf(stderr, "  x5=0x%llx x2=0x%llx [x5+0x20]=0x%llx [x2+0x20]=0x%llx\n",
                     (unsigned long long)E.r[5], (unsigned long long)E.r[2],
                     (unsigned long long)*(uint64_t*)(E.r[5]+0x20),
                     (unsigned long long)*(uint64_t*)(E.r[2]+0x20));
+            if (off == 0x1091cULL) {
+                fprintf(stderr, "[dbg] 1091c x19=%#llx [x19+0x370]=%#llx x20=%#llx\n", (unsigned long long)E.r[19], (unsigned long long)*(uint64_t*)(E.r[19]+0x370), (unsigned long long)E.r[20]);
+            }
+            if (off == 0x10924ULL) {
+                uint64_t *ap = (uint64_t*)(uintptr_t)E.r[1];
+                fprintf(stderr, "[dbg] 10924 x0='%.40s' argv0='%.20s' argv1='%.20s' argv2='%.20s'\n",
+                    (char*)(uintptr_t)E.r[0], (char*)(uintptr_t)ap[0], (char*)(uintptr_t)ap[1], (char*)(uintptr_t)ap[2]);
+            }
+            if (off == 0x10538ULL) {
+                fprintf(stderr, "[dbg] 10538 x0='%.40s' x1='%.40s' x2=%#llx\n", (char*)(uintptr_t)E.r[0], (char*)(uintptr_t)E.r[1], (unsigned long long)E.r[2]);
+            }
             if (off == 0x10928ULL) {
                 fprintf(stderr, "[dbg] 10928 x0=%#llx x1=%#llx '%s' argv1=%#llx '%s'\n",
                     (unsigned long long)E.r[0], (unsigned long long)E.r[1], (char*)(uintptr_t)E.r[1],
@@ -208,6 +219,17 @@ static int exec_one(void) {
                     (unsigned long long)*(uint64_t*)(p+16), (char*)(uintptr_t)*(uint64_t*)(p+16),
                     (unsigned long long)*(uint64_t*)(p+24), (char*)(uintptr_t)*(uint64_t*)(p+24),
                     (unsigned long long)*(uint64_t*)(p+32), (char*)(uintptr_t)*(uint64_t*)(p+32));
+            }
+            if (off == 0x1091cULL) {
+                fprintf(stderr, "[dbg] 1091c x19=%#llx [x19+0x370]=%#llx x20=%#llx\n", (unsigned long long)E.r[19], (unsigned long long)*(uint64_t*)(E.r[19]+0x370), (unsigned long long)E.r[20]);
+            }
+            if (off == 0x10924ULL) {
+                uint64_t *ap = (uint64_t*)(uintptr_t)E.r[1];
+                fprintf(stderr, "[dbg] 10924 x0='%.40s' argv0='%.20s' argv1='%.20s' argv2='%.20s'\n",
+                    (char*)(uintptr_t)E.r[0], (char*)(uintptr_t)ap[0], (char*)(uintptr_t)ap[1], (char*)(uintptr_t)ap[2]);
+            }
+            if (off == 0x10538ULL) {
+                fprintf(stderr, "[dbg] 10538 x0='%.40s' x1='%.40s' x2=%#llx\n", (char*)(uintptr_t)E.r[0], (char*)(uintptr_t)E.r[1], (unsigned long long)E.r[2]);
             }
             if (off == 0x10928ULL) {
                 fprintf(stderr, "[dbg] 10928 x0=%#llx x1=%#llx '%s' argv1=%#llx '%s'\n",
