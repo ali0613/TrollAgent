@@ -188,3 +188,33 @@ App 原生系统（AI 全走这里，零感知）
 - **BP 打点改变 guest 路径**（加 0x1091c/0x10924/0x10538 打点后 echo 输出消失、rc=0；去打点后 echo 输出 "echo\0...: "、exit 1）——**guest 读未初始化内存，值依赖宿主 fprintf 副作用**。
 - **系统根因候选**：test_emu 初始栈布局（slot[2+narg]=0 envp 空、aux 表 AT_PHNUM=6、AT_RANDOM 指向 rand16、无 AT_NULL 之外填充）——musl 启动读 auxv/envp 处存在未初始化/布局差异 → 分支不稳定。**下一步应重构初始栈（完整 envp/auxv/清零）而非继续逐点 BP**。
 - **已闭环**：UBFM/SIMD LDP q/syscall198/argv 分发实证（2142dba）；echo 执行链打通（输出+exit）。
+
+## 2026-10-20 突破：SXTW/SXTX 移位缺失 → echo 完全跑通
+
+**根因（最后一块拼图）**：emu.c LDR/STR 寄存器偏移解码中，SXTW（option=110）/SXTX（option=111）漏了 `<<(sh?sz:0)` 移位。
+busybox main 的 applet 表查询 `ldr x2, [x1, w20, sxtw #3]`（0x10520）地址算成 x1+72（未×8），
+读到错误表项 0x2fdac（网络 applet）而非 echo_main 0xabaf0 → blr 到错函数 → 该函数 bb_error_msg
+打印 "echo: "（applet 名前缀）→ exit 1。此即此前所有"argv 污染/echo: 输出"的最终根因。
+
+**修复**：
+```c
+case 6: off = (uint64_t)(int64_t)(int32_t)(uint32_t)rmv << (sh ? sz : 0); break; /* SXTW #sh */
+case 7: off = (uint64_t)(int64_t)rmv << (sh ? sz : 0); break;                    /* SXTX #sh */
+```
+
+**修复后实测（busybox-test/test_emu）**：
+- `echo hello` → stdout "hello"（fd=1 write n=6），echo_main argc=2 argv0='echo' argv1='hello' 正确
+- `echo hello world` → "hello world"
+- `echo -n hi` → "hi"（无换行）
+- `true` → rc=0
+- `busybox`（无参数）→ "BusyBox v1.36.1 multi-call binary." usage 输出
+- 退出码遗留问题：echo 正常路径 rc=218（exit 读 [0x13d330] 全局返回码=218，0x1052c strb 写 [argv+0x330] 疑似地址/寄存器 x1 与 exit 读址不一致，待查）
+
+**栈重构（前段）**：字符串区移至 sp_top-512（musl 启动清零 sp 上方 0x200B），指针表区 sp_top-4096，
+完整 auxv（AT_PHDR/PHENT/PHNUM/PAGESZ/BASE/FLAGS/ENTRY/UID/EUID/GID/EGID/CLKTCK/SECURE/RANDOM/HWCAP=0/EXECFN/PLATFORM/HWCAP2/NULL）。
+
+**打点工具**：EMU_DBG 开关（不干扰路径的纯数值打点）0x10928/applet 表 0x10520（funcoff）/0x10528（blr 目标）/echo_main 入口；
+svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项）后确认修复生效。
+
+**状态**：echo 全系列跑通；下一步查 exit code 218（0x1052c strb 与 0x113b8 ldrb 地址不一致），
+之后 commit→CI→release+aka→真机验证。

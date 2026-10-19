@@ -161,6 +161,29 @@ static int unsupported(uint32_t i) {
 }
 
 static int exec_one(void) {
+    if (getenv("EMU_DBG")) {
+        uint64_t offd = E.pc - g_base;
+        if (offd == 0x10928ULL)
+            fprintf(stderr, "[dbg] 10928 x0=%#llx x1=%#llx x19=%#llx x20=%#llx\n",
+                (unsigned long long)E.r[0], (unsigned long long)E.r[1],
+                (unsigned long long)E.r[19], (unsigned long long)E.r[20]);
+        if (offd == 0x10520ULL) {
+            uint64_t f = *(uint64_t*)(uintptr_t)(g_base + 0x13c038ULL + E.r[20]*8);
+            fprintf(stderr, "[dbg] applet w20=%u funcoff=%#llx g_base=%#llx argv=%#llx\n",
+                (unsigned)E.r[20], (unsigned long long)(f - (uint64_t)g_base),
+                (unsigned long long)g_base, (unsigned long long)E.r[22]);
+        }
+        if (offd == 0x10528ULL)
+            fprintf(stderr, "[dbg] blr x2=%#llx (off=%#llx)\n",
+                (unsigned long long)E.r[2], (unsigned long long)(E.r[2] - (uint64_t)g_base));
+        if (offd == 0xabaf0ULL) {
+            uint64_t *ap = (uint64_t*)(uintptr_t)E.r[1];
+            fprintf(stderr, "[dbg] echo_main argc=%llu argv0='%.12s' argv1='%.12s' argv2='%.12s' argv3='%.12s'\n",
+                (unsigned long long)E.r[0],
+                (char*)(uintptr_t)ap[0], (char*)(uintptr_t)ap[1],
+                (char*)(uintptr_t)ap[2], (char*)(uintptr_t)ap[3]);
+        }
+    }
     if (getenv("EMU_TRACE"))
         fprintf(stderr, "TRACE pc=0x%llx insn=0x%08x x0=0x%llx x1=0x%llx x2=0x%llx x19=0x%llx x20=0x%llx x21=0x%llx x23=0x%llx x24=0x%llx x30=0x%llx sp=0x%llx\n",
             (unsigned long long)E.pc, (unsigned)(*(volatile uint32_t *)(uintptr_t)E.pc),
@@ -321,8 +344,16 @@ static int exec_one(void) {
         uint64_t ret = translate_syscall(nr, E.r[0], E.r[1], E.r[2],
                                          E.r[3], E.r[4], E.r[5]);
         if (nr == 64 && g_base)
-            fprintf(stderr, "[svc] write pc-off=%#llx buf='%.20s' n=%llu\n",
-                (unsigned long long)(E.pc - (uint64_t)g_base), (char*)(uintptr_t)E.r[1], (unsigned long long)E.r[2]);
+            fprintf(stderr, "[svc] write fd=%llu pc-off=%#llx lr-off=%#llx n=%llu buf='%.20s' chain=%#llx/%#llx/%#llx/%#llx\n",
+                (unsigned long long)E.r[0],
+                (unsigned long long)(E.pc - (uint64_t)g_base),
+                (unsigned long long)(E.r[30] - (uint64_t)g_base),
+                (unsigned long long)E.r[2],
+                (char*)(uintptr_t)E.r[1],
+                (unsigned long long)(*(uint64_t*)(uintptr_t)E.sp - (uint64_t)g_base),
+                (unsigned long long)(*(uint64_t*)(uintptr_t)(E.sp + 8) - (uint64_t)g_base),
+                (unsigned long long)(*(uint64_t*)(uintptr_t)(E.sp + 16) - (uint64_t)g_base),
+                (unsigned long long)(*(uint64_t*)(uintptr_t)(E.sp + 24) - (uint64_t)g_base));
         E.r[0] = (uint64_t)ret;
         E.pc += 4;
         return 0;
@@ -639,8 +670,8 @@ static int exec_one(void) {
                     /* ARM64 bits[15:13]: 010=UXTW 011=LSL/UXTX 110=SXTW 111=SXTX */
                     case 2: off = (rmv & 0xFFFFFFFF) << (sh ? sz : 0); break;    /* UXTW */
                     case 3: off = sh ? (rmv << sz) : rmv; break;                 /* LSL/UXTX */
-                    case 6: off = (uint64_t)(int64_t)(int32_t)(uint32_t)rmv; break; /* SXTW */
-                    case 7: off = (uint64_t)(int64_t)rmv; break;                 /* SXTX */
+                    case 6: off = (uint64_t)(int64_t)(int32_t)(uint32_t)rmv << (sh ? sz : 0); break; /* SXTW #sh */
+                    case 7: off = (uint64_t)(int64_t)rmv << (sh ? sz : 0); break;                 /* SXTX #sh */
                     default: return unsupported(i);
                     }
                     addr = RSP(rn(i)) + off;
