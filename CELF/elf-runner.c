@@ -419,23 +419,33 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
     /* 映射整块（MAP_FIXED 到 ELF 期望地址；低地址通常空闲）。
        14c8 MAP_JIT：iOS 16 执行 mmap 代码必须 MAP_JIT+dynamic-codesigning，
        否则 mprotect(RX) 后取指仍 SIGBUS（allow-unsigned-executable-memory 仅 macOS 有效）。
-       iOS 禁止 MAP_JIT+MAP_FIXED（EINVAL）→ 首试固定地址仅用于诊断，正常走非固定。 */
+       iOS 禁止 MAP_JIT+MAP_FIXED（EINVAL）→ 首试固定地址仅用于诊断，正常走非固定。
+       14d9: MAP_JIT 全部 EINVAL（无 JIT 激活）时 fallback——mmap(PROT_READ|PROT_WRITE|PROT_EXEC)
+       一次性 RWX（allow-unsigned-executable-memory 的"create writable and executable memory"
+       语义，不经过 MAP_JIT）。TrollStore App 带该 entitlement，iOS 16 若豁免 W^X 则无需 JIT。 */
     void *m = mmap((void *)lo, total, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANON | MAP_JIT | MAP_FIXED, -1, 0);
     if (m == MAP_FAILED) {
         /* 地址冲突时退回任意地址并重定位（静态 ELF 假设固定地址，先试 MAP_FIXED） */
-        fprintf(stderr, "elf-runner: mmap 0x%lx 失败 (%s)，尝试非固定映射\n",
+        fprintf(stderr, "elf-runner: mmap 0x%lx 失败 (%s)，尝试非固定 MAP_JIT\n",
                 (unsigned long)lo, strerror(errno));
         m = mmap(NULL, total, PROT_READ | PROT_WRITE,
                  MAP_PRIVATE | MAP_ANON | MAP_JIT, -1, 0);
-        if (m == MAP_FAILED) {
-            fprintf(stderr, "elf-runner: 非固定 MAP_JIT mmap 失败 (%s) total=0x%zx\n",
-                    strerror(errno), total);
-            free(raw); return -1;
-        }
-        /* 修复(iOS)：非固定映射时不得覆盖 g_load_vaddr(原始 vaddr)。
-           否则下方段拷贝 dst=lo+(p_vaddr-g_load_vaddr) 回落为 p_vaddr(0x400000 未映射)→SIGSEGV。
-           iOS 上 MAP_FIXED 到低地址(0x400000) 会 Cannot allocate memory，必须走非固定+相对偏移。 */
+    }
+    if (m == MAP_FAILED) {
+        fprintf(stderr, "elf-runner: MAP_JIT 均失败 (%s)，尝试 RWX 直连(allow-unsigned)\n",
+                strerror(errno));
+        m = mmap(NULL, total, PROT_READ | PROT_WRITE | PROT_EXEC,
+                 MAP_PRIVATE | MAP_ANON, -1, 0);
+    }
+    if (m == MAP_FAILED) {
+        fprintf(stderr, "elf-runner: RWX mmap 失败 (%s) total=0x%zx\n",
+                strerror(errno), total);
+        free(raw); return -1;
+    }
+    if ((uintptr_t)m != lo) {
+        fprintf(stderr, "[elf-runner] 非固定映射 base=0x%lx（原 vaddr 0x%lx）\n",
+                (unsigned long)m, (unsigned long)lo);
     }
     g_base = (uintptr_t)m;   /* 实际映射基址：MAP_FIXED 成功=lo 原址；失败=任意地址 */
     fprintf(stderr, "[elf-runner] mmap: base=0x%lx g_load_vaddr=0x%lx total=%zu\n",
