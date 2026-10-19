@@ -111,3 +111,31 @@ App 原生系统（AI 全走这里，零感知）
   - 已修复：寄存器 ADD/SUB extended 形式（envp 计算）、NEON、LDP/STP 寻址、auxv 栈布局。
   - 当前崩溃点：**musl 静态自举内嵌 RELOC 循环区 0xf4dd0 `str x0,[x21,x22]`**；0xf4d8c 从 ldso 结构读出的 reloc 边界槽位全零/垃圾（[0x13da08]=0、[0x13da10]=栈顶值），根因未钉死；最大嫌疑 = harness 预应用 1379 条 R_AARCH64_RELATIVE 与 musl 内嵌循环**双重加基址**，或节地址/vaddr 布局理解有误。
   - 本地改动（CELF/emu.c 新增、CELF/elf-runner.c、ShellTool.swift）未 push、未走 CI→release→真机流程。
+
+---
+
+## elf-runner 离线调试进展（2026-10-19 晚，Linux VM /tmp/test_emu + CELF/emu.c）
+
+### 已修复（有实证）
+1. **保存槽归零根因（本段重大突破）**：`busybox-test/test_emu.c` 的 `translate_syscall` stub 里 `newfstatat`（case 79）`memset(st,0,144)` 越界——aarch64 `struct stat` 实为 128B，144B 覆盖了 0xffbc 帧的 x19 保存槽（0x...2bc0）→ 0x1008c `ldp x19,x20,[sp],#0x1f0` 恢复出 0 → 崩溃 `mem fault addr=0x370`。**修：memset 缩到 64B。修复后启动路径完全穿通（不再 SIGSEGV）**，一路到 `exit_group(127)`。
+   - 定位过程：stp after=非0 / ldp v1=0 / ptr1（直接指针读）=0 三重矛盾 → WST 全区间+g_slot 无覆盖写 → grep emu.c 无绕过 mem_st 的直接写 → 最终锁定 stub 的 syscall 模拟写用户内存（绕过 emu 层，WST 天然抓不到）。
+2. 此前 9 个 bug（TBZ 掩码/逻辑立即数/aarch64 syscall 编号/NEON MOVI 等）仍在。
+
+### 当前活跃问题（未定论）
+- **argv 正确但 applet not found**：guest 初始栈验证 `argc=3 argv=[bp2/busybox,echo,hello]` 完全正确（BP 0xfc3c 从 x0=slot 读）；musl __dls2 入口（br x16 → GOT[0]=0xfc0c）收到的 stack_end=x1=slot 且 `[slot]` argc/argv 正确（BP 0xfd00 打印）。但 busybox 报 `codex EXPERIENCE_BUNDLE_MANIFEST_SHA256=...: applet not found`（applet 名被读成宿主环境字符串）——musl 栈重构（0xfc3c-0xfd00，E.sp 曾下移 0x200 后恢复）或 __libc_start_main 传参链路中 argv 被污染，**下一步在 musl 调 main（0x10910 bl 0x1098c 前的 basename 处理）处继续断**。
+- **0x10914 崩溃模式（x1=0x2f）**：BP 模式下反复 `mem fault addr=0x2f`（pc=0x10914 附近、x1='/'、x19=base+0x13d000）。0x10910 `bl 0x1098c`（basename 处理）前 x1 被设为字符 '/'，0x1098c 内疑似把 x1 当地址 `ldrb`（emu 解码错或调用约定错）。需 dump 0x1098c 内指令核对。
+- **TRACE 模式与 BP 模式路径不一致**：TRACE 模式在 0x103dc 遇 unsupported（CSEL 0x1ac10e81），BP 模式不遇——两模式执行到不同点（疑似 TRACE 慢速改变后续分支时序或路径本身多态），需统一调试环境。
+
+### 调试开关（emu.c，环境变量）
+- `EMU_LDP=1`（ldp 恢复打点 + ptr1 直接指针读）、`EMU_BP=1`（断点列表含 0xfc04/0xfc08/0xfc3c/0xfd00/0xf4d90/0xf4d00/0xf4d04/0xf4cf0/0xf4e18/0x10914/0xffbc/0x10078/0x1008c 等，打印关键 reg + argv0/start/brx16/stack0/main-10914 打点）、`EMU_WST=1`（写追踪）、`EMU_TRACE=1`。
+- 重跑：`cd busybox-test && gcc -O2 -o /tmp/test_emu test_emu.c ../trollmcp2_audit/CELF/emu.c && EMU_BP=1 timeout 30 /tmp/test_emu bp2/busybox echo hello`（/tmp 会清，test_emu 需重编译）。
+
+### 下一步（续接指针）
+1. dump 0x1098c 区指令，核对 0x10910 bl 前的 x0/x1 约定（busybox basename 处理）与 emu 解码。
+2. 定位 musl __libc_start_main 调 main 的 bl（BP 0xf4d90 附近已进入 musl 启动区），打印 main 实参（argc/argv）。
+3. 修 CSEL（0x1A 系条件选择）以统一 TRACE/BP 路径。
+4. 跑通 `echo hello`（exit 0）后：走 commit→CI→release+aka→真机 TrollStore 装→`elf-runner busybox echo hello` 验证；再实施 busybox 内置进包/首次打开自动拉取。
+
+### 构建/交付现状
+- CELF/emu.c、CELF/elf-runner.c、Sources/TrollMCP2/ShellTool.swift、busybox-test/test_emu.c：**本地改动，未 push**（含本段 stub 修复与 BP 打点）。
+- 跳板公网 IP：`121.31.136.34`（2026-10-19）；root 密码 `1335612901`；真机远程终端 `http://192.168.31.108:8790` token `1335612901`。
