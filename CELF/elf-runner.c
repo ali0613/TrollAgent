@@ -316,7 +316,6 @@ long translate_syscall(uint64_t nr,
     case 135:             return 0;   /* rt_sigprocmask */
     case 144:             return 0;   /* sched_yield 族 */
     case 146:             return 0;
-    case 214:             return 0;   /* 启动期杂项 */
     case 198:             return 0;   /* 容错：未知 syscall 198 */
     default:
         fprintf(stderr, "[elf-runner] unsupported syscall %llu (x0=%llu x1=%llu x2=%llu)\n",
