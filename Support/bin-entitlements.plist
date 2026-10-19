@@ -44,5 +44,9 @@
 	<!-- 14c8: elf-runner 需把 ELF 段 mprotect 成 PROT_EXEC 直跑 → 缺此 entitlement 真机 mprotect 报 EACCES -->
 	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
 	<true/>
+	<!-- 14df: MAP_JIT 需要 allow-jit（模拟器 Play!/Dolphin 都带）；14d7/14dc 实测即使手动 JIT 启动
+	     缺 allow-jit 时 MAP_JIT 仍 EINVAL -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
 </dict>
 </plist>
