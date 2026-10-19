@@ -550,6 +550,18 @@ static int apply_seg_prot(void) {
     return 0;
 }
 
+/* 14de: 检测当前进程是否已带 JIT（TrollStore attach 后 CS_DEBUGGED + dynamic-codesigning 生效，
+   MAP_JIT 可成功）。成功=已有 JIT（勿再请求 URL 闪切）；失败=需懒激活。 */
+int have_jit(void) {
+    void *m = mmap(NULL, 0x4000, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANON | MAP_JIT, -1, 0);
+    if (m != MAP_FAILED) {
+        munmap(m, 0x4000);
+        return 1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     /* 14dc: 主进程内跑模式——sigsetjmp 出口兜住 ELF 的 exit_group（sys_exit_group siglongjmp 回），
        主进程存活。spawn 模式(_exit 路径)不受影响（g_exit_jumped 置位后正常返回给调用方）。 */

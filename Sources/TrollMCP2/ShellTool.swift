@@ -1093,20 +1093,30 @@ final class ShellExecTool: MCPTool {
                         let magic = Bundle.main.bundlePath + "/bin/magic.mgc"
                         if FileManager.default.fileExists(atPath: magic) { env["MAGIC"] = magic }
                     }
-                    // 14dc: elf-runner 主进程内跑（不再 spawn 主二进制 --elf-runner）——
-                    // TrollStore JIT(apple-magnifier URL / 手动以 JIT 启动) 只 attach bundle id 对应的
-                    // 主进程，spawn 出的子进程不继承 CS_DEBUGGED（14d7 实证 MAP_JIT 仍 EINVAL）。
-                    // 主进程内直调 elf_runner_main：同进程同线程 load ELF + jump，MAP_JIT 直接可用
-                    // （主进程已由 App 启动时 JIT 请求激活）。ELF 的 exit_group 由 siglongjmp 翻译回
-                    // elf_runner_main 出口（14dc），主进程存活，8790 服务不中断。
-                    // 输出：dup2 fd1/2 → 临时文件，跑完读回并恢复（ELF 的 write 翻译写 fd 1/2）。
+                    // 14de: elf-runner 主进程内跑 + 懒 JIT 激活——
+                    // TrollStore JIT 只 attach 主进程（spawn 子进程不继承 CS_DEBUGGED，14d7 实证）。
+                    // 不启动时自动请求（切后台被杀→重启→重复闪切烦人，14de 移除）；执行命令时
+                    // 先 have_jit() 检测：已有 JIT 直跑（同进程内仅首次需要激活一次）；无 JIT 才
+                    // 请求 apple-magnifier URL（闪切一次 TrollStore attach 主进程）等 3s 再跑。
+                    // ELF 的 exit_group 由 siglongjmp 翻译回（14dc），主进程存活。
+                    // 输出：dup2 fd1/2 → Documents/Workspace/linux/elf_out.log（崩溃时也能读回定位）。
                     if word == "elf-runner" {
                         let exe = Bundle.main.executablePath ?? (Bundle.main.bundlePath + "/TrollAgent")
-                        let tmp = NSTemporaryDirectory() + "elf_out_\(ProcessInfo.processInfo.processIdentifier)_\(Int(Date().timeIntervalSince1970)).log"
+                        let docsDir = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first
+                                      ?? (NSHomeDirectory() + "/Documents")
+                        let outLog = docsDir + "/Workspace/linux/elf_out.log"
+                        var jitNote = ""
+                        if have_jit() == 0 {
+                            let bid = Bundle.main.bundleIdentifier ?? "org.python.python"
+                            let os = bid.withCString { troll_request_jit($0) }
+                            jitNote = "lazy-JIT request err=\(os)（闪切一次激活主进程 JIT）"
+                            Thread.sleep(forTimeInterval: 3.0)
+                            fputs("[shelltool] \(jitNote), have_jit after=" + "\(have_jit())\n", stderr)
+                        }
                         var cargs: [UnsafeMutablePointer<CChar>?] = [strdup(exe)]
                         for a in args { cargs.append(strdup(a)) }
                         cargs.append(nil)
-                        let outFD = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+                        let outFD = open(outLog, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
                         let saved1 = dup(1)
                         let saved2 = dup(2)
                         dup2(outFD, 1)
@@ -1122,10 +1132,9 @@ final class ShellExecTool: MCPTool {
                         } else {
                             code = elf_runner_main(Int32(cargs.count - 1), cargs.withUnsafeMutableBufferPointer { $0.baseAddress! })
                         }
-                        let out = (try? String(contentsOfFile: tmp, encoding: .utf8)) ?? ""
-                        try? FileManager.default.removeItem(atPath: tmp)
+                        let out = (try? String(contentsOfFile: outLog, encoding: .utf8)) ?? ""
                         return ["command": segment, "exit_code": Int(code), "stdout": "",
-                                "stderr": out, "ios_native": true, "inproc": true]
+                                "stderr": (jitNote.isEmpty ? "" : jitNote + "\n") + out, "ios_native": true, "inproc": true]
                     }
                     let res = BuildRunner.shared.run(executable: p, args: args,
                                                      env: env, timeout: timeout)

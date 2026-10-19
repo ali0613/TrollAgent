@@ -12,6 +12,8 @@ import SwiftUI
 @_silgen_name("elf_runner_main") func elf_runner_main(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
 // 14d3: 请求 TrollStore 为本进程开 JIT（CLaunch/jit.c，LaunchServices C API，Swift overlay 不暴露）
 @_silgen_name("troll_request_jit") func troll_request_jit(_ bundleID: UnsafePointer<CChar>) -> Int32
+// 14de: 检测当前进程是否已带 JIT（MAP_JIT 试映射成功=已激活，无需再请求 URL）
+@_silgen_name("have_jit") func have_jit() -> Int32
 
 @main
 struct TrollAgentApp {
@@ -120,16 +122,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         RemoteAgent.shared.reportInstallIfNeeded()
         RemoteAgent.shared.reportPendingCrashes()
 
-        // 14dc: 主进程 JIT 激活——TrollStore 只 attach bundle id 对应的主进程，spawn 子进程
-        // 不继承 CS_DEBUGGED（14d7 实证）。App 启动 2s 后自动请求 apple-magnifier URL
-        // （闪切一次 TrollStore 再回来，主进程带 JIT），此后 elf-runner 命令主进程内跑。
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2) {
-            let bid = Bundle.main.bundleIdentifier ?? "org.python.python"
-            let os = bid.withCString { troll_request_jit($0) }
-            fputs("[appmain] startup JIT request err=\(os)（闪切后主进程带 JIT）\n", stderr)
-            Thread.sleep(forTimeInterval: 2.5)
-            fputs("[appmain] startup JIT wait done\n", stderr)
-        }
+        // 14de: 去掉启动自动 JIT 请求（App 切后台被杀→回前台重启→重复闪切 TrollStore 烦人）。
+        // 改为懒激活：ShellTool 执行 elf-runner 时先 have_jit() 检测，无 JIT 才请求一次（同进程内仅一次）。
 
         window = UIWindow(frame: UIScreen.main.bounds)
         window?.rootViewController = UIHostingController(rootView: RootView())
