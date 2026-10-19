@@ -177,6 +177,7 @@ static int g_exit_code = 0;
 #define SYS_arch_prctl        178  /* x86 专用，aarch64 无 */
 
 static long sys_exit(int code)          { return sys_exit_group(code); }
+static long sys_exit_group(int code);   /* 前向声明（sys_exit 在 sys_exit_group 之前定义） */
 static long sys_exit_group(int code) {
     /* 14dc: 主进程内跑模式——ELF 的 exit/exit_group 不再 _exit 杀进程，
        siglongjmp 跳回 elf_runner_main 的 sigsetjmp 出口（信号 handler 上下文→主执行流），
