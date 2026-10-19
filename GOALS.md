@@ -251,3 +251,12 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
   证实此前 x19 垃圾 = 打点漂移，auxv+打点门控+syscall stub 后主路径全通。
 - 修复：emu.c MADD/MSUB 分支加 0x1B000000 掩码（32 位 madd/msub；sf 由 bit31 自然给出，0x9B=64 位 0x1B=32 位）。
 - 本地验证：echo hello 输出 ✓，之后退出路径有新 mem fault（x1=-16，exit code 问题，独立遗留）。
+
+## 2026-10-20 突破5：真机输出 "echo: "（错误 applet）= CELF 栈布局未对齐 test_emu
+- 真机 madd 修复版：无崩溃、无 UNSUPPORTED，但输出 `echo\0\0\0\0: `（bb_error_msg 错误路径，本地同代码是 hello）。
+- **根因**：CELF/elf-runner.c 的初始栈与本地跑通配置 test_emu 不一致：
+  ① argv 字符串用宿主指针（真机进程 argv）而非复制到 guest 栈；
+  ② 指针表在 sp_top-512（test_emu 在 sp_top-4096）；
+  ③ auxv 键值错（CLKTCK=11 应为 17、HWCAP=15 应为 16、PLATFORM=29 应为 15、缺 UID/EUID/GID/EGID）；
+  ④ 栈 1MB（test_emu 32MB）。
+- **修复**：CELF 栈构建整体对齐 test_emu（字符串复制 guest 栈、指针表 -4096、标准 auxv 键值、32MB 栈）。

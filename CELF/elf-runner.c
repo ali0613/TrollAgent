@@ -643,36 +643,51 @@ int elf_runner_main(int argc, char **argv) {
        musl/glibc _start 从 [sp] 读 argc，argv=sp+8；auxv 需完整
        (AT_PHDR/AT_PHENT/AT_PHNUM/AT_PAGESZ/AT_ENTRY/AT_RANDOM 等)，
        缺 AT_PHDR/AT_RANDOM 时 musl 静态 PIE 启动路径会读错 → SIGBUS。 */
+    /* 与本地跑通配置 test_emu 完全对齐：字符串复制到 guest 栈（sp_top-512 起），
+       指针表在 sp_top-4096，auxv 键值标准（UID..EGID/CLKTCK=17/HWCAP=16/PLATFORM=15）。
+       宿主指针字符串会让 musl/busybox 在真机走到错误 applet（"echo: "）。 */
     int narg = argc - 1;
-    uint8_t *stack = mmap(NULL, 1 << 20, PROT_READ | PROT_WRITE,
+    uint8_t *stack = mmap(NULL, 32 << 20, PROT_READ | PROT_WRITE,
                           MAP_PRIVATE | MAP_ANON, -1, 0);
     if (stack == MAP_FAILED) { perror("stack"); return 1; }
-    uintptr_t sp_top = (uintptr_t)stack + (1 << 20);
-    sp_top &= ~(uintptr_t)15;                     /* 16 字节对齐 */
-    uintptr_t *slot = (uintptr_t *)(sp_top - 512);
-    uint64_t *aux = (uint64_t *)(slot + 3 + narg);  /* argv NULL + envp NULL 之后（+2 会覆盖 envp NULL，musl 把 auxv 当 envp 遍历 → AT_PHDR 丢 → 崩） */
-    uint64_t rand16[2] = { 0x1234, 0x5678 };        /* AT_RANDOM（栈上） */
+    uintptr_t sp_top = ((uintptr_t)stack + (32 << 20)) & ~15ULL;
+    char *p = (char *)(sp_top - 512);               /* 字符串区（musl 启动会清零 sp 上方并 add sp，需远离初始 sp） */
+    uintptr_t *argstr = (uintptr_t *)malloc((narg + 2) * sizeof(uintptr_t));
     int i;
-    slot[0] = (uintptr_t)narg;                    /* argc */
-    for (i = 0; i < narg; i++) slot[1 + i] = (uintptr_t)argv[i + 1];
-    slot[1 + narg] = 0;                           /* argv NULL */
-    slot[2 + narg] = 0;                           /* envp NULL(空) */
+    for (i = 0; i < narg; i++) {
+        size_t l = strlen(argv[i + 1]) + 1;
+        memcpy(p, argv[i + 1], l);
+        argstr[i] = (uintptr_t)p;
+        p += l;
+    }
+    uintptr_t plat = (uintptr_t)p; memcpy(p, "aarch64", 8); p += 8;   /* AT_PLATFORM */
+    uintptr_t rndp  = (uintptr_t)p; memset(p, 0xAB, 16); p += 16;     /* AT_RANDOM(16B) */
+    uintptr_t *slot = (uintptr_t *)(((uintptr_t)(sp_top - 4096) + 15) & ~15ULL);
     int a = 0;
-    aux[a++] = 3;  aux[a++] = g_base + g_phoff;    /* AT_PHDR */
-    aux[a++] = 4;  aux[a++] = g_phentsize;         /* AT_PHENT */
-    aux[a++] = 5;  aux[a++] = g_phnum;             /* AT_PHNUM */
-    aux[a++] = 6;  aux[a++] = 4096;                /* AT_PAGESZ */
-    aux[a++] = 7;  aux[a++] = 0;                   /* AT_BASE(静态链接=0) */
-    aux[a++] = 8;  aux[a++] = 0;                   /* AT_FLAGS */
-    aux[a++] = 9;  aux[a++] = entry;               /* AT_ENTRY */
-    aux[a++] = 23; aux[a++] = 0;                   /* AT_SECURE */
-    aux[a++] = 11; aux[a++] = 100;                 /* AT_CLKTCK */
-    aux[a++] = 25; aux[a++] = (uintptr_t)rand16;   /* AT_RANDOM(16B) */
-    aux[a++] = 31; aux[a++] = (uintptr_t)elf_path; /* AT_EXECFN */
-    aux[a++] = 15; aux[a++] = 0;                   /* AT_HWCAP */
-    aux[a++] = 26; aux[a++] = 0;                   /* AT_HWCAP2 */
-    aux[a++] = 29; aux[a++] = (uintptr_t)"aarch64"; /* AT_PLATFORM */
-    aux[a++] = 0;                                  /* AT_NULL */
+    slot[a++] = (uintptr_t)narg;                  /* argc */
+    for (i = 0; i < narg; i++) slot[a++] = argstr[i];   /* argv[] */
+    slot[a++] = 0;                                /* argv 终止 */
+    slot[a++] = 0;                                /* envp[0]=NULL（空环境） */
+    uint64_t *aux = (uint64_t *)&slot[a];         /* auxv 起点（envp NULL 之后） */
+    aux[a++] = 3;  aux[a++] = g_base + g_phoff;   /* AT_PHDR */
+    aux[a++] = 4;  aux[a++] = g_phentsize;        /* AT_PHENT */
+    aux[a++] = 5;  aux[a++] = g_phnum;            /* AT_PHNUM */
+    aux[a++] = 6;  aux[a++] = 4096;               /* AT_PAGESZ */
+    aux[a++] = 7;  aux[a++] = 0;                  /* AT_BASE(静态链接=0) */
+    aux[a++] = 8;  aux[a++] = 0;                  /* AT_FLAGS */
+    aux[a++] = 9;  aux[a++] = entry;              /* AT_ENTRY */
+    aux[a++] = 11; aux[a++] = 0;                  /* AT_UID */
+    aux[a++] = 12; aux[a++] = 0;                  /* AT_EUID */
+    aux[a++] = 13; aux[a++] = 0;                  /* AT_GID */
+    aux[a++] = 14; aux[a++] = 0;                  /* AT_EGID */
+    aux[a++] = 17; aux[a++] = 100;                /* AT_CLKTCK */
+    aux[a++] = 23; aux[a++] = 0;                  /* AT_SECURE */
+    aux[a++] = 25; aux[a++] = rndp;               /* AT_RANDOM */
+    aux[a++] = 16; aux[a++] = 0;                  /* AT_HWCAP */
+    aux[a++] = 31; aux[a++] = argstr[0];          /* AT_EXECFN */
+    aux[a++] = 15; aux[a++] = plat;               /* AT_PLATFORM */
+    aux[a++] = 26; aux[a++] = 0;                  /* AT_HWCAP2 */
+    aux[a++] = 0;                                 /* AT_NULL */
 
     fprintf(stderr, "[elf-runner] loading %s entry=0x%lx base=0x%lx size=%zu\n",
             elf_path, (unsigned long)entry, (unsigned long)g_base, g_total_size);
