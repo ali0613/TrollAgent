@@ -524,27 +524,16 @@ int main(int argc, char **argv) {
     const char *elf_path = argv[1];
     fprintf(stderr, "[elf-runner] START argc=%d elf=%s\n", argc, elf_path);
 
-    /* 14d0 JIT：iOS 禁止进程自 attach（14c8 实证 EPERM）。照搬 TrollStore 机制：
-       父进程 fork 子进程跑 ELF，父对子 ptrace(PT_ATTACHEXC) attach/detach
-       （父子关系 attach 合法），内核因"被调试"给子进程开 JIT → 子内 MAP_JIT 成功。
-       需 get-task-allow + task_for_pid（已加）+ iOS16 需 Developer Mode（用户已开）。 */
-    pid_t child = fork();
-    if (child < 0) { perror("fork"); return 1; }
+    /* 14d7: JIT 激活由本进程外部完成（TrollStore 手动"以 JIT 启动"或 apple-magnifier URL，
+       进程内带 CS_DEBUGGED 进入）。单进程直跑——14d0-14d2 的 fork 方案已实证死路：
+       iOS16 App fork 子进程必被 SIGBUS 杀（st=0xa 三版复现，pre-stop 日志未出）。 */
+    uintptr_t entry = 0;
+    if (load_elf(elf_path, &entry) != 0) return 1;
 
-    if (child == 0) {
-        /* 子进程：SIGSTOP 暂停等父 attach（14d1 实证：App 进程调 PT_TRACE_ME 直接被 SIGBUS 杀，
-           去掉；父子 attach 由父侧 PT_ATTACHEXC 完成，detach 后 SIGCONT resume） */
-        fprintf(stderr, "[elf-runner][child] pid=%d pre-stop\n", (int)getpid());
-        raise(SIGSTOP);
-        fprintf(stderr, "[elf-runner][child] resumed pid=%d\n", (int)getpid());
-
-        uintptr_t entry = 0;
-        if (load_elf(elf_path, &entry) != 0) _exit(2);
-
-        /* 先 patch svc（段仍 RW），再设只读/执行保护 */
-        int npatch = patch_svc();
-        if (apply_seg_prot() != 0) _exit(2);
-        fprintf(stderr, "[elf-runner] svc patched: %d syscall sites\n", npatch);
+    /* 先 patch svc（段仍 RW），再设只读/执行保护 */
+    int npatch = patch_svc();
+    if (apply_seg_prot() != 0) return 1;
+    fprintf(stderr, "[elf-runner] svc patched: %d syscall sites\n", npatch);
 
         /* 注册 SIGTRAP handler（SA_SIGINFO 才能拿 ucontext 寄存器） */
         struct sigaction sa;
@@ -604,30 +593,5 @@ int main(int argc, char **argv) {
         : [sp] "r" ((uintptr_t)slot), [entry] "r" (entry)
         : "memory");
     fprintf(stderr, "[elf-runner] UNREACHABLE（entry 未返回）\n");
-    _exit(1);
-    }
-
-    /* 父进程：等子 SIGSTOP → PT_ATTACHEXC attach → detach（JIT 激活）→ resume 子 */
-    int st;
-    pid_t r1 = waitpid(child, &st, WUNTRACED);
-    fprintf(stderr, "[elf-runner] wait1 r=%d st=0x%x %s%s%s\n", (int)r1, st,
-            WIFEXITED(st) ? "exited" : "", WIFSIGNALED(st) ? "killed" : "",
-            WIFSTOPPED(st) ? "stopped" : "");
-    if (WIFSIGNALED(st)) fprintf(stderr, "[elf-runner] child killed by signal %d\n", WTERMSIG(st));
-    if (ptrace(PT_ATTACHEXC, child, 0, 0) == 0) {
-        usleep(100000);
-        ptrace(PT_DETACH, child, 0, 0);
-        fprintf(stderr, "[elf-runner] JIT enabled for child %d\n", child);
-    } else {
-        fprintf(stderr, "[elf-runner] attach child 失败 (%s)——MAP_JIT 将不可用\n",
-                strerror(errno));
-    }
-    kill(child, SIGCONT);          /* resume 子（attach 失败也要放行） */
-    pid_t r2 = waitpid(child, &st, 0);
-    fprintf(stderr, "[elf-runner] wait2 r=%d st=0x%x %s%s%s\n", (int)r2, st,
-            WIFEXITED(st) ? "exited" : "", WIFSIGNALED(st) ? "killed" : "",
-            WIFSTOPPED(st) ? "stopped" : "");
-    if (WIFEXITED(st)) return WEXITSTATUS(st);
-    fprintf(stderr, "[elf-runner] child exited abnormally\n");
     return 1;
 }
