@@ -1093,20 +1093,39 @@ final class ShellExecTool: MCPTool {
                         let magic = Bundle.main.bundlePath + "/bin/magic.mgc"
                         if FileManager.default.fileExists(atPath: magic) { env["MAGIC"] = magic }
                     }
-                    // 14c8: elf-runner 编进主二进制——spawn 主二进制 --elf-runner 模式。
-                    // 绕开 bin/(TrollStore 覆盖/重装不替换) 与 Documents(AMFI 拒绝 spawn 独立二进制) 双死结：
-                    // 主二进制覆盖安装即替换 + 自带 App 特权 entitlement 被 iOS 信任。
+                    // 14dc: elf-runner 主进程内跑（不再 spawn 主二进制 --elf-runner）——
+                    // TrollStore JIT(apple-magnifier URL / 手动以 JIT 启动) 只 attach bundle id 对应的
+                    // 主进程，spawn 出的子进程不继承 CS_DEBUGGED（14d7 实证 MAP_JIT 仍 EINVAL）。
+                    // 主进程内直调 elf_runner_main：同进程同线程 load ELF + jump，MAP_JIT 直接可用
+                    // （主进程已由 App 启动时 JIT 请求激活）。ELF 的 exit_group 由 siglongjmp 翻译回
+                    // elf_runner_main 出口（14dc），主进程存活，8790 服务不中断。
+                    // 输出：dup2 fd1/2 → 临时文件，跑完读回并恢复（ELF 的 write 翻译写 fd 1/2）。
                     if word == "elf-runner" {
                         let exe = Bundle.main.executablePath ?? (Bundle.main.bundlePath + "/TrollAgent")
-                        // 14c8 fix: BuildRunner.run 已把 executable 作为 argv[0](argvList=[path]+args)，
-                        // args 只传 --elf-runner 标记+ELF参数，不能重复带 exe(否则 argv[1]=exe 非 --elf-runner，
-                        // AppMain 分支不匹配→主二进制进 UI 模式后台卡死超时无输出)。
-                        let r = BuildRunner.shared.run(executable: exe, args: ["--elf-runner"] + args,
-                                                       env: env, timeout: timeout)
-                        var out = r.stdout
-                        if r.timedOut { out += "\n[执行超时 \(Int(timeout))s 被终止]" }
-                        return ["command": segment, "exit_code": r.exitCode, "stdout": out,
-                                "stderr": r.stderr, "ios_native": true]
+                        let tmp = NSTemporaryDirectory() + "elf_out_\(ProcessInfo.processInfo.processIdentifier)_\(Int(Date().timeIntervalSince1970)).log"
+                        var cargs: [UnsafeMutablePointer<CChar>?] = [strdup(exe)]
+                        for a in args { cargs.append(strdup(a)) }
+                        cargs.append(nil)
+                        let outFD = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+                        let saved1 = dup(1)
+                        let saved2 = dup(2)
+                        dup2(outFD, 1)
+                        dup2(outFD, 2)
+                        let code: Int32
+                        if outFD >= 0 {
+                            code = cargs.withUnsafeMutableBufferPointer { buf in
+                                elf_runner_main(Int32(buf.count - 1), buf.baseAddress!)
+                            }
+                            dup2(saved1, 1)
+                            dup2(saved2, 2)
+                            close(outFD); close(saved1); close(saved2)
+                        } else {
+                            code = elf_runner_main(Int32(cargs.count - 1), cargs.withUnsafeMutableBufferPointer { $0.baseAddress! })
+                        }
+                        let out = (try? String(contentsOfFile: tmp, encoding: .utf8)) ?? ""
+                        try? FileManager.default.removeItem(atPath: tmp)
+                        return ["command": segment, "exit_code": Int(code), "stdout": "",
+                                "stderr": out, "ios_native": true, "inproc": true]
                     }
                     let res = BuildRunner.shared.run(executable: p, args: args,
                                                      env: env, timeout: timeout)

@@ -32,6 +32,7 @@
 #include <time.h>
 #include <sys/ucontext.h>
 #include <signal.h>
+#include <setjmp.h>
 /* iOS SDK 缺 sys/ptrace.h（ptrace 为 Darwin 私有 API）——手写声明与常量，符号在 libSystem */
 #define PT_TRACE_ME   0
 #define PT_ATTACHEXC  19
@@ -125,6 +126,9 @@ static uint64_t g_phnum = 0;
 static struct { uintptr_t off; size_t len; int prot; } g_segs[MAX_SEGS];
 static int g_nsegs = 0;
 static int g_rwx = 0;      /* 14da: mmap 走 RWX 直连(allow-unsigned)时置 1——保持 RWX 直接执行，不再 mprotect */
+static sigjmp_buf g_exit_jmp; /* 14dc: 主进程内跑模式的 ELF 退出出口（exit_group → siglongjmp 回） */
+static int g_exit_jumped = 0;
+static int g_exit_code = 0;
 
 /* ---- 寄存器访问（iOS arm64 ucontext） ---- */
 #if defined(__aarch64__)
@@ -172,8 +176,18 @@ static int g_rwx = 0;      /* 14da: mmap 走 RWX 直连(allow-unsigned)时置 1�
 #define SYS_ioctl             29
 #define SYS_arch_prctl        178  /* x86 专用，aarch64 无 */
 
-static long sys_exit(int code)          { _exit(code); return 0; }
-static long sys_exit_group(int code)    { _exit(code); return 0; }
+static long sys_exit(int code)          { return sys_exit_group(code); }
+static long sys_exit_group(int code) {
+    /* 14dc: 主进程内跑模式——ELF 的 exit/exit_group 不再 _exit 杀进程，
+       siglongjmp 跳回 elf_runner_main 的 sigsetjmp 出口（信号 handler 上下文→主执行流），
+       主进程(8790 服务)存活，后续命令可继续。 */
+    if (g_exit_jumped) {
+        g_exit_code = code;
+        siglongjmp(g_exit_jmp, 1);
+    }
+    _exit(code);
+    return 0;
+}
 static long sys_getpid(void)            { return (long)getpid(); }
 static long sys_getppid(void)           { return (long)getppid(); }
 static long sys_getuid(void)            { return 0; }
@@ -536,6 +550,14 @@ static int apply_seg_prot(void) {
 }
 
 int main(int argc, char **argv) {
+    /* 14dc: 主进程内跑模式——sigsetjmp 出口兜住 ELF 的 exit_group（sys_exit_group siglongjmp 回），
+       主进程存活。spawn 模式(_exit 路径)不受影响（g_exit_jumped 置位后正常返回给调用方）。 */
+    if (sigsetjmp(g_exit_jmp, 1) != 0) {
+        fprintf(stderr, "[elf-runner] ELF 退出 code=%d（进程内模式，主进程存活）\n", g_exit_code);
+        return g_exit_code;
+    }
+    g_exit_jumped = 1;
+
     if (argc < 2) {
         fprintf(stderr, "usage: elf-runner <linux-aarch64-static-elf> [args...]\n");
         return 2;

@@ -120,6 +120,17 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         RemoteAgent.shared.reportInstallIfNeeded()
         RemoteAgent.shared.reportPendingCrashes()
 
+        // 14dc: 主进程 JIT 激活——TrollStore 只 attach bundle id 对应的主进程，spawn 子进程
+        // 不继承 CS_DEBUGGED（14d7 实证）。App 启动 2s 后自动请求 apple-magnifier URL
+        // （闪切一次 TrollStore 再回来，主进程带 JIT），此后 elf-runner 命令主进程内跑。
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2) {
+            let bid = Bundle.main.bundleIdentifier ?? "org.python.python"
+            let os = bid.withCString { troll_request_jit($0) }
+            fputs("[appmain] startup JIT request err=\(os)（闪切后主进程带 JIT）\n", stderr)
+            Thread.sleep(forTimeInterval: 2.5)
+            fputs("[appmain] startup JIT wait done\n", stderr)
+        }
+
         window = UIWindow(frame: UIScreen.main.bounds)
         window?.rootViewController = UIHostingController(rootView: RootView())
         window?.makeKeyAndVisible()
