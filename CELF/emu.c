@@ -173,6 +173,14 @@ static int exec_one(void) {
                 (unsigned)E.r[20], (unsigned long long)(f - (uint64_t)g_base),
                 (unsigned long long)g_base, (unsigned long long)E.r[22]);
         }
+        if (offd == 0x113a0ULL)
+            fprintf(stderr, "[dbg] exit-entry [0x13d330]=%u x0=%#llx\n",
+                (unsigned)*(uint8_t*)(uintptr_t)(g_base + 0x13d330ULL),
+                (unsigned long long)E.r[0]);
+        if (offd == 0x113b4ULL)
+            fprintf(stderr, "[dbg] exit-ldrb x0=%#llx [0x13d330]=%u\n",
+                (unsigned long long)E.r[0],
+                (unsigned)*(uint8_t*)(uintptr_t)(g_base + 0x13d330ULL));
         if (offd == 0x10528ULL)
             fprintf(stderr, "[dbg] blr x2=%#llx (off=%#llx)\n",
                 (unsigned long long)E.r[2], (unsigned long long)(E.r[2] - (uint64_t)g_base));

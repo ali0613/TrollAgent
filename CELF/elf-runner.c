@@ -113,9 +113,9 @@ typedef struct {
 #define R_AARCH64_RELATIVE 1027  /* *(base+r_offset) = base + r_addend */
 
 /* ---- 运行时状态 ---- */
-static uintptr_t g_base = 0;             /* 加载基址（存地址；按整数运算避免指针算术混用） */
+uintptr_t g_base = 0;             /* 加载基址（存地址；按整数运算避免指针算术混用） */
 static uintptr_t g_load_vaddr = 0;      /* 第一个段的 vaddr */
-static size_t   g_total_size = 0;       /* 覆盖全部段的内存区域大小 */
+size_t   g_total_size = 0;       /* 覆盖全部段的内存区域大小 */
 static uint64_t g_syscall_num = 0;      /* 由 svc patch 记录（brk 号带 syscall#） */
 static uint64_t g_phoff = 0;           /* 14c8: program header 信息（auxv AT_PHDR/AT_PHENT/AT_PHNUM） */
 static uint64_t g_phentsize = 0;
@@ -282,7 +282,7 @@ static long sys_ioctl(int fd, unsigned long req, long arg) {
 }
 
 /* 主翻译入口：Linux syscall 号 → 本地实现 */
-static long translate_syscall(uint64_t nr,
+long translate_syscall(uint64_t nr,
                               uint64_t a0, uint64_t a1, uint64_t a2,
                               uint64_t a3, uint64_t a4, uint64_t a5) {
     switch (nr) {
@@ -339,8 +339,25 @@ static void trap_handler(int sig, siginfo_t *si, void *ucv) {
 #endif
 }
 
-/* ---- 14c8: SIGBUS/SIGSEGV handler：抓崩溃点（PC/LR/SP/FAR）定位 ---- */
+/* ---- 14c8: SIGBUS/SIGSEGV handler：抓崩溃点（PC/LR/SP/FAR）定位 ----
+ * 14e1: 解释器模式下（emu 激活），ELF 的非法内存访问 → siglongjmp 回解释器
+ * 报错退出（不杀主进程）；非解释器模式保持 _exit 原行为。 */
+extern int emu_is_active(void);
+extern jmp_buf *emu_jmp_buf(void);
 static void crash_handler(int sig, siginfo_t *si, void *ucv) {
+    if (emu_is_active()) {
+        ucontext_t *ctx = (ucontext_t *)ucv;
+#if defined(__aarch64__)
+        fprintf(stderr, "[elf-runner] emu mem fault sig=%d pc=0x%llx far=0x%llx -> longjmp\n",
+                sig,
+                (unsigned long long)ctx->uc_mcontext->__ss.__pc,
+                (unsigned long long)(si ? (uintptr_t)si->si_addr : 0));
+#else
+        fprintf(stderr, "[elf-runner] emu mem fault sig=%d -> longjmp\n", sig);
+#endif
+        siglongjmp(*emu_jmp_buf(), 1);
+        return;
+    }
     ucontext_t *ctx = (ucontext_t *)ucv;
 #if defined(__aarch64__)
     fprintf(stderr, "[elf-runner] CRASH sig=%d pc=0x%llx lr=0x%llx sp=0x%llx far=0x%llx\n",
@@ -565,7 +582,9 @@ int have_jit(void) {
 int elf_runner_main(int argc, char **argv) {
     /* 14dc: 主进程内跑模式——sigsetjmp 出口兜住 ELF 的 exit_group（sys_exit_group siglongjmp 回），
        主进程存活。spawn 模式(_exit 路径)不受影响（g_exit_jumped 置位后正常返回给调用方）。 */
+    extern void emu_deactivate(void);
     if (sigsetjmp(g_exit_jmp, 1) != 0) {
+        emu_deactivate();   /* 14e1: 解释器被 exit_group longjmp 中断，复位 crash 兜底状态 */
         fprintf(stderr, "[elf-runner] ELF 退出 code=%d（进程内模式，主进程存活）\n", g_exit_code);
         return g_exit_code;
     }
@@ -599,20 +618,17 @@ int elf_runner_main(int argc, char **argv) {
     uintptr_t entry = 0;
     if (load_elf(elf_path, &entry) != 0) return 1;
 
-    /* 先 patch svc（段仍 RW），再设只读/执行保护 */
-    int npatch = patch_svc();
-    if (apply_seg_prot() != 0) return 1;
-    fprintf(stderr, "[elf-runner] svc patched: %d syscall sites\n", npatch);
+    /* 14e1: 解释器模式（用户选 A）——不再 patch_svc / apply_seg_prot / jump 直跑。
+       iOS16.3+TrollStore 无 MAP_JIT 可用（csflags 实测 debugged=0、allow-jit 位不在），
+       可执行内存取指必 SIGBUS。解释器把指令当数据处理逐条解码，svc 指令
+       在 emu 内直接走 translate_syscall。ELF 段保持 RW。 */
 
-        /* 注册 SIGTRAP handler（SA_SIGINFO 才能拿 ucontext 寄存器） */
+        /* 注册 SIGBUS/SIGSEGV handler：解释器模式下非法内存访问 longjmp 回 emu
+           （不杀主进程）；非解释器模式保留崩溃定位。 */
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
-        sa.sa_sigaction = trap_handler;
-        sa.sa_flags = SA_SIGINFO;
-        sigaction(SIGTRAP, &sa, NULL);
-
-        /* SIGBUS/SIGSEGV handler 抓崩溃 PC（若 entry 后仍崩，靠它定位） */
         sa.sa_sigaction = crash_handler;
+        sa.sa_flags = SA_SIGINFO;
         sigaction(SIGBUS, &sa, NULL);
         sigaction(SIGSEGV, &sa, NULL);
 
@@ -650,17 +666,15 @@ int elf_runner_main(int argc, char **argv) {
 
     fprintf(stderr, "[elf-runner] loading %s entry=0x%lx base=0x%lx size=%zu\n",
             elf_path, (unsigned long)entry, (unsigned long)g_base, g_total_size);
-    fprintf(stderr, "[elf-runner] jumping to entry=0x%lx\n", (unsigned long)entry);
+    fprintf(stderr, "[elf-runner] interpreter mode: entry=0x%lx sp=0x%lx\n",
+            (unsigned long)entry, (unsigned long)slot);
 
-    /* 手动跳转：mov sp = Linux 初始栈，br entry（aarch64；不回返） */
-    register uintptr_t a0 __asm__("x0") = (uintptr_t)narg;
-    (void)a0;
-    __asm__ volatile(
-        "mov sp, %[sp]\n\t"
-        "br %[entry]\n\t"
-        :
-        : [sp] "r" ((uintptr_t)slot), [entry] "r" (entry)
-        : "memory");
-    fprintf(stderr, "[elf-runner] UNREACHABLE（entry 未返回）\n");
-    return 1;
+    /* 14e1: 解释器执行（不回返；exit_group 由 translate_syscall 内 siglongjmp
+       回 elf_runner_main 的 setjmp，主进程存活）。 */
+    extern int emu_run(uint64_t entry, uint64_t sp);
+    extern void emu_deactivate(void);
+    int rc = emu_run(entry, (uintptr_t)slot);
+    emu_deactivate();
+    fprintf(stderr, "[elf-runner] interpreter returned %d\n", rc);
+    return rc > 0 ? rc : (rc == 0 ? 0 : 1);
 }

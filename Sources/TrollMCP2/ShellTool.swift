@@ -1093,26 +1093,17 @@ final class ShellExecTool: MCPTool {
                         let magic = Bundle.main.bundlePath + "/bin/magic.mgc"
                         if FileManager.default.fileExists(atPath: magic) { env["MAGIC"] = magic }
                     }
-                    // 14de: elf-runner 主进程内跑 + 懒 JIT 激活——
-                    // TrollStore JIT 只 attach 主进程（spawn 子进程不继承 CS_DEBUGGED，14d7 实证）。
-                    // 不启动时自动请求（切后台被杀→重启→重复闪切烦人，14de 移除）；执行命令时
-                    // 先 have_jit() 检测：已有 JIT 直跑（同进程内仅首次需要激活一次）；无 JIT 才
-                    // 请求 apple-magnifier URL（闪切一次 TrollStore attach 主进程）等 3s 再跑。
+                    // 14e1: elf-runner 解释器模式——不再需要 JIT（指令当数据处理，绕开
+                    // iOS16.3+TrollStore 的 MAP_JIT 权限墙，14e0 csflags 实测 debugged=0）。
+                    // 移除懒 JIT 激活：apple-magnifier 闪切 TrollStore 无效且打断 App 后台
+                    // （闪切→远程服务重启→8790 断连，用户已多次抱怨）。
                     // ELF 的 exit_group 由 siglongjmp 翻译回（14dc），主进程存活。
-                    // 输出：dup2 fd1/2 → Documents/Workspace/linux/elf_out.log（崩溃时也能读回定位）。
+                    // 输出：dup2 fd1/2 → Documents/Workspace/linux/elf_out.log。
                     if word == "elf-runner" {
                         let exe = Bundle.main.executablePath ?? (Bundle.main.bundlePath + "/TrollAgent")
                         let docsDir = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first
                                       ?? (NSHomeDirectory() + "/Documents")
                         let outLog = docsDir + "/Workspace/linux/elf_out.log"
-                        var jitNote = ""
-                        if have_jit() == 0 {
-                            let bid = Bundle.main.bundleIdentifier ?? "org.python.python"
-                            let os = bid.withCString { troll_request_jit($0) }
-                            jitNote = "lazy-JIT request err=\(os)（闪切一次激活主进程 JIT）"
-                            Thread.sleep(forTimeInterval: 3.0)
-                            fputs("[shelltool] \(jitNote), have_jit after=" + "\(have_jit())\n", stderr)
-                        }
                         var cargs: [UnsafeMutablePointer<CChar>?] = [strdup(exe)]
                         for a in args { cargs.append(strdup(a)) }
                         cargs.append(nil)
@@ -1134,7 +1125,7 @@ final class ShellExecTool: MCPTool {
                         }
                         let out = (try? String(contentsOfFile: outLog, encoding: .utf8)) ?? ""
                         return ["command": segment, "exit_code": Int(code), "stdout": "",
-                                "stderr": (jitNote.isEmpty ? "" : jitNote + "\n") + out, "ios_native": true, "inproc": true]
+                                "stderr": out, "ios_native": true, "inproc": true]
                     }
                     let res = BuildRunner.shared.run(executable: p, args: args,
                                                      env: env, timeout: timeout)

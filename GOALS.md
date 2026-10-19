@@ -218,3 +218,10 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 
 **状态**：echo 全系列跑通；下一步查 exit code 218（0x1052c strb 与 0x113b8 ldrb 地址不一致），
 之后 commit→CI→release+aka→真机验证。
+
+## 2026-10-20 续：exit code 218 调查（遗留）
+- 澄清：0x1052c 实际为 `adrp x1, #0x13d000` 重设基址，exit_code 存储逻辑正确（strb w0→[0x13d330]）。
+- echo svc 序列全 trace：135/144/146/214/222/64 均有 stub 且无 -ENOSYS 返回 → 218 不是 -ENOSYS 截断。
+- rc=218 稳定；EMU_DBG 打点（fprintf 副作用）会使路径漂移到 -38（unsupported）→ 无 BP 结果可信。
+- 218 = echo_main 返回值（0x10530 strb 到 [0x13d330] 后 exit_group(218)）；echo_main 内部某处返回 218（应 0），
+  机制未明，留待真机/进一步 dump echo_main 尾部（0xabd00 后）。影响 `$?`，不影响输出。
