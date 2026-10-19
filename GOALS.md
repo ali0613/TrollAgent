@@ -168,3 +168,12 @@ App 原生系统（AI 全走这里，零感知）
 - **fault 实际在 0xDD468**（非 0x31468，此前 base 推算误）：`ldrh w0, [x1, x0, lsl#1]`，x1=base+0xFFB04（映射内，adrp #0xff000+0xb04 正确）、索引 x0=fault 时=0x7600000000000000（异常）。上下文 0xdd43c-0xdd474 = musl malloc 系函数（tst #0x1f / and #-0x1000 / ubfx x0,#6,#6 → ldrh 查表 / ubfiz <<4）。**"got UDP packet"（0x31464 区）与 0xDD468 是不同地点**：执行流先到 udhcpc debug 打印、后续 malloc 内 fault。
 - **疑点**：0xdd45c `ubfx x0,x0,#6,#6`（0xd3462c00，imms=11 immr=6，UBFX lsb=6 width=6）输出应为 0（0x7600... 位 6-11=0），fault 时 x0 却=0x7600...——**UBFM 分支对 imms>=immr 的特例语义需复核（UBFIZ vs UBFX）**；或 E.pc 打印滞后（fault 在 ldrh 之后某处）。
 - **未决**：applet 分发为何走到 udhcpc（0x31464 debug 打印触发，[x0+0x1e8] bit0=1，x0=[sp+0x98] 来自 main 之后）；TRACE/BP 路径差异。
+
+### 续：UBFM 根因修复 + echo 跑通（2026-10-20 三段）
+- **0xDD468 fault 根因**：emu UBFM 分支把 UBFX/UBFIZ 误当 LSL（v<<(63-imms)）→ 0xd3462c00（ubfx x0,x0,#6,#6，imms=11 immr=6）输出 0x7600000000000000（118<<52）→ ldrh 索引爆炸。**修复：imms==full→LSR；imms>=immr→UBFX（(v>>immr)&mask(imms-immr+1)）；else→UBFIZ（(v&mask(imms+1))<<(w-immr)）**。
+- **SIMD LDP q 掩码补 0xAC400000/0xAD400000**（0xad4187e0=ldp q0,q1,[sp,#0x30] 曾漏匹配）。
+- **stub syscall 198**（容错返回 0）。
+- **突破：echo 已执行并输出**（exit_group(1)，从 exit 127/applet not found 推进）：
+  - stdout 实测 = `echo^@^@^@^@^@^@: `（"echo"+6 NUL+": "）——**echo_main 收到的 argv[1] 被污染成 "echo\0..."（应为 "hello"）**，echo 打印 argv[1]+": "。
+  - 污染点在 busybox main 的 applet 分发链（0x1091c ldr [x19+0x370] → 0x10924 bl 0x10538 附近；BP 0x10928 未触发，路径在 0x10538 内部）。
+- **下一步**：BP 0x10538 入口/内部定位 argv 污染（x0=applet 名、x1=argv[0]、"echo" 从何写入 argv 区）；修好后应输出 "hello"、exit 0。

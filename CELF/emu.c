@@ -171,12 +171,18 @@ static int exec_one(void) {
 
     if (getenv("EMU_BP")) {
         uint64_t off = E.pc - g_base;
-        if (off == 0x3146cULL || off == 0xffbcULL || off == 0x31460ULL || off == 0x31474ULL || off == 0xddf54ULL || off == 0xdd5e4ULL || off == 0xddf88ULL || off == 0x9304ULL || off == 0x9300ULL || off == 0xfd00ULL || off == 0xfc08ULL || off == 0xfc04ULL || off == 0xfc3cULL || off == 0xf4e18ULL || off == 0xf4d70ULL || off == 0xf4f2cULL || off == 0xf4d8cULL || off == 0xf4d90ULL || off == 0xf4f44ULL || off == 0xf4f60ULL || off == 0xf4f5cULL || off == 0xf4fb4ULL || off == 0xf4fb8ULL || off == 0xf4fbcULL || off == 0xf4ee4ULL || off == 0xf4ef0ULL || off == 0xf4f08ULL || off == 0xf4ea0ULL || off == 0xf4ee8ULL || off == 0xf4e5cULL || off == 0xf4ea8ULL || off == 0xf4eacULL || off == 0xf4ed0ULL || off == 0xf4d00ULL || off == 0xf4d04ULL || off == 0xf4cf0ULL || off == 0x10914ULL || off == 0x10918ULL || off == 0xffbcULL || off == 0x10078ULL || off == 0x1008cULL || off == 0xffc0ULL || off == 0xffd4ULL || off == 0xfff4ULL || off == 0x10028ULL || off == 0x10060ULL || off == 0x1006cULL || off == 0xffd8ULL || off == 0xfff8ULL || off == 0x1002cULL || off == 0x10064ULL) {
+        if (off == 0x10928ULL || off == 0x3146cULL || off == 0xffbcULL || off == 0x31460ULL || off == 0x31474ULL || off == 0xddf54ULL || off == 0xdd5e4ULL || off == 0xddf88ULL || off == 0x9304ULL || off == 0x9300ULL || off == 0xfd00ULL || off == 0xfc08ULL || off == 0xfc04ULL || off == 0xfc3cULL || off == 0xf4e18ULL || off == 0xf4d70ULL || off == 0xf4f2cULL || off == 0xf4d8cULL || off == 0xf4d90ULL || off == 0xf4f44ULL || off == 0xf4f60ULL || off == 0xf4f5cULL || off == 0xf4fb4ULL || off == 0xf4fb8ULL || off == 0xf4fbcULL || off == 0xf4ee4ULL || off == 0xf4ef0ULL || off == 0xf4f08ULL || off == 0xf4ea0ULL || off == 0xf4ee8ULL || off == 0xf4e5cULL || off == 0xf4ea8ULL || off == 0xf4eacULL || off == 0xf4ed0ULL || off == 0xf4d00ULL || off == 0xf4d04ULL || off == 0xf4cf0ULL || off == 0x10914ULL || off == 0x10918ULL || off == 0xffbcULL || off == 0x10078ULL || off == 0x1008cULL || off == 0xffc0ULL || off == 0xffd4ULL || off == 0xfff4ULL || off == 0x10028ULL || off == 0x10060ULL || off == 0x1006cULL || off == 0xffd8ULL || off == 0xfff8ULL || off == 0x1002cULL || off == 0x10064ULL) {
             if (off == 0xf4ee4ULL || off == 0xf4ef0ULL)
                 fprintf(stderr, "  x5=0x%llx x2=0x%llx [x5+0x20]=0x%llx [x2+0x20]=0x%llx\n",
                     (unsigned long long)E.r[5], (unsigned long long)E.r[2],
                     (unsigned long long)*(uint64_t*)(E.r[5]+0x20),
                     (unsigned long long)*(uint64_t*)(E.r[2]+0x20));
+            if (off == 0x10928ULL) {
+                fprintf(stderr, "[dbg] 10928 x0=%#llx x1=%#llx '%s' argv1=%#llx '%s'\n",
+                    (unsigned long long)E.r[0], (unsigned long long)E.r[1], (char*)(uintptr_t)E.r[1],
+                    (unsigned long long)(E.r[20]?*(uint64_t*)(E.r[20]+8):0),
+                    (char*)(E.r[20]?*(uint64_t*)(E.r[20]+8):0));
+            }
             if (off == 0x3146cULL) {
                 fprintf(stderr, "[dbg] l3146c after-adrp x0=%#llx\n", (unsigned long long)E.r[0]);
             }
@@ -202,6 +208,12 @@ static int exec_one(void) {
                     (unsigned long long)*(uint64_t*)(p+16), (char*)(uintptr_t)*(uint64_t*)(p+16),
                     (unsigned long long)*(uint64_t*)(p+24), (char*)(uintptr_t)*(uint64_t*)(p+24),
                     (unsigned long long)*(uint64_t*)(p+32), (char*)(uintptr_t)*(uint64_t*)(p+32));
+            }
+            if (off == 0x10928ULL) {
+                fprintf(stderr, "[dbg] 10928 x0=%#llx x1=%#llx '%s' argv1=%#llx '%s'\n",
+                    (unsigned long long)E.r[0], (unsigned long long)E.r[1], (char*)(uintptr_t)E.r[1],
+                    (unsigned long long)(E.r[20]?*(uint64_t*)(E.r[20]+8):0),
+                    (char*)(E.r[20]?*(uint64_t*)(E.r[20]+8):0));
             }
             if (off == 0x3146cULL) {
                 fprintf(stderr, "[dbg] l3146c after-adrp x0=%#llx\n", (unsigned long long)E.r[0]);
@@ -529,9 +541,17 @@ static int exec_one(void) {
             uint64_t masked = (v >> immr) & m;
             if (sf) res = (uint64_t)((int64_t)(masked << (64 - w)) >> (64 - w));
             else { int32_t st = (int32_t)((uint32_t)masked << (32 - w)) >> (32 - w); res = (uint32_t)st; }
-        } else {                                        /* UBFM：LSR/LSL */
-            if (imms == full) res = v >> immr;          /* LSR */
-            else { int n = (sf ? 63 : 31) - imms; res = v << n; }   /* LSL */
+        } else {                                        /* UBFM：LSR / UBFX / UBFIZ */
+            if (imms == full) { res = v >> immr; }      /* LSR */
+            else if (imms >= immr) {                    /* UBFX：提取位 immr 起 (imms-immr+1) 位 */
+                int w = imms - immr + 1;
+                uint64_t m = (w == (sf ? 64 : 32)) ? ~0ULL : ((1ULL << w) - 1);
+                res = (v >> immr) & m;
+            } else {                                    /* UBFIZ：低位 (imms+1) 位左移 (w-immr) */
+                int w = imms + 1;
+                uint64_t m = (w == (sf ? 64 : 32)) ? ~0ULL : ((1ULL << w) - 1);
+                res = (v & m) << ((sf ? 64 : 32) - immr);
+            }
             if (!sf) res &= 0xFFFFFFFF;
         }
         W(rd(i), res); E.pc += 4; return 0;
@@ -748,7 +768,7 @@ not_ldstp:
             else if (m == 0xADC00000) W(rn(i), base + (uint64_t)sext((i >> 15) & 0x7F, 7) * 16);
             E.pc += 4; return 0;
         }
-        if (m == 0xAC000000 || m == 0xAC800000 || m == 0xACC00000) {   /* LDP q */
+        if (m == 0xAC000000 || m == 0xAC400000 || m == 0xAC800000 || m == 0xACC00000 || m == 0xAD400000) {   /* LDP q */
             int64_t off = sext((i >> 15) & 0x7F, 7) << 4;
             uint64_t base = RSP(rn(i));
             uint64_t a = base + (uint64_t)off;
