@@ -183,3 +183,8 @@ App 原生系统（AI 全走这里，零感知）
 - 0x10928（bl 0x10538 返回点）BP 始终不触发——0x10538 返回路径异常（待查，可能 0x10538 内部 ret 逻辑或 bl 目标差异）。
 - **echo 污染（"echo\0..."）发生在 0x10538 之后到 echo_main 之间**（argv 进入 0x10538 时正确）。候选：0x10538 内部写 argv/全局、或 main 在调 echo_main 时重排参数。
 - **已闭环**：UBFM/SIMD/syscall198 全部修复入 main（5cc88df）；echo 执行+输出+exit（内容/退出码待修）。
+
+### 续：BP 干扰实证 + 系统根因方向（2026-10-20 五段）
+- **BP 打点改变 guest 路径**（加 0x1091c/0x10924/0x10538 打点后 echo 输出消失、rc=0；去打点后 echo 输出 "echo\0...: "、exit 1）——**guest 读未初始化内存，值依赖宿主 fprintf 副作用**。
+- **系统根因候选**：test_emu 初始栈布局（slot[2+narg]=0 envp 空、aux 表 AT_PHNUM=6、AT_RANDOM 指向 rand16、无 AT_NULL 之外填充）——musl 启动读 auxv/envp 处存在未初始化/布局差异 → 分支不稳定。**下一步应重构初始栈（完整 envp/auxv/清零）而非继续逐点 BP**。
+- **已闭环**：UBFM/SIMD LDP q/syscall198/argv 分发实证（2142dba）；echo 执行链打通（输出+exit）。

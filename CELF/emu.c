@@ -320,6 +320,9 @@ static int exec_one(void) {
         if (nr == 0 && E.r[16] != 0) nr = E.r[16];   /* 兜底：部分旧封装只放 x16 */
         uint64_t ret = translate_syscall(nr, E.r[0], E.r[1], E.r[2],
                                          E.r[3], E.r[4], E.r[5]);
+        if (nr == 64 && g_base)
+            fprintf(stderr, "[svc] write pc-off=%#llx buf='%.20s' n=%llu\n",
+                (unsigned long long)(E.pc - (uint64_t)g_base), (char*)(uintptr_t)E.r[1], (unsigned long long)E.r[2]);
         E.r[0] = (uint64_t)ret;
         E.pc += 4;
         return 0;
