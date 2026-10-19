@@ -124,6 +124,7 @@ static uint64_t g_phnum = 0;
 #define MAX_SEGS 32
 static struct { uintptr_t off; size_t len; int prot; } g_segs[MAX_SEGS];
 static int g_nsegs = 0;
+static int g_rwx = 0;      /* 14da: mmap 走 RWX 直连(allow-unsigned)时置 1——保持 RWX 直接执行，不再 mprotect */
 
 /* ---- 寄存器访问（iOS arm64 ucontext） ---- */
 #if defined(__aarch64__)
@@ -437,6 +438,7 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
                 strerror(errno));
         m = mmap(NULL, total, PROT_READ | PROT_WRITE | PROT_EXEC,
                  MAP_PRIVATE | MAP_ANON, -1, 0);
+        if (m != MAP_FAILED) g_rwx = 1;
     }
     if (m == MAP_FAILED) {
         fprintf(stderr, "elf-runner: RWX mmap 失败 (%s) total=0x%zx\n",
@@ -507,6 +509,13 @@ static int patch_svc(void) {
 
 /* ---- patch 完成后统一按段设保护 ---- */
 static int apply_seg_prot(void) {
+    if (g_rwx) {
+        /* 14da: mmap 已 RWX 直连(allow-unsigned)——14d9 实测 mprotect 去 W 后取指仍 SIGBUS
+           (iOS16 W^X: 执行检查拒绝从 RWX 历史页面收权后的 X)。
+           保持 RWX 直接执行（allow-unsigned-executable-memory 语义=创建可写可执行内存）。 */
+        fprintf(stderr, "[elf-runner] RWX 直连模式：保持可写可执行，跳过 mprotect\n");
+        return 0;
+    }
     for (int i = 0; i < g_nsegs; i++) {
         // 14c8: mmap 初始即 PROT_READ|PROT_WRITE，R|W 段已是目标权限→无需 mprotect。
         // (iOS 上对含未写入 gap 页的区域 mprotect R|W 实测 EINVAL——seg0 R|X 成功、seg1 R|W 失败)。
