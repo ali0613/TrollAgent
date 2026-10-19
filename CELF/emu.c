@@ -547,8 +547,8 @@ static int exec_one(void) {
         }
     }
 
-    /* ---- MADD/MSUB（Ra=31 → MUL） ---- */
-    if ((i & 0xFFC00000) == 0x9B000000) {
+    /* ---- MADD/MSUB（Ra=31 → MUL；0x9B=64位，0x1B=32位，sf 由 bit31 自然给出） ---- */
+    if ((i & 0xFFC00000) == 0x9B000000 || (i & 0xFFC00000) == 0x1B000000) {
         int sf = (i >> 31) & 1, ra = (i >> 10) & 0x1F, msub = (i >> 15) & 1;
         uint64_t p = RZR(rn(i)) * RZR(rm(i));
         uint64_t res;

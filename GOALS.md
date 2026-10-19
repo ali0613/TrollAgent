@@ -245,3 +245,9 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 - **修复**：① 全部调试打点门控到 EMU_DBG/EMU_LDP（默认关，本地验证 dbg 行=0）；② 补 syscall stub 96/73/135/144/146/214/198 返回 0。
 - 本地无打点干净路径：echo hello 正常输出，0 [dbg] 行。退出码 218（-38）为独立遗留
   （退出路径遇 UNSUPPORTED madd 0x1b027c82，后续补解码）。
+
+## 2026-10-20 突破4：真机无崩溃点！停在 UNSUPPORTED madd → 补 32 位 MADD/MSUB
+- 干净路径版真机：**无 mem fault**，执行 20710 步，停在 UNSUPPORTED insn 0x1b004c42（32 位 madd）。
+  证实此前 x19 垃圾 = 打点漂移，auxv+打点门控+syscall stub 后主路径全通。
+- 修复：emu.c MADD/MSUB 分支加 0x1B000000 掩码（32 位 madd/msub；sf 由 bit31 自然给出，0x9B=64 位 0x1B=32 位）。
+- 本地验证：echo hello 输出 ✓，之后退出路径有新 mem fault（x1=-16，exit code 问题，独立遗留）。
