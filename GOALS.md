@@ -225,3 +225,14 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 - rc=218 稳定；EMU_DBG 打点（fprintf 副作用）会使路径漂移到 -38（unsupported）→ 无 BP 结果可信。
 - 218 = echo_main 返回值（0x10530 strb 到 [0x13d330] 后 exit_group(218)）；echo_main 内部某处返回 218（应 0），
   机制未明，留待真机/进一步 dump echo_main 尾部（0xabd00 后）。影响 `$?`，不影响输出。
+
+## 2026-10-20 突破2：真机崩根因 = CELF interpreter 栈 auxv 错位（已修复）
+- 真机 `elf-runner busybox echo hello`：musl reloc 循环 mem fault @0xfd64（x0=0 x1=0x218 far=0x220）→ -14。
+- 定位：真机 busybox SHA1=2be6362d… 与 bp2 完全一致（同文件），差异在 CELF/elf-runner.c 的 interpreter 栈构建。
+- **根因**：`aux = slot + 2 + narg` 使 auxv 起点覆盖 slot[2+narg]（envp NULL）→ musl 把 auxv 前几项当 envp
+  遍历（非 NULL 不终止）→ auxv 整体错位 → AT_PHDR 丢失 → _start 的 DYNAMIC/rela 计算全错 → x0=0，
+  rela 表指针=0x218 → ldr [x1+8] 读 0x220 mem fault。
+- **修复**：`aux = slot + 3 + narg`（跳过 envp NULL）+ 补齐 AT_CLKTCK/AT_HWCAP/AT_HWCAP2/AT_PLATFORM
+  （对齐离线 test_emu 跑通配置）。
+- **本地复现验证**：test_emu 临时改 aux 为 &sp[a-1]（模拟错位）→ 崩溃输出与真机逐字节一致
+  （x0=0x0 x1=0x218 x2=0x8148 mem fault @0xfd64）；恢复后 echo hello 正常。

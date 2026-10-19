@@ -644,7 +644,7 @@ int elf_runner_main(int argc, char **argv) {
     uintptr_t sp_top = (uintptr_t)stack + (1 << 20);
     sp_top &= ~(uintptr_t)15;                     /* 16 字节对齐 */
     uintptr_t *slot = (uintptr_t *)(sp_top - 512);
-    uint64_t *aux = (uint64_t *)(slot + 2 + narg);  /* argv NULL 之后 */
+    uint64_t *aux = (uint64_t *)(slot + 3 + narg);  /* argv NULL + envp NULL 之后（+2 会覆盖 envp NULL，musl 把 auxv 当 envp 遍历 → AT_PHDR 丢 → 崩） */
     uint64_t rand16[2] = { 0x1234, 0x5678 };        /* AT_RANDOM（栈上） */
     int i;
     slot[0] = (uintptr_t)narg;                    /* argc */
@@ -660,8 +660,12 @@ int elf_runner_main(int argc, char **argv) {
     aux[a++] = 8;  aux[a++] = 0;                   /* AT_FLAGS */
     aux[a++] = 9;  aux[a++] = entry;               /* AT_ENTRY */
     aux[a++] = 23; aux[a++] = 0;                   /* AT_SECURE */
+    aux[a++] = 11; aux[a++] = 100;                 /* AT_CLKTCK */
     aux[a++] = 25; aux[a++] = (uintptr_t)rand16;   /* AT_RANDOM(16B) */
     aux[a++] = 31; aux[a++] = (uintptr_t)elf_path; /* AT_EXECFN */
+    aux[a++] = 15; aux[a++] = 0;                   /* AT_HWCAP */
+    aux[a++] = 26; aux[a++] = 0;                   /* AT_HWCAP2 */
+    aux[a++] = 29; aux[a++] = (uintptr_t)"aarch64"; /* AT_PLATFORM */
     aux[a++] = 0;                                  /* AT_NULL */
 
     fprintf(stderr, "[elf-runner] loading %s entry=0x%lx base=0x%lx size=%zu\n",
