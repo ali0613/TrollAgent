@@ -339,3 +339,10 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 - 机理：musl malloc 用 mmap(prot=0) 映射后再 mprotect 设 RW；elf-runner.c **无 mprotect(226)** → -ENOSYS → 访问 prot=0 区 → SIGBUS。
 - 修复（v9）：case 226 → return 0（RWX 直连下无需真改权限）。版本标记 v9。
 - 待验：真机 echo hello；通=里程碑。之后：统一 syscall 层、busybox 内置、下载链路、HUD。
+
+## 2026-10-20 暂停点：v9 验证中断——iPhone 闪退，远程终端断（API 000）
+- v9（mprotect stub）真机：mmap 修复仍生效（mmap ret=0x12c000000 成功）；输出截断于 `emu mem faul`（新崩点未看清）。
+- 随即 iPhone 闪退、远程终端不可达（API 返回 000）。用户要求停止。
+- **恢复点**：① 拿 v9 完整崩溃尾部（新崩点 far/pc）② 若 mprotect 后仍崩，下一步查 far 地址归属
+  （0x12c000000 区 = sys_brk 16MB 堆被 musl MAP_FIXED 覆盖的边界问题）③ 统一 syscall 层。
+- 版本链：v7 brk-heap → v8 anon-fix（EBADF 修复成功）→ v9 mprotect。仓库 HEAD=37fb4fb。
