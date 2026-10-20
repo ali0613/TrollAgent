@@ -31,6 +31,8 @@
 #include <sys/ioctl.h>
 #include <time.h>
 #include <sys/ucontext.h>
+#include <dirent.h>
+#include <sys/uio.h>
 #include <signal.h>
 #include <setjmp.h>
 /* iOS SDK 缺 sys/ptrace.h（ptrace 为 Darwin 私有 API）——手写声明与常量，符号在 libSystem */
@@ -167,6 +169,8 @@ static int g_exit_code = 0;
 #define SYS_clock_gettime     113
 #define SYS_statx             291
 #define SYS_newfstatat        79
+#define SYS_getdents64        61
+#define SYS_writev             66
 #define SYS_readlinkat        78
 #define SYS_mkdirat           34
 #define SYS_unlinkat          35
@@ -208,8 +212,101 @@ static long sys_close(int fd) {
 static long sys_lseek(int fd, off_t off, int whence) {
     return (long)lseek(fd, off, whence);
 }
+
+/* Linux aarch64 O_* → Darwin O_*（busybox 按 Linux 常量传；Darwin 常量不同） */
+static int xlate_flags(int lf) {
+    int x = lf & 0x3;                 /* O_RDONLY/O_WRONLY/O_RDWR 一致 */
+    if (lf & 0x40)   x |= O_CREAT;    /* 0x40 → 0x200 */
+    if (lf & 0x80)   x |= O_EXCL;     /* 0x80 → 0x800 */
+    if (lf & 0x200)  x |= O_TRUNC;    /* 0x200 → 0x400 */
+    if (lf & 0x400)  x |= O_APPEND;   /* 0x400 → 0x8 */
+    if (lf & 0x800)  x |= O_NONBLOCK; /* 0x800 → 0x4 */
+    if (lf & 0x4000) x |= O_DIRECTORY;/* 0x4000 → 0x100000 */
+    if (lf & 0x8000) x |= O_NOFOLLOW; /* 0x8000 → 0x100 */
+    if (lf & 0x80000) x |= O_CLOEXEC; /* 0x80000 → 0x1000000 */
+    return x;                         /* O_LARGEFILE(0x20000)：Darwin 无 */
+}
+/* Linux AT_* → Darwin AT_* */
+static int xlate_atflags(int f) {
+    int x = 0;
+    if (f & 0x100)  x |= AT_SYMLINK_NOFOLLOW;  /* 0x100 → 0x20 */
+    if (f & 0x200)  x |= AT_REMOVEDIR;         /* 0x200 → 0x80 */
+    if (f & 0x2000) x |= AT_EACCESS;           /* 0x2000 → 0x10 */
+    return x;
+}
+/* aarch64 Linux struct stat（asm-generic，musl 同布局，128B） */
+struct linux_stat {
+    uint64_t st_dev, st_ino;
+    uint32_t st_mode, st_nlink, st_uid, st_gid;
+    uint64_t st_rdev, __pad1;
+    int64_t st_size;
+    int32_t st_blksize, __pad2;
+    int64_t st_blocks;
+    int64_t atime_s; uint64_t atime_ns;
+    int64_t mtime_s; uint64_t mtime_ns;
+    int64_t ctime_s; uint64_t ctime_ns;
+    uint32_t __unused[2];
+};
+static long sys_newfstatat(int dirfd, const char *path, struct linux_stat *st, int flags) {
+    struct stat s;
+    if (fstatat(dirfd, path, &s, xlate_atflags(flags)) != 0) return -errno;
+    memset(st, 0, sizeof(*st));
+    st->st_dev = s.st_dev; st->st_ino = s.st_ino; st->st_mode = s.st_mode;
+    st->st_nlink = s.st_nlink; st->st_uid = s.st_uid; st->st_gid = s.st_gid;
+    st->st_rdev = s.st_rdev; st->st_size = s.st_size;
+    st->st_blksize = s.st_blksize; st->st_blocks = s.st_blocks;
+#ifdef __APPLE__
+    st->atime_s = s.st_atimespec.tv_sec; st->atime_ns = s.st_atimespec.tv_nsec;
+    st->mtime_s = s.st_mtimespec.tv_sec; st->mtime_ns = s.st_mtimespec.tv_nsec;
+    st->ctime_s = s.st_ctimespec.tv_sec; st->ctime_ns = s.st_ctimespec.tv_nsec;
+#else
+    st->atime_s = s.st_atim.tv_sec; st->atime_ns = s.st_atim.tv_nsec;
+    st->mtime_s = s.st_mtim.tv_sec; st->mtime_ns = s.st_mtim.tv_nsec;
+    st->ctime_s = s.st_ctim.tv_sec; st->ctime_ns = s.st_ctim.tv_nsec;
+#endif
+    return 0;
+}
+/* Darwin 无 Linux 式 getdents64：getdirentries 读 Darwin dirent → 转 Linux dirent64 */
+struct linux_dirent64 {
+    uint64_t d_ino; int64_t d_off;
+    uint16_t d_reclen; uint8_t d_type; char d_name[];
+} __attribute__((packed));
+static long sys_getdents64(int fd, void *buf, size_t count) {
+#ifdef __APPLE__
+    /* Darwin 无 Linux 式 getdents64：getdirentries 读 Darwin dirent → 转 Linux dirent64 */
+    char tmp[8192];
+    long basep = 0;
+    long n = (long)getdirentries(fd, tmp, sizeof(tmp), &basep);
+    if (n < 0) return -errno;
+    unsigned char *out = buf;
+    long o = 0, i = 0;
+    while (i < n) {
+        struct dirent *de = (struct dirent *)(tmp + i);
+        size_t namlen = de->d_namlen;
+        size_t lreclen = (namlen + 1 + 19 + 7) & ~(size_t)7;
+        if (o + (long)lreclen > (long)count) break;
+        memset(out + o, 0, lreclen);
+        struct linux_dirent64 *ld = (struct linux_dirent64 *)(out + o);
+        ld->d_ino = de->d_ino;
+        ld->d_off = (int64_t)de->d_seekoff;
+        ld->d_reclen = (uint16_t)lreclen;
+        ld->d_type = de->d_type;
+        memcpy(ld->d_name, de->d_name, namlen);
+        o += (long)lreclen;
+        i += de->d_reclen;
+    }
+    return o;
+#else
+    /* 本地对照：Linux 原生 getdents64 透传（布局即 Linux dirent64） */
+    long r = syscall(217, fd, buf, count);   /* x86_64 getdents64 */
+    return r < 0 ? -errno : r;
+#endif
+}
+static long sys_writev(int fd, const struct iovec *iov, int iovcnt) {
+    return (long)writev(fd, iov, iovcnt);
+}
 static long sys_openat(int dirfd, const char *path, int flags, mode_t mode) {
-    return (long)openat(dirfd, path, flags, mode);
+    return (long)openat(dirfd, path, xlate_flags(flags), mode);
 }
 static long sys_faccessat(int dirfd, const char *path, int amode) {
     return (long)faccessat(dirfd, path, amode, 0);   /* Darwin 4 参（flags） */
@@ -349,6 +446,9 @@ long translate_syscall(uint64_t nr,
     case SYS_lseek:       r = sys_lseek((int)a0, (off_t)a1, (int)a2); break;
     case SYS_openat:      r = sys_openat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (mode_t)a3); break;
     case SYS_faccessat:   r = sys_faccessat((int)a0, (const char*)(uintptr_t)a1, (int)a2); break;
+    case SYS_newfstatat:  r = sys_newfstatat((int)a0, (const char*)(uintptr_t)a1, (struct linux_stat*)(uintptr_t)a2, (int)a3); break;
+    case SYS_getdents64:  r = sys_getdents64((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
+    case SYS_writev:      r = sys_writev((int)a0, (const struct iovec*)(uintptr_t)a1, (int)a2); break;
     case SYS_dup:         r = sys_dup((int)a0); break;
     case SYS_dup3:        r = sys_dup3((int)a0, (int)a1, (int)a2); break;
     case SYS_uname:       r = sys_uname((void*)(uintptr_t)a0); break;
@@ -657,7 +757,7 @@ int elf_runner_main(int argc, char **argv) {
         return 2;
     }
     const char *elf_path = argv[1];
-    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v14 syscall-trace)\n", argc, elf_path);
+    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v15 ls-syscalls)\n", argc, elf_path);
 
     /* 14e0: 诊断进程实际 csflags（CS_DEBUGGED=0x800）——TrollStore 手动 JIT 启动/URL 激活后
        到底有没有被 attach。csops(CS_OPS_STATUS) 是唯一可靠的运行时查询。 */
