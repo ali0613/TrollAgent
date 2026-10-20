@@ -322,6 +322,7 @@ long translate_syscall(uint64_t nr,
     case SYS_brk:         return sys_brk((uintptr_t)a0);
     case SYS_mmap:        return sys_mmap((uintptr_t)a0, (size_t)a1, (int)a2, (int)a3, (int)a4, (off_t)a5);
     case SYS_munmap:      return sys_munmap((uintptr_t)a0, (size_t)a1);
+    case 226:             return 0;   /* mprotect：musl malloc mmap(prot=0) 后设权限；RWX 直连下无需真改 */
     case SYS_nanosleep:   return sys_nanosleep((const struct timespec*)(uintptr_t)a0, (struct timespec*)(uintptr_t)a1);
     case SYS_gettimeofday:return sys_gettimeofday((void*)(uintptr_t)a0, (void*)(uintptr_t)a1);
     case SYS_clock_gettime:return sys_clock_gettime((int)a0, (void*)(uintptr_t)a1);
@@ -617,7 +618,7 @@ int elf_runner_main(int argc, char **argv) {
         return 2;
     }
     const char *elf_path = argv[1];
-    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v8 anon-fix)\n", argc, elf_path);
+    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v9 mprotect)\n", argc, elf_path);
 
     /* 14e0: 诊断进程实际 csflags（CS_DEBUGGED=0x800）——TrollStore 手动 JIT 启动/URL 激活后
        到底有没有被 attach。csops(CS_OPS_STATUS) 是唯一可靠的运行时查询。 */

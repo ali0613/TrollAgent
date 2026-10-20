@@ -333,3 +333,9 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 - 本地诊断：musl mmap flags=0x32（0x20=MAP_ANONYMOUS Linux | 0x10=MAP_FIXED | 0x2=MAP_PRIVATE）、fd=-1、prot=0。
   iOS 不识别 0x20 为匿名 → EBADF(-9)。之前 fd 修复方向错误（fd 本来就是 -1）。
 - **修复（5e55941 后补充）**：sys_mmap 把 flags 的 0x20 翻译为 0x1000，匿名时 fd=-1。版本标记 v8。
+
+## 2026-10-20 v8 验证：mmap EBADF 修复生效！新卡点：musl malloc mmap 后 mprotect 缺失
+- v8 真机：第一个 mmap ret=0x12bf00000（正数——EBADF 修复成功）；随后 `emu mem fault sig=10 far=0x12bf01000`。
+- 机理：musl malloc 用 mmap(prot=0) 映射后再 mprotect 设 RW；elf-runner.c **无 mprotect(226)** → -ENOSYS → 访问 prot=0 区 → SIGBUS。
+- 修复（v9）：case 226 → return 0（RWX 直连下无需真改权限）。版本标记 v9。
+- 待验：真机 echo hello；通=里程碑。之后：统一 syscall 层、busybox 内置、下载链路、HUD。
