@@ -245,7 +245,7 @@ struct linux_stat {
     int64_t atime_s; uint64_t atime_ns;
     int64_t mtime_s; uint64_t mtime_ns;
     int64_t ctime_s; uint64_t ctime_ns;
-    uint32_t __unused[2];
+    uint32_t __resv[2];
 };
 static long sys_newfstatat(int dirfd, const char *path, struct linux_stat *st, int flags) {
     struct stat s;
