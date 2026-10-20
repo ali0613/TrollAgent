@@ -161,6 +161,17 @@ static int unsupported(uint32_t i) {
 }
 
 static int exec_one(void) {
+    /* 一次性真机诊断：0x10520 applet 查询（打印后自关，避免漂移） */
+    {
+        static int diag_done = 0;
+        if (!diag_done && E.pc >= g_base && E.pc - g_base == 0x10520ULL) {
+            diag_done = 1;
+            uint64_t f = *(uint64_t*)(uintptr_t)(g_base + 0x13c038ULL + E.r[20]*8);
+            fprintf(stderr, "[diag] 10520 w20=%u funcoff=%#llx argvp=%#llx x1=%#llx expect_echo=0xabaf0\n",
+                (unsigned)E.r[20], (unsigned long long)(f - (uint64_t)g_base),
+                (unsigned long long)E.r[22], (unsigned long long)E.r[1]);
+        }
+    }
     if (getenv("EMU_DBG")) {
         uint64_t offd = E.pc - g_base;
         if (offd == 0x10928ULL)
