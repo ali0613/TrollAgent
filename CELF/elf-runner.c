@@ -442,6 +442,30 @@ long translate_syscall(uint64_t nr,
                               uint64_t a3, uint64_t a4, uint64_t a5) {
     long r;
     switch (nr) {
+    case SYS_openat:
+        r = sys_openat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (mode_t)a3);
+        fprintf(stderr, "[lsdiag] openat fd0=%d path=%s flags=0x%x mode=0x%x -> ret=%ld\n",
+                (int)a0, (const char*)(uintptr_t)a1, (unsigned)(int)a2, (unsigned)(mode_t)a3, r);
+        break;
+    case SYS_newfstatat:
+        r = sys_newfstatat((int)a0, (const char*)(uintptr_t)a1, (struct linux_stat*)(uintptr_t)a2, (int)a3);
+        fprintf(stderr, "[lsdiag] fstatat dirfd=%d path=%s flags=0x%x -> ret=%ld\n",
+                (int)a0, (const char*)(uintptr_t)a1, (unsigned)(int)a3, r);
+        break;
+    case SYS_getdents64:
+        r = sys_getdents64((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
+        fprintf(stderr, "[lsdiag] getdents64 fd=%d buf=%p cnt=%zu -> ret=%ld\n",
+                (int)a0, (void*)(uintptr_t)a1, (size_t)a2, r);
+        break;
+    case SYS_writev:
+        r = sys_writev((int)a0, (const struct iovec*)(uintptr_t)a1, (int)a2);
+        fprintf(stderr, "[lsdiag] writev fd=%d iov=%p cnt=%d -> ret=%ld\n",
+                (int)a0, (void*)(uintptr_t)a1, (int)a2, r);
+        break;
+    case SYS_close:
+        r = sys_close((int)a0);
+        fprintf(stderr, "[lsdiag] close fd=%d -> ret=%ld\n", (int)a0, r);
+        break;
     case SYS_exit:        r = sys_exit((int)a0); break;
     case SYS_exit_group:  r = sys_exit_group((int)a0); break;
     case SYS_getpid:      r = sys_getpid(); break;
@@ -452,13 +476,8 @@ long translate_syscall(uint64_t nr,
     case SYS_getegid:     r = sys_getegid(); break;
     case SYS_write:       r = sys_write((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
     case SYS_read:        r = sys_read((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
-    case SYS_close:       r = sys_close((int)a0); break;
     case SYS_lseek:       r = sys_lseek((int)a0, (off_t)a1, (int)a2); break;
-    case SYS_openat:      r = sys_openat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (mode_t)a3); break;
     case SYS_faccessat:   r = sys_faccessat((int)a0, (const char*)(uintptr_t)a1, (int)a2); break;
-    case SYS_newfstatat:  r = sys_newfstatat((int)a0, (const char*)(uintptr_t)a1, (struct linux_stat*)(uintptr_t)a2, (int)a3); break;
-    case SYS_getdents64:  r = sys_getdents64((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
-    case SYS_writev:      r = sys_writev((int)a0, (const struct iovec*)(uintptr_t)a1, (int)a2); break;
     case SYS_dup:         r = sys_dup((int)a0); break;
     case SYS_dup3:        r = sys_dup3((int)a0, (int)a1, (int)a2); break;
     case SYS_uname:       r = sys_uname((void*)(uintptr_t)a0); break;
@@ -767,7 +786,7 @@ int elf_runner_main(int argc, char **argv) {
         return 2;
     }
     const char *elf_path = argv[1];
-    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v15 ls-syscalls)\n", argc, elf_path);
+    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v16 diag-ls)\n", argc, elf_path);
 
     /* 14e0: 诊断进程实际 csflags（CS_DEBUGGED=0x800）——TrollStore 手动 JIT 启动/URL 激活后
        到底有没有被 attach。csops(CS_OPS_STATUS) 是唯一可靠的运行时查询。 */
