@@ -287,3 +287,12 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 - 下一个诊断：0x10520 加打印 argv[0]/argv[1] 字符串内容（本地基准 argv0='echo' argv1='hello'）。
   真机若 argv 对 → echo_main/musl stdio/syscall（elf-runner.c translate_syscall 与 test_emu 不同）；
   若 argv 错 → guest 字符串/栈问题。
+
+## 2026-10-20 重大发现：echo_main 用直接 write(1)（非 FILE 指针）；真机 fd=2 是 error 路径先发
+- **反汇编证实**：echo_main 0xabbd8 是 `write(1, buf, len)` 直接封装调用（0xabbd4 mov w0,#1 硬编码 fd=1；
+  FILE 指针 0x13d380 只用于 0xabbd0 `str wzr,[x0]` 清零，非 fwrite 参数）。之前"fwrite FILE 诊断"读 x0=1 → 本地/真机 mem fault addr=0x1，已删。
+- **真机 653d705 版**：第一个 write = `fd=2 n=13 buf='echo'`（stderr error 消息）——**echo_main 的 write(1,'hello') 从未执行**。
+  → echo_main 内部（或之前）先走了 error 路径（bb_error_msg），busybox exit code=1（正常 echo 应 0）。
+- **本地基准（安全诊断版）**：`[diag] echo-write fd=1 len=6` + `[diag] write fd=1 n=6 pc-off=0xf18a0 lr-off=0xf48a4 buf='hello` + `hello` 输出。
+- **本轮构建带**：① echo_main 0xabbd8 安全诊断（fd/len，不读危险指针）② write svc 诊断加 **lr-off**（write 调用者）。
+  **真机若 write lr-off=0xf48a4（同本地）→ stdio FILE/fd 层错；若不同 → 更早的 error 路径。**

@@ -161,14 +161,17 @@ static int unsupported(uint32_t i) {
 }
 
 static int exec_one(void) {
-    /* 一次性真机诊断：echo_main fwrite 返回处 0xabbdc + write svc（打印后自关） */
+    /* 一次性真机诊断：echo_main write 调用点 0xabbd8（fd/len/buf—— 只打不读危险指针） */
     {
-        static int diag_done = 0;
-        if (!diag_done && E.pc >= g_base && E.pc - g_base == 0xabbdcULL) {
-            diag_done = 1;
-            fprintf(stderr, "[diag] fwrite ret x0=%llu want=%llu buf0='%.16s'\n",
-                (unsigned long long)E.r[0], (unsigned long long)E.r[19],
-                (const char*)(uintptr_t)E.r[21]);
+        static int fd_diag = 0;
+        if (!fd_diag && E.pc >= g_base && E.pc - g_base == 0xabbd8ULL) {
+            fd_diag = 1;
+            const char *b = (const char*)(uintptr_t)E.r[1];
+            char safe[24] = {0};
+            if (E.r[1] >= (uint64_t)g_base && E.r[1] < (uint64_t)g_base + 0x200000)
+                for (int k = 0; k < 20 && b[k]; k++) safe[k] = (b[k] >= 32 && b[k] < 127) ? b[k] : '.';
+            fprintf(stderr, "[diag] echo-write fd=%llu len=%llu buf0='%s'\n",
+                (unsigned long long)E.r[0], (unsigned long long)E.r[19], safe);
         }
     }
     /* 一次性真机诊断：0x10520 applet 查询（打印后自关，避免漂移） */
@@ -381,9 +384,10 @@ static int exec_one(void) {
         if (nr == 64 && g_base) {
             static int wdiag = 0;
             if (!wdiag) { wdiag = 1;
-                fprintf(stderr, "[diag] write fd=%llu n=%llu pc-off=%#llx buf='%.20s'\n",
+                fprintf(stderr, "[diag] write fd=%llu n=%llu pc-off=%#llx lr-off=%#llx buf='%.20s'\n",
                     (unsigned long long)E.r[0], (unsigned long long)E.r[2],
                     (unsigned long long)(E.pc - (uint64_t)g_base),
+                    (unsigned long long)(E.r[30] - (uint64_t)g_base),
                     (const char*)(uintptr_t)E.r[1]);
             }
         }
