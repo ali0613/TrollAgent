@@ -260,3 +260,9 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
   ③ auxv 键值错（CLKTCK=11 应为 17、HWCAP=15 应为 16、PLATFORM=29 应为 15、缺 UID/EUID/GID/EGID）；
   ④ 栈 1MB（test_emu 32MB）。
 - **修复**：CELF 栈构建整体对齐 test_emu（字符串复制 guest 栈、指针表 -4096、标准 auxv 键值、32MB 栈）。
+
+## 2026-10-20 突破6：布局迭代（真机反馈驱动）
+- v2（guest 字符串 + 指针表 sp_top-4096 + 标准键 + 32MB）真机崩回 reloc 0xfd64（x1=0x218）：
+  sp_top-4096 与 musl 启动清零区冲突 → auxv 读取错位。
+- v3（当前）：指针表回退 sp_top-512（真机已验证过 reloc 的位置）+ 字符串复制到 guest 栈但放指针表下方
+  sp_top-8192（远离清零区，避免宿主指针导致的错误 applet "echo: "）+ 标准 auxv 键。

@@ -643,15 +643,15 @@ int elf_runner_main(int argc, char **argv) {
        musl/glibc _start 从 [sp] 读 argc，argv=sp+8；auxv 需完整
        (AT_PHDR/AT_PHENT/AT_PHNUM/AT_PAGESZ/AT_ENTRY/AT_RANDOM 等)，
        缺 AT_PHDR/AT_RANDOM 时 musl 静态 PIE 启动路径会读错 → SIGBUS。 */
-    /* 与本地跑通配置 test_emu 完全对齐：字符串复制到 guest 栈（sp_top-512 起），
-       指针表在 sp_top-4096，auxv 键值标准（UID..EGID/CLKTCK=17/HWCAP=16/PLATFORM=15）。
-       宿主指针字符串会让 musl/busybox 在真机走到错误 applet（"echo: "）。 */
+    /* 布局结论（真机验证）：指针表必须在 sp_top-512（sp_top-4096 与 musl 启动清零区冲突→reloc 崩）；
+       字符串复制到 guest 栈但要放指针表下方（宿主指针→错误 applet "echo: "）；
+       auxv 用标准键（UID..EGID/CLKTCK=17/HWCAP=16/PLATFORM=15）。 */
     int narg = argc - 1;
-    uint8_t *stack = mmap(NULL, 32 << 20, PROT_READ | PROT_WRITE,
+    uint8_t *stack = mmap(NULL, 1 << 20, PROT_READ | PROT_WRITE,
                           MAP_PRIVATE | MAP_ANON, -1, 0);
     if (stack == MAP_FAILED) { perror("stack"); return 1; }
-    uintptr_t sp_top = ((uintptr_t)stack + (32 << 20)) & ~15ULL;
-    char *p = (char *)(sp_top - 512);               /* 字符串区（musl 启动会清零 sp 上方并 add sp，需远离初始 sp） */
+    uintptr_t sp_top = ((uintptr_t)stack + (1 << 20)) & ~15ULL;
+    char *p = (char *)(sp_top - 8192);              /* 字符串区（指针表下方，远离 musl 清零区与启动栈帧） */
     uintptr_t *argstr = (uintptr_t *)malloc((narg + 2) * sizeof(uintptr_t));
     int i;
     for (i = 0; i < narg; i++) {
@@ -662,13 +662,14 @@ int elf_runner_main(int argc, char **argv) {
     }
     uintptr_t plat = (uintptr_t)p; memcpy(p, "aarch64", 8); p += 8;   /* AT_PLATFORM */
     uintptr_t rndp  = (uintptr_t)p; memset(p, 0xAB, 16); p += 16;     /* AT_RANDOM(16B) */
-    uintptr_t *slot = (uintptr_t *)(((uintptr_t)(sp_top - 4096) + 15) & ~15ULL);
+    uintptr_t *slot = (uintptr_t *)(sp_top - 512);  /* 指针表（真机验证过 reloc 的位置） */
     int a = 0;
     slot[a++] = (uintptr_t)narg;                  /* argc */
     for (i = 0; i < narg; i++) slot[a++] = argstr[i];   /* argv[] */
     slot[a++] = 0;                                /* argv 终止 */
     slot[a++] = 0;                                /* envp[0]=NULL（空环境） */
-    uint64_t *aux = (uint64_t *)&slot[a];         /* auxv 起点（envp NULL 之后） */
+    uint64_t *aux = (uint64_t *)(slot + 3 + narg); /* auxv（argv NULL+envp NULL 之后；+2 覆盖 envp NULL→reloc 崩） */
+    a = 0;
     aux[a++] = 3;  aux[a++] = g_base + g_phoff;   /* AT_PHDR */
     aux[a++] = 4;  aux[a++] = g_phentsize;        /* AT_PHENT */
     aux[a++] = 5;  aux[a++] = g_phnum;            /* AT_PHNUM */
