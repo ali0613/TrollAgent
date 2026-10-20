@@ -310,7 +310,7 @@ static int exec_one(void) {
     if (E.pc >= g_base && E.pc - g_base == 0xf0e4cULL) {
         static int se = 0;
         if (se < 4) { se++;
-            fprintf(stderr, "[se] %s完成 x22=0x%llx x21=0x%llx x26=%lld x24=0x%llx x23=0x%llx\n",
+            fprintf(stderr, "[se] 0x%llx完成 x22=0x%llx x21=0x%llx x26=%lld x24=0x%llx x23=0x%llx\n",
                 (unsigned long long)(E.pc - g_base),
                 (unsigned long long)E.r[22], (unsigned long long)E.r[21],
                 (long long)E.r[26], (unsigned long long)E.r[24],
@@ -928,7 +928,9 @@ static int exec_one(void) {
      *   0xdde00 bfi x0,x24,#12,#52 被错执行成右移提取 → meta->maplen=0
      *   → free_group 误走 brk 分支 → get_meta(mmap页首) 读 [页首-4] → SIGBUS）
      */
-    if ((i & 0x7F800000) == 0x33000000 || (i & 0x7F800000) == 0xB3000000) {
+    if ((i & 0xFF800000) == 0x33000000 || (i & 0xFF800000) == 0xB3000000) {
+        /* v19.3: 掩码必须含符号位 bit31（0xFF800000），否则 0xB3000000 分支恒假、
+           64 位 BFI/BFXIL 永不匹配（gcc/clang -Wtautological-compare 实证死分支） */
         int sf = (i >> 31) & 1, w = sf ? 64 : 32;
         int immr = (i >> 16) & 0x3F, imms = (i >> 10) & 0x3F;
         uint64_t rn_v = RZR(rn(i)), rd_v = RZR(rd(i)), res;
@@ -1177,7 +1179,7 @@ not_ldstp:
     if ((i & 0xFFF00000) == 0xD5300000) { W(rd(i), 0); E.pc += 4; return 0; }  /* 其他 MRS → 0 */
     if ((i & 0xFFF00000) == 0xD5100000) { E.pc += 4; return 0; }               /* 其他 MSR → 忽略 */
     if ((i & 0xFFFFF000) == 0xD53B0000) { W(rd(i), 0); E.pc += 4; return 0; }  /* MRS dczid_el0 → 0（禁用 dc zva 路径） */
-    if ((i & 0xFFFFF01F) == 0xD50B7400) { E.pc += 4; return 0; }               /* DC ZVA → NOP */
+    if ((i & 0xFFFFF01F) == 0xD50B7000) { E.pc += 4; return 0; }               /* DC ZVA → NOP（v19.3: 0xD50B7400 带 bit20 被掩码清除→恒假，改 0xD50B7000 真匹配） */
 
     /* ---- NEON 精简支持（musl memset/memcpy 优化） ---- */
     if ((i & 0xFFE0FC00) == 0x0F000400 || (i & 0xFFE0FC00) == 0x4F000400) {  /* MOVI vector（全零模式） */

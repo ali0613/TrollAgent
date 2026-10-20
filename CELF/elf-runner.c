@@ -219,7 +219,11 @@ static long sys_renameat(int olddfd, const char *oldp, int newdfd, const char *n
     return 0;
 }
 static long sys_renameat2(int olddfd, const char *oldp, int newdfd, const char *newp, unsigned flags) {
-    if (renameat2(olddfd, oldp, newdfd, newp, flags)) return -errno;
+    /* renameat2 是 Linux 专用（RENAME_NOREPLACE/RENAME_EXCHANGE 等），iOS SDK 无此函数，
+       直接调用 → implicit-function-declaration，clang 16+（Xcode 16+）下是硬错误，整包编译失败。
+       flags==0 时语义等价于 POSIX renameat（iOS 有）；非 0 时 iOS 无对应语义，返回 ENOSYS。 */
+    if (flags) return -ENOSYS;
+    if (renameat(olddfd, oldp, newdfd, newp)) return -errno;
     return 0;
 }
 
