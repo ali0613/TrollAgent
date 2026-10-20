@@ -174,6 +174,29 @@ static int exec_one(void) {
                 (unsigned long long)E.r[0], (unsigned long long)E.r[19], safe);
         }
     }
+    /* 一次性多诊断：echo_main 内部关键点 + exit 路径（全部打印后自关） */
+    {
+        static int d_af0=0, d_bb0=0, d_be8=0, d_bf4=0, d_13a0=0;
+        uint64_t off = E.pc >= g_base ? E.pc - (uint64_t)g_base : ~0ULL;
+        if (!d_af0 && off == 0xabaf0ULL) { d_af0=1;
+            fprintf(stderr, "[diag] echo-main argc=%llu argvp=%#llx w22=%llu w23=%llu\n",
+                (unsigned long long)E.r[0], (unsigned long long)E.r[1],
+                (unsigned long long)E.r[22], (unsigned long long)E.r[23]); }
+        if (!d_bb0 && off == 0xabbb0ULL) { d_bb0=1;
+            fprintf(stderr, "[diag] echo-newline w22=%llu w23=%llu len19=%llu\n",
+                (unsigned long long)E.r[22], (unsigned long long)E.r[23],
+                (unsigned long long)E.r[19]); }
+        if (!d_be8 && off == 0xabbe8ULL) { d_be8=1;
+            fprintf(stderr, "[diag] echo-error-path lr-off=%#llx len19=%llu ret0=%llu\n",
+                (unsigned long long)(E.r[30] - (uint64_t)g_base),
+                (unsigned long long)E.r[19], (unsigned long long)E.r[0]); }
+        if (!d_bf4 && off == 0xabbf4ULL) { d_bf4=1;
+            fprintf(stderr, "[diag] echo-ret x0=%llu len19=%llu\n",
+                (unsigned long long)E.r[0], (unsigned long long)E.r[19]); }
+        if (!d_13a0 && (off == 0x113a0ULL || off == 0x113b8ULL)) { d_13a0=1;
+            fprintf(stderr, "[diag] exit-path pc-off=%#llx x0=%llu x19=%llu\n",
+                (unsigned long long)off, (unsigned long long)E.r[0], (unsigned long long)E.r[19]); }
+    }
     /* 一次性真机诊断：0x10520 applet 查询（打印后自关，避免漂移） */
     {
         static int diag_done = 0;
