@@ -41,6 +41,28 @@ static uint64_t g_slot = 0;
 static jmp_buf g_emu_jmp;
 static int g_emu_active = 0;
 
+/* v11: 指令 ring buffer —— 崩前最后 64 条 (pc, insn)，longjmp 时带出，定位访存来源 */
+#define TR_RING 64
+static uint64_t tr_pc[TR_RING];
+static uint32_t tr_insn[TR_RING];
+static int tr_idx = 0;
+static void tr_record(uint64_t pc, uint32_t insn) {
+    tr_pc[tr_idx] = pc;
+    tr_insn[tr_idx] = insn;
+    tr_idx = (tr_idx + 1) % TR_RING;
+}
+static void tr_dump(void) {
+    int n = 0, i = tr_idx;
+    fprintf(stderr, "[emu] -- crash trail (last %d) --\n", TR_RING);
+    for (; n < TR_RING; n++) {
+        i = (i + TR_RING - 1) % TR_RING;
+        if (!tr_pc[i]) continue;
+        fprintf(stderr, "  t%02d 0x%08llx: %08x\n",
+            n, (unsigned long long)tr_pc[i], (unsigned)tr_insn[i]);
+    }
+    fprintf(stderr, "[emu] -- end trail --\n");
+}
+
 /* x31 读=ZR(0)；x31 写=SP（W 处理） */
 static uint64_t RZR(int n) { return n == 31 ? 0 : E.r[n]; }
 static uint64_t RSP(int n) { return n == 31 ? E.sp : E.r[n]; }
@@ -161,6 +183,9 @@ static int unsupported(uint32_t i) {
 }
 
 static int exec_one(void) {
+    /* v11: 每条指令进 ring buffer（崩点带出最后 64 条） */
+    tr_record(E.pc, E.pc >= g_base && E.pc + 4 <= g_base + g_total_size
+                  ? *(const uint32_t *)(uintptr_t)E.pc : 0);
     /* 一次性真机诊断：echo_main write 调用点 0xabbd8（fd/len/buf—— 只打不读危险指针） */
     {
         static int fd_diag = 0;
@@ -1036,13 +1061,17 @@ int emu_run(uint64_t entry, uint64_t sp) {
     E.sp = sp;
     g_emu_active = 1;
     if (setjmp(g_emu_jmp) != 0) {
-        fprintf(stderr, "[emu] mem fault @ pc=0x%llx (longjmp exit) x0=0x%llx sp=0x%llx x1=0x%llx x2=0x%llx x19=0x%llx x20=0x%llx x21=0x%llx x23=0x%llx x24=0x%llx x30=0x%llx\n",
+        fprintf(stderr, "[emu] mem fault @ pc=0x%llx (longjmp exit) x0=0x%llx sp=0x%llx x1=0x%llx x2=0x%llx x19=0x%llx x20=0x%llx x21=0x%llx x23=0x%llx x24=0x%llx x30=0x%llx x6=0x%llx x16=0x%llx x17=0x%llx x22=0x%llx x25=0x%llx\n",
                 (unsigned long long)E.pc,
                 (unsigned long long)E.r[0], (unsigned long long)E.sp,
                 (unsigned long long)E.r[1], (unsigned long long)E.r[2],
                 (unsigned long long)E.r[19], (unsigned long long)E.r[20],
                 (unsigned long long)E.r[21], (unsigned long long)E.r[23],
-                (unsigned long long)E.r[24], (unsigned long long)E.r[30]);
+                (unsigned long long)E.r[24], (unsigned long long)E.r[30],
+                (unsigned long long)E.r[6], (unsigned long long)E.r[16],
+                (unsigned long long)E.r[17], (unsigned long long)E.r[22],
+                (unsigned long long)E.r[25]);
+        tr_dump();
         g_emu_active = 0;
         return E.exit_code ? (int)E.exit_code : -EFAULT;
     }
