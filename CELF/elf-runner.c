@@ -236,6 +236,7 @@ static long sys_uname(void *buf) {
 }
 
 static uint64_t g_heap_base = 0, g_heap_cur = 0, g_heap_top = 0;
+static uint64_t g_stack_base = 0;   /* v10: 栈区记录（MAP_FIXED 重叠判断用） */
 static long sys_brk(uintptr_t newbrk) {
     /* musl malloc 依赖 brk 扩展堆：brk(0) 返回当前堆顶；brk(nb) 成功返回 nb、失败返回旧堆顶 */
     if (g_heap_base == 0) {
@@ -262,8 +263,38 @@ static long sys_mmap(uintptr_t addr, size_t len, int prot, int flags, int fd, of
        翻译 0x20→0x1000；MAP_PRIVATE=0x2 / MAP_FIXED=0x10 两平台一致。匿名时 fd 强制 -1。 */
     if (flags & 0x20) flags = (flags & ~0x20) | 0x1000;
     if (flags & 0x1000) fd = -1;
+    /* ★ v10 根因修复（真机 EINVAL=-22）：musl mallocng 用 MAP_FIXED 固定映射到
+       已映射区域（典型=sys_brk 堆基址 0x12c002000）。Linux 语义 MAP_FIXED 覆盖已有
+       映射并成功；iOS(Darwin) 对已映射地址的 MAP_FIXED 返回 EINVAL → malloc 失败 →
+       后续访问该页 SIGBUS(far=0x12c003000)。
+       修复：MAP_FIXED 目标落在已知已映射区（ELF 加载区 / brk 堆 / 栈）→ 直接返回
+       addr 视为成功（页已真实存在，guest 可直接读写）。 */
+    if ((flags & 0x10) && addr != 0) {
+        int in_mapped = 0;
+        if (g_heap_base && addr >= g_heap_base && addr < g_heap_top)
+            in_mapped = 1;
+        else if (g_base && addr >= g_base && addr < g_base + g_total_size)
+            in_mapped = 1;
+        else if (g_stack_base && addr >= g_stack_base &&
+                 addr < g_stack_base + (32 << 20))
+            in_mapped = 1;
+        if (in_mapped) {
+            fprintf(stderr, "[elf-runner] v10 MAP_FIXED 命中已映射区 addr=0x%lx len=%zu prot=%d flags=0x%x -> 返回 addr\n",
+                    (unsigned long)addr, len, prot, flags);
+            return (long)addr;
+        }
+    }
     void *r = mmap((void*)addr, len, mprot, flags, fd, off);
-    if (r == MAP_FAILED) return -errno;
+    if (r == MAP_FAILED) {
+        /* v10: MAP_FIXED 仍失败（与未知映射冲突）→ 去 FIXED 重试（musl 同款 fallback） */
+        if ((flags & 0x10) && addr != 0) {
+            fprintf(stderr, "[elf-runner] v10 MAP_FIXED 失败(%s) addr=0x%lx len=%zu -> 去 FIXED 重试\n",
+                    strerror(errno), (unsigned long)addr, len);
+            r = mmap(NULL, len, mprot, flags & ~0x10, fd, off);
+            if (r != MAP_FAILED) return (long)(uintptr_t)r;
+        }
+        return -errno;
+    }
     return (long)(uintptr_t)r;
 }
 static long sys_munmap(uintptr_t addr, size_t len) {
@@ -618,7 +649,7 @@ int elf_runner_main(int argc, char **argv) {
         return 2;
     }
     const char *elf_path = argv[1];
-    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v9 mprotect)\n", argc, elf_path);
+    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v10 mapfixed)\n", argc, elf_path);
 
     /* 14e0: 诊断进程实际 csflags（CS_DEBUGGED=0x800）——TrollStore 手动 JIT 启动/URL 激活后
        到底有没有被 attach。csops(CS_OPS_STATUS) 是唯一可靠的运行时查询。 */
@@ -666,6 +697,7 @@ int elf_runner_main(int argc, char **argv) {
     uint8_t *stack = mmap(NULL, 32 << 20, PROT_READ | PROT_WRITE,
                           MAP_PRIVATE | MAP_ANON, -1, 0);
     if (stack == MAP_FAILED) { perror("stack"); return 1; }
+    g_stack_base = (uintptr_t)stack;   /* v10: 记录栈区（MAP_FIXED 重叠判断用） */
     uintptr_t sp_top = ((uintptr_t)stack + (32 << 20)) & ~15ULL;
     char *p = (char *)(sp_top - 512);               /* 字符串区（与本地跑通配置一致） */
     uintptr_t *argstr = (uintptr_t *)malloc((narg + 2) * sizeof(uintptr_t));
