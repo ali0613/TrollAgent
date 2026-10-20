@@ -257,6 +257,9 @@ static long sys_mmap(uintptr_t addr, size_t len, int prot, int flags, int fd, of
     if (prot & 1) mprot |= PROT_READ;
     if (prot & 2) mprot |= PROT_WRITE;
     if (prot & 4) mprot |= PROT_EXEC;
+    /* iOS/Darwin：匿名映射（MAP_ANON/MAP_ANONYMOUS）fd 必须为 -1；
+       Linux 忽略 fd，musl 的 malloc 可能传 0/垃圾 → iOS EBADF(-9) */
+    if (flags & (MAP_ANON | MAP_ANONYMOUS)) { flags |= MAP_ANON; fd = -1; }
     void *r = mmap((void*)addr, len, mprot, flags, fd, off);
     if (r == MAP_FAILED) return -errno;
     return (long)(uintptr_t)r;

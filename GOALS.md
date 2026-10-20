@@ -318,3 +318,13 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 - 本地 malloc 序列（新诊断）：brk(0)→ret 堆基址 ✓；brk(扩展)→ret 新断点 ✓；mmap(固定0x...b000,0x1000)→ret 同址 ✓；mmap(NULL,0x1000)→ret 新区 ✓。
 - **怀疑**：musl malloc 用 MAP_FIXED mmap 在 heap 顶附近固定地址；iOS MAP_FIXED 若地址已映射（栈/堆/段冲突）→ EINVAL → malloc NULL。
 - 本轮带 brk/mmap 返回诊断（malloc-sys-ret）→ 真机看哪个 syscall 返回负值。
+
+## 2026-10-20 ★★★ 根因定位：musl malloc 的匿名 mmap 在 iOS 返回 EBADF(-9)
+- 真机 malloc-ret 诊断（53a57f1 版）：brk 全部成功（brk(0)→0x12d400000、brk(扩展)→成功）；
+  **mmap 两次全部 ret=-9(EBADF)**（nr=222 a0=0x12d400000 与 a0=0，len 均 0x1000）→ musl malloc 失败 → xmalloc NULL。
+- **机理**：musl malloc 用 `mmap(addr,len,prot,MAP_PRIVATE|MAP_ANON,fd,0)`；Linux 对 MAP_ANON 忽略 fd 参数，
+  **iOS(Darwin) 要求匿名映射 fd 必须为 -1，musl 传入的 fd（0 或未定义）→ EBADF**。
+- **修复（已提交）**：elf-runner.c sys_mmap 检测 flags & (MAP_ANON|MAP_ANONYMOUS) → 强制 flags|=MAP_ANON、fd=-1。
+- **预期**：修复后 musl malloc 正常 → echo xmalloc 成功 → write(1,'hello') → stdout 输出 hello。
+- 待办：真机验证（若通=里程碑）；统一 syscall 层（test_emu.c ↔ elf-runner.c 合并，本地可真机预演）；
+  busybox 内置进包/首次拉取；HUD 上滑退出；下载链路。
