@@ -328,3 +328,8 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 - **预期**：修复后 musl malloc 正常 → echo xmalloc 成功 → write(1,'hello') → stdout 输出 hello。
 - 待办：真机验证（若通=里程碑）；统一 syscall 层（test_emu.c ↔ elf-runner.c 合并，本地可真机预演）；
   busybox 内置进包/首次拉取；HUD 上滑退出；下载链路。
+
+## 2026-10-20 ★★★ 真正根因（v8）：Linux musl MAP_ANONYMOUS=0x20 vs iOS MAP_ANON=0x1000
+- 本地诊断：musl mmap flags=0x32（0x20=MAP_ANONYMOUS Linux | 0x10=MAP_FIXED | 0x2=MAP_PRIVATE）、fd=-1、prot=0。
+  iOS 不识别 0x20 为匿名 → EBADF(-9)。之前 fd 修复方向错误（fd 本来就是 -1）。
+- **修复（5e55941 后补充）**：sys_mmap 把 flags 的 0x20 翻译为 0x1000，匿名时 fd=-1。版本标记 v8。

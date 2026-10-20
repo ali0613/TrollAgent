@@ -257,9 +257,11 @@ static long sys_mmap(uintptr_t addr, size_t len, int prot, int flags, int fd, of
     if (prot & 1) mprot |= PROT_READ;
     if (prot & 2) mprot |= PROT_WRITE;
     if (prot & 4) mprot |= PROT_EXEC;
-    /* iOS/Darwin：匿名映射（MAP_ANON/MAP_ANONYMOUS）fd 必须为 -1；
-       Linux 忽略 fd，musl 的 malloc 可能传 0/垃圾 → iOS EBADF(-9) */
-    if (flags & (MAP_ANON | MAP_ANONYMOUS)) { flags |= MAP_ANON; fd = -1; }
+    /* ★ 根因修复（真机 EBADF=-9）：guest 是 Linux musl，MAP_ANONYMOUS 在 Linux=0x20，
+       iOS 的 MAP_ANON=0x1000 —— 两平台常量不同，iOS 不识别 0x20 为匿名 → EBADF。
+       翻译 0x20→0x1000；MAP_PRIVATE=0x2 / MAP_FIXED=0x10 两平台一致。匿名时 fd 强制 -1。 */
+    if (flags & 0x20) flags = (flags & ~0x20) | 0x1000;
+    if (flags & 0x1000) fd = -1;
     void *r = mmap((void*)addr, len, mprot, flags, fd, off);
     if (r == MAP_FAILED) return -errno;
     return (long)(uintptr_t)r;
@@ -615,7 +617,7 @@ int elf_runner_main(int argc, char **argv) {
         return 2;
     }
     const char *elf_path = argv[1];
-    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v7 brk-heap)\n", argc, elf_path);
+    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v8 anon-fix)\n", argc, elf_path);
 
     /* 14e0: 诊断进程实际 csflags（CS_DEBUGGED=0x800）——TrollStore 手动 JIT 启动/URL 激活后
        到底有没有被 attach。csops(CS_OPS_STATUS) 是唯一可靠的运行时查询。 */

@@ -422,11 +422,11 @@ static int exec_one(void) {
         if ((nr == 214 || nr == 222) && g_base) {
             static int bmdiag = 0;
             if (bmdiag < 8) { bmdiag++;
-                fprintf(stderr, "[diag] malloc-sys nr=%llu a0=%#llx a1=%#llx lr-off=%#llx pre-ret-r8=%#llx\n",
+                fprintf(stderr, "[diag] malloc-sys nr=%llu a0=%#llx a1=%#llx a2=%#llx a3=%#llx a4=%lld lr-off=%#llx\n",
                     (unsigned long long)nr, (unsigned long long)E.r[0],
-                    (unsigned long long)E.r[1],
-                    (unsigned long long)(E.r[30] - (uint64_t)g_base),
-                    (unsigned long long)E.r[8]);
+                    (unsigned long long)E.r[1], (unsigned long long)E.r[2],
+                    (unsigned long long)E.r[3], (long long)E.r[4],
+                    (unsigned long long)(E.r[30] - (uint64_t)g_base));
             }
         }
         if (nr == 64 && g_base) {
