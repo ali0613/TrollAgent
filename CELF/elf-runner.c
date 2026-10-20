@@ -206,7 +206,13 @@ static long sys_write(int fd, const void *buf, size_t count) {
 static long sys_read(int fd, void *buf, size_t count) {
     return (long)read(fd, buf, count);
 }
+static DIR *g_dir_cache[16];   /* getdents64：fdopendir 缓存（busybox close 时释放） */
 static long sys_close(int fd) {
+    if (fd >= 0 && fd < 16 && g_dir_cache[fd]) {
+        closedir(g_dir_cache[fd]);
+        g_dir_cache[fd] = NULL;
+        return 0;   /* DIR 接管 fd，closedir 已释放 */
+    }
     return (long)close(fd);
 }
 static long sys_lseek(int fd, off_t off, int whence) {
@@ -273,27 +279,31 @@ struct linux_dirent64 {
 } __attribute__((packed));
 static long sys_getdents64(int fd, void *buf, size_t count) {
 #ifdef __APPLE__
-    /* Darwin 无 Linux 式 getdents64：getdirentries 读 Darwin dirent → 转 Linux dirent64 */
-    char tmp[8192];
-    long basep = 0;
-    long n = (long)getdirentries(fd, tmp, sizeof(tmp), &basep);
-    if (n < 0) return -errno;
+    /* Darwin 无 Linux getdents64、getdirentries 在 64 位 inode 下不可用：
+       fdopendir+readdir（Darwin dirent → 转 Linux dirent64）；DIR 按 fd 缓存，
+       sys_close 负责释放，避免 busybox 后续 close(fd) 时 double-close。 */
+    if (fd < 0 || fd >= 16) return -EBADF;
+    if (!g_dir_cache[fd]) {
+        g_dir_cache[fd] = fdopendir(fd);
+        if (!g_dir_cache[fd]) return -errno;
+    }
+    DIR *d = g_dir_cache[fd];
     unsigned char *out = buf;
-    long o = 0, i = 0;
-    while (i < n) {
-        struct dirent *de = (struct dirent *)(tmp + i);
-        size_t namlen = de->d_namlen;
+    long o = 0;
+    struct dirent *de;
+    errno = 0;
+    while ((de = readdir(d)) != NULL) {
+        size_t namlen = strlen(de->d_name);
         size_t lreclen = (namlen + 1 + 19 + 7) & ~(size_t)7;
         if (o + (long)lreclen > (long)count) break;
         memset(out + o, 0, lreclen);
         struct linux_dirent64 *ld = (struct linux_dirent64 *)(out + o);
-        ld->d_ino = de->d_ino;
-        ld->d_off = (int64_t)de->d_seekoff;
+        ld->d_ino = (uint64_t)de->d_ino;
+        ld->d_off = (int64_t)o;   /* Linux d_off：busybox 一般不依赖精确值 */
         ld->d_reclen = (uint16_t)lreclen;
         ld->d_type = de->d_type;
         memcpy(ld->d_name, de->d_name, namlen);
         o += (long)lreclen;
-        i += de->d_reclen;
     }
     return o;
 #else
