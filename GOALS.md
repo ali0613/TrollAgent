@@ -312,3 +312,9 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 - 本轮新增：① elf-runner START 打印版本标记（ELF-RUNNER 2026-10-20 v7 brk-heap）确认包版本
   ② emu 一次性诊断：xmalloc(0x11a74) 入口打印 size+lr（本地基准 size=7 lr=0xabb9c）
   ③ bb_error_msg(0x10e7c) 入口打印 caller-lr + msg（本地不触发；真机将指出谁调了 error）
+
+## 2026-10-20 v7 确认：brk 修复已装；xmalloc(malloc 0x85e0) 仍失败
+- v7 版本标记确认 brk 堆已生效；xmalloc(0x11a74)=调 0x85e0(malloc)→NULL→0x11a28(xalloc_die)→stderr。
+- 本地 malloc 序列（新诊断）：brk(0)→ret 堆基址 ✓；brk(扩展)→ret 新断点 ✓；mmap(固定0x...b000,0x1000)→ret 同址 ✓；mmap(NULL,0x1000)→ret 新区 ✓。
+- **怀疑**：musl malloc 用 MAP_FIXED mmap 在 heap 顶附近固定地址；iOS MAP_FIXED 若地址已映射（栈/堆/段冲突）→ EINVAL → malloc NULL。
+- 本轮带 brk/mmap 返回诊断（malloc-sys-ret）→ 真机看哪个 syscall 返回负值。

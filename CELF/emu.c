@@ -419,6 +419,16 @@ static int exec_one(void) {
            musl __syscall 封装也是 mov x8,x16 后再 svc，x8 恒为真值） */
         uint64_t nr = E.r[8];
         if (nr == 0 && E.r[16] != 0) nr = E.r[16];   /* 兜底：部分旧封装只放 x16 */
+        if ((nr == 214 || nr == 222) && g_base) {
+            static int bmdiag = 0;
+            if (bmdiag < 8) { bmdiag++;
+                fprintf(stderr, "[diag] malloc-sys nr=%llu a0=%#llx a1=%#llx lr-off=%#llx pre-ret-r8=%#llx\n",
+                    (unsigned long long)nr, (unsigned long long)E.r[0],
+                    (unsigned long long)E.r[1],
+                    (unsigned long long)(E.r[30] - (uint64_t)g_base),
+                    (unsigned long long)E.r[8]);
+            }
+        }
         if (nr == 64 && g_base) {
             static int wdiag = 0;
             if (!wdiag) { wdiag = 1;
@@ -431,6 +441,13 @@ static int exec_one(void) {
         }
         uint64_t ret = translate_syscall(nr, E.r[0], E.r[1], E.r[2],
                                          E.r[3], E.r[4], E.r[5]);
+        if ((nr == 214 || nr == 222) && g_base) {
+            static int bmret = 0;
+            if (bmret < 8) { bmret++;
+                fprintf(stderr, "[diag] malloc-sys-ret nr=%llu ret=%#llx (%lld)\n",
+                    (unsigned long long)nr, (unsigned long long)ret, (long long)ret);
+            }
+        }
         if (nr == 64 && g_base && getenv("EMU_DBG"))
             fprintf(stderr, "[svc] write fd=%llu pc-off=%#llx lr-off=%#llx n=%llu buf='%.20s' chain=%#llx/%#llx/%#llx/%#llx\n",
                 (unsigned long long)E.r[0],
