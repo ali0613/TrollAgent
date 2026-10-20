@@ -266,3 +266,9 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
   sp_top-4096 与 musl 启动清零区冲突 → auxv 读取错位。
 - v3（当前）：指针表回退 sp_top-512（真机已验证过 reloc 的位置）+ 字符串复制到 guest 栈但放指针表下方
   sp_top-8192（远离清零区，避免宿主指针导致的错误 applet "echo: "）+ 标准 auxv 键。
+
+## 2026-10-20 突破7：布局 v4（本地复现定案）
+- 本地 v3 布局（指针表 -512）复现 `applet not found`（127）→ 指针表 -512 错误方向。
+- 真机 v2 崩 reloc 的根因：auxv 写入用 aux[a++]（a 初始 = narg+3）→ 写到 slot 之外错位（本地 v1 用 aux[aa++] 从 0 起）。
+- **v4（当前）= 完整复制本地 v1 跑通配置**：指针表 sp_top-4096、字符串 guest(sp_top-512)、标准 auxv 键、
+  auxv 从 0 索引写入、32MB 栈。本地 v1 已输出 hello。
