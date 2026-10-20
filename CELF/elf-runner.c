@@ -537,7 +537,7 @@ long translate_syscall(uint64_t nr,
                 (unsigned long long)a0, (unsigned long long)a1, (unsigned long long)a2);
         r = -ENOSYS;
     }
-    if (1) /* v17: EMU_SYSCALL 恒开（真机无法传 env，默认全轨迹） */
+    if (getenv("EMU_DBG")) /* 默认关：EMU_DBG=1 时开 syscall 轨迹（v19.4 收敛） */
         fprintf(stderr, "[sys] nr=%llu -> %lld (x0=%llu x1=%llu x2=%llu x3=%llu x4=%llu x5=%llu)\n",
                 (unsigned long long)nr, (long long)r,
                 (unsigned long long)a0, (unsigned long long)a1, (unsigned long long)a2,
@@ -821,7 +821,7 @@ int elf_runner_main(int argc, char **argv) {
         return 2;
     }
     const char *elf_path = argv[1];
-    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v18 ioctl-trace)\n", argc, elf_path);
+    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-21 v19.4 clean)\n", argc, elf_path);
 
     /* 14e0: 诊断进程实际 csflags（CS_DEBUGGED=0x800）——TrollStore 手动 JIT 启动/URL 激活后
        到底有没有被 attach。csops(CS_OPS_STATUS) 是唯一可靠的运行时查询。 */
