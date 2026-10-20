@@ -649,7 +649,7 @@ int elf_runner_main(int argc, char **argv) {
         return 2;
     }
     const char *elf_path = argv[1];
-    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v12 bfm-fix)\n", argc, elf_path);
+    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v13 excl-barrier)\n", argc, elf_path);
 
     /* 14e0: 诊断进程实际 csflags（CS_DEBUGGED=0x800）——TrollStore 手动 JIT 启动/URL 激活后
        到底有没有被 attach。csops(CS_OPS_STATUS) 是唯一可靠的运行时查询。 */

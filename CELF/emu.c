@@ -752,6 +752,44 @@ static int exec_one(void) {
         W(rd(i), res); E.pc += 4; return 0;
     }
 
+    /* ---- 独占访问：LDXR/LDAXR/STXR/STLXR/LDXP/LDAXP/STXP/STLXP ----
+     * 解释器单线程、无并发 → 独占必然成功：
+     *   LD* = 普通读；ST* = 普通写 + 状态寄存器 Rs 写 0（成功，musl 原子循环即退出）。
+     * acquire/release 位（bit15 等）在单线程下无观察差异，忽略。
+     * 掩码经 capstone 对照 busybox_device 全部真实独占指令验证（15 条代码区）。 */
+    if ((i & 0xFFE07C00) == 0xC8407C00 || (i & 0xFFE07C00) == 0x88407C00) {
+        /* 单元素 LDXR/LDAXR */
+        int sz = (i >> 30) & 3, rn = (i >> 5) & 0x1F, rt = i & 0x1F;
+        uint64_t v = mem_ld(RSP(rn), 1 << sz);
+        if (sz == 2) v = (uint32_t)v;
+        W(rt, v); E.pc += 4; return 0;
+    }
+    if ((i & 0xFFE07C00) == 0xC8007C00 || (i & 0xFFE07C00) == 0x88007C00) {
+        /* 单元素 STXR/STLXR：写 + Rs=0（独占成功） */
+        int sz = (i >> 30) & 3, rn = (i >> 5) & 0x1F, rt = i & 0x1F, rs = (i >> 16) & 0x1F;
+        mem_st(RSP(rn), RZR(rt), 1 << sz);
+        W(rs, 0); E.pc += 4; return 0;
+    }
+    if ((i & 0xFFE00000) == 0xC8600000 || (i & 0xFFE00000) == 0x88600000) {
+        /* 对 LDXP/LDAXP：读两元素 */
+        int sz = (i >> 30) & 3, rn = (i >> 5) & 0x1F, rt1 = i & 0x1F, rt2 = (i >> 10) & 0x1F;
+        uint64_t addr = RSP(rn);
+        uint64_t v1 = mem_ld(addr, 1 << sz), v2 = mem_ld(addr + (1 << sz), 1 << sz);
+        if (sz == 2) { v1 = (uint32_t)v1; v2 = (uint32_t)v2; }
+        W(rt1, v1); W(rt2, v2); E.pc += 4; return 0;
+    }
+    if ((i & 0xFFE00000) == 0xC8200000 || (i & 0xFFE00000) == 0x88200000) {
+        /* 对 STXP/STLXP：写两元素 + Ws=0 */
+        int sz = (i >> 30) & 3, rn = (i >> 5) & 0x1F, rt1 = i & 0x1F, rt2 = (i >> 10) & 0x1F, rs = (i >> 16) & 0x1F;
+        uint64_t addr = RSP(rn);
+        mem_st(addr, RZR(rt1), 1 << sz); mem_st(addr + (1 << sz), RZR(rt2), 1 << sz);
+        W(rs, 0); E.pc += 4; return 0;
+    }
+    /* ---- 内存屏障：DMB/DSB/ISB/CLREX（单线程解释器：无操作） ---- */
+    if ((i & 0xFFFFF000) == 0xD5033000) {
+        E.pc += 4; return 0;
+    }
+
     /* ---- LDR/STR (unsigned imm / reg offset) ---- */
     {
         uint32_t m = i & 0xFFC00000;
