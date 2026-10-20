@@ -280,3 +280,10 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 - **下一步诊断（真机 trace）**：开 EMU_DBG 一次性打点（0x10520 打印 w20/表项），或用 API env 传 EMU_DBG=1；
   关注 find_applet 返回值与 0x10520 SXTW 查询是否与本地一致。若 EMU_DBG 漂移，改加"一次性"诊断
   （首次命中后自关）。
+
+## 2026-10-20 诊断进展：真机 applet 查询正确（w20=72 funcoff=0xabaf0）→ 问题在 echo_main 内部
+- 真机一次性诊断：`[diag] 10520 w20=72 funcoff=0xabaf0 argvp=...` —— 与本地完全一致！
+  **applet 查询正确，echo_main 被正确跳转**；后续输出仍 echo\0e（stdout 空）→ 问题在 echo_main 内部。
+- 下一个诊断：0x10520 加打印 argv[0]/argv[1] 字符串内容（本地基准 argv0='echo' argv1='hello'）。
+  真机若 argv 对 → echo_main/musl stdio/syscall（elf-runner.c translate_syscall 与 test_emu 不同）；
+  若 argv 错 → guest 字符串/栈问题。

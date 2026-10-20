@@ -170,6 +170,14 @@ static int exec_one(void) {
             fprintf(stderr, "[diag] 10520 w20=%u funcoff=%#llx argvp=%#llx x1=%#llx expect_echo=0xabaf0\n",
                 (unsigned)E.r[20], (unsigned long long)(f - (uint64_t)g_base),
                 (unsigned long long)E.r[22], (unsigned long long)E.r[1]);
+            {
+                uintptr_t ap = (uintptr_t)E.r[22];
+                const char *a0 = (const char*)(uintptr_t)((uintptr_t*)ap)[0];
+                const char *a1 = (const char*)(uintptr_t)((uintptr_t*)ap)[1];
+                fprintf(stderr, "[diag] argv0='%.24s' argv1='%.24s' argvp0=%#llx argvp1=%#llx\n",
+                    a0 ? a0 : "(null)", a1 ? a1 : "(null)",
+                    (unsigned long long)((uintptr_t*)ap)[0], (unsigned long long)((uintptr_t*)ap)[1]);
+            }
         }
     }
     if (getenv("EMU_DBG")) {
