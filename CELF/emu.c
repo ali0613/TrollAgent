@@ -691,20 +691,29 @@ static int exec_one(void) {
         W(rd(i), res); E.pc += 4; return 0;
     }
 
-    /* ---- 位域：BFM（0x33000000 W / 0xB3000000 X，BFI/BFXIL） ---- */
+    /* ---- 位域：BFM（0x33000000 W / 0xB3000000 X，BFI/BFXIL） ----
+     * 注意：ARM 真机语义（keystone 汇编 + unicorn/qemu 实测交叉验证）：
+     *   imms >= immr → BFXIL（提取）：Xd[0 : imms-immr] = Xn[immr : imms]
+     *   imms <  immr → BFI（插入）：Xd[lsb : lsb+imms] = Xn[0 : imms]，lsb=(w-immr)%w
+     * （v11 崩点根因：旧实现两分支语义写反，musl mallocng 的
+     *   0xdde00 bfi x0,x24,#12,#52 被错执行成右移提取 → meta->maplen=0
+     *   → free_group 误走 brk 分支 → get_meta(mmap页首) 读 [页首-4] → SIGBUS）
+     */
     if ((i & 0x7F800000) == 0x33000000 || (i & 0x7F800000) == 0xB3000000) {
         int sf = (i >> 31) & 1, w = sf ? 64 : 32;
         int immr = (i >> 16) & 0x3F, imms = (i >> 10) & 0x3F;
         uint64_t rn_v = RZR(rn(i)), rd_v = RZR(rd(i)), res;
-        if (imms >= immr) {                     /* BFI：插入 */
+        if (imms >= immr) {                     /* BFXIL：提取 Xn[immr:imms] 到 Xd 低位 */
             int lsb = immr, width = imms - immr + 1;
             uint64_t mask = (width >= w) ? ~0ULL : ((1ULL << width) - 1);
-            mask <<= lsb;
-            res = (rd_v & ~mask) | ((rn_v << lsb) & mask);
-        } else {                                /* BFXIL：提取 */
-            int lsb = w - immr, width = imms + 1;
-            uint64_t mask = (width >= w) ? ~0ULL : ((1ULL << width) - 1);
             res = (rd_v & ~mask) | ((rn_v >> lsb) & mask);
+        } else {                                /* BFI：Xd[lsb:lsb+imms] = Xn[0:imms]（低位插入） */
+            int lsb = (w - (immr % w)) % w, width = imms + 1;
+            uint64_t smask = (width >= w) ? ~0ULL : ((1ULL << width) - 1);
+            uint64_t mask;
+            if (lsb + width > w) mask = (smask << lsb) | (smask >> (w - lsb));
+            else mask = smask << lsb;
+            res = (rd_v & ~mask) | ((rn_v & smask) << lsb);
         }
         if (!sf) res &= 0xFFFFFFFF;
         W(rd(i), res); E.pc += 4; return 0;
