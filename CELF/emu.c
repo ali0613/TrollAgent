@@ -182,10 +182,16 @@ static int unsupported(uint32_t i) {
     return 1;
 }
 
+static int g_iotrace = 0;   /* v18: ioctl 后指令轨迹开关 */
 static int exec_one(void) {
     /* v11: 每条指令进 ring buffer（崩点带出最后 64 条） */
     tr_record(E.pc, E.pc >= g_base && E.pc + 4 <= g_base + g_total_size
                   ? *(const uint32_t *)(uintptr_t)E.pc : 0);
+    if (g_iotrace)
+        fprintf(stderr, "[it] pc-off=0x%llx insn=0x%08x\n",
+                (unsigned long long)(E.pc - g_base),
+                (unsigned int)(E.pc >= g_base && E.pc + 4 <= g_base + g_total_size
+                    ? *(const uint32_t *)(uintptr_t)E.pc : 0));
     /* 一次性真机诊断：echo_main write 调用点 0xabbd8（fd/len/buf—— 只打不读危险指针） */
     {
         static int fd_diag = 0;
@@ -466,6 +472,8 @@ static int exec_one(void) {
         }
         uint64_t ret = translate_syscall(nr, E.r[0], E.r[1], E.r[2],
                                          E.r[3], E.r[4], E.r[5]);
+        if (nr == 29) { g_iotrace = 1; }        /* v18: ioctl 后开指令轨迹 */
+        if (nr == 64) { g_iotrace = 0; }        /* v18: write 后关 */
         if ((nr == 214 || nr == 222) && g_base) {
             static int bmret = 0;
             if (bmret < 8) { bmret++;
