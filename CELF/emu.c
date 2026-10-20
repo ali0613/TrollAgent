@@ -161,6 +161,16 @@ static int unsupported(uint32_t i) {
 }
 
 static int exec_one(void) {
+    /* 一次性真机诊断：echo_main fwrite 返回处 0xabbdc + write svc（打印后自关） */
+    {
+        static int diag_done = 0;
+        if (!diag_done && E.pc >= g_base && E.pc - g_base == 0xabbdcULL) {
+            diag_done = 1;
+            fprintf(stderr, "[diag] fwrite ret x0=%llu want=%llu buf0='%.16s'\n",
+                (unsigned long long)E.r[0], (unsigned long long)E.r[19],
+                (const char*)(uintptr_t)E.r[21]);
+        }
+    }
     /* 一次性真机诊断：0x10520 applet 查询（打印后自关，避免漂移） */
     {
         static int diag_done = 0;
@@ -368,6 +378,15 @@ static int exec_one(void) {
            musl __syscall 封装也是 mov x8,x16 后再 svc，x8 恒为真值） */
         uint64_t nr = E.r[8];
         if (nr == 0 && E.r[16] != 0) nr = E.r[16];   /* 兜底：部分旧封装只放 x16 */
+        if (nr == 64 && g_base) {
+            static int wdiag = 0;
+            if (!wdiag) { wdiag = 1;
+                fprintf(stderr, "[diag] write fd=%llu n=%llu pc-off=%#llx buf='%.20s'\n",
+                    (unsigned long long)E.r[0], (unsigned long long)E.r[2],
+                    (unsigned long long)(E.pc - (uint64_t)g_base),
+                    (const char*)(uintptr_t)E.r[1]);
+            }
+        }
         uint64_t ret = translate_syscall(nr, E.r[0], E.r[1], E.r[2],
                                          E.r[3], E.r[4], E.r[5]);
         if (nr == 64 && g_base && getenv("EMU_DBG"))
