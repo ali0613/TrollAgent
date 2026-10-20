@@ -130,7 +130,10 @@ static int g_nsegs = 0;
 static int g_rwx = 0;      /* 14da: mmap 走 RWX 直连(allow-unsigned)时置 1——保持 RWX 直接执行，不再 mprotect */
 static sigjmp_buf g_exit_jmp; /* 14dc: 主进程内跑模式的 ELF 退出出口（exit_group → siglongjmp 回） */
 static int g_exit_jumped = 0;
-static int g_exit_code = 0;
+/* v19.3.1 buildfix: 全局（非 static）——emu.c 用 extern 引用这两个符号，static 不导出导致
+   链接 undefined symbol "_g_exit_code"/"_g_emu_halt"（本地 -c 单文件不链接测不出，iOS 链接必挂） */
+int g_exit_code = 0;
+int g_emu_halt = 0;
 
 /* ---- 寄存器访问（iOS arm64 ucontext） ---- */
 #if defined(__aarch64__)
