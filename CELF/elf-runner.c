@@ -328,49 +328,57 @@ static long sys_ioctl(int fd, unsigned long req, long arg) {
     return (long)ioctl(fd, req, arg);
 }
 
-/* 主翻译入口：Linux syscall 号 → 本地实现 */
+/* 主翻译入口：Linux syscall 号 → 本地实现
+ * EMU_SYSCALL=1 时打印每个 syscall 的 nr/args/ret（v14 诊断）。 */
 long translate_syscall(uint64_t nr,
                               uint64_t a0, uint64_t a1, uint64_t a2,
                               uint64_t a3, uint64_t a4, uint64_t a5) {
+    long r;
     switch (nr) {
-    case SYS_exit:        return sys_exit((int)a0);
-    case SYS_exit_group:  return sys_exit_group((int)a0);
-    case SYS_getpid:      return sys_getpid();
-    case SYS_getppid:     return sys_getppid();
-    case SYS_getuid:      return sys_getuid();
-    case SYS_geteuid:     return sys_geteuid();
-    case SYS_getgid:      return sys_getgid();
-    case SYS_getegid:     return sys_getegid();
-    case SYS_write:       return sys_write((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
-    case SYS_read:        return sys_read((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
-    case SYS_close:       return sys_close((int)a0);
-    case SYS_lseek:       return sys_lseek((int)a0, (off_t)a1, (int)a2);
-    case SYS_openat:      return sys_openat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (mode_t)a3);
-    case SYS_faccessat:   return sys_faccessat((int)a0, (const char*)(uintptr_t)a1, (int)a2);
-    case SYS_dup:         return sys_dup((int)a0);
-    case SYS_dup3:        return sys_dup3((int)a0, (int)a1, (int)a2);
-    case SYS_uname:       return sys_uname((void*)(uintptr_t)a0);
-    case SYS_brk:         return sys_brk((uintptr_t)a0);
-    case SYS_mmap:        return sys_mmap((uintptr_t)a0, (size_t)a1, (int)a2, (int)a3, (int)a4, (off_t)a5);
-    case SYS_munmap:      return sys_munmap((uintptr_t)a0, (size_t)a1);
-    case 226:             return 0;   /* mprotect：musl malloc mmap(prot=0) 后设权限；RWX 直连下无需真改 */
-    case SYS_nanosleep:   return sys_nanosleep((const struct timespec*)(uintptr_t)a0, (struct timespec*)(uintptr_t)a1);
-    case SYS_gettimeofday:return sys_gettimeofday((void*)(uintptr_t)a0, (void*)(uintptr_t)a1);
-    case SYS_clock_gettime:return sys_clock_gettime((int)a0, (void*)(uintptr_t)a1);
-    case SYS_fcntl:       return sys_fcntl((int)a0, (int)a1, (long)a2);
-    case SYS_ioctl:       return sys_ioctl((int)a0, (unsigned long)a1, (long)a2);
-    case 96:              return 0;   /* getrlimit（结构保持 0，busybox 启动查询用） */
-    case 73:              return 0;   /* 容错（arm64 编号未映射宏） */
-    case 135:             return 0;   /* rt_sigprocmask */
-    case 144:             return 0;   /* sched_yield 族 */
-    case 146:             return 0;
-    case 198:             return 0;   /* 容错：未知 syscall 198 */
+    case SYS_exit:        r = sys_exit((int)a0); break;
+    case SYS_exit_group:  r = sys_exit_group((int)a0); break;
+    case SYS_getpid:      r = sys_getpid(); break;
+    case SYS_getppid:     r = sys_getppid(); break;
+    case SYS_getuid:      r = sys_getuid(); break;
+    case SYS_geteuid:     r = sys_geteuid(); break;
+    case SYS_getgid:      r = sys_getgid(); break;
+    case SYS_getegid:     r = sys_getegid(); break;
+    case SYS_write:       r = sys_write((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
+    case SYS_read:        r = sys_read((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
+    case SYS_close:       r = sys_close((int)a0); break;
+    case SYS_lseek:       r = sys_lseek((int)a0, (off_t)a1, (int)a2); break;
+    case SYS_openat:      r = sys_openat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (mode_t)a3); break;
+    case SYS_faccessat:   r = sys_faccessat((int)a0, (const char*)(uintptr_t)a1, (int)a2); break;
+    case SYS_dup:         r = sys_dup((int)a0); break;
+    case SYS_dup3:        r = sys_dup3((int)a0, (int)a1, (int)a2); break;
+    case SYS_uname:       r = sys_uname((void*)(uintptr_t)a0); break;
+    case SYS_brk:         r = sys_brk((uintptr_t)a0); break;
+    case SYS_mmap:        r = sys_mmap((uintptr_t)a0, (size_t)a1, (int)a2, (int)a3, (int)a4, (off_t)a5); break;
+    case SYS_munmap:      r = sys_munmap((uintptr_t)a0, (size_t)a1); break;
+    case 226:             r = 0; break;   /* mprotect：musl malloc mmap(prot=0) 后设权限；RWX 直连下无需真改 */
+    case SYS_nanosleep:   r = sys_nanosleep((const struct timespec*)(uintptr_t)a0, (struct timespec*)(uintptr_t)a1); break;
+    case SYS_gettimeofday:r = sys_gettimeofday((void*)(uintptr_t)a0, (void*)(uintptr_t)a1); break;
+    case SYS_clock_gettime:r = sys_clock_gettime((int)a0, (void*)(uintptr_t)a1); break;
+    case SYS_fcntl:       r = sys_fcntl((int)a0, (int)a1, (long)a2); break;
+    case SYS_ioctl:       r = sys_ioctl((int)a0, (unsigned long)a1, (long)a2); break;
+    case 96:              r = 0; break;   /* getrlimit（结构保持 0，busybox 启动查询用） */
+    case 73:              r = 0; break;   /* 容错（arm64 编号未映射宏） */
+    case 135:             r = 0; break;   /* rt_sigprocmask */
+    case 144:             r = 0; break;   /* sched_yield 族 */
+    case 146:             r = 0; break;
+    case 198:             r = 0; break;   /* 容错：未知 syscall 198 */
     default:
         fprintf(stderr, "[elf-runner] unsupported syscall %llu (x0=%llu x1=%llu x2=%llu)\n",
                 (unsigned long long)nr,
                 (unsigned long long)a0, (unsigned long long)a1, (unsigned long long)a2);
-        return -ENOSYS;
+        r = -ENOSYS;
     }
+    if (getenv("EMU_SYSCALL"))
+        fprintf(stderr, "[sys] nr=%llu -> %lld (x0=%llu x1=%llu x2=%llu x3=%llu x4=%llu x5=%llu)\n",
+                (unsigned long long)nr, (long long)r,
+                (unsigned long long)a0, (unsigned long long)a1, (unsigned long long)a2,
+                (unsigned long long)a3, (unsigned long long)a4, (unsigned long long)a5);
+    return r;
 }
 
 /* ---- SIGTRAP handler：截获 brk（原 svc #0）→ 翻译 syscall ---- */
@@ -649,7 +657,7 @@ int elf_runner_main(int argc, char **argv) {
         return 2;
     }
     const char *elf_path = argv[1];
-    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v13 excl-barrier)\n", argc, elf_path);
+    fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-20 v14 syscall-trace)\n", argc, elf_path);
 
     /* 14e0: 诊断进程实际 csflags（CS_DEBUGGED=0x800）——TrollStore 手动 JIT 启动/URL 激活后
        到底有没有被 attach。csops(CS_OPS_STATUS) 是唯一可靠的运行时查询。 */
