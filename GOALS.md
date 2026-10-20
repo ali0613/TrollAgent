@@ -305,3 +305,10 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
   **elf-runner.c `sys_brk` 是 `(void)newbrk; return 0;`（no-op）→ musl malloc 小块分配失败/重叠 →
   busybox xmalloc → bb_error_msg → fd=2 error → exit 1。**
 - **修复（commit 7ac21da 之后）**：elf-runner.c sys_brk 改为 16MB mmap 堆 + 标准 brk 语义。
+
+## 2026-10-20 brk 修复后真机行为未变 → 需确认 xmalloc 失败调用者
+- brk 堆修复版（6912102）真机结果：仍 fd=2 error、exit-path x19=7、echo 未到 write(1)。
+  可能 ① 新包未生效（TrollStore 缓存/装错）② xmalloc 失败另有原因。
+- 本轮新增：① elf-runner START 打印版本标记（ELF-RUNNER 2026-10-20 v7 brk-heap）确认包版本
+  ② emu 一次性诊断：xmalloc(0x11a74) 入口打印 size+lr（本地基准 size=7 lr=0xabb9c）
+  ③ bb_error_msg(0x10e7c) 入口打印 caller-lr + msg（本地不触发；真机将指出谁调了 error）

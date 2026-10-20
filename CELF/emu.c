@@ -197,6 +197,21 @@ static int exec_one(void) {
             fprintf(stderr, "[diag] exit-path pc-off=%#llx x0=%llu x19=%llu\n",
                 (unsigned long long)off, (unsigned long long)E.r[0], (unsigned long long)E.r[19]); }
     }
+    /* 一次性：bb_error_msg(0x10e7c) 调用者 + xmalloc(0x11a74) 请求大小 */
+    {
+        uint64_t off = E.pc >= g_base ? E.pc - (uint64_t)g_base : ~0ULL;
+        static int d_e7c=0, d_1a74=0;
+        if (!d_e7c && off == 0x10e7cULL) { d_e7c=1;
+            const char *m = (const char*)(uintptr_t)E.r[0];
+            char ms[48] = {0};
+            if (E.r[0] >= (uint64_t)g_base && E.r[0] < (uint64_t)g_base + 0x200000)
+                for (int k = 0; k < 40 && m[k]; k++) ms[k] = (m[k] >= 32 && m[k] < 127) ? m[k] : '.';
+            fprintf(stderr, "[diag] bb_error_msg caller-lr=%#llx msg='%s'\n",
+                (unsigned long long)(E.r[30] - (uint64_t)g_base), ms); }
+        if (!d_1a74 && off == 0x11a74ULL) { d_1a74=1;
+            fprintf(stderr, "[diag] xmalloc size=%llu lr=%#llx\n",
+                (unsigned long long)E.r[0], (unsigned long long)(E.r[30] - (uint64_t)g_base)); }
+    }
     /* 一次性真机诊断：0x10520 applet 查询（打印后自关，避免漂移） */
     {
         static int diag_done = 0;
