@@ -174,6 +174,9 @@ static int g_exit_code = 0;
 #define SYS_readlinkat        78
 #define SYS_mkdirat           34
 #define SYS_unlinkat          35
+#define SYS_getcwd            17
+#define SYS_renameat          38
+#define SYS_renameat2         276
 #define SYS_rmdir             21
 #define SYS_dup               23
 #define SYS_dup3              24
@@ -199,6 +202,26 @@ static long sys_getuid(void)            { return 0; }
 static long sys_geteuid(void)           { return 0; }
 static long sys_getgid(void)            { return 0; }
 static long sys_getegid(void)           { return 0; }
+static long sys_getcwd(char *buf, size_t size) {
+    if (!getcwd(buf, size)) return -errno;
+    return (long)strlen(buf);
+}
+static long sys_mkdirat(int dirfd, const char *path, mode_t mode) {
+    if (mkdirat(dirfd, path, mode)) return -errno;
+    return 0;
+}
+static long sys_unlinkat(int dirfd, const char *path, int flags) {
+    if (unlinkat(dirfd, path, flags)) return -errno;
+    return 0;
+}
+static long sys_renameat(int olddfd, const char *oldp, int newdfd, const char *newp) {
+    if (renameat(olddfd, oldp, newdfd, newp)) return -errno;
+    return 0;
+}
+static long sys_renameat2(int olddfd, const char *oldp, int newdfd, const char *newp, unsigned flags) {
+    if (renameat2(olddfd, oldp, newdfd, newp, flags)) return -errno;
+    return 0;
+}
 
 static long sys_write(int fd, const void *buf, size_t count) {
     return (long)write(fd, buf, count);
@@ -474,6 +497,11 @@ long translate_syscall(uint64_t nr,
     case SYS_geteuid:     r = sys_geteuid(); break;
     case SYS_getgid:      r = sys_getgid(); break;
     case SYS_getegid:     r = sys_getegid(); break;
+    case SYS_getcwd:      r = sys_getcwd((char*)(uintptr_t)a0, (size_t)a1); break;
+    case SYS_mkdirat:     r = sys_mkdirat((int)a0, (const char*)(uintptr_t)a1, (mode_t)a2); break;
+    case SYS_unlinkat:    r = sys_unlinkat((int)a0, (const char*)(uintptr_t)a1, (int)a2); break;
+    case SYS_renameat:    r = sys_renameat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (const char*)(uintptr_t)a3); break;
+    case SYS_renameat2:   r = sys_renameat2((int)a0, (const char*)(uintptr_t)a1, (int)a2, (const char*)(uintptr_t)a3, (unsigned)a4); break;
     case SYS_write:       r = sys_write((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
     case SYS_read:        r = sys_read((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
     case SYS_lseek:       r = sys_lseek((int)a0, (off_t)a1, (int)a2); break;

@@ -24,6 +24,8 @@ extern uintptr_t g_base;
 extern size_t g_total_size;
 extern long translate_syscall(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
                               uint64_t a3, uint64_t a4, uint64_t a5);
+extern int g_emu_halt;   /* v19: syscall_layer 的 exit_group 置位，本地驱动据此停止 */
+extern int g_exit_code;
 
 typedef struct {
     uint64_t r[31];
@@ -114,6 +116,14 @@ static uint64_t decode_bitmask(int N, int immr, int imms, int sf, int *valid) {
     if (r != 0)
         mask = ((mask >> r) | (mask << (levels + 1 - r))) & full;
     if (levels != 63) mask &= (1ULL << (levels + 1)) - 1;
+    /* v19: 按周期扩展到 64 位（此前缺失 → SWAR bitmask 只算出低位，strchr 失效） */
+    {
+        int step = levels + 1;
+        if (step < 64 && mask) {
+            uint64_t rep = mask;
+            for (int i = step; i < 64; i += step) mask |= rep << i;
+        }
+    }
     if (!sf) mask &= 0xFFFFFFFF;
     *valid = 1;
     return mask;
@@ -187,6 +197,198 @@ static int exec_one(void) {
     /* v11: 每条指令进 ring buffer（崩点带出最后 64 条） */
     tr_record(E.pc, E.pc >= g_base && E.pc + 4 <= g_base + g_total_size
                   ? *(const uint32_t *)(uintptr_t)E.pc : 0);
+    /* v19 调试：%s 跳转表（0xb1780-0xb17b0）寄存器快照 */
+    if (E.pc >= g_base && E.pc - g_base >= 0xb1780ULL && E.pc - g_base <= 0xb17b0ULL)
+        fprintf(stderr, "[jt] pc-off=0x%llx w5=%u x0=0x%llx x5=0x%llx x19=0x%llx x24=0x%llx x20=0x%llx x21=0x%llx\n",
+                (unsigned long long)(E.pc - g_base),
+                (unsigned int)(E.r[5] & 0xFFFFFFFF), (unsigned long long)E.r[0],
+                (unsigned long long)E.r[5], (unsigned long long)E.r[19],
+                (unsigned long long)E.r[24], (unsigned long long)E.r[20],
+                (unsigned long long)E.r[21]);
+    /* v19 调试：strchr 返回检查（0xb1c10）与转换调用（0xb1cd4） */
+    if (E.pc >= g_base && (E.pc - g_base == 0xb1c10ULL || E.pc - g_base == 0xb1cd4ULL)) {
+        static int sc_done = 0;
+        if (E.pc - g_base == 0xb1c10ULL) sc_done = 1;
+        fprintf(stderr, "[sc] pc-off=0x%llx x0=0x%llx w23=%u w24=%u x20=0x%llx x4=0x%llx x21=0x%llx\n",
+                (unsigned long long)(E.pc - g_base), (unsigned long long)E.r[0],
+                (unsigned int)(E.r[23] & 0xFF), (unsigned int)(E.r[24] & 0xFFFFFFFF),
+                (unsigned long long)E.r[20], (unsigned long long)E.r[4],
+                (unsigned long long)E.r[21]);
+        (void)sc_done;
+    }
+    /* v19 调试：0xee0ac（格式化包装）返回值 & 0xf018c（vfprintf 核心）入口 */
+    if (E.pc >= g_base && (E.pc - g_base == 0xee128ULL || E.pc - g_base == 0xf018cULL)) {
+        if (E.pc - g_base == 0xf018cULL) {
+            const char *fmts = (const char*)(uintptr_t)E.r[1];
+            char safe[32] = {0};
+            if (E.r[1] >= (uint64_t)g_base && E.r[1] < (uint64_t)g_base + 0x2000000)
+                for (int k = 0; k < 31 && fmts[k]; k++) safe[k] = (fmts[k] >= 32 && fmts[k] < 127) ? fmts[k] : '.';
+            fprintf(stderr, "[vf] 0xf018c ENTER x0=0x%llx x1=0x%llx fmt='%s' x2=0x%llx x3=0x%llx\n",
+                    (unsigned long long)E.r[0], (unsigned long long)E.r[1], safe,
+                    (unsigned long long)E.r[2], (unsigned long long)E.r[3]);
+        } else {
+            fprintf(stderr, "[vf] 0xee0ac RET x0=0x%llx (%lld)\n",
+                    (unsigned long long)E.r[0], (long long)E.r[0]);
+        }
+    }
+    /* v19 调试：0xb1c98(memcpy) 与 0xb1cd4(0xb16a8) 缓冲内容 */
+    if (E.pc >= g_base && (E.pc - g_base == 0xb1c98ULL || E.pc - g_base == 0xb1cd4ULL)) {
+        if (E.pc - g_base == 0xb1c98ULL) {
+            unsigned char *d = (unsigned char*)(uintptr_t)E.r[0];
+            char hex[64] = {0};
+            for (int k = 0; k < 16; k++) sprintf(hex + k*3, "%02x ", d[k]);
+            fprintf(stderr, "[mc] 0xb1c98 memcpy x0=0x%llx x1=0x%llx x2=%llu 前16字节: %s\n",
+                    (unsigned long long)E.r[0], (unsigned long long)E.r[1],
+                    (unsigned long long)E.r[2], hex);
+        } else {
+            unsigned char *d = (unsigned char*)(uintptr_t)E.r[0];
+            char hex[64] = {0};
+            for (int k = 0; k < 16; k++) sprintf(hex + k*3, "%02x ", d[k]);
+            fprintf(stderr, "[mc] 0xb1cd4 x0=0x%llx 前16字节: %s\n",
+                    (unsigned long long)E.r[0], hex);
+        }
+    }
+    /* v19 调试：strlen 0x9300 入口/返回 */
+    if (E.pc >= g_base && (E.pc - g_base == 0x9300ULL || E.pc - g_base == 0x9328ULL)) {
+        if (E.pc - g_base == 0x9300ULL) {
+            const char *s = (const char*)(uintptr_t)E.r[0];
+            char safe[20] = {0};
+            if (E.r[0] >= 0x60000000ULL && E.r[0] < 0x70000000ULL)
+                for (int k = 0; k < 19 && s[k]; k++) safe[k] = (s[k] >= 32 && s[k] < 127) ? s[k] : '.';
+            fprintf(stderr, "[sl] strlen ENTER x0=0x%llx '%s'\n", (unsigned long long)E.r[0], safe);
+        } else {
+            fprintf(stderr, "[sl] strlen RET x0=%lld (0x%llx)\n", (long long)E.r[0], (unsigned long long)E.r[0]);
+        }
+    }
+    /* v19 调试：0xf7628 fwrite刷新链入口 */
+    if (E.pc >= g_base && E.pc - g_base == 0xf7628ULL) {
+        const char *s = (const char*)(uintptr_t)E.r[1];
+        char safe[20] = {0};
+        if (E.r[1] >= 0x60000000ULL && E.r[1] < 0x70000000ULL)
+            for (int k = 0; k < 19 && s[k]; k++) safe[k] = (s[k] >= 32 && s[k] < 127) ? s[k] : '.';
+        fprintf(stderr, "[fw] fwrite刷新链 ENTER buf=0x%llx '%s' len=%lld(0x%llx) lr-off=%#llx\n",
+            (unsigned long long)E.r[1], safe,
+            (long long)E.r[2], (unsigned long long)E.r[2],
+            (unsigned long long)(E.r[30] - (uint64_t)g_base));
+    }
+    /* v19 调试：0xeeac8 fwrite 入口 */
+    if (E.pc >= g_base && E.pc - g_base == 0xeeac8ULL) {
+        static int fw2 = 0;
+        if (fw2 < 6) { fw2++;
+            const char *s = (const char*)(uintptr_t)E.r[1];
+            char safe[24] = {0};
+            for (int k = 0; k < 23 && E.r[1] >= 0x60000000ULL && E.r[1] < 0x70000000ULL && s[k]; k++)
+                safe[k] = (s[k] >= 32 && s[k] < 127) ? s[k] : '.';
+            fprintf(stderr, "[fw2] fwrite ENTER buf=0x%llx '%s' len=%lld(0x%llx) lr-off=%#llx\n",
+                (unsigned long long)E.r[1], safe,
+                (long long)E.r[2], (unsigned long long)E.r[2],
+                (unsigned long long)(E.r[30] - (uint64_t)g_base));
+        }
+    }
+    /* v19 调试：0xedb74 __fwritex 入口 + 0xeeac8 fwrite 包装入口 */
+    if (E.pc >= g_base && (E.pc - g_base == 0xedb74ULL || E.pc - g_base == 0xeeac8ULL)) {
+        static int fwx = 0;
+        if (fwx < 20) { fwx++;
+            fprintf(stderr, "[fx] %#llx ENTER x0=0x%llx x1=0x%llx x2=0x%llx lr=%#llx\n",
+                (unsigned long long)(E.pc - g_base),
+                (unsigned long long)E.r[0], (unsigned long long)E.r[1],
+                (unsigned long long)E.r[2],
+                (unsigned long long)(E.r[30] - (uint64_t)g_base));
+        }
+    }
+    /* v19 调试：0xefef4 %d转换长度计算 x2-x27 */
+    if (E.pc >= g_base && E.pc - g_base == 0xefef4ULL) {
+        static int ln2 = 0;
+        if (ln2 < 8) { ln2++;
+            fprintf(stderr, "[ln] 0xefef4 x2=0x%llx x27=0x%llx sp=0x%llx x8=%lld(0x%llx)\n",
+                (unsigned long long)E.r[2], (unsigned long long)E.r[27],
+                (unsigned long long)E.sp, (long long)(E.r[2]-E.r[27]),
+                (unsigned long long)(E.r[2]-E.r[27]));
+        }
+    }
+    /* v19 调试：%s 完成 0xf0e4c */
+    if (E.pc >= g_base && E.pc - g_base == 0xf0e4cULL) {
+        static int se = 0;
+        if (se < 4) { se++;
+            fprintf(stderr, "[se] %s完成 x22=0x%llx x21=0x%llx x26=%lld x24=0x%llx x23=0x%llx\n",
+                (unsigned long long)(E.pc - g_base),
+                (unsigned long long)E.r[22], (unsigned long long)E.r[21],
+                (long long)E.r[26], (unsigned long long)E.r[24],
+                (unsigned long long)E.r[23]);
+        }
+    }
+    /* v19 调试：vfprintf 分派入口 0xefd14（w4=转换字符） */
+    if (E.pc >= g_base && E.pc - g_base == 0xefd14ULL) {
+        static int fd = 0;
+        if (fd < 10) { fd++;
+            fprintf(stderr, "[fd] w4=0x%x w28=%d x27=0x%llx x2=0x%llx x23=0x%llx\n",
+                (unsigned)E.r[4] & 0xff, (int)(E.r[28]&0xff),
+                (unsigned long long)E.r[27], (unsigned long long)E.r[2],
+                (unsigned long long)E.r[23]);
+        }
+    }
+    /* v19 调试：0xeff44 转换串 fwrite 前 */
+    if (E.pc >= g_base && E.pc - g_base == 0xeff44ULL) {
+        static int ef = 0;
+        if (ef < 8) { ef++;
+            unsigned long long sp = E.r[31];
+            uint32_t m88=0, m78=0;
+            unsigned long long a88 = sp + 0x88, a78 = sp + 0x78;
+            m88 = (uint32_t)mem_ld(a88, 4);
+            m78 = (uint32_t)mem_ld(a78, 4);
+            fprintf(stderr, "[ef] w20=%d w19=%d w24=%d x27=0x%llx x28=0x%llx x2=0x%llx [sp+0x88]=0x%x [sp+0x78]=0x%x\n",
+                (int)(E.r[20]&0xffffffff), (int)(E.r[19]&0xffffffff),
+                (int)(E.r[24]&0xffffffff),
+                (unsigned long long)E.r[27], (unsigned long long)E.r[28],
+                (unsigned long long)E.r[2], m88, m78);
+        }
+    }
+    /* v19 调试：strnlen 调用前 0xeffdc */
+    if (E.pc >= g_base && E.pc - g_base == 0xeffdcULL) {
+        static int sn = 0;
+        if (sn < 4) { sn++;
+            fprintf(stderr, "[sn] x27=0x%llx w24=%d x2=0x%llx\n",
+                (unsigned long long)E.r[27], (int)(E.r[24]&0xffffffff),
+                (unsigned long long)E.r[2]);
+        }
+    }
+    /* v19 调试：memchr 入口 0x88a0 */
+    if (E.pc >= g_base && E.pc - g_base == 0x88a0ULL) {
+        static int mc = 0;
+        if (mc < 8) { mc++;
+            fprintf(stderr, "[mc] memchr ENTER x0=0x%llx x1=0x%llx x2=0x%llx\n",
+                (unsigned long long)E.r[0], (unsigned long long)E.r[1],
+                (unsigned long long)E.r[2]);
+        }
+    }
+    /* v19 调试：memchr 返回点 0x892c/0x8954 */
+    if (E.pc >= g_base && (E.pc - g_base == 0x892cULL || E.pc - g_base == 0x8954ULL)) {
+        static int mr = 0;
+        if (mr < 8) { mr++;
+            fprintf(stderr, "[mr] memchr RET 0x%x x3=0x%llx\n",
+                (unsigned)(E.pc - g_base), (unsigned long long)E.r[3]);
+        }
+    }
+    /* v19 调试：strnlen 返回 0x9558 */
+    if (E.pc >= g_base && E.pc - g_base == 0x9558ULL) {
+        static int sr = 0;
+        if (sr < 4) { sr++;
+            fprintf(stderr, "[sr] strnlen RET x0=0x%llx x19=0x%llx x20=0x%llx\n",
+                (unsigned long long)E.r[0], (unsigned long long)E.r[19],
+                (unsigned long long)E.r[20]);
+        }
+    }
+    /* v19 调试：0x9550 cmp 后 nzcv */
+    if (E.pc >= g_base && E.pc - g_base == 0x9554ULL) {
+        static int cq = 0;
+        if (cq < 4) { cq++;
+            int n=(E.nzcv>>31)&1,z=(E.nzcv>>30)&1,cv=(E.nzcv>>29)&1,v=(E.nzcv>>28)&1;
+            fprintf(stderr, "[cq] 0x9554 csel nzcv=%08x n=%d z=%d c=%d v=%d x19=0x%llx x20=0x%llx insn=0x%08x\n",
+                (unsigned)E.nzcv, n, z, cv, v,
+                (unsigned long long)E.r[19], (unsigned long long)E.r[20],
+                (unsigned)(*(const uint32_t*)(uintptr_t)E.pc));
+        }
+    }
     if (g_iotrace)
         fprintf(stderr, "[it] pc-off=0x%llx insn=0x%08x\n",
                 (unsigned long long)(E.pc - g_base),
@@ -470,8 +672,18 @@ static int exec_one(void) {
                     (const char*)(uintptr_t)E.r[1]);
             }
         }
+        if (nr == 66 && g_base) {
+            static int wv = 0;
+            if (wv < 4) { wv++;
+                fprintf(stderr, "[wv] writev pc-off=%#llx lr-off=%#llx fd=%llu\n",
+                    (unsigned long long)(E.pc - (uint64_t)g_base),
+                    (unsigned long long)(E.r[30] - (uint64_t)g_base),
+                    (unsigned long long)E.r[0]);
+            }
+        }
         uint64_t ret = translate_syscall(nr, E.r[0], E.r[1], E.r[2],
                                          E.r[3], E.r[4], E.r[5]);
+        if (g_emu_halt) { E.exited = 1; E.exit_code = (int)g_exit_code; }
         if (nr == 29) { g_iotrace = 1; }        /* v18: ioctl 后开指令轨迹 */
         if (nr == 64) { g_iotrace = 0; }        /* v18: write 后关 */
         if ((nr == 214 || nr == 222) && g_base) {
@@ -677,15 +889,24 @@ static int exec_one(void) {
         }
     }
 
-    /* ---- MADD/MSUB（Ra=31 → MUL；0x9B=64位，0x1B=32位，sf 由 bit31 自然给出） ---- */
-    if ((i & 0xFFC00000) == 0x9B000000 || (i & 0xFFC00000) == 0x1B000000) {
-        int sf = (i >> 31) & 1, ra = (i >> 10) & 0x1F, msub = (i >> 15) & 1;
-        uint64_t p = RZR(rn(i)) * RZR(rm(i));
-        uint64_t res;
-        if (ra == 31) res = msub ? (uint64_t)(0 - p) : p;
-        else res = msub ? (RZR(ra) - p) : (p + RZR(ra));
+    /* ---- 3-source 乘加（v19.3）：MADD/MSUB/MUL + SMADDL/SMSUBL + UMADDL/UMSUBL + SMULH/UMULH
+           编码: 1 sf 0 0 1 1 0 1 1 op[3:0] Rm o0 Ra Rn Rd；op=8/9/0xD/0xA/0xE（keystone 实测） */
+    if ((i & 0x1F000000) == 0x1B000000) {
+        int sf = (i >> 31) & 1, op = (i >> 21) & 0xF, o0 = (i >> 15) & 1;
+        int Rm = (i >> 16) & 0x1F, Ra = (i >> 10) & 0x1F, Rn = (i >> 5) & 0x1F, Rd = i & 0x1F;
+        uint64_t a = RZR(Ra), n = RZR(Rn), m = RZR(Rm), res = 0;
+        switch (op) {
+        case 0x8: res = o0 ? a - n * m : a + n * m; break;              /* MADD/MSUB */
+        case 0x9: res = o0 ? a - (int64_t)(int32_t)n * (int64_t)(int32_t)m
+                           : a + (int64_t)(int32_t)n * (int64_t)(int32_t)m; break; /* SMADDL/SMSUBL */
+        case 0xD: res = o0 ? a - (uint64_t)(uint32_t)n * (uint64_t)(uint32_t)m
+                           : a + (uint64_t)(uint32_t)n * (uint64_t)(uint32_t)m; break; /* UMADDL/UMSUBL */
+        case 0xA: res = (uint64_t)(((__int128_t)(int64_t)n * (__int128_t)(int64_t)m) >> 64); break; /* SMULH */
+        case 0xE: res = (uint64_t)(((__uint128_t)n * (__uint128_t)m) >> 64); break;        /* UMULH */
+        default: return unsupported(i);
+        }
         if (!sf) res &= 0xFFFFFFFF;
-        W(rd(i), res); E.pc += 4; return 0;
+        W(Rd, res); E.pc += 4; return 0;
     }
 
     /* ---- UDIV/SDIV ---- */
@@ -805,9 +1026,11 @@ static int exec_one(void) {
         if (m == 0x39000000) { sz = 0; }
         else if (m == 0x39400000) { sz = 0; is_ld = 1; }
         else if (m == 0x39800000) { sz = 0; is_ld = 1; sign = 1; }
+        else if (m == 0x39C00000) { sz = 0; is_ld = 1; sign = 1; }   /* v19.3 LDRSB X（64位符号扩展字节加载） */
         else if (m == 0x79000000) { sz = 1; }
         else if (m == 0x79400000) { sz = 1; is_ld = 1; }
         else if (m == 0x79800000) { sz = 1; is_ld = 1; sign = 1; }
+        else if (m == 0x79C00000) { sz = 1; is_ld = 1; sign = 1; }   /* v19.3 LDRSH X（64位符号扩展半字加载） */
         else if (m == 0xB9000000) { sz = 2; }
         else if (m == 0xB9400000) { sz = 2; is_ld = 1; }
         else if (m == 0xB9800000) { sz = 2; is_ld = 1; sign = 1; }
@@ -829,6 +1052,15 @@ static int exec_one(void) {
         else if (m == 0x78400000) { sz = 1; is_ld = 1; }    /* LDRH post */
         else if (m == 0x78800000) { sz = 1; }               /* STRH pre */
         else if (m == 0x78C00000) { sz = 1; is_ld = 1; }    /* LDRH pre */
+        /* v19: register-offset 变体（跳转表/数组访问核心；此前漏匹配 → unsupported） */
+        else if (m == 0x38200000) { sz = 0; }               /* STRB reg */
+        else if (m == 0x38600000) { sz = 0; is_ld = 1; }    /* LDRB reg */
+        else if (m == 0x78200000) { sz = 1; }               /* STRH reg */
+        else if (m == 0x78600000) { sz = 1; is_ld = 1; }    /* LDRH reg */
+        else if (m == 0xB8200000) { sz = 2; }               /* STR W reg */
+        else if (m == 0xB8600000) { sz = 2; is_ld = 1; }    /* LDR W reg */
+        else if (m == 0xF8200000) { sz = 3; }               /* STR X reg */
+        else if (m == 0xF8600000) { sz = 3; is_ld = 1; }    /* LDR X reg */
         if (sz >= 0) {
             uint64_t addr;
             if ((i >> 24) & 1) {                        /* unsigned imm */
@@ -1024,6 +1256,29 @@ not_ldstp:
         }
     }
 
+    /* ---- LD1/ST1（Advanced SIMD multiple structures，无 post-index；musl strstr 等 SWAR 路径）
+           掩码：ST1=0x0C000000 / LD1=0x0C400000（bit22 区分）；寄存器数查 bit[15:12]（7=1 10=2 6=3 2=4，keystone 实测）；Q=bit30；Rn=bit[9:5]；Rt=bit[4:0] */
+    {
+        uint32_t _mn = i & 0x0FC00000;
+        if (_mn == 0x0C000000 || _mn == 0x0C400000) {
+            int is_ld = (_mn == 0x0C400000);
+            int q = (i >> 30) & 1, op4 = (i >> 12) & 0xF, nreg = 0;
+            if (op4 == 0x7) nreg = 1; else if (op4 == 0xA) nreg = 2;
+            else if (op4 == 0x6) nreg = 3; else if (op4 == 0x2) nreg = 4;
+            if (nreg) {
+                uint64_t a = RSP((i >> 5) & 0x1F);
+                int rt = i & 0x1F, nbytes = q ? 16 : 8;
+                for (int k = 0; k < nreg; k++) {
+                    int rr = (rt + k) & 0x1F;
+                    if (is_ld) { E.v[rr][0] = mem_ld(a, 8); E.v[rr][1] = mem_ld(a + 8, 8); }
+                    else { mem_st(a, E.v[rr][0], 8); mem_st(a + 8, E.v[rr][1], 8); }
+                    a += nbytes;
+                }
+                E.pc += 4; return 0;
+            }
+        }
+    }
+
     /* ---- CCMP/CCMN（imm：bit11-10=0b10；reg：bit11-10=0b00；cond=bit15-12，nzcv=bit3-0） ---- */
     if ((i & 0x7E400000) == 0x7A400000 || (i & 0x7E400000) == 0x3A400000) {
         int sf = (i >> 31) & 1, op = (i >> 30) & 1;      /* op=1→CCMP(sub)，0→CCMN(add) */
@@ -1045,7 +1300,7 @@ not_ldstp:
         (i & 0xFFE00000) == 0x9A800000 || (i & 0xFFE00000) == 0xDA800000) {
         int op = (i >> 21) & 3;           /* 00=CSEL/CSINC  10=CSINV/CSNEG */
         int op2 = (i >> 10) & 3;          /* 00=base 01=inc/neg */
-        int c = i & 0xF;
+        int c = (i >> 12) & 0xF;          /* v19.2 修复：CSEL 条件码在 bit[15:12]（原 i&0xF 误取 Rd 低位） */
         uint64_t a = RZR(rn(i)), b = RZR(rm(i));
         int t = cond_true(c);
         uint64_t res;
