@@ -296,3 +296,12 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 - **本地基准（安全诊断版）**：`[diag] echo-write fd=1 len=6` + `[diag] write fd=1 n=6 pc-off=0xf18a0 lr-off=0xf48a4 buf='hello` + `hello` 输出。
 - **本轮构建带**：① echo_main 0xabbd8 安全诊断（fd/len，不读危险指针）② write svc 诊断加 **lr-off**（write 调用者）。
   **真机若 write lr-off=0xf48a4（同本地）→ stdio FILE/fd 层错；若不同 → 更早的 error 路径。**
+
+## 2026-10-20 根因定位：elf-runner.c sys_brk 是 no-op → musl malloc 拿不到堆 → echo xmalloc 失败
+- multi-diag 真机数据：`echo-main argc=2`（入口正确）、`write fd=2 lr-off=0xf48a4`（error 消息写 stderr——
+  lr 与本地 fwrite 内部一致，但 echo 的 write(1) 从未执行）、`exit-path x19=7`（error 后退出）。
+- echo-newline/echo-write/echo-ret 均未触发 → echo_main 在 0xabbb0 之前失败。
+- **对照源码**：test_emu.c `case 214` 有 8MB mmap 堆 + brk 语义（brk(0)→cur；越界→旧 cur）；
+  **elf-runner.c `sys_brk` 是 `(void)newbrk; return 0;`（no-op）→ musl malloc 小块分配失败/重叠 →
+  busybox xmalloc → bb_error_msg → fd=2 error → exit 1。**
+- **修复（commit 7ac21da 之后）**：elf-runner.c sys_brk 改为 16MB mmap 堆 + 标准 brk 语义。

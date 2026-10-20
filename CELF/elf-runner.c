@@ -235,10 +235,21 @@ static long sys_uname(void *buf) {
     return 0;
 }
 
+static uint64_t g_heap_base = 0, g_heap_cur = 0, g_heap_top = 0;
 static long sys_brk(uintptr_t newbrk) {
-    /* iOS 无传统 brk；static 二进制通常一次性 brk 到静态堆顶，接受即可 */
-    (void)newbrk;
-    return 0;
+    /* musl malloc 依赖 brk 扩展堆：brk(0) 返回当前堆顶；brk(nb) 成功返回 nb、失败返回旧堆顶 */
+    if (g_heap_base == 0) {
+        void *h = mmap(NULL, 16 << 20, PROT_READ | PROT_WRITE,
+                       MAP_PRIVATE | MAP_ANON, -1, 0);
+        if (h == MAP_FAILED) return -ENOMEM;
+        g_heap_base = (uintptr_t)h;
+        g_heap_cur = g_heap_base;
+        g_heap_top = g_heap_base + (16 << 20);
+    }
+    if (newbrk == 0) return (long)g_heap_cur;
+    if (newbrk > g_heap_top || newbrk < g_heap_base) return (long)g_heap_cur;
+    g_heap_cur = newbrk;
+    return (long)g_heap_cur;
 }
 static long sys_mmap(uintptr_t addr, size_t len, int prot, int flags, int fd, off_t off) {
     /* MAP_FIXED 支持；PROT_* 映射 iOS 相同 */
