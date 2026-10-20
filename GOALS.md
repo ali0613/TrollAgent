@@ -272,3 +272,11 @@ svc write 打点含 fd/pc-off/lr-off/n/hex；验证 blr 目标=0xabaf0（表项�
 - 真机 v2 崩 reloc 的根因：auxv 写入用 aux[a++]（a 初始 = narg+3）→ 写到 slot 之外错位（本地 v1 用 aux[aa++] 从 0 起）。
 - **v4（当前）= 完整复制本地 v1 跑通配置**：指针表 sp_top-4096、字符串 guest(sp_top-512)、标准 auxv 键、
   auxv 从 0 索引写入、32MB 栈。本地 v1 已输出 hello。
+
+## 2026-10-20 真机 v4 结果（重要转折）
+- v4（=本地跑通配置逐字节复制）真机仍输出 `echo\0e '%s: `（与 v3 相同）→ **非布局问题**。
+- 本地同一布局 hello ✓，真机 applet 查询总错 → **真机环境特有差异**（emu 在 iOS 进程 vs Linux 进程，
+  或 musl 启动路径差异）。宿主字符串版(v1)输出 "echo: "、guest 字符串版(v3/v4)输出 "echo\0e '%s: "。
+- **下一步诊断（真机 trace）**：开 EMU_DBG 一次性打点（0x10520 打印 w20/表项），或用 API env 传 EMU_DBG=1；
+  关注 find_applet 返回值与 0x10520 SXTW 查询是否与本地一致。若 EMU_DBG 漂移，改加"一次性"诊断
+  （首次命中后自关）。
