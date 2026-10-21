@@ -36,7 +36,6 @@
 #ifdef __APPLE__
 #include <sys/mount.h>
 #include <sys/sysctl.h>   /* Darwin: sysctl/CTL_KERN/KERN_BOOTTIME/CTL_HW/HW_MEMSIZE */
-#include <libproc.h>      /* Darwin: proc_listallpids/proc_pidinfo/proc_name */
 #else
 #include <sys/vfs.h>
 #include <sys/sysinfo.h>
@@ -380,27 +379,13 @@ static long vproc_open(const char *path, int flags) {
     if (fd < 0) return -EMFILE;
     struct vproc_fd *v = vproc_get(fd);
     char name[64] = "";
-#ifdef __APPLE__
-    proc_name((int)pid, name, sizeof(name));
-#else
+    /* v19.18: iOS SDK 无 libproc.h（proc_name/proc_pidinfo/proc_listallpids 不可用）——
+       统一占位进程名 p<pid>，ps 框架可跑；真实进程名后续单独研究（sysctl KERN_PROC 沙盒受限） */
     snprintf(name, sizeof(name), "p%ld", pid);
-#endif
     if (strcmp(rest, "stat") == 0) {
         char buf[512];
         long utime = 0, stime = 0, ppid = 0;
         int nthreads = 0;
-#ifdef __APPLE__
-        struct proc_taskinfo ti;
-        if (proc_pidinfo((int)pid, PROC_PIDTASKINFO, 0, &ti, sizeof(ti)) == sizeof(ti)) {
-            utime = (long)(ti.pti_total_user   / 10000);   /* us -> 0.01s tick 近似 */
-            stime = (long)(ti.pti_total_system / 10000);
-            nthreads = ti.pti_threadnum;
-        }
-        struct proc_bsdinfo bi;
-        if (proc_pidinfo((int)pid, PROC_PIDTBSDINFO, 0, &bi, sizeof(bi)) == sizeof(bi)) {
-            ppid = (long)bi.pbi_ppid;
-        }
-#endif
         /* Linux /proc/<pid>/stat 关键字段位：pid (comm) state ppid ... utime stime ... num_threads */
         snprintf(buf, sizeof(buf),
                  "%ld (%s) S %ld 0 0 0 0 0 0 0 0 0 %ld %ld 0 0 20 0 %d 0 0 0 0 0",
@@ -444,10 +429,11 @@ static long vproc_getdents(int fd, void *buf, size_t count) {
     if (!v || !v->is_dir) return -EBADF;
     pid_t pids[4096];
     int n = 0;
+    /* v19.18: iOS 无 proc_listallpids（libproc.h 不存在）——占位枚举 1..256 */
 #ifdef __APPLE__
-    n = proc_listallpids(pids, 4096);
+    for (n = 0; n < 4096 && n < 256; n++) pids[n] = (pid_t)(n + 1);
 #else
-    /* 本地对照：枚举宿主 /proc 的 pid 目录（真机走 proc_listallpids） */
+    /* 本地对照：枚举宿主 /proc 的 pid 目录 */
     DIR *dp = opendir("/proc");
     if (dp) {
         struct dirent *de;
