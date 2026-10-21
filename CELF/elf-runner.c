@@ -35,14 +35,11 @@
 #include <sys/uio.h>
 #ifdef __APPLE__
 #include <sys/mount.h>
-#else
-#include <sys/vfs.h>
-#if defined(__APPLE__)
 #include <sys/sysctl.h>   /* Darwin: sysctl/CTL_KERN/KERN_BOOTTIME/CTL_HW/HW_MEMSIZE */
 #else
+#include <sys/vfs.h>
 #include <sys/sysinfo.h>
-#endif
-#include <sys/sendfile.h>
+#include <sys/sendfile.h>   /* Linux sendfile 签名 */
 #endif
 #include <signal.h>
 #include <setjmp.h>
@@ -570,9 +567,31 @@ static long sys_sysinfo(void *buf) {
     memcpy(buf, &si, sizeof(si));
     return 0;
 }
-/* sendfile（arm64 nr 71）：busybox cp 大文件加速路径；offset 为 guest off_t*（LP64 一致，直透） */
+/* sendfile（arm64 nr 71）：busybox cp 大文件加速路径。
+ * Linux/BSD 的 sendfile 签名不同，统一用 read/write 循环实现（双平台可编译、语义正确）。
+ * offset 为 guest off_t*（可空）；返回实际复制字节数。 */
 static long sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
-    return (long)sendfile(out_fd, in_fd, offset, count);
+    char buf[65536];
+    off_t pos = offset ? *offset : 0;
+    if (offset && lseek(in_fd, pos, SEEK_SET) < 0) return -errno;
+    size_t total = 0;
+    for (;;) {
+        size_t want = sizeof(buf);
+        if (count != 0 && count - total < want) want = count - total;
+        ssize_t n = read(in_fd, buf, want);
+        if (n < 0) return -errno;
+        if (n == 0) break;
+        size_t offw = 0;
+        while (offw < (size_t)n) {
+            ssize_t w = write(out_fd, buf + offw, (size_t)n - offw);
+            if (w < 0) return -errno;
+            offw += (size_t)w;
+        }
+        total += (size_t)n;
+        if (count != 0 && total >= count) break;
+    }
+    if (offset) *offset = pos + (off_t)total;
+    return (long)total;
 }
 /* fcntl 简化（busybox 常用 F_GETFL/F_SETFL 等） */
 static long sys_fcntl(int fd, int cmd, long arg) {
