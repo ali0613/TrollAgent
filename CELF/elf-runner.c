@@ -36,6 +36,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <sched.h>       /* v19.18f: cpu_set_t（sched_getaffinity） */
 #ifdef __APPLE__
 #include <sys/mount.h>
 #include <sys/sysctl.h>   /* Darwin: sysctl/CTL_KERN/KERN_BOOTTIME/CTL_HW/HW_MEMSIZE */
@@ -208,6 +209,12 @@ int g_emu_halt = 0;
 #define SYS_ioctl             29
 #define SYS_arch_prctl        178  /* x86 专用，aarch64 无 */
 #define SYS_fork              220  /* aarch64：httpd 每连接 fork 子进程 */
+#define SYS_execve            221  /* aarch64：timeout/xargs/nice 的子进程 exec */
+#define SYS_setpriority       140
+#define SYS_sched_getaffinity 123
+#define SYS_sched_setaffinity 122
+#define SYS_fstat             80
+#define SYS_pipe2             59
 /* v19.18e：socket 族（网络类 applet：wget/nc/telnet/httpd 等） */
 #define SYS_poll               7
 #define SYS_select            23
@@ -906,6 +913,51 @@ static long sys_chdir(const char *path) {
     if (chdir(path)) return -errno;
     return 0;
 }
+/* v19.18f：execve——只发生在 fork 子进程（xargs/timeout/nice 模型），宿主 execve 直接替换子进程 */
+static long sys_execve(const char *path, char *const argv[], char *const envp[]) {
+    execve(path, argv, envp);   /* 成功不返回；失败返回 */
+    return -errno;
+}
+static long sys_setpriority(int which, int who, int prio) {
+    if (setpriority(which, who, prio)) return -errno;
+    return 0;
+}
+static long sys_sched_getaffinity(pid_t pid, size_t size, void *mask) {
+    if (sched_getaffinity(pid, size, (cpu_set_t *)mask)) return -errno;
+    return 0;
+}
+static long sys_sched_setaffinity(pid_t pid, size_t size, const void *mask) {
+    if (sched_setaffinity(pid, size, (const cpu_set_t *)mask)) return -errno;
+    return 0;
+}
+static long sys_fstat(int fd, void *statbuf) {
+    /* guest Linux stat 布局（aarch64）：st_dev..st_size..st_mtime..（与宿主 Linux x86_64 不同但 aarch64 宿主一致）；
+       本地 Linux 宿主 x86_64 布局不同——用字段级转换保证正确性。 */
+    struct linux_stat { uint64_t dev; uint64_t ino; uint32_t mode; uint32_t nlink; uint32_t uid; uint32_t gid;
+                        uint64_t rdev; uint64_t size; uint64_t blksize; uint64_t blocks;
+                        uint64_t atime; uint64_t atime_ns; uint64_t mtime; uint64_t mtime_ns;
+                        uint64_t ctime; uint64_t ctime_ns; uint32_t unused[3]; };
+    struct stat hs;
+    if (fstat(fd, &hs)) return -errno;
+    struct linux_stat *g = (struct linux_stat *)statbuf;
+    memset(g, 0, sizeof(*g));
+    g->dev = hs.st_dev; g->ino = hs.st_ino;
+    g->mode = hs.st_mode; g->nlink = hs.st_nlink;
+    g->uid = hs.st_uid; g->gid = hs.st_gid;
+    g->rdev = hs.st_rdev; g->size = hs.st_size;
+    g->blksize = hs.st_blksize; g->blocks = hs.st_blocks;
+    g->atime = hs.st_atime; g->atime_ns = hs.st_atim.tv_nsec;
+    g->mtime = hs.st_mtime; g->mtime_ns = hs.st_mtim.tv_nsec;
+    g->ctime = hs.st_ctime; g->ctime_ns = hs.st_ctim.tv_nsec;
+    return 0;
+}
+static long sys_wait4(pid_t pid, int *status, int options, void *rusage) {
+    int st;
+    pid_t w = wait4(pid, &st, options, (struct rusage *)rusage);
+    if (w < 0) return -errno;
+    if (status) *status = st;
+    return (long)w;
+}
 static long sys_dup3(int oldfd, int newfd, int flags) {
     (void)flags;
     if (dup2(oldfd, newfd) < 0) return -errno;
@@ -1252,6 +1304,18 @@ long translate_syscall(uint64_t nr,
         if (pid < 0) r = -errno; else r = (long)pid;
         break;
     }
+    case SYS_execve:      r = sys_execve((const char*)(uintptr_t)a0, (char* const*)(uintptr_t)a1, (char* const*)(uintptr_t)a2); break;
+    case SYS_setpriority: r = sys_setpriority((int)a0, (int)a1, (int)a2); break;
+    case SYS_sched_getaffinity: r = sys_sched_getaffinity((pid_t)a0, (size_t)a1, (void*)(uintptr_t)a2); break;
+    case SYS_sched_setaffinity: r = sys_sched_setaffinity((pid_t)a0, (size_t)a1, (const void*)(uintptr_t)a2); break;
+    case SYS_fstat:       r = sys_fstat((int)a0, (void*)(uintptr_t)a1); break;
+    case SYS_pipe2: {     /* tar -czf 调 gzip 子进程的管道 */
+        int p[2];
+        if (pipe2(p, (int)a1)) r = -errno;
+        else { ((int*)(uintptr_t)a0)[0] = p[0]; ((int*)(uintptr_t)a0)[1] = p[1]; r = 0; }
+        break;
+    }
+    case 260:             r = sys_wait4((pid_t)a0, (int*)(uintptr_t)a1, (int)a2, (void*)(uintptr_t)a3); break;  /* wait4：xargs 父进程回收 */
     case SYS_dup3:        r = sys_dup3((int)a0, (int)a1, (int)a2); break;
     case SYS_uname:       r = sys_uname((void*)(uintptr_t)a0); break;
     case 43:              r = sys_statfs((const char*)(uintptr_t)a0, (void*)(uintptr_t)a1); break;  /* arm64 statfs */
@@ -1351,10 +1415,46 @@ static void crash_handler(int sig, siginfo_t *si, void *ucv) {
                 (unsigned long long)ctx->uc_mcontext->__ss.__pc,
                 (unsigned long long)(si ? (uintptr_t)si->si_addr : 0));
 #else
-        fprintf(stderr, "[elf-runner] emu mem fault sig=%d -> longjmp\n", sig);
+        fprintf(stderr, "[elf-runner] emu mem fault sig=%d -> longjmp (host pc=%p far=%p)\n",
+                sig,
+                (void *)(ctx ? ctx->uc_mcontext.gregs[REG_RIP] : 0),
+                (void *)(si ? si->si_addr : 0));
+        {
+            uintptr_t rip = (uintptr_t)(ctx ? ctx->uc_mcontext.gregs[REG_RIP] : 0);
+            unsigned char buf[32];
+            ssize_t n = -1;
+            /* 只读探针：可能仍 fault——用已知好地址对比打印 */
+            if (rip > 0x1000) {
+                volatile unsigned char *p = (volatile unsigned char *)rip;
+                for (int k = 0; k < 24 && (uintptr_t)p < rip + 24; k++) {
+                    buf[k] = p[k];
+                }
+                n = 24;
+            }
+            if (n > 0) {
+                fprintf(stderr, "  rip_bytes:");
+                for (int k = 0; k < n; k++) fprintf(stderr, " %02x", buf[k]);
+                fprintf(stderr, "\n");
+            } else {
+                fprintf(stderr, "  rip_bytes: <unreadable>\n");
+            }
+        }
+        if (ctx) {
+            for (int gi = 0; gi < 23; gi++)
+                fprintf(stderr, "  g[%d]=0x%llx\n", gi, (unsigned long long)ctx->uc_mcontext.gregs[gi]);
+            uintptr_t sp = (uintptr_t)ctx->uc_mcontext.gregs[REG_RSP];
+            fprintf(stderr, "  stack:");
+            for (int k = 0; k < 8; k++) {
+                uintptr_t v;
+                if (!sigprocmask) {} /* noop */
+                /* 直接读宿主栈（handler 同线程） */
+                v = *(volatile uintptr_t *)(sp + k * 8);
+                fprintf(stderr, " [%d]=0x%llx", k, (unsigned long long)v);
+            }
+            fprintf(stderr, "\n");
+        }
 #endif
         siglongjmp(*emu_jmp_buf(), 1);
-        return;
     }
     ucontext_t *ctx = (ucontext_t *)ucv;
 #if defined(__aarch64__)
