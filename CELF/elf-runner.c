@@ -36,6 +36,7 @@
 #ifdef __APPLE__
 #include <sys/mount.h>
 #include <sys/sysctl.h>   /* Darwin: sysctl/CTL_KERN/KERN_BOOTTIME/CTL_HW/HW_MEMSIZE */
+#include <libproc.h>      /* Darwin: proc_listallpids/proc_pidinfo/proc_name */
 #else
 #include <sys/vfs.h>
 #include <sys/sysinfo.h>
@@ -49,6 +50,7 @@
 #define PT_DETACH     11
 extern int ptrace(int request, pid_t pid, char *addr, int data);
 #include <stdbool.h>
+#include <stddef.h>
 #ifndef _DARWIN_C_SOURCE
 #define _DARWIN_C_SOURCE
 #endif
@@ -320,6 +322,190 @@ struct linux_dirent64 {
     uint64_t d_ino; int64_t d_off;
     uint16_t d_reclen; uint8_t d_type; char d_name[];
 } __attribute__((packed));
+
+/* ---- 虚拟 procfs（iOS 无 /proc；busybox ps 枚举 PID + 读 stat/cmdline） ---- */
+#define VPROC_BASE  1000
+#define VPROC_MAX   64
+struct vproc_fd {
+    int in_use;
+    int is_dir;          /* 目录：getdents64 时枚举 pid */
+    char *data;          /* 文件内容 */
+    size_t len, pos;
+};
+static struct vproc_fd g_vproc[VPROC_MAX];
+static int vproc_alloc(void) {
+    for (int i = 0; i < VPROC_MAX; i++) {
+        if (!g_vproc[i].in_use) {
+            memset(&g_vproc[i], 0, sizeof(g_vproc[0]));
+            g_vproc[i].in_use = 1;
+            return VPROC_BASE + i;
+        }
+    }
+    return -1;
+}
+static struct vproc_fd *vproc_get(int fd) {
+    if (fd < VPROC_BASE || fd >= VPROC_BASE + VPROC_MAX) return NULL;
+    struct vproc_fd *v = &g_vproc[fd - VPROC_BASE];
+    return v->in_use ? v : NULL;
+}
+static void vproc_free(int fd) {
+    struct vproc_fd *v = vproc_get(fd);
+    if (v) { free(v->data); memset(v, 0, sizeof(*v)); }
+}
+static int is_proc_path(const char *p) {
+    if (!p) return 0;
+    return strncmp(p, "/proc", 5) == 0 && (p[5] == '\0' || p[5] == '/');
+}
+/* 虚拟目录 fd（/proc）：getdents64 时枚举 pid */
+static long vproc_open_dir(void) {
+    int fd = vproc_alloc();
+    if (fd < 0) return -EMFILE;
+    vproc_get(fd)->is_dir = 1;
+    return fd;
+}
+/* 生成 /proc/<pid>/stat 与 /proc/<pid>/cmdline 内容 */
+static long vproc_open(const char *path, int flags) {
+    (void)flags;
+    if (!path[5] || (path[5] == '/' && !path[6])) return vproc_open_dir();  /* /proc 或 /proc/ */
+    const char *rest = path + 6;
+    long pid = -1;
+    if (strncmp(rest, "self/", 5) == 0) { pid = (long)getpid(); rest += 5; }
+    else {
+        char *end;
+        pid = strtol(rest, &end, 10);
+        if (end == rest || *end != '/') return -ENOENT;
+        rest = end + 1;
+    }
+    int fd = vproc_alloc();
+    if (fd < 0) return -EMFILE;
+    struct vproc_fd *v = vproc_get(fd);
+    char name[64] = "";
+#ifdef __APPLE__
+    proc_name((int)pid, name, sizeof(name));
+#else
+    snprintf(name, sizeof(name), "p%ld", pid);
+#endif
+    if (strcmp(rest, "stat") == 0) {
+        char buf[512];
+        long utime = 0, stime = 0, ppid = 0;
+        int nthreads = 0;
+#ifdef __APPLE__
+        struct proc_taskinfo ti;
+        if (proc_pidinfo((int)pid, PROC_PIDTASKINFO, 0, &ti, sizeof(ti)) == sizeof(ti)) {
+            utime = (long)(ti.pti_total_user   / 10000);   /* us -> 0.01s tick 近似 */
+            stime = (long)(ti.pti_total_system / 10000);
+            nthreads = ti.pti_threadnum;
+        }
+        struct proc_bsdinfo bi;
+        if (proc_pidinfo((int)pid, PROC_PIDTBSDINFO, 0, &bi, sizeof(bi)) == sizeof(bi)) {
+            ppid = (long)bi.pbi_ppid;
+        }
+#endif
+        /* Linux /proc/<pid>/stat 关键字段位：pid (comm) state ppid ... utime stime ... num_threads */
+        snprintf(buf, sizeof(buf),
+                 "%ld (%s) S %ld 0 0 0 0 0 0 0 0 0 %ld %ld 0 0 20 0 %d 0 0 0 0 0",
+                 pid, name[0] ? name : "?", ppid, utime, stime, nthreads);
+        v->data = strdup(buf);
+        v->len = strlen(buf);
+        return fd;
+    }
+    if (strcmp(rest, "cmdline") == 0) {
+        v->data = strdup(name[0] ? name : "?");
+        v->len = strlen(v->data);
+        return fd;
+    }
+    if (strcmp(rest, "uptime") == 0) {
+        char buf[64];
+#ifdef __APPLE__
+        struct timeval boot, now;
+        size_t blen = sizeof(boot);
+        int mib[2] = { CTL_KERN, KERN_BOOTTIME };
+        if (sysctl(mib, 2, &boot, &blen, NULL, 0) == 0) {
+            gettimeofday(&now, NULL);
+            snprintf(buf, sizeof(buf), "%.2f %.2f",
+                     (double)(now.tv_sec - boot.tv_sec),
+                     (double)(now.tv_sec - boot.tv_sec) * 0.5);
+        } else snprintf(buf, sizeof(buf), "0.00 0.00");
+#else
+        snprintf(buf, sizeof(buf), "0.00 0.00");
+#endif
+        v->data = strdup(buf);
+        v->len = strlen(v->data);
+        return fd;
+    }
+    /* 其他 /proc/<pid>/xxx：空文件（后续按需扩展） */
+    v->data = strdup("");
+    v->len = 0;
+    return fd;
+}
+/* 虚拟目录 getdents64：枚举所有 pid */
+static long vproc_getdents(int fd, void *buf, size_t count) {
+    struct vproc_fd *v = vproc_get(fd);
+    if (!v || !v->is_dir) return -EBADF;
+    pid_t pids[4096];
+    int n = 0;
+#ifdef __APPLE__
+    n = proc_listallpids(pids, 4096);
+#else
+    /* 本地对照：枚举宿主 /proc 的 pid 目录（真机走 proc_listallpids） */
+    DIR *dp = opendir("/proc");
+    if (dp) {
+        struct dirent *de;
+        while (n < 4096 && (de = readdir(dp)) != NULL) {
+            char *end;
+            long pid = strtol(de->d_name, &end, 10);
+            if (*end == '\0' && pid > 0) pids[n++] = (pid_t)pid;
+        }
+        closedir(dp);
+    }
+#endif
+    if (n < 0) n = 0;
+    unsigned char *out = buf;
+    size_t used = 0;
+    while ((size_t)v->pos < (size_t)n) {
+        char name[16];
+        snprintf(name, sizeof(name), "%d", pids[v->pos]);
+        size_t nl = strlen(name);
+        size_t lreclen = offsetof(struct linux_dirent64, d_name) + nl + 1;
+        if (used + lreclen > count) break;
+        struct linux_dirent64 *ld = (struct linux_dirent64 *)(out + used);
+        ld->d_ino = (uint64_t)pids[v->pos];
+        ld->d_off = (int64_t)v->pos + 1;
+        ld->d_reclen = (uint16_t)lreclen;
+        ld->d_type = 4 /* DT_DIR */;
+        memcpy(ld->d_name, name, nl + 1);
+        used += lreclen;
+        v->pos++;
+    }
+    if (used == 0 && (size_t)v->pos >= (size_t)n) return 0;  /* EOF */
+    return (long)used;
+}
+/* 虚拟文件 read/lseek/close */
+static long vproc_read(int fd, void *buf, size_t count) {
+    struct vproc_fd *v = vproc_get(fd);
+    if (!v || v->is_dir) return -EBADF;
+    if (v->pos >= v->len) return 0;
+    size_t n = v->len - v->pos;
+    if (n > count) n = count;
+    memcpy(buf, v->data + v->pos, n);
+    v->pos += n;
+    return (long)n;
+}
+static long vproc_lseek(int fd, off_t off, int whence) {
+    struct vproc_fd *v = vproc_get(fd);
+    if (!v || v->is_dir) return -ESPIPE;
+    off_t base = (whence == SEEK_SET) ? 0 : (whence == SEEK_CUR) ? (off_t)v->pos : (off_t)v->len;
+    off_t np = base + off;
+    if (np < 0) return -EINVAL;
+    if (np > (off_t)v->len) np = (off_t)v->len;
+    v->pos = (size_t)np;
+    return np;
+}
+static long vproc_close(int fd) {
+    if (!vproc_get(fd)) return -EBADF;
+    vproc_free(fd);
+    return 0;
+}
 static long sys_getdents64(int fd, void *buf, size_t count) {
 #ifdef __APPLE__
     /* Darwin 无 Linux getdents64、getdirentries 在 64 位 inode 下不可用：
@@ -614,18 +800,26 @@ long translate_syscall(uint64_t nr,
                 (unsigned long long)a1, (unsigned long long)a2, (unsigned long long)a3);
     }
     switch (nr) {
-    case SYS_openat:
-        r = sys_openat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (mode_t)a3);        break;
+    case SYS_openat: {
+        const char *p = (const char*)(uintptr_t)a1;
+        if (is_proc_path(p)) r = vproc_open(p, (int)a2);
+        else r = sys_openat((int)a0, p, (int)a2, (mode_t)a3);
+        break;
+    }
     case SYS_newfstatat:
         r = sys_newfstatat((int)a0, (const char*)(uintptr_t)a1, (struct linux_stat*)(uintptr_t)a2, (int)a3);        break;
     case SYS_getdents64:
-        r = sys_getdents64((int)a0, (void*)(uintptr_t)a1, (size_t)a2);        break;
+        if ((int)a0 >= VPROC_BASE) r = vproc_getdents((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
+        else r = sys_getdents64((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
+        break;
     case SYS_writev:
         r = sys_writev((int)a0, (const struct iovec*)(uintptr_t)a1, (int)a2);        break;
     case 65:  /* arm64 readv */
         r = sys_readv((int)a0, (const struct iovec*)(uintptr_t)a1, (int)a2);        break;
     case SYS_close:
-        r = sys_close((int)a0);        break;
+        if ((int)a0 >= VPROC_BASE) r = vproc_close((int)a0);
+        else r = sys_close((int)a0);
+        break;
     case SYS_exit:        r = sys_exit((int)a0); break;
     case SYS_exit_group:  r = sys_exit_group((int)a0); break;
     case SYS_getpid:      r = sys_getpid(); break;
@@ -640,8 +834,14 @@ long translate_syscall(uint64_t nr,
     case SYS_renameat:    r = sys_renameat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (const char*)(uintptr_t)a3); break;
     case SYS_renameat2:   r = sys_renameat2((int)a0, (const char*)(uintptr_t)a1, (int)a2, (const char*)(uintptr_t)a3, (unsigned)a4); break;
     case SYS_write:       r = sys_write((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
-    case SYS_read:        r = sys_read((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
-    case SYS_lseek:       r = sys_lseek((int)a0, (off_t)a1, (int)a2); break;
+    case SYS_read:
+        if ((int)a0 >= VPROC_BASE) r = vproc_read((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
+        else r = sys_read((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
+        break;
+    case SYS_lseek:
+        if ((int)a0 >= VPROC_BASE) r = vproc_lseek((int)a0, (off_t)a1, (int)a2);
+        else r = sys_lseek((int)a0, (off_t)a1, (int)a2);
+        break;
     case SYS_faccessat:   r = sys_faccessat((int)a0, (const char*)(uintptr_t)a1, (int)a2); break;
     case SYS_dup:         r = sys_dup((int)a0); break;
     case SYS_dup3:        r = sys_dup3((int)a0, (int)a1, (int)a2); break;
