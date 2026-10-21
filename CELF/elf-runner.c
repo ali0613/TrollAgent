@@ -715,17 +715,53 @@ static long sys_clock_gettime(int clk, void *ts) {
     return 0;
 }
 
-/* statfs/fstatfs：guest 与 host 同为 64 位 Linux，struct statfs 布局一致直接 memcpy */
+/* statfs/fstatfs：iOS(Darwin) struct statfs 布局 ≠ Linux——必须字段级转换，memcpy 会让
+   guest 读到错位字段（f_bsize→f_blocks 低位、f_frsize→fstypename 字符）→ df 数据垃圾 → vfprintf null → SIGSEGV。
+   Linux statfs 布局：type(0) bsize(8) blocks(16) bfree(24) bavail(32) files(40) ffree(48) fsid(56) namelen(64) frsize(72) flags(80) spare(88) */
+struct linux_statfs {
+    long f_type;            /* 0  */
+    long f_bsize;           /* 8  */
+    uint64_t f_blocks;      /* 16 */
+    uint64_t f_bfree;       /* 24 */
+    uint64_t f_bavail;      /* 32 */
+    uint64_t f_files;       /* 40 */
+    uint64_t f_ffree;       /* 48 */
+    long f_fsid[2];         /* 56 */
+    long f_namelen;         /* 64 */
+    long f_frsize;          /* 72 */
+    long f_flags;           /* 80 */
+    long f_spare[4];        /* 88 */
+};
+static void statfs_to_linux(struct statfs *s, struct linux_statfs *ls) {
+    memset(ls, 0, sizeof(*ls));
+    ls->f_type = (long)s->f_type;
+    ls->f_bsize = (long)s->f_bsize;
+    ls->f_blocks = (uint64_t)s->f_blocks;
+    ls->f_bfree = (uint64_t)s->f_bfree;
+    ls->f_bavail = (uint64_t)s->f_bavail;
+    ls->f_files = (uint64_t)s->f_files;
+    ls->f_ffree = (uint64_t)s->f_ffree;
+#ifdef __APPLE__
+    ls->f_fsid[0] = (long)s->f_fsid.val[0];
+    ls->f_fsid[1] = (long)s->f_fsid.val[1];
+#else
+    ls->f_fsid[0] = (long)s->f_fsid.__val[0];   /* glibc __fsid_t { int __val[2]; } */
+    ls->f_fsid[1] = (long)s->f_fsid.__val[1];
+#endif
+    ls->f_flags = (long)s->f_flags;
+    ls->f_namelen = 255;
+    ls->f_frsize = (long)s->f_bsize;
+}
 static long sys_statfs(const char *path, void *buf) {
     struct statfs s;
     long r = (long)statfs(path, &s);
-    if (r == 0) memcpy(buf, &s, sizeof(struct statfs));
+    if (r == 0) statfs_to_linux(&s, (struct linux_statfs *)buf);
     return r;
 }
 static long sys_fstatfs(int fd, void *buf) {
     struct statfs s;
     long r = (long)fstatfs(fd, &s);
-    if (r == 0) memcpy(buf, &s, sizeof(struct statfs));
+    if (r == 0) statfs_to_linux(&s, (struct linux_statfs *)buf);
     return r;
 }
 
