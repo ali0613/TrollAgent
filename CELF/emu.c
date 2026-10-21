@@ -275,6 +275,7 @@ static int exec_one(void) {
     if ((i & 0x7E000000) == 0x36000000) {                /* TBZ/TBNZ（sf=bit31, op=bit24） */
         int bit = ((i >> 19) & 0x1F) | (((i >> 31) & 1) << 5);
         int test = (RZR(rd(i)) >> bit) & 1;
+        uint64_t oldpc = E.pc;
         if (test == (((i >> 24) & 1) != 0)) E.pc += (uint64_t)sext((i >> 5) & 0x3FFF, 14) << 2;
         else E.pc += 4;
         return 0;
@@ -575,16 +576,16 @@ static int exec_one(void) {
         else if (m == 0xF8C00000) { sz = 3; is_ld = 1; }    /* LDR X pre */
         else if (m == 0xB8000000) { sz = 2; }               /* STR W post */
         else if (m == 0xB8400000) { sz = 2; is_ld = 1; }    /* LDR W post */
-        else if (m == 0xB8800000) { sz = 2; }               /* STR W pre */
-        else if (m == 0xB8C00000) { sz = 2; is_ld = 1; }    /* LDR W pre */
+        else if (m == 0xB8800000) { sz = 2; is_ld = 1; sign = 1; } /* v19.7 LDURSW（原错标 STR W pre） */
+        else if (m == 0xB8C00000) { sz = 2; }               /* PRFM(LDR W opc11) → 保守无操作 */
         else if (m == 0x38000000) { sz = 0; }               /* STRB post */
         else if (m == 0x38400000) { sz = 0; is_ld = 1; }    /* LDRB post */
-        else if (m == 0x38800000) { sz = 0; }               /* STRB pre */
-        else if (m == 0x38C00000) { sz = 0; is_ld = 1; }    /* LDRB pre */
+        else if (m == 0x38800000) { sz = 0; is_ld = 1; sign = 1; } /* v19.7 LDURSB（原错标 STRB pre） */
+        else if (m == 0x38C00000) { sz = 0; }               /* PRFM(LDRB opc11) → 保守无操作 */
         else if (m == 0x78000000) { sz = 1; }               /* STRH post */
         else if (m == 0x78400000) { sz = 1; is_ld = 1; }    /* LDRH post */
-        else if (m == 0x78800000) { sz = 1; }               /* STRH pre */
-        else if (m == 0x78C00000) { sz = 1; is_ld = 1; }    /* LDRH pre */
+        else if (m == 0x78800000) { sz = 1; is_ld = 1; sign = 1; } /* v19.7 LDURSH（原错标 STRH pre） */
+        else if (m == 0x78C00000) { sz = 1; }               /* PRFM(LDRH opc11) → 保守无操作 */
         /* v19: register-offset 变体（跳转表/数组访问核心；此前漏匹配 → unsupported） */
         else if (m == 0x38200000) { sz = 0; }               /* STRB reg */
         else if (m == 0x38600000) { sz = 0; is_ld = 1; }    /* LDRB reg */
@@ -635,7 +636,7 @@ static int exec_one(void) {
                     int w = 8 << sz;
                     v = (uint64_t)((int64_t)(int32_t)((uint32_t)v << (32 - w))) >> (32 - w);
                 }
-                if (sz == 2) v = (uint32_t)v;
+                if (sz == 2 && !sign) v = (uint32_t)v;
                 W(rd(i), v);
             } else {
                 mem_st(addr, RZR(rd(i)), 1 << sz);

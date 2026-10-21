@@ -479,29 +479,15 @@ long translate_syscall(uint64_t nr,
     long r;
     switch (nr) {
     case SYS_openat:
-        r = sys_openat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (mode_t)a3);
-        fprintf(stderr, "[lsdiag] openat fd0=%d path=%s flags=0x%x mode=0x%x -> ret=%ld\n",
-                (int)a0, (const char*)(uintptr_t)a1, (unsigned)(int)a2, (unsigned)(mode_t)a3, r);
-        break;
+        r = sys_openat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (mode_t)a3);        break;
     case SYS_newfstatat:
-        r = sys_newfstatat((int)a0, (const char*)(uintptr_t)a1, (struct linux_stat*)(uintptr_t)a2, (int)a3);
-        fprintf(stderr, "[lsdiag] fstatat dirfd=%d path=%s flags=0x%x -> ret=%ld\n",
-                (int)a0, (const char*)(uintptr_t)a1, (unsigned)(int)a3, r);
-        break;
+        r = sys_newfstatat((int)a0, (const char*)(uintptr_t)a1, (struct linux_stat*)(uintptr_t)a2, (int)a3);        break;
     case SYS_getdents64:
-        r = sys_getdents64((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
-        fprintf(stderr, "[lsdiag] getdents64 fd=%d buf=%p cnt=%zu -> ret=%ld\n",
-                (int)a0, (void*)(uintptr_t)a1, (size_t)a2, r);
-        break;
+        r = sys_getdents64((int)a0, (void*)(uintptr_t)a1, (size_t)a2);        break;
     case SYS_writev:
-        r = sys_writev((int)a0, (const struct iovec*)(uintptr_t)a1, (int)a2);
-        fprintf(stderr, "[lsdiag] writev fd=%d iov=%p cnt=%d -> ret=%ld\n",
-                (int)a0, (void*)(uintptr_t)a1, (int)a2, r);
-        break;
+        r = sys_writev((int)a0, (const struct iovec*)(uintptr_t)a1, (int)a2);        break;
     case SYS_close:
-        r = sys_close((int)a0);
-        fprintf(stderr, "[lsdiag] close fd=%d -> ret=%ld\n", (int)a0, r);
-        break;
+        r = sys_close((int)a0);        break;
     case SYS_exit:        r = sys_exit((int)a0); break;
     case SYS_exit_group:  r = sys_exit_group((int)a0); break;
     case SYS_getpid:      r = sys_getpid(); break;
