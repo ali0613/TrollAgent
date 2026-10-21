@@ -297,7 +297,23 @@ struct linux_stat {
     int64_t ctime_s; uint64_t ctime_ns;
     uint32_t __resv[2];
 };
+/* v19.18c：is_proc_path 前移（sys_newfstatat 需要，原定义在 vproc 区导致隐式声明冲突） */
+static int is_proc_path(const char *p) {
+    if (!p) return 0;
+    return strncmp(p, "/proc", 5) == 0 && (p[5] == '\0' || p[5] == '/');
+}
 static long sys_newfstatat(int dirfd, const char *path, struct linux_stat *st, int flags) {
+    /* v19.18c：虚拟 /proc——stat(/proc[/*]) 在 iOS 无真实文件，返回虚拟目录/文件类型
+       （busybox ls/ps 先 stat 目录，缺失 → ENOENT → ls /proc 失败、ps 枚举 0） */
+    if (path && is_proc_path(path)) {
+        memset(st, 0, sizeof(*st));
+        int is_dir = (path[5] == '\0') || (path[5] == '/' && !path[6])
+                  || (path[5] == '/' && path[6] >= '0' && path[6] <= '9');  /* /proc 或 /proc/<pid> */
+        st->st_mode = (is_dir ? S_IFDIR : S_IFREG) | 0444;
+        st->st_nlink = 1;
+        st->st_ino = 1;
+        return 0;
+    }
     struct stat s;
     if (fstatat(dirfd, path, &s, xlate_atflags(flags)) != 0) return -errno;
     memset(st, 0, sizeof(*st));
@@ -351,10 +367,7 @@ static void vproc_free(int fd) {
     struct vproc_fd *v = vproc_get(fd);
     if (v) { free(v->data); memset(v, 0, sizeof(*v)); }
 }
-static int is_proc_path(const char *p) {
-    if (!p) return 0;
-    return strncmp(p, "/proc", 5) == 0 && (p[5] == '\0' || p[5] == '/');
-}
+
 /* 虚拟目录 fd（/proc）：getdents64 时枚举 pid */
 static long vproc_open_dir(void) {
     int fd = vproc_alloc();
@@ -372,8 +385,11 @@ static long vproc_open(const char *path, int flags) {
     else {
         char *end;
         pid = strtol(rest, &end, 10);
-        if (end == rest || *end != '/') return -ENOENT;
-        rest = end + 1;
+        if (end != rest && *end == '/') {
+            rest = end + 1;
+        } else if (strcmp(rest, "mounts") == 0 || strcmp(rest, "uptime") == 0) {
+            pid = -1;   /* v19.18c：顶层文件 /proc/mounts、/proc/uptime（无 pid 前缀） */
+        } else return -ENOENT;
     }
     int fd = vproc_alloc();
     if (fd < 0) return -EMFILE;
@@ -382,7 +398,7 @@ static long vproc_open(const char *path, int flags) {
     /* v19.18: iOS SDK 无 libproc.h（proc_name/proc_pidinfo/proc_listallpids 不可用）——
        统一占位进程名 p<pid>，ps 框架可跑；真实进程名后续单独研究（sysctl KERN_PROC 沙盒受限） */
     snprintf(name, sizeof(name), "p%ld", pid);
-    if (strcmp(rest, "stat") == 0) {
+    if (strcmp(rest, "stat") == 0 && pid >= 0) {
         char buf[512];
         long utime = 0, stime = 0, ppid = 0;
         int nthreads = 0;
@@ -394,7 +410,7 @@ static long vproc_open(const char *path, int flags) {
         v->len = strlen(buf);
         return fd;
     }
-    if (strcmp(rest, "cmdline") == 0) {
+    if (strcmp(rest, "cmdline") == 0 && pid >= 0) {
         v->data = strdup(name[0] ? name : "?");
         v->len = strlen(v->data);
         return fd;
@@ -415,6 +431,14 @@ static long vproc_open(const char *path, int flags) {
         snprintf(buf, sizeof(buf), "0.00 0.00");
 #endif
         v->data = strdup(buf);
+        v->len = strlen(v->data);
+        return fd;
+    }
+    if (strcmp(rest, "mounts") == 0) {              /* v19.18c：df 读 /proc/self/mounts 匹配挂载点 */
+        v->data = strdup("/dev/root / ext4 rw,relatime 0 0\n"
+                         "/dev/root /tmp ext4 rw,relatime 0 0\n"
+                         "/dev/root /var ext4 rw,relatime 0 0\n"
+                         "/dev/root /private/var ext4 rw,relatime 0 0\n");
         v->len = strlen(v->data);
         return fd;
     }
