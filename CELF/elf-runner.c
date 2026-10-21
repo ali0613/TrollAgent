@@ -1195,6 +1195,16 @@ int elf_runner_main(int argc, char **argv) {
     extern void emu_deactivate(void);
     if (sigsetjmp(g_exit_jmp, 1) != 0) {
         emu_deactivate();   /* 14e1: 解释器被 exit_group longjmp 中断，复位 crash 兜底状态 */
+        /* v19.18c: guest 执行完释放本轮 mmap——App 是常驻 8790 服务，每次调用泄漏
+           stack 32MB + ELF 1.3MB + 0x580000 区 128KB + heap 16MB，连续 277 条命令
+           后内存耗尽（mmap Cannot allocate memory → App 假死/被杀）。 */
+        if (g_stack_base) { munmap((void *)g_stack_base, 32 << 20); g_stack_base = 0; }
+        if (g_heap_base)  { munmap((void *)g_heap_base, 16 << 20); g_heap_base = g_heap_cur = g_heap_top = 0; }
+        if (g_base) {
+            munmap((void *)(g_base + 0x580000), 0x20000);   /* guest 0x580000 写缓冲区（独立映射） */
+            munmap((void *)g_base, g_total_size);
+            g_base = 0;
+        }
         fprintf(stderr, "[elf-runner] ELF 退出 code=%d（进程内模式，主进程存活）\n", g_exit_code);
         return g_exit_code;
     }
