@@ -710,19 +710,54 @@ static long vproc_open(const char *path, int flags) {
     snprintf(name, sizeof(name), "p%ld", pid);
     if (strcmp(rest, "stat") == 0 && pid >= 0) {
         char buf[512];
+#ifndef __APPLE__
+        /* v19.18g：本地（Linux 宿主）读真实 /proc/<pid>/stat——pgrep/ps 需真实 comm */
+        char p[64];
+        snprintf(p, sizeof(p), "/proc/%ld/stat", pid);
+        int fh = open(p, O_RDONLY);
+        if (fh >= 0) {
+            ssize_t n = read(fh, buf, sizeof(buf) - 1);
+            close(fh);
+            if (n > 0) { buf[n] = 0; v->data = strdup(buf); v->len = n; return fd; }
+        }
+        /* 读不到（进程消失/权限）→ 占位 */
+        snprintf(buf, sizeof(buf), "%ld (?) R 0 0 0 0 0 0 0 0 0 0 0 0 0 20 0 0 0 0 0", pid);
+#else
         long utime = 0, stime = 0, ppid = 0;
         int nthreads = 0;
         /* Linux /proc/<pid>/stat 关键字段位：pid (comm) state ppid ... utime stime ... num_threads */
         snprintf(buf, sizeof(buf),
                  "%ld (%s) S %ld 0 0 0 0 0 0 0 0 0 %ld %ld 0 0 20 0 %d 0 0 0 0 0",
                  pid, name[0] ? name : "?", ppid, utime, stime, nthreads);
+#endif
         v->data = strdup(buf);
         v->len = strlen(buf);
         return fd;
     }
     if (strcmp(rest, "cmdline") == 0 && pid >= 0) {
+#ifndef __APPLE__
+        /* v19.18g：本地读真实 cmdline（pgrep -f 匹配需要） */
+        char p[64];
+        snprintf(p, sizeof(p), "/proc/%ld/cmdline", pid);
+        int fh = open(p, O_RDONLY);
+        if (fh >= 0) {
+            char cb[2048];
+            ssize_t n = read(fh, cb, sizeof(cb) - 1);
+            close(fh);
+            if (n > 0) {
+                /* cmdline 以 \0 分隔参数；busybox pgrep -f 匹配完整串——\0 换空格 */
+                for (ssize_t i = 0; i < n; i++) if (cb[i] == 0) cb[i] = ' ';
+                v->data = strdup(cb);
+                v->len = n;
+                return fd;
+            }
+        }
+        v->data = strdup("");
+        v->len = 0;
+#else
         v->data = strdup(name[0] ? name : "?");
         v->len = strlen(v->data);
+#endif
         return fd;
     }
     if (strcmp(rest, "uptime") == 0) {
@@ -890,6 +925,9 @@ static long sys_getdents64(int fd, void *buf, size_t count) {
 #else
     /* 本地对照：Linux 原生 getdents64 透传（布局即 Linux dirent64） */
     long r = syscall(217, fd, buf, count);   /* x86_64 getdents64 */
+    if (getenv("GDD_TRACE")) {
+        fprintf(stderr, "[gdd] fd=%d count=%zu ret=%ld\n", fd, count, r);
+    }
     return r < 0 ? -errno : r;
 #endif
 }
@@ -901,7 +939,12 @@ static long sys_writev(int fd, const struct iovec *iov, int iovcnt) {
     return (long)writev(fd, iov, iovcnt);
 }
 static long sys_openat(int dirfd, const char *path, int flags, mode_t mode) {
-    return (long)openat(dirfd, path, xlate_flags(flags), mode);
+    int x = xlate_flags(flags);
+    if (getenv("OAT_TRACE")) {
+        fprintf(stderr, "[oat] dirfd=%d path=%s flags=0x%x -> xlate 0x%x mode=0%o\n",
+                dirfd, path ? path : "(null)", flags, x, (unsigned)mode);
+    }
+    return (long)openat(dirfd, path, x, mode);
 }
 static long sys_faccessat(int dirfd, const char *path, int amode) {
     return (long)faccessat(dirfd, path, amode, 0);   /* Darwin 4 参（flags） */
