@@ -33,6 +33,9 @@
 #include <sys/ucontext.h>
 #include <dirent.h>
 #include <sys/uio.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <poll.h>
 #ifdef __APPLE__
 #include <sys/mount.h>
 #include <sys/sysctl.h>   /* Darwin: sysctl/CTL_KERN/KERN_BOOTTIME/CTL_HW/HW_MEMSIZE */
@@ -199,10 +202,31 @@ int g_emu_halt = 0;
 #define SYS_ftruncate         46
 #define SYS_utimensat         88
 #define SYS_rmdir             21
+#define SYS_chdir             49
 #define SYS_dup               23
 #define SYS_dup3              24
 #define SYS_ioctl             29
 #define SYS_arch_prctl        178  /* x86 专用，aarch64 无 */
+#define SYS_fork              220  /* aarch64：httpd 每连接 fork 子进程 */
+/* v19.18e：socket 族（网络类 applet：wget/nc/telnet/httpd 等） */
+#define SYS_poll               7
+#define SYS_select            23
+#define SYS_socket            198
+#define SYS_socketpair        199
+#define SYS_bind              200
+#define SYS_listen            201
+#define SYS_accept            202
+#define SYS_connect           203
+#define SYS_getsockname       204
+#define SYS_getpeername       205
+#define SYS_sendto            206
+#define SYS_recvfrom          207
+#define SYS_setsockopt        208
+#define SYS_getsockopt        209
+#define SYS_shutdown          210
+#define SYS_sendmsg           211
+#define SYS_recvmsg           212
+#define SYS_accept4           242
 
 static long sys_exit_group(int code);   /* 前向声明（sys_exit 引用 sys_exit_group，须先声明） */
 static long sys_exit(int code)          { return sys_exit_group(code); }
@@ -228,6 +252,238 @@ static long sys_umask(mode_t mask) {
     mode_t old = g_guest_umask;
     g_guest_umask = mask & 0777;
     return (long)old;
+}
+
+/* ---- v19.18e：socket 族（网络 applet）----
+ * guest 是 Linux ABI：struct sockaddr_in 无 sin_len、family 在偏移 0（uint16）。
+ * iOS 是 Darwin ABI：sockaddr_in 有 sin_len(uint8)+sin_family(uint8)。
+ * 本地 Linux 布局与 guest 相同直接透传；iOS 需逐字段转换。
+ */
+struct linux_sockaddr_in {
+    uint16_t sin_family;
+    uint16_t sin_port;      /* 网络序 */
+    uint32_t sin_addr;
+    char     sin_zero[8];
+};
+struct linux_sockaddr_in6 {
+    uint16_t sin6_family;
+    uint16_t sin6_port;
+    uint32_t sin6_flowinfo;
+    struct in6_addr sin6_addr;
+    uint32_t sin6_scope_id;
+};
+static socklen_t sockaddr_conv(const void *guest_sa, socklen_t guest_len,
+                               struct sockaddr_storage *host_out) {
+#ifdef __APPLE__
+    /* Darwin：sockaddr_in = sin_len(1)+sin_family(1)+port(2)+addr(4) */
+    if (guest_len >= sizeof(struct linux_sockaddr_in)) {
+        const struct linux_sockaddr_in *g = guest_sa;
+        struct sockaddr_in *h = (struct sockaddr_in *)host_out;
+        memset(h, 0, sizeof(*h));
+        h->sin_len = sizeof(*h);
+        h->sin_family = g->sin_family;
+        h->sin_port = g->sin_port;
+        h->sin_addr.s_addr = g->sin_addr;
+        return sizeof(*h);
+    }
+    if (guest_len >= sizeof(struct linux_sockaddr_in6)) {
+        const struct linux_sockaddr_in6 *g = guest_sa;
+        struct sockaddr_in6 *h = (struct sockaddr_in6 *)host_out;
+        memset(h, 0, sizeof(*h));
+        h->sin6_len = sizeof(*h);
+        h->sin6_family = g->sin6_family;
+        h->sin6_port = g->sin6_port;
+        h->sin6_flowinfo = g->sin6_flowinfo;
+        h->sin6_addr = g->sin6_addr;
+        h->sin6_scope_id = g->sin6_scope_id;
+        return sizeof(*h);
+    }
+    /* AF_UNIX 等：直接透传 */
+    memcpy(host_out, guest_sa, guest_len);
+    return guest_len;
+#else
+    /* Linux：guest 与宿主布局一致，直接透传 */
+    memcpy(host_out, guest_sa, guest_len);
+    return guest_len;
+#endif
+}
+static long sys_socket(int domain, int type, int proto) {
+    int fd = socket(domain, type, proto);
+    return (fd < 0) ? -errno : (long)fd;
+}
+static long sys_socketpair(int domain, int type, int proto, int *sv) {
+    int pair[2];
+    if (socketpair(domain, type, proto, pair)) return -errno;
+    sv[0] = pair[0]; sv[1] = pair[1];
+    return 0;
+}
+static long sys_connect(int fd, const void *sa, socklen_t len) {
+    struct sockaddr_storage hsa;
+    socklen_t hlen = sockaddr_conv(sa, len, &hsa);
+    if (connect(fd, (struct sockaddr *)&hsa, hlen)) return -errno;
+    return 0;
+}
+static long sys_bind(int fd, const void *sa, socklen_t len) {
+    struct sockaddr_storage hsa;
+    socklen_t hlen = sockaddr_conv(sa, len, &hsa);
+    if (bind(fd, (struct sockaddr *)&hsa, hlen)) return -errno;
+    return 0;
+}
+static long sys_getsockname(int fd, void *sa, socklen_t *len) {
+    struct sockaddr_storage hsa;
+    socklen_t hlen = sizeof(hsa);
+    if (getsockname(fd, (struct sockaddr *)&hsa, &hlen)) return -errno;
+#ifdef __APPLE__
+    /* Darwin→Linux：去掉 sin_len，family 转 uint16 */
+    if (hlen >= sizeof(struct sockaddr_in) && *len >= sizeof(struct linux_sockaddr_in)
+        && ((struct sockaddr_in *)&hsa)->sin_family == AF_INET) {
+        struct linux_sockaddr_in *g = (struct linux_sockaddr_in *)sa;
+        const struct sockaddr_in *h = (const struct sockaddr_in *)&hsa;
+        g->sin_family = h->sin_family; g->sin_port = h->sin_port;
+        g->sin_addr = h->sin_addr.s_addr; memset(g->sin_zero, 0, 8);
+        *len = sizeof(struct linux_sockaddr_in);
+        return 0;
+    }
+#endif
+    memcpy(sa, &hsa, *len < hlen ? *len : hlen);
+    *len = hlen;
+    return 0;
+}
+static long sys_getpeername(int fd, void *sa, socklen_t *len) {
+    struct sockaddr_storage hsa;
+    socklen_t hlen = sizeof(hsa);
+    if (getpeername(fd, (struct sockaddr *)&hsa, &hlen)) return -errno;
+#ifdef __APPLE__
+    if (hlen >= sizeof(struct sockaddr_in) && *len >= sizeof(struct linux_sockaddr_in)
+        && ((struct sockaddr_in *)&hsa)->sin_family == AF_INET) {
+        struct linux_sockaddr_in *g = (struct linux_sockaddr_in *)sa;
+        const struct sockaddr_in *h = (const struct sockaddr_in *)&hsa;
+        g->sin_family = h->sin_family; g->sin_port = h->sin_port;
+        g->sin_addr = h->sin_addr.s_addr; memset(g->sin_zero, 0, 8);
+        *len = sizeof(struct linux_sockaddr_in);
+        return 0;
+    }
+#endif
+    memcpy(sa, &hsa, *len < hlen ? *len : hlen);
+    *len = hlen;
+    return 0;
+}
+static long sys_listen(int fd, int backlog) {
+    if (listen(fd, backlog)) return -errno;
+    return 0;
+}
+static long sys_accept(int fd, void *sa, socklen_t *len, int flags) {
+    struct sockaddr_storage hsa;
+    socklen_t hlen = sizeof(hsa);
+    int c;
+#ifdef __APPLE__
+    c = accept(fd, (struct sockaddr *)&hsa, &hlen);
+#else
+    c = (flags & 3) ? accept4(fd, (struct sockaddr *)&hsa, &hlen, flags & 3) : accept(fd, (struct sockaddr *)&hsa, &hlen);
+#endif
+    if (c < 0) return -errno;
+#ifdef __APPLE__
+    if (sa && *len >= sizeof(struct linux_sockaddr_in)
+        && hlen >= sizeof(struct sockaddr_in)
+        && ((struct sockaddr_in *)&hsa)->sin_family == AF_INET) {
+        struct linux_sockaddr_in *g = (struct linux_sockaddr_in *)sa;
+        const struct sockaddr_in *h = (const struct sockaddr_in *)&hsa;
+        g->sin_family = h->sin_family; g->sin_port = h->sin_port;
+        g->sin_addr = h->sin_addr.s_addr; memset(g->sin_zero, 0, 8);
+        if (len) *len = sizeof(struct linux_sockaddr_in);
+    } else if (sa) { memcpy(sa, &hsa, *len < hlen ? *len : hlen); if (len) *len = hlen; }
+#else
+    if (sa && len) { memcpy(sa, &hsa, *len < hlen ? *len : hlen); *len = hlen; }
+#endif
+    return c;
+}
+static long sys_sendto(int fd, const void *buf, size_t n, int flags,
+                       const void *sa, socklen_t len) {
+    ssize_t rv;
+    if (sa) {
+        struct sockaddr_storage hsa;
+        socklen_t hlen = sockaddr_conv(sa, len, &hsa);
+        rv = sendto(fd, buf, n, flags, (struct sockaddr *)&hsa, hlen);
+    } else rv = sendto(fd, buf, n, flags, NULL, 0);
+    return (rv < 0) ? -errno : (long)rv;
+}
+static long sys_recvfrom(int fd, void *buf, size_t n, int flags,
+                         void *sa, socklen_t *len) {
+    ssize_t rv;
+    if (sa) {
+        struct sockaddr_storage hsa;
+        socklen_t hlen = sizeof(hsa);
+        rv = recvfrom(fd, buf, n, flags, (struct sockaddr *)&hsa, &hlen);
+        if (rv >= 0) {
+#ifdef __APPLE__
+            if (hlen >= sizeof(struct sockaddr_in) && *len >= sizeof(struct linux_sockaddr_in)
+                && ((struct sockaddr_in *)&hsa)->sin_family == AF_INET) {
+                struct linux_sockaddr_in *g = (struct linux_sockaddr_in *)sa;
+                const struct sockaddr_in *h = (const struct sockaddr_in *)&hsa;
+                g->sin_family = h->sin_family; g->sin_port = h->sin_port;
+                g->sin_addr = h->sin_addr.s_addr; memset(g->sin_zero, 0, 8);
+                *len = sizeof(struct linux_sockaddr_in);
+            } else { memcpy(sa, &hsa, *len < hlen ? *len : hlen); *len = hlen; }
+#else
+            memcpy(sa, &hsa, *len < hlen ? *len : hlen); *len = hlen;
+#endif
+        }
+    } else rv = recvfrom(fd, buf, n, flags, NULL, NULL);
+    return (rv < 0) ? -errno : (long)rv;
+}
+static long sys_setsockopt(int fd, int level, int opt, const void *val, socklen_t len) {
+    if (setsockopt(fd, level, opt, val, len)) return -errno;
+    return 0;
+}
+static long sys_getsockopt(int fd, int level, int opt, void *val, socklen_t *len) {
+    if (getsockopt(fd, level, opt, val, len)) return -errno;
+    return 0;
+}
+static long sys_shutdown(int fd, int how) {
+    if (shutdown(fd, how)) return -errno;
+    return 0;
+}
+static long sys_sendmsg(int fd, const struct msghdr *msg, int flags) {
+    /* guest msghdr/iovec 与 Linux 布局一致；Darwin 的 msghdr 也兼容（msg_name/msg_iov 等） */
+    struct msghdr h;
+    memcpy(&h, msg, sizeof(h));
+#ifdef __APPLE__
+    if (msg->msg_name && msg->msg_namelen) {
+        struct sockaddr_storage hsa;
+        h.msg_namelen = sockaddr_conv(msg->msg_name, msg->msg_namelen, &hsa);
+        h.msg_name = &hsa;
+    }
+#endif
+    ssize_t rv = sendmsg(fd, &h, flags);
+    return (rv < 0) ? -errno : (long)rv;
+}
+static long sys_recvmsg(int fd, struct msghdr *msg, int flags) {
+    struct msghdr h;
+    memcpy(&h, msg, sizeof(h));
+    ssize_t rv = recvmsg(fd, &h, flags);
+    if (rv < 0) return -errno;
+#ifdef __APPLE__
+    if (h.msg_name && h.msg_namelen) {
+        struct sockaddr_storage *hsa = (struct sockaddr_storage *)h.msg_name;
+        if (h.msg_namelen >= sizeof(struct sockaddr_in)
+            && ((struct sockaddr_in *)hsa)->sin_family == AF_INET) {
+            struct linux_sockaddr_in *g = (struct linux_sockaddr_in *)msg->msg_name;
+            const struct sockaddr_in *hi = (const struct sockaddr_in *)hsa;
+            g->sin_family = hi->sin_family; g->sin_port = hi->sin_port;
+            g->sin_addr = hi->sin_addr.s_addr; memset(g->sin_zero, 0, 8);
+            msg->msg_namelen = sizeof(struct linux_sockaddr_in);
+        } else if (h.msg_namelen <= msg->msg_namelen) {
+            memcpy(msg->msg_name, h.msg_name, h.msg_namelen);
+            msg->msg_namelen = h.msg_namelen;
+        }
+    } else msg->msg_namelen = 0;
+    msg->msg_flags = h.msg_flags;
+#endif
+    return (long)rv;
+}
+static long sys_poll(struct pollfd *fds, nfds_t nfds, int timeout) {
+    int rv = poll(fds, nfds, timeout);
+    return (rv < 0) ? -errno : (long)rv;
 }
 static long sys_getcwd(char *buf, size_t size) {
     if (!getcwd(buf, size)) return -errno;
@@ -646,6 +902,10 @@ static long sys_faccessat(int dirfd, const char *path, int amode) {
 static long sys_dup(int fd) {
     return (long)dup(fd);
 }
+static long sys_chdir(const char *path) {
+    if (chdir(path)) return -errno;
+    return 0;
+}
 static long sys_dup3(int oldfd, int newfd, int flags) {
     (void)flags;
     if (dup2(oldfd, newfd) < 0) return -errno;
@@ -986,6 +1246,12 @@ long translate_syscall(uint64_t nr,
         break;
     case SYS_faccessat:   r = sys_faccessat((int)a0, (const char*)(uintptr_t)a1, (int)a2); break;
     case SYS_dup:         r = sys_dup((int)a0); break;
+    case SYS_chdir:       r = sys_chdir((const char*)(uintptr_t)a0); break;
+    case SYS_fork: {      /* httpd 每连接 fork：宿主 fork，父子各自继续解释器（fork 语义天然成立） */
+        pid_t pid = fork();
+        if (pid < 0) r = -errno; else r = (long)pid;
+        break;
+    }
     case SYS_dup3:        r = sys_dup3((int)a0, (int)a1, (int)a2); break;
     case SYS_uname:       r = sys_uname((void*)(uintptr_t)a0); break;
     case 43:              r = sys_statfs((const char*)(uintptr_t)a0, (void*)(uintptr_t)a1); break;  /* arm64 statfs */
@@ -999,15 +1265,49 @@ long translate_syscall(uint64_t nr,
     case SYS_clock_gettime:r = sys_clock_gettime((int)a0, (void*)(uintptr_t)a1); break;
     case SYS_fcntl:       r = sys_fcntl((int)a0, (int)a1, (long)a2); break;
     case SYS_ioctl:       r = sys_ioctl((int)a0, (unsigned long)a1, (long)a2); break;
+    /* v19.18e：socket 族 */
+    case SYS_socket:      r = sys_socket((int)a0, (int)a1, (int)a2); break;
+    case SYS_socketpair:  r = sys_socketpair((int)a0, (int)a1, (int)a2, (int*)(uintptr_t)a3); break;
+    case SYS_connect:     r = sys_connect((int)a0, (const void*)(uintptr_t)a1, (socklen_t)a2); break;
+    case SYS_bind:        r = sys_bind((int)a0, (const void*)(uintptr_t)a1, (socklen_t)a2); break;
+    case SYS_listen:      r = sys_listen((int)a0, (int)a1); break;
+    case SYS_accept:      r = sys_accept((int)a0, (void*)(uintptr_t)a1, (socklen_t*)(uintptr_t)a2, 0); break;
+    case SYS_accept4:     r = sys_accept((int)a0, (void*)(uintptr_t)a1, (socklen_t*)(uintptr_t)a2, (int)a3); break;
+    case SYS_getsockname: r = sys_getsockname((int)a0, (void*)(uintptr_t)a1, (socklen_t*)(uintptr_t)a2); break;
+    case SYS_getpeername: r = sys_getpeername((int)a0, (void*)(uintptr_t)a1, (socklen_t*)(uintptr_t)a2); break;
+    case SYS_sendto:      r = sys_sendto((int)a0, (const void*)(uintptr_t)a1, (size_t)a2, (int)a3,
+                                         (const void*)(uintptr_t)a4, (socklen_t)a5); break;
+    case SYS_recvfrom:    r = sys_recvfrom((int)a0, (void*)(uintptr_t)a1, (size_t)a2, (int)a3,
+                                           (void*)(uintptr_t)a4, (socklen_t*)(uintptr_t)a5); break;
+    case SYS_setsockopt:  r = sys_setsockopt((int)a0, (int)a1, (int)a2, (const void*)(uintptr_t)a3, (socklen_t)a4); break;
+    case SYS_getsockopt:  r = sys_getsockopt((int)a0, (int)a1, (int)a2, (void*)(uintptr_t)a3, (socklen_t*)(uintptr_t)a4); break;
+    case SYS_shutdown:    r = sys_shutdown((int)a0, (int)a1); break;
+    case SYS_sendmsg:     r = sys_sendmsg((int)a0, (const struct msghdr*)(uintptr_t)a1, (int)a2); break;
+    case SYS_recvmsg:     r = sys_recvmsg((int)a0, (struct msghdr*)(uintptr_t)a1, (int)a2); break;
+    case SYS_poll:        r = sys_poll((struct pollfd*)(uintptr_t)a0, (nfds_t)a1, (int)a2); break;
     case 158:             r = sys_getgroups((int)a0, (gid_t*)(uintptr_t)a1); break;  /* arm64 getgroups */
     case 179:             r = sys_sysinfo((void*)(uintptr_t)a0); break;  /* arm64 sysinfo：ps 需要 */
     case 71:              r = sys_sendfile((int)a0, (int)a1, (off_t*)(uintptr_t)a2, (size_t)a3); break;  /* arm64 sendfile：cp 大文件 */
     case 96:              r = 0; break;   /* getrlimit（结构保持 0，busybox 启动查询用） */
-    case 73:              r = 0; break;   /* 容错（arm64 编号未映射宏） */
+    case 73: {            /* ppoll——nc 等网络 applet 的 I/O 等待（原容错返回 0 导致 nc 假超时退出） */
+        struct timespec ppts, *ppts_p = NULL;
+        if (a2) { memcpy(&ppts, (const void*)(uintptr_t)a2, sizeof(ppts)); ppts_p = &ppts; }
+        int prv = ppoll((struct pollfd*)(uintptr_t)a0, (nfds_t)a1, ppts_p, (const sigset_t*)(uintptr_t)a3);
+        r = (prv < 0) ? -errno : (long)prv;
+        break;
+    }
+    case 103:             r = 0; break;   /* setitimer（nc -w 超时用；不真正生效但流程继续） */
+    case 134: {           /* rt_sigaction——guest handler 无法在宿主执行，no-op（httpd 初始化必调） */
+        if (a2) {   /* 返回旧 action：sigsetsize=8 的调用点——只写 3 个 u64（handler/flags/restorer），防溢出 */
+            struct { uint64_t handler; uint64_t flags; uint64_t restorer; } *g = (void*)(uintptr_t)a2;
+            g->handler = 0; g->flags = 0; g->restorer = 0;
+        }
+        r = 0;   /* 不真正装信号（guest handler 不可执行）；musl sigaction wrapper 只读返回值 */
+        break;
+    }
     case 135:             r = 0; break;   /* rt_sigprocmask */
     case 144:             r = 0; break;   /* sched_yield 族 */
     case 146:             r = 0; break;
-    case 198:             r = 0; break;   /* 容错：未知 syscall 198 */
     default:
         fprintf(stderr, "[elf-runner] unsupported syscall %llu (x0=%llu x1=%llu x2=%llu)\n",
                 (unsigned long long)nr,
