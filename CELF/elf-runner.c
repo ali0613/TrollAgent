@@ -36,6 +36,7 @@
 #ifdef __APPLE__
 #include <sys/mount.h>
 #include <sys/sysctl.h>   /* Darwin: sysctl/CTL_KERN/KERN_BOOTTIME/CTL_HW/HW_MEMSIZE */
+#include <mach/mach.h>    /* v19.18d: host_statistics64/vm_kernel_page_size（/proc/meminfo 用） */
 #else
 #include <sys/vfs.h>
 #include <sys/sysinfo.h>
@@ -424,8 +425,9 @@ static long vproc_open(const char *path, int flags) {
         pid = strtol(rest, &end, 10);
         if (end != rest && *end == '/') {
             rest = end + 1;
-        } else if (strcmp(rest, "mounts") == 0 || strcmp(rest, "uptime") == 0) {
-            pid = -1;   /* v19.18c：顶层文件 /proc/mounts、/proc/uptime（无 pid 前缀） */
+        } else if (strcmp(rest, "mounts") == 0 || strcmp(rest, "uptime") == 0
+                   || strcmp(rest, "meminfo") == 0) {
+            pid = -1;   /* v19.18c：顶层文件 /proc/mounts、/proc/uptime、/proc/meminfo（无 pid 前缀） */
         } else return -ENOENT;
     }
     int fd = vproc_alloc();
@@ -477,6 +479,38 @@ static long vproc_open(const char *path, int flags) {
                          "/dev/root /var ext4 rw,relatime 0 0\n"
                          "/dev/root /private/var ext4 rw,relatime 0 0\n");
         v->len = strlen(v->data);
+        return fd;
+    }
+    if (strcmp(rest, "meminfo") == 0) {             /* v19.18d：free 读 /proc/meminfo——iOS 无真实 meminfo，用 sysctl 填充 */
+        char buf[1024];
+        unsigned long long total = 0, free_mem = 0, avail = 0;
+#ifdef __APPLE__
+        int mib[2] = { CTL_HW, HW_MEMSIZE };
+        size_t len = sizeof(total);
+        if (sysctl(mib, 2, &total, &len, NULL, 0) != 0) total = 0;
+        /* vm_statistics64：页面数（iOS 沙盒可读） */
+        mach_msg_type_number_t cnt = HOST_VM_INFO64_COUNT;
+        vm_statistics64_data_t vs;
+        if (host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t)&vs, &cnt) == KERN_SUCCESS) {
+            uint64_t ps = (uint64_t)vm_kernel_page_size;
+            if (!ps) ps = 16384;
+            free_mem = vs.free_count * ps;
+            avail = (vs.free_count + vs.inactive_count) * ps;
+        }
+#endif
+        if (!total) total = 8ULL << 30;             /* 兜底 8GB */
+        if (!avail) avail = free_mem ? free_mem : total / 4;
+        snprintf(buf, sizeof(buf),
+                 "MemTotal:      %8llu kB\n"
+                 "MemFree:       %8llu kB\n"
+                 "MemAvailable:  %8llu kB\n"
+                 "Buffers:              0 kB\n"
+                 "Cached:               0 kB\n"
+                 "SwapTotal:            0 kB\n"
+                 "SwapFree:             0 kB\n",
+                 total / 1024, free_mem / 1024, avail / 1024);
+        v->data = strdup(buf);
+        v->len = strlen(buf);
         return fd;
     }
     /* 其他 /proc/<pid>/xxx：空文件（后续按需扩展） */
