@@ -69,7 +69,7 @@ static void tr_dump(void) {
 static uint64_t RZR(int n) { return n == 31 ? 0 : E.r[n]; }
 static uint64_t RSP(int n) { return n == 31 ? E.sp : E.r[n]; }
 static void W(int n, uint64_t v) {
-    if (getenv("EMU_W5") && n == 5) fprintf(stderr, "W5 pc=0x%llx v=0x%llx\n", (unsigned long long)E.pc, (unsigned long long)v);
+        fprintf(stderr, "[w26] pc=0x%05llx v=0x%llx\n", (unsigned long long)(E.pc - g_base) & 0xFFFFFF, (unsigned long long)v);
     if (n == 31) E.sp = v; else if (n < 31) E.r[n] = v;
 }
 
@@ -163,7 +163,6 @@ static int cond_true(unsigned c) {
 /* 内存访问：直接访问；非法地址由 SIGSEGV → crash_handler(emu) → longjmp 兜底 */
 static void *mem_p(uint64_t a) { return (void *)(uintptr_t)a; }
 static uint64_t mem_ld(uint64_t a, int bytes) {
-    if (getenv("EMU_MEM")) fprintf(stderr, "MEM_LD addr=0x%llx bytes=%d pc=0x%llx\n", (unsigned long long)a, bytes, (unsigned long long)E.pc);
     void *p = mem_p(a);
     switch (bytes) {
     case 1: return *(uint8_t *)p;
@@ -172,8 +171,16 @@ static uint64_t mem_ld(uint64_t a, int bytes) {
     default:{ uint64_t v; memcpy(&v, p, 8); return v; }
     }
 }
+static double fp_ld(int n, int type) {
+    double d; uint64_t bits = E.v[n][0];
+    if (!type) { float f; memcpy(&f, &bits, 4); return (double)f; }
+    memcpy(&d, &bits, 8); return d;
+}
+static void fp_st(int n, int type, double v) {
+    if (!type) { float f = (float)v; uint32_t b; memcpy(&b, &f, 4); E.v[n][0] = b; E.v[n][1] = 0; }
+    else { uint64_t b; memcpy(&b, &v, 8); E.v[n][0] = b; E.v[n][1] = 0; }
+}
 static void mem_st(uint64_t a, uint64_t v, int bytes) {
-    if (getenv("EMU_WST") && (a == g_slot || a == g_slot + 8 || (a >= E.sp - 0x300ULL && a <= E.sp + 0x230ULL)))
         fprintf(stderr, "[wst] pc=0x%llx off=%#llx st [%llx] <- %llx (%d)\n", (unsigned long long)E.pc,
                 (unsigned long long)(E.pc - g_base), (unsigned long long)a, (unsigned long long)v, bytes);
     void *p = mem_p(a);
@@ -202,38 +209,14 @@ static int exec_one(void) {
                 (unsigned long long)(E.pc - g_base),
                 (unsigned int)(E.pc >= g_base && E.pc + 4 <= g_base + g_total_size
                     ? *(const uint32_t *)(uintptr_t)E.pc : 0));
-    if (getenv("EMU_DBG")) {
-        uint64_t offd = E.pc - g_base;
-        if (offd == 0x10928ULL)
-            fprintf(stderr, "[dbg] 10928 x0=%#llx x1=%#llx x19=%#llx x20=%#llx\n",
-                (unsigned long long)E.r[0], (unsigned long long)E.r[1],
-                (unsigned long long)E.r[19], (unsigned long long)E.r[20]);
-        if (offd == 0x10520ULL) {
-            uint64_t f = *(uint64_t*)(uintptr_t)(g_base + 0x13c038ULL + E.r[20]*8);
-            fprintf(stderr, "[dbg] applet w20=%u funcoff=%#llx g_base=%#llx argv=%#llx\n",
-                (unsigned)E.r[20], (unsigned long long)(f - (uint64_t)g_base),
-                (unsigned long long)g_base, (unsigned long long)E.r[22]);
-        }
-        if (offd == 0x113a0ULL)
-            fprintf(stderr, "[dbg] exit-entry [0x13d330]=%u x0=%#llx\n",
-                (unsigned)*(uint8_t*)(uintptr_t)(g_base + 0x13d330ULL),
-                (unsigned long long)E.r[0]);
-        if (offd == 0x113b4ULL)
-            fprintf(stderr, "[dbg] exit-ldrb x0=%#llx [0x13d330]=%u\n",
-                (unsigned long long)E.r[0],
-                (unsigned)*(uint8_t*)(uintptr_t)(g_base + 0x13d330ULL));
-        if (offd == 0x10528ULL)
-            fprintf(stderr, "[dbg] blr x2=%#llx (off=%#llx)\n",
-                (unsigned long long)E.r[2], (unsigned long long)(E.r[2] - (uint64_t)g_base));
-        if (offd == 0xabaf0ULL) {
-            uint64_t *ap = (uint64_t*)(uintptr_t)E.r[1];
-            fprintf(stderr, "[dbg] echo_main argc=%llu argv0='%.12s' argv1='%.12s' argv2='%.12s' argv3='%.12s'\n",
-                (unsigned long long)E.r[0],
-                (char*)(uintptr_t)ap[0], (char*)(uintptr_t)ap[1],
-                (char*)(uintptr_t)ap[2], (char*)(uintptr_t)ap[3]);
-        }
-    }
-    if (getenv("EMU_TRACE"))
+        fprintf(stderr, "[who] pc=0x%05llx\n", (unsigned long long)((E.pc - g_base) & 0xFFFFFF));
+        { double _d; memcpy(&_d, &E.v[0][0], 8);
+          fprintf(stderr, "[d0000] x0=%#llx x1=%#llx x2=%#llx x3=%#llx x19=%#llx x20=%#llx x21=%#llx x22=%#llx x23=%#llx x24=%#llx x25=%#llx x26=%#llx x27=%#llx x28=%#llx x30=%#llx sp=%#llx d0=%g d0bits=%#llx\n",
+            (unsigned long long)E.r[0], (unsigned long long)E.r[1], (unsigned long long)E.r[2], (unsigned long long)E.r[3],
+            (unsigned long long)E.r[19], (unsigned long long)E.r[20], (unsigned long long)E.r[21], (unsigned long long)E.r[22],
+            (unsigned long long)E.r[23], (unsigned long long)E.r[24], (unsigned long long)E.r[25], (unsigned long long)E.r[26],
+            (unsigned long long)E.r[27], (unsigned long long)E.r[28], (unsigned long long)E.r[30], (unsigned long long)E.sp,
+            _d, (unsigned long long)E.v[0][0]); }
         fprintf(stderr, "TRACE pc=0x%llx insn=0x%08x x0=0x%llx x1=0x%llx x2=0x%llx x19=0x%llx x20=0x%llx x21=0x%llx x23=0x%llx x24=0x%llx x30=0x%llx sp=0x%llx\n",
             (unsigned long long)E.pc, (unsigned)(*(volatile uint32_t *)(uintptr_t)E.pc),
             (unsigned long long)E.r[0], (unsigned long long)E.r[1],
@@ -241,148 +224,10 @@ static int exec_one(void) {
             (unsigned long long)E.r[21], (unsigned long long)E.r[23], (unsigned long long)E.r[24],
             (unsigned long long)E.r[30], (unsigned long long)E.sp);
 
-    if (getenv("EMU_BP")) {
-        uint64_t off = E.pc - g_base;
-        if (off == 0x1091cULL || off == 0x10924ULL || off == 0x10538ULL || off == 0x10928ULL || off == 0x3146cULL || off == 0xffbcULL || off == 0x31460ULL || off == 0x31474ULL || off == 0xddf54ULL || off == 0xdd5e4ULL || off == 0xddf88ULL || off == 0x9304ULL || off == 0x9300ULL || off == 0xfd00ULL || off == 0xfc08ULL || off == 0xfc04ULL || off == 0xfc3cULL || off == 0xf4e18ULL || off == 0xf4d70ULL || off == 0xf4f2cULL || off == 0xf4d8cULL || off == 0xf4d90ULL || off == 0xf4f44ULL || off == 0xf4f60ULL || off == 0xf4f5cULL || off == 0xf4fb4ULL || off == 0xf4fb8ULL || off == 0xf4fbcULL || off == 0xf4ee4ULL || off == 0xf4ef0ULL || off == 0xf4f08ULL || off == 0xf4ea0ULL || off == 0xf4ee8ULL || off == 0xf4e5cULL || off == 0xf4ea8ULL || off == 0xf4eacULL || off == 0xf4ed0ULL || off == 0xf4d00ULL || off == 0xf4d04ULL || off == 0xf4cf0ULL || off == 0x10914ULL || off == 0x10918ULL || off == 0xffbcULL || off == 0x10078ULL || off == 0x1008cULL || off == 0xffc0ULL || off == 0xffd4ULL || off == 0xfff4ULL || off == 0x10028ULL || off == 0x10060ULL || off == 0x1006cULL || off == 0xffd8ULL || off == 0xfff8ULL || off == 0x1002cULL || off == 0x10064ULL) {
-            if (off == 0xf4ee4ULL || off == 0xf4ef0ULL)
-                fprintf(stderr, "  x5=0x%llx x2=0x%llx [x5+0x20]=0x%llx [x2+0x20]=0x%llx\n",
-                    (unsigned long long)E.r[5], (unsigned long long)E.r[2],
-                    (unsigned long long)*(uint64_t*)(E.r[5]+0x20),
-                    (unsigned long long)*(uint64_t*)(E.r[2]+0x20));
-            if (off == 0x1091cULL) {
-                fprintf(stderr, "[dbg] 1091c x19=%#llx [x19+0x370]=%#llx x20=%#llx\n", (unsigned long long)E.r[19], (unsigned long long)*(uint64_t*)(E.r[19]+0x370), (unsigned long long)E.r[20]);
-            }
-            if (off == 0x10924ULL) {
-                uint64_t *ap = (uint64_t*)(uintptr_t)E.r[1];
-                fprintf(stderr, "[dbg] 10924 x0='%.40s' argv0='%.20s' argv1='%.20s' argv2='%.20s'\n",
-                    (char*)(uintptr_t)E.r[0], (char*)(uintptr_t)ap[0], (char*)(uintptr_t)ap[1], (char*)(uintptr_t)ap[2]);
-            }
-            if (off == 0x10538ULL) {
-                fprintf(stderr, "[dbg] 10538 x0='%.40s' x1='%.40s' x2=%#llx\n", (char*)(uintptr_t)E.r[0], (char*)(uintptr_t)E.r[1], (unsigned long long)E.r[2]);
-            }
-            if (off == 0x10928ULL) {
-                fprintf(stderr, "[dbg] 10928 x0=%#llx x1=%#llx '%s' argv1=%#llx '%s'\n",
-                    (unsigned long long)E.r[0], (unsigned long long)E.r[1], (char*)(uintptr_t)E.r[1],
-                    (unsigned long long)(E.r[20]?*(uint64_t*)(E.r[20]+8):0),
-                    (char*)(E.r[20]?*(uint64_t*)(E.r[20]+8):0));
-            }
-            if (off == 0x3146cULL) {
-                fprintf(stderr, "[dbg] l3146c after-adrp x0=%#llx\n", (unsigned long long)E.r[0]);
-            }
-            if (off == 0xffbcULL) {
-                g_slot = E.sp - 0x1f0;
-                fprintf(stderr, "[dbg] argv0 ptr=%#llx str=\"%.60s\" sp=%#llx\n",
-                    (unsigned long long)E.r[0], (char *)(uintptr_t)E.r[0], (unsigned long long)E.sp);
-            }
-            if (off == 0xfc04ULL) {
-                fprintf(stderr, "[dbg] andsp x0=%#llx sp_before=%#llx\n", (unsigned long long)E.r[0], (unsigned long long)E.sp);
-            }
-            if (off == 0xfc08ULL) {
-                fprintf(stderr, "[dbg] b-fc3c sp=%#llx x0=%#llx\n", (unsigned long long)E.sp, (unsigned long long)E.r[0]);
-            }
-            if (off == 0xfd00ULL) {
-                fprintf(stderr, "[dbg] brx16 x16=%#llx x0=%#llx x1=%#llx x2=%#llx x3=%#llx sp=%#llx\n",
-                    (unsigned long long)E.r[16], (unsigned long long)E.r[0], (unsigned long long)E.r[1],
-                    (unsigned long long)E.r[2], (unsigned long long)E.r[3], (unsigned long long)E.sp);
-                uint64_t p = E.r[1];
-                fprintf(stderr, "[dbg] stack0 argc=%llu a0=%#llx\"%s\" a1=%#llx\"%s\" a2=%#llx\"%s\" a3=%#llx\"%s\"\n",
-                    (unsigned long long)*(uint64_t*)p,
-                    (unsigned long long)*(uint64_t*)(p+8), (char*)(uintptr_t)*(uint64_t*)(p+8),
-                    (unsigned long long)*(uint64_t*)(p+16), (char*)(uintptr_t)*(uint64_t*)(p+16),
-                    (unsigned long long)*(uint64_t*)(p+24), (char*)(uintptr_t)*(uint64_t*)(p+24),
-                    (unsigned long long)*(uint64_t*)(p+32), (char*)(uintptr_t)*(uint64_t*)(p+32));
-            }
-            if (off == 0x1091cULL) {
-                fprintf(stderr, "[dbg] 1091c x19=%#llx [x19+0x370]=%#llx x20=%#llx\n", (unsigned long long)E.r[19], (unsigned long long)*(uint64_t*)(E.r[19]+0x370), (unsigned long long)E.r[20]);
-            }
-            if (off == 0x10924ULL) {
-                uint64_t *ap = (uint64_t*)(uintptr_t)E.r[1];
-                fprintf(stderr, "[dbg] 10924 x0='%.40s' argv0='%.20s' argv1='%.20s' argv2='%.20s'\n",
-                    (char*)(uintptr_t)E.r[0], (char*)(uintptr_t)ap[0], (char*)(uintptr_t)ap[1], (char*)(uintptr_t)ap[2]);
-            }
-            if (off == 0x10538ULL) {
-                fprintf(stderr, "[dbg] 10538 x0='%.40s' x1='%.40s' x2=%#llx\n", (char*)(uintptr_t)E.r[0], (char*)(uintptr_t)E.r[1], (unsigned long long)E.r[2]);
-            }
-            if (off == 0x10928ULL) {
-                fprintf(stderr, "[dbg] 10928 x0=%#llx x1=%#llx '%s' argv1=%#llx '%s'\n",
-                    (unsigned long long)E.r[0], (unsigned long long)E.r[1], (char*)(uintptr_t)E.r[1],
-                    (unsigned long long)(E.r[20]?*(uint64_t*)(E.r[20]+8):0),
-                    (char*)(E.r[20]?*(uint64_t*)(E.r[20]+8):0));
-            }
-            if (off == 0x3146cULL) {
-                fprintf(stderr, "[dbg] l3146c after-adrp x0=%#llx\n", (unsigned long long)E.r[0]);
-            }
-            if (off == 0xffbcULL) {
-                fprintf(stderr, "[dbg] ffbc x0=%#llx '%s' x1=%#llx x2=%#llx\n", (unsigned long long)E.r[0], (char*)(E.r[0] ? (void*)E.r[0] : (void*)"?"), (unsigned long long)E.r[1], (unsigned long long)E.r[2]);
-            }
-            if (off == 0x31460ULL) {
-                fprintf(stderr, "[dbg] l31460 x0=%#llx [sp+0x98]=%#llx\n", (unsigned long long)E.r[0], (unsigned long long)*(uint64_t*)(E.sp+0x98));
-            }
-            if (off == 0x31474ULL) {
-                fprintf(stderr, "[dbg] l31474 x22=%#llx w25=%#x x0=%#llx x19=%#llx\n", (unsigned long long)E.r[22], (unsigned)(E.r[25] & 0xFFFFFFFF), (unsigned long long)E.r[0], (unsigned long long)E.r[19]);
-            }
-            if (off == 0xddf54ULL) {
-                fprintf(stderr, "[dbg] cls-ent x0=%#llx\n", (unsigned long long)E.r[0]);
-            }
-            if (off == 0xdd5e4ULL) {
-                fprintf(stderr, "[dbg] cls-ret w0=%#x\n", (unsigned)(E.r[0] & 0xFFFFFFFF));
-            }
-            if (off == 0xddf88ULL) {
-                fprintf(stderr, "[dbg] cls-w20 w20=%#x\n", (unsigned)(E.r[20] & 0xFFFFFFFF));
-            }
-            if (off == 0x9300ULL) {
-                fprintf(stderr, "[dbg] strlen x0=%#llx x1=%#llx sp=%#llx\n", (unsigned long long)E.r[0], (unsigned long long)E.r[1], (unsigned long long)E.sp);
-            }
-            if (off == 0x9304ULL) {
-                fprintf(stderr, "[dbg] strlen+4 x0=%#llx x1=%#llx\n", (unsigned long long)E.r[0], (unsigned long long)E.r[1]);
-            }
-            if (off == 0x10914ULL) {
-                fprintf(stderr, "[dbg] main-10914 x0=%#llx x1=%#llx x19=%#llx x20=%#llx x21=%#llx sp=%#llx\n",
-                    (unsigned long long)E.r[0], (unsigned long long)E.r[1],
-                    (unsigned long long)E.r[19], (unsigned long long)E.r[20], (unsigned long long)E.r[21], (unsigned long long)E.sp);
-            }
-            if (off == 0xfc3cULL) {
-                uint64_t p = E.r[0];
-                fprintf(stderr, "[dbg] start x0=%#llx argc=%llu argv0=%#llx\"%s\" argv1=%#llx\"%s\" argv2=%#llx\"%s\" esp=%#llx\n",
-                    (unsigned long long)p,
-                    (unsigned long long)*(uint64_t*)p,
-                    (unsigned long long)*(uint64_t*)(p+8), (char*)(uintptr_t)*(uint64_t*)(p+8),
-                    (unsigned long long)*(uint64_t*)(p+16), (char*)(uintptr_t)*(uint64_t*)(p+16),
-                    (unsigned long long)*(uint64_t*)(p+24), (char*)(uintptr_t)*(uint64_t*)(p+24),
-                    (unsigned long long)E.sp);
-            }
-        if (off == 0xf4cf0ULL || off == 0xf4d60ULL || off == 0x10914ULL || off == 0x10918ULL || off == 0xffbcULL || off == 0x10078ULL || off == 0x1008cULL || off == 0xffd8ULL || off == 0xfff8ULL || off == 0x1002cULL || off == 0x10064ULL)
-                fprintf(stderr, "  sp=0x%llx [sp]=0x%llx [sp+8]=0x%llx x30=0x%llx x19=0x%llx x20=0x%llx\n",
-                    (unsigned long long)E.sp,
-                    (unsigned long long)*(uint64_t*)E.sp,
-                    (unsigned long long)*(uint64_t*)(E.sp + 8),
-                    (unsigned long long)E.r[30], (unsigned long long)E.r[19], (unsigned long long)E.r[20]);
-            fprintf(stderr, "BP off=%#llx ", (unsigned long long)off);
-            for (int k = 0; k < 31; k++) fprintf(stderr, "x%d=0x%llx ", k, (unsigned long long)E.r[k]);
-            fprintf(stderr, "sp=0x%llx\n", (unsigned long long)E.sp);
-            if (off == 0xf4e18ULL) {
-                fprintf(stderr, "  [x0+0x18]=0x%llx [x0+0x20]=0x%llx [x0+0x28]=0x%llx [x0]=0x%llx\n",
-                    (unsigned long long)*(uint64_t*)(E.r[0]+0x18),
-                    (unsigned long long)*(uint64_t*)(E.r[0]+0x20),
-                    (unsigned long long)*(uint64_t*)(E.r[0]+0x28),
-                    (unsigned long long)*(uint64_t*)(E.r[0]));
-                fprintf(stderr, "  [base+0x13e160+0x18]=0x%llx [+0x20]=0x%llx [+0x28]=0x%llx [0x13ea08]=0x%llx [0x13e9f8]=0x%llx [0x13ea00]=0x%llx\n",
-                    (unsigned long long)*(uint64_t*)(g_base+0x13e178),
-                    (unsigned long long)*(uint64_t*)(g_base+0x13e180),
-                    (unsigned long long)*(uint64_t*)(g_base+0x13e188),
-                    (unsigned long long)*(uint64_t*)(g_base+0x13ea08),
-                    (unsigned long long)*(uint64_t*)(g_base+0x13e9f8),
-                    (unsigned long long)*(uint64_t*)(g_base+0x13ea00));
-                fprintf(stderr, "  [base+0x1040..0x1060]=0x%llx 0x%llx 0x%llx 0x%llx\n",
-                    (unsigned long long)*(uint64_t*)(g_base+0x1040),
-                    (unsigned long long)*(uint64_t*)(g_base+0x1048),
-                    (unsigned long long)*(uint64_t*)(g_base+0x1050),
-                    (unsigned long long)*(uint64_t*)(g_base+0x1058));
-            }
-        }
-    }
     uint32_t i = fetch();
     if (E.exited) return 1;
+    { uint8_t _h = (i >> 24) & 0xFF;
+        fprintf(stderr, "[fp] pc-off=0x%05llx insn=%08x\n", (unsigned long long)(E.pc - g_base) & 0xFFFFFF, i); }
 
     /* ---- SVC ---- */
     if ((i & 0xFF000000) == 0xD4000000) {
@@ -393,17 +238,6 @@ static int exec_one(void) {
         uint64_t ret = translate_syscall(nr, E.r[0], E.r[1], E.r[2],
                                          E.r[3], E.r[4], E.r[5]);
         if (g_emu_halt) { E.exited = 1; E.exit_code = (int)g_exit_code; }
-        if (nr == 64 && g_base && getenv("EMU_DBG"))
-            fprintf(stderr, "[svc] write fd=%llu pc-off=%#llx lr-off=%#llx n=%llu buf='%.20s' chain=%#llx/%#llx/%#llx/%#llx\n",
-                (unsigned long long)E.r[0],
-                (unsigned long long)(E.pc - (uint64_t)g_base),
-                (unsigned long long)(E.r[30] - (uint64_t)g_base),
-                (unsigned long long)E.r[2],
-                (char*)(uintptr_t)E.r[1],
-                (unsigned long long)(*(uint64_t*)(uintptr_t)E.sp - (uint64_t)g_base),
-                (unsigned long long)(*(uint64_t*)(uintptr_t)(E.sp + 8) - (uint64_t)g_base),
-                (unsigned long long)(*(uint64_t*)(uintptr_t)(E.sp + 16) - (uint64_t)g_base),
-                (unsigned long long)(*(uint64_t*)(uintptr_t)(E.sp + 24) - (uint64_t)g_base));
         E.r[0] = (uint64_t)ret;
         E.pc += 4;
         return 0;
@@ -415,9 +249,12 @@ static int exec_one(void) {
     if ((i & 0xFFF80000) == 0xD5000000) { E.pc += 4; return 0; }   /* SYS/DC/IC/AT */
 
     /* ---- 分支 ---- */
+    if ((i & 0xFF800000) == 0x52800000) {                 /* MOVZ W（临时：0xf3514 轨迹） */
+    }
     if ((i & 0x7C000000) == 0x14000000) {                 /* B/BL（bit31=1 是 BL） */
+        uint64_t tgt = E.pc + ((uint64_t)sext(i & 0x03FFFFFF, 26) << 2);
         if ((i >> 31) & 1) E.r[30] = E.pc + 4;
-        E.pc += (uint64_t)sext(i & 0x03FFFFFF, 26) << 2;
+        E.pc = tgt;
         return 0;
     }
     if ((i & 0xFFFFFC1F) == 0xD61F0000) { E.pc = RSP(rn(i)); return 0; }
@@ -609,8 +446,10 @@ static int exec_one(void) {
         W(Rd, res); E.pc += 4; return 0;
     }
 
-    /* ---- UDIV/SDIV ---- */
-    if ((i & 0xFFC00000) == 0x9AC00000) {
+    /* ---- UDIV/SDIV ----（bit13=0 才是 div；bit13=1 是 LSLV/LSRV/ASRV/RORV，
+       由下方 variable-shift 块处理——之前掩码 0xFFC00000 误捕 ASRV（0x9AC02xxx），
+       strftime 0xf3220 的 asr x0,x26,x0 被当 udiv → date %H 空输出） */
+    if ((i & 0xFFC00000) == 0x9AC00000 && !((i >> 13) & 1)) {
         int sf = (i >> 31) & 1, op = (i >> 10) & 3;
         uint64_t a = RZR(rn(i)), b = RZR(rm(i)), res = 0;
         if (b == 0) res = 0;
@@ -769,7 +608,6 @@ static int exec_one(void) {
                 addr = RSP(rn(i)) + (((i >> 10) & 0xFFF) << sz);
             } else {
                 int opt = (i >> 10) & 3;                /* bit11-10 */
-                if (getenv("EMU_MEM")) fprintf(stderr, "  LDRSTR i=0x%08x rn=%d rm=%d rd=%d opt=%d\n", i, rn(i), rm(i), rd(i), opt);
                 if (opt == 1) {                         /* post-index（imm9） */
                     int64_t imm9 = sext((i >> 12) & 0x1FF, 9);
                     addr = RSP(rn(i));
@@ -800,7 +638,6 @@ static int exec_one(void) {
                 }
             }
             if (is_ld) {
-                if (getenv("EMU_MEM")) fprintf(stderr, "  LDR addr=0x%llx sz=%d rd=%d\n", (unsigned long long)addr, sz, rd(i));
                 uint64_t v = mem_ld(addr, 1 << sz);
                 if (sign && sz < 3) {
                     int w = 8 << sz;
@@ -809,7 +646,6 @@ static int exec_one(void) {
                 if (sz == 2) v = (uint32_t)v;
                 W(rd(i), v);
             } else {
-                if (getenv("EMU_MEM")) fprintf(stderr, "  STR addr=0x%llx sz=%d rd=%d val=0x%llx\n", (unsigned long long)addr, sz, rd(i), (unsigned long long)RZR(rd(i)));
                 mem_st(addr, RZR(rd(i)), 1 << sz);
             }
             E.pc += 4;
@@ -823,8 +659,6 @@ static int exec_one(void) {
         if (!(_m10 >= 0xA2 && _m10 <= 0xA7)) goto not_ldstp;
     }
     {
-        if (rd(i) == 19 && (i & 0x1F) == 19 && ((i >> 10) & 0x1F) == 20 && (i >> 31) == 1 && ((i >> 22) & 0xFF) == 0xA6)
-            if (getenv("EMU_LDP")) fprintf(stderr, "[dbg] LDP/STP branch pc=%#llx insn=%08x\n", (unsigned long long)E.pc, i);
         int sf = (i >> 31) & 1, is_ld = ((i >> 22) & 1);   /* 奇数 = LDP */
         int rt = rd(i), rt2 = (i >> 10) & 0x1F;
         int64_t imm7 = sext(((i >> 15) & 0x7F), 7) * (sf ? 8 : 4);
@@ -835,22 +669,12 @@ static int exec_one(void) {
         if (is_ld) {
             uint64_t v1 = mem_ld(addr, sf ? 8 : 4);
             uint64_t v2 = mem_ld(addr + (sf ? 8 : 4), sf ? 8 : 4);
-            if (getenv("EMU_LDP")) fprintf(stderr, "[dbg] ldp pc=%#llx addr=%#llx v1=%#llx v2=%#llx ptr1=%#llx rt=%d rt2=%d post=%d sp=%#llx x19_before=%#llx\n",
-                (unsigned long long)E.pc, (unsigned long long)addr, (unsigned long long)v1, (unsigned long long)v2,
-                (unsigned long long)*(uint64_t *)(uintptr_t)addr,
-                rt, rt2, post, (unsigned long long)E.sp, (unsigned long long)E.r[19]);
             W(rt, v1);
             W(rt2, v2);
-            if (getenv("EMU_LDP")) fprintf(stderr, "[dbg] ldp after: x19=%#llx x20=%#llx\n", (unsigned long long)E.r[19], (unsigned long long)E.r[20]);
         } else {
             if (rt == 19 && is_ld == 0 && ((i >> 22) & 0xFF) == 0xA6 && (i & 0x1F) == 19 && ((i >> 10) & 0x1F) == 20) {
-                if (getenv("EMU_LDP")) fprintf(stderr, "[dbg] stp x19 pc=%#llx addr=%#llx v=%#llx sp=%#llx pre=%d post=%d\n",
-                    (unsigned long long)E.pc, (unsigned long long)addr, (unsigned long long)RZR(rt), (unsigned long long)E.sp, pre, post);
                 mem_st(addr, RZR(rt), 8);
                 mem_st(addr + 8, RZR(rt2), 8);
-                if (getenv("EMU_LDP")) fprintf(stderr, "[dbg] after: mem[addr]=%#llx mem[addr+8]=%#llx\n",
-                    (unsigned long long)*(uint64_t*)(uintptr_t)addr,
-                    (unsigned long long)*(uint64_t*)(uintptr_t)(addr + 8));
             } else {
                 mem_st(addr, RZR(rt), sf ? 8 : 4);
                 mem_st(addr + (sf ? 8 : 4), RZR(rt2), sf ? 8 : 4);
@@ -882,11 +706,88 @@ not_ldstp:
     if ((i & 0xFFFFF01F) == 0xD50B7000) { E.pc += 4; return 0; }               /* DC ZVA → NOP（v19.3: 0xD50B7400 带 bit20 被掩码清除→恒假，改 0xD50B7000 真匹配） */
 
     /* ---- NEON 精简支持（musl memset/memcpy 优化） ---- */
-    if ((i & 0xFFE0FC00) == 0x0F000400 || (i & 0xFFE0FC00) == 0x4F000400) {  /* MOVI vector（全零模式） */
-        int cmode = (i >> 12) & 0xF, imm = (i >> 16) & 0xFF, rd = i & 0x1F;
-        if (imm == 0 && cmode == 0) { E.v[rd][0] = 0; E.v[rd][1] = 0; E.pc += 4; return 0; }
-        fprintf(stderr, "[emu] UNSUPPORTED movi cmode=%d imm=%d pc=%#llx\n", cmode, imm, (unsigned long long)E.pc);
-        return 1;
+    if ((i & 0xFFE0FC00) == 0x0F000400 || (i & 0xFFE0FC00) == 0x4F000400 ||  /* MOVI/MVNI 2S/4S */
+        (i & 0xFFE0FC00) == 0x0F008400 || (i & 0xFFE0FC00) == 0x4F008400 ||  /* MOVI/MVNI 4H/8H */
+        (i & 0xFFE0FC00) == 0x0F00E400 || (i & 0xFFE0FC00) == 0x4F00E400 ||  /* MOVI 8B/16B */
+        (i & 0xFFE0FC00) == 0x6F00E400 ||                                     /* MOVI 2D（imm8=0 或 0xFF） */
+        (i & 0xFFE0FC00) == 0x2F000400 || (i & 0xFFE0FC00) == 0x6F000400 ||  /* MVNI 2S/4S */
+        (i & 0xFFE0FC00) == 0x2F008400 || (i & 0xFFE0FC00) == 0x6F008400 ||  /* MVNI 4H/8H */
+        (i & 0xFFE0FC00) == 0x0F00A400 || (i & 0xFFE0FC00) == 0x4F00A400) {  /* MOVI H lsl #8 */
+        int cmode = (i >> 12) & 0xF;
+        int q = (i >> 30) & 1;
+        int rd = i & 0x1F;
+        int mvni = ((i >> 29) & 1) && cmode != 14;   /* op 位=1 且非 2D 特例 → MVNI */
+        int imm8 = ((i >> 16) & 0x7) << 5 | ((i >> 5) & 0x1F);
+        uint64_t v = 0;
+        if (cmode == 14) {                          /* 8B/16B/2D：imm8 复制 8 次 */
+            v = (uint64_t)(uint8_t)imm8 * 0x0101010101010101ull;
+        } else if (cmode == 8) {                    /* 4H/8H：imm8 复制 2 次到 16 位，4 个半字 */
+            uint64_t h = (uint64_t)(uint8_t)imm8 * 0x0101ull;
+            v = h * 0x0001000100010001ull;
+        } else if (cmode == 0) {                    /* 2S/4S：imm8 复制 4 次到 32 位，2 个字 */
+            uint64_t w = (uint64_t)(uint8_t)imm8 * 0x01010101ull;
+            v = w * 0x0000000100000001ull;
+        } else if (cmode == 2) {                    /* 2S/4S lsl #8 */
+            v = (uint64_t)((uint32_t)(uint8_t)imm8 << 8) * 0x0000000100000001ull;
+        } else if (cmode == 4) {                    /* 2S/4S lsl #16 */
+            v = (uint64_t)((uint32_t)(uint8_t)imm8 << 16) * 0x0000000100000001ull;
+        } else if (cmode == 6) {                    /* 2S/4S lsl #24 */
+            v = (uint64_t)((uint32_t)(uint8_t)imm8 << 24) * 0x0000000100000001ull;
+        } else if (cmode == 10) {                   /* 8H lsl #8 */
+            uint64_t h = (uint64_t)((uint16_t)(uint8_t)imm8 << 8);
+            v = h * 0x0001000100010001ull;
+        } else {
+            fprintf(stderr, "[emu] UNSUPPORTED movi cmode=%d pc=%#llx\n", cmode, (unsigned long long)E.pc);
+            return 1;
+        }
+        if (mvni) v = ~v;
+        if (q) { E.v[rd][0] = v; E.v[rd][1] = v; }
+        else { E.v[rd][0] = v; E.v[rd][1] = 0; }
+        E.pc += 4; return 0;
+    }
+    /* ---- SIMD&FP 双寄存器对访存：STP/LDP S/D/Q（seq 的 ldp d19,d20 等） ---- */
+    if ((i & 0x3FC00000) == 0x2D000000 || (i & 0x3FC00000) == 0x2C000000 ||
+        (i & 0x3FC00000) == 0x2D400000 || (i & 0x3FC00000) == 0x2C400000) {
+        int is_ld = (i >> 22) & 1;                   /* bit22: 1=LDP/LDNP, 0=STP/STNP */
+        int opc = (i >> 30) & 3;                     /* 00=S 01=D 10=Q */
+        int size = opc == 0 ? 4 : opc == 1 ? 8 : 16; /* S=4B D=8B Q=16B */
+        int scale = size == 4 ? 2 : size == 8 ? 3 : 4;
+        int64_t imm = (int64_t)sext((i >> 15) & 0x7F, 7) << scale;
+        /* bit[23:22]: 00=STP-offset 01=LDP-offset 10=pre/post 11=pre/post；bit23=1 写回，pre/post 由 bit24 分（1=pre 0=post） */
+        uint64_t base = RSP(rn(i)), addr;
+        if ((i >> 23) & 1) {
+            if ((i >> 24) & 1) { addr = base + (uint64_t)imm; W(rn(i), addr); }  /* pre */
+            else { addr = base; W(rn(i), base + (uint64_t)imm); }                 /* post */
+        } else addr = base + (uint64_t)imm;
+        int rt = rd(i), rt2 = (i >> 10) & 0x1F;
+        if (is_ld) {
+            if (size == 16) {
+                E.v[rt][0] = mem_ld(addr, 8); E.v[rt][1] = mem_ld(addr + 8, 8);
+                E.v[rt2][0] = mem_ld(addr + 16, 8); E.v[rt2][1] = mem_ld(addr + 24, 8);
+            } else if (size == 8) {
+                E.v[rt][0] = mem_ld(addr, 8); E.v[rt][1] = 0;
+                E.v[rt2][0] = mem_ld(addr + 8, 8); E.v[rt2][1] = 0;
+            } else {
+                E.v[rt][0] = (uint32_t)mem_ld(addr, 4); E.v[rt][1] = 0;
+                E.v[rt2][0] = (uint32_t)mem_ld(addr + 4, 4); E.v[rt2][1] = 0;
+            }
+        } else {
+            if (size == 16) {
+                mem_st(addr, E.v[rt][0], 8); mem_st(addr + 8, E.v[rt][1], 8);
+                mem_st(addr + 16, E.v[rt2][0], 8); mem_st(addr + 24, E.v[rt2][1], 8);
+            } else if (size == 8) {
+                mem_st(addr, E.v[rt][0], 8); mem_st(addr + 8, E.v[rt2][0], 8);
+            } else {
+                mem_st(addr, E.v[rt][0] & 0xFFFFFFFF, 4); mem_st(addr + 4, E.v[rt2][0] & 0xFFFFFFFF, 4);
+            }
+        }
+        E.pc += 4; return 0;
+    }
+    if ((i & 0x0F20FC00) == 0x0E201C00) {                 /* ORR (vector)：Vd = Vn | Vm（8B/16B，含 mov 特例） */
+        int rd = i & 0x1F, rn = (i >> 5) & 0x1F, rm = (i >> 16) & 0x1F, q = (i >> 30) & 1;
+        E.v[rd][0] = E.v[rn][0] | E.v[rm][0];
+        E.v[rd][1] = q ? (E.v[rn][1] | E.v[rm][1]) : 0;
+        E.pc += 4; return 0;
     }
     if ((i & 0xFFE0FC00) == 0x4E000C00) {                 /* DUP vd, wn（GPR→vector） */
         int imm5 = (i >> 16) & 0x1F, rn = (i >> 5) & 0x1F, rd = i & 0x1F;
@@ -907,6 +808,45 @@ not_ldstp:
     }
     if ((i & 0xFFE0FC00) == 0x4E003C00) {                 /* UMOV Xd, Vn.D[0] */
         W(rd(i), E.v[(i >> 5) & 0x1F][0]); E.pc += 4; return 0;
+    }
+    /* ---- 标量 FP 访存（B/H/S/D 元素）---- */
+    if ((i & 0x7FC00000) == 0x3D000000 || (i & 0x7FC00000) == 0x7D000000 ||
+        (i & 0x7FC00000) == 0xBD000000 || (i & 0x7FC00000) == 0xFD000000 ||
+        (i & 0x7FC00000) == 0x3C000000 || (i & 0x7FC00000) == 0x7C000000 ||
+        (i & 0x7FC00000) == 0xBC000000 || (i & 0x7FC00000) == 0xFC000000 ||
+        (i & 0x7FC00000) == 0x3D400000 || (i & 0x7FC00000) == 0x7D400000 ||
+        (i & 0x7FC00000) == 0xBD400000 || (i & 0x7FC00000) == 0xFD400000) {
+        int sz = ((i >> 31) & 1) << 1 | ((i >> 30) & 1);  /* B=0 H=1 S=2 D=3 */
+        int rd = i & 0x1F, opc = (i >> 22) & 3;
+        int nbytes = 1 << sz;
+        if (i & 0x04000000) {                             /* bit26=1：STR/LDR imm12 */
+            uint64_t a = RSP(rn(i)) + ((((i >> 10) & 0xFFF) << sz));
+            if (opc == 0) mem_st(a, E.v[rd][0], nbytes);  /* STR B/H/S/D */
+            else if (opc == 1) { uint64_t x = mem_ld(a, nbytes); E.v[rd][0] = x; }
+            else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opc=%d pc=%#llx\n", opc, (unsigned long long)E.pc); return 1; }
+            E.pc += 4; return 0;
+        }
+        if (i & 0x00200000) {                             /* bit21=1：STUR/LDUR imm9（unscaled） */
+            uint64_t a = RSP(rn(i)) + (uint64_t)sext((i >> 12) & 0x1FF, 9);
+            if (opc == 0) mem_st(a, E.v[rd][0], nbytes);
+            else if (opc == 1) { uint64_t x = mem_ld(a, nbytes); E.v[rd][0] = x; }
+            else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opc=%d pc=%#llx\n", opc, (unsigned long long)E.pc); return 1; }
+            E.pc += 4; return 0;
+        }
+        /* bit21=0：寄存器偏移 str/ldr b/h/s/d, [xn, xm, <ext>] */
+        int opt = (i >> 13) & 7, s = (i >> 12) & 1, rm = (i >> 16) & 0x1F;
+        uint64_t off;
+        if (opt == 2) off = (uint64_t)(uint32_t)RZR(rm);     /* UXTW */
+        else if (opt == 3) off = RZR(rm);                    /* LSL(64) */
+        else if (opt == 6) off = (uint64_t)(int64_t)(int32_t)RZR(rm);  /* SXTW */
+        else if (opt == 7) off = (uint64_t)(int64_t)RZR(rm);  /* SXTX */
+        else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opt=%d i=%#x pc=%#llx\n", opt, i, (unsigned long long)E.pc); return 1; }
+        if (s) off <<= sz;
+        uint64_t a = RSP(rn(i)) + off;
+        if (opc == 0) mem_st(a, E.v[rd][0], nbytes);
+        else if (opc == 1) { uint64_t x = mem_ld(a, nbytes); E.v[rd][0] = x; }
+        else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opc=%d pc=%#llx\n", opc, (unsigned long long)E.pc); return 1; }
+        E.pc += 4; return 0;
     }
     {   /* SIMD&FP 访存：str/ldr q（imm12）、stur/ldur q（imm9）、stp/ldp q（imm7） */
         uint32_t m = i & 0xFFC00000;
@@ -997,6 +937,37 @@ not_ldstp:
         E.pc += 4; return 0;
     }
 
+    /* ---- ADC/SBC/ADCS/SBCS（带进位加减，0x1A/0x3A/0x5A/0x7A W + 0x9A/0xBA/0xDA/0xFA X） ---- */
+    if ((i & 0x1FE00000) == 0x1A000000 || (i & 0x1FE00000) == 0x3A000000 ||
+        (i & 0x1FE00000) == 0x5A000000 || (i & 0x1FE00000) == 0x7A000000) {
+        int sf = (i >> 31) & 1, op = (i >> 30) & 1, setf = (i >> 29) & 1;
+        uint64_t a = RZR(rn(i)), b = RZR(rm(i));
+        int c = (E.nzcv >> 29) & 1;
+        uint64_t res, nc, nz;
+        if (!op) { /* ADC */
+            res = a + b + c;
+            nc = (res < a) || (c && res == a) ? 1 : 0;
+            uint64_t sg = 1ULL << (sf ? 63 : 31);
+            nz = ((a & sg) == (b & sg)) && ((res & sg) != (a & sg)) ? 1 : 0;
+        } else {   /* SBC：a - b - !C */
+            uint64_t br = 1 - c;
+            res = a - b - br;
+            nc = (a >= b + br) ? 1 : 0;
+            uint64_t sg = 1ULL << (sf ? 63 : 31);
+            nz = ((a & sg) != (b & sg)) && ((res & sg) == (b & sg)) ? 1 : 0;
+        }
+        if (sf) W(rd(i), res); else W(rd(i), (uint32_t)res);
+        if (setf) {
+            uint32_t f = 0;
+            if ((res >> (sf ? 63 : 31)) & 1) f |= 1u << 31;
+            if ((sf ? res : (uint32_t)res) == 0) f |= 1u << 30;
+            if (nc) f |= 1u << 29;
+            if (nz) f |= 1u << 28;
+            E.nzcv = f;
+        }
+        E.pc += 4; return 0;
+    }
+
     /* ---- CSEL/CSINC/CSINV/CSNEG ---- (CSEL/CSINC=0x1A800000 系 op=00；CSINV/CSNEG=0x5A800000 系 op=10；op2: 00=base/01=inc/neg；SDIV/UDIV 的 op2=11 由 op 位排除) */
     if ((i & 0xFFE00000) == 0x1A800000 || (i & 0xFFE00000) == 0x5A800000 ||
         (i & 0xFFE00000) == 0x9A800000 || (i & 0xFFE00000) == 0xDA800000) {
@@ -1064,6 +1035,114 @@ not_ldstp:
         }
     }
 
+    /* ---- FMOV S/D imm（printf 浮点格式化的 1.0/0.5/0.125 等） ---- */
+    if ((i & 0xFFE0FC00) == 0x1E201000 || (i & 0xFFE0FC00) == 0x1E601000) {
+        int imm8 = (i >> 13) & 0xFF;
+        int a = (imm8 >> 7) & 1, ex = (~(imm8 >> 4) & 7), fr = imm8 & 0xF;
+        double v = (a ? -1.0 : 1.0) * (1.0 + fr / 16.0) * pow(2.0, -ex);
+        int type = ((i & 0xFFE0FC00) == 0x1E601000) ? 1 : 0;
+        fp_st(rd(i), type, type ? v : (float)v);
+        E.pc += 4; return 0;
+    }
+
+    /* ---- EXTR（strtod/floatscan 位提取） ---- */
+    if ((i & 0xFFF00000) == 0x93C00000) {
+        int imm = (i >> 10) & 0x3F; uint64_t v = RZR(rn(i)), w = RZR((i >> 16) & 0x1F);
+        W(rd(i), imm == 0 ? v : ((v << (64 - imm)) | (w >> imm))); E.pc += 4; return 0;
+    }
+    if ((i & 0xFFF00000) == 0x13800000) {
+        int imm = (i >> 10) & 0x1F; uint32_t v = (uint32_t)RZR(rn(i)), w = (uint32_t)RZR((i >> 16) & 0x1F);
+        W(rd(i), (uint64_t)(imm == 0 ? v : ((v << (32 - imm)) | (w >> imm)))); E.pc += 4; return 0;
+    }
+
+    /* ---- INS/FMOV vN.d[1], xM（musl long double 构造） ---- */
+    if ((i & 0xFFFFFC00) == 0x9EAF0000) { E.v[rd(i)][1] = RZR((i >> 5) & 0x1F); E.pc += 4; return 0; } /* FMOV vN.d[1], xM */
+    if ((i & 0xFFFFFC00) == 0x9EAC0000) { E.v[rd(i)][0] = RZR((i >> 5) & 0x1F); E.pc += 4; return 0; } /* FMOV vN.d[0], xM */
+
+    /* ---- REV16/REV32/REV（printf %.1f 的 strtod 小数解析需要） ---- */
+    if ((i & 0xFFFFFC00) == 0x5AC00400) { uint32_t v = (uint32_t)RZR(rn(i)); W(rd(i), (uint64_t)(uint32_t)(((v & 0xFF00FF00u) >> 8) | ((v & 0x00FF00FFu) << 8))); E.pc += 4; return 0; } /* REV16 W */
+    if ((i & 0xFFFFFC00) == 0xDAC00400) { uint64_t v = RZR(rn(i)); W(rd(i), ((v & 0xFF00FF00FF00FF00ULL) >> 8) | ((v & 0x00FF00FF00FF00FFULL) << 8)); E.pc += 4; return 0; } /* REV16 X */
+    if ((i & 0xFFFFFC00) == 0x5AC00800) { uint32_t v = (uint32_t)RZR(rn(i)); W(rd(i), (uint64_t)(uint32_t)__builtin_bswap32(v)); E.pc += 4; return 0; } /* REV32 W */
+    if ((i & 0xFFFFFC00) == 0xDAC00800) { uint64_t v = RZR(rn(i)); W(rd(i), __builtin_bswap64(v)); E.pc += 4; return 0; } /* REV32 X */
+    if ((i & 0xFFFFFC00) == 0xDAC00A00) { uint64_t v = RZR(rn(i)); W(rd(i), __builtin_bswap64(v)); E.pc += 4; return 0; } /* REV X */
+
+    /* ---- 标量浮点（v19.5：seq/printf %g 需要；host double 直算） ---- */
+    if ((i & 0xFF20FC00) == 0x1E200800) {   /* FMUL s/d */
+        int type = (i >> 22) & 1;
+        fp_st(rd(i), type, fp_ld(rn(i), type) * fp_ld(rm(i), type));
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFF20FC00) == 0x1E201800) {   /* FDIV s/d */
+        int type = (i >> 22) & 1;
+        fp_st(rd(i), type, fp_ld(rn(i), type) / fp_ld(rm(i), type));
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFF20FC00) == 0x1E202800) {   /* FADD s/d */
+        int type = (i >> 22) & 1;
+        fp_st(rd(i), type, fp_ld(rn(i), type) + fp_ld(rm(i), type));
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFF20FC00) == 0x1E203800) {   /* FSUB s/d */
+        int type = (i >> 22) & 1;
+        fp_st(rd(i), type, fp_ld(rn(i), type) - fp_ld(rm(i), type));
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFFC00) == 0x1E604000) { fp_st(rd(i), 1, fp_ld(rn(i), 1)); E.pc += 4; return 0; } /* FMOV d,d */
+    if ((i & 0xFFFFFC00) == 0x1E204000) { fp_st(rd(i), 0, fp_ld(rn(i), 0)); E.pc += 4; return 0; } /* FMOV s,s */
+    if ((i & 0xFFFFFC00) == 0x1E60C000) { fp_st(rd(i), 1, fabs(fp_ld(rn(i), 1))); E.pc += 4; return 0; } /* FABS d */
+    if ((i & 0xFFFFFC00) == 0x1E20C000) { fp_st(rd(i), 0, fabsf((float)fp_ld(rn(i), 0))); E.pc += 4; return 0; } /* FABS s */
+    if ((i & 0xFFFFFC00) == 0x1E614000) { fp_st(rd(i), 1, -fp_ld(rn(i), 1)); E.pc += 4; return 0; } /* FNEG d */
+    if ((i & 0xFFFFFC00) == 0x1E214000) { fp_st(rd(i), 0, -fp_ld(rn(i), 0)); E.pc += 4; return 0; } /* FNEG s */
+    if ((i & 0xFFFFFC00) == 0x1E61C000) { fp_st(rd(i), 1, sqrt(fp_ld(rn(i), 1))); E.pc += 4; return 0; } /* FSQRT d */
+    if ((i & 0xFFFFFC00) == 0x1E21C000) { fp_st(rd(i), 0, sqrtf((float)fp_ld(rn(i), 0))); E.pc += 4; return 0; } /* FSQRT s */
+    if ((i & 0xFFE0FC1F) == 0x1E602000 || (i & 0xFFE0FC1F) == 0x1E602010 ||
+        (i & 0xFFE0FC1F) == 0x1E602008 || (i & 0xFFE0FC1F) == 0x1E602018) {
+        /* FCMP/FCMPE d,d / d,#0.0（含 0x1E612000 系与 opc 变体） */
+        double a = fp_ld(rn(i), 1);
+        double b = (i & 0x08) ? 0.0 : fp_ld((i & 0x1F), 1);
+        int un = isnan(a) || isnan(b);
+        uint32_t f = 0;
+        if (a < b) f |= 1u << 31;      /* N */
+        if (a == b) f |= 1u << 30;     /* Z */
+        if (a >= b) f |= 1u << 29;     /* C */
+        if (un) f |= 1u << 28;         /* V */
+        E.nzcv = f;
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFFC00) == 0x1E22C000) { fp_st(rd(i), 1, (double)fp_ld(rn(i), 0)); E.pc += 4; return 0; } /* FCVT d,s */
+    if ((i & 0xFFFFFC00) == 0x1E624000) { fp_st(rd(i), 0, (float)fp_ld(rn(i), 1)); E.pc += 4; return 0; } /* FCVT s,d */
+    if ((i & 0xFFFFFC00) == 0x9E780000 || (i & 0xFFFFFC00) == 0x1E780000) {   /* FCVTZS x/w,d */
+        double a = fp_ld((i >> 5) & 0x1F, 1);
+        int64_t r = (int64_t)a;
+        if ((i >> 31) & 1) W(rd(i), (uint64_t)r); else W(rd(i), (uint64_t)(int32_t)r);
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFFC00) == 0x9E790000 || (i & 0xFFFFFC00) == 0x1E790000) {   /* FCVTZU x/w,d */
+        double a = fp_ld((i >> 5) & 0x1F, 1);
+        uint64_t r = (uint64_t)a;
+        if (!((i >> 31) & 1)) r = (uint32_t)r;
+        W(rd(i), r); E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFFC00) == 0x9E620000 || (i & 0xFFFFFC00) == 0x1E620000) {   /* SCVTF d,x / s,w */
+        int type = (i >> 22) & 1;
+        int64_t v = ((i >> 31) & 1) ? (int64_t)RZR(rn(i)) : (int32_t)RZR(rn(i));
+        fp_st(rd(i), type, (double)v); E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFFC00) == 0x9E630000 || (i & 0xFFFFFC00) == 0x1E630000) {   /* UCVTF d,x / s,w */
+        int type = (i >> 22) & 1;
+        uint64_t v = ((i >> 31) & 1) ? RZR(rn(i)) : (uint32_t)RZR(rn(i));
+        fp_st(rd(i), type, (double)v); E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFFC00) == 0x1E260000) { W(rd(i), (uint64_t)(int32_t)fp_ld(rn(i), 0)); E.pc += 4; return 0; } /* FMOV w,s */
+    if ((i & 0xFFFFFC00) == 0x1E270000) { fp_st(rd(i), 0, (float)(int32_t)RZR(rn(i))); E.pc += 4; return 0; } /* FMOV s,w */
+    if ((i & 0xFFFFFC00) == 0x9E660000) { W(rd(i), (uint64_t)fp_ld(rn(i), 1)); E.pc += 4; return 0; } /* FMOV x,d */
+    if ((i & 0xFFFFFC00) == 0x9E670000) { fp_st(rd(i), 1, (double)RZR(rn(i))); E.pc += 4; return 0; } /* FMOV d,x */
+    if ((i & 0xFF200800) == 0x1F400000 || (i & 0xFF200800) == 0x1F400800) {   /* FMADD/FMSUB d */
+        int type = (i >> 22) & 1;
+        double a = fp_ld(rd(i), type), b = fp_ld((i >> 5) & 0x1F, type), c = fp_ld((i >> 16) & 0x1F, type);
+        double r = ((i >> 15) & 1) ? a - b * c : a + b * c;
+        fp_st(rd(i), type, r); E.pc += 4; return 0;
+    }
     return unsupported(i);
 }
 
@@ -1073,8 +1152,8 @@ int emu_run(uint64_t entry, uint64_t sp) {
     E.sp = sp;
     g_emu_active = 1;
     if (setjmp(g_emu_jmp) != 0) {
-        fprintf(stderr, "[emu] mem fault @ pc=0x%llx (longjmp exit) x0=0x%llx sp=0x%llx x1=0x%llx x2=0x%llx x19=0x%llx x20=0x%llx x21=0x%llx x23=0x%llx x24=0x%llx x30=0x%llx x6=0x%llx x16=0x%llx x17=0x%llx x22=0x%llx x25=0x%llx\n",
-                (unsigned long long)E.pc,
+        fprintf(stderr, "[emu] mem fault @ pc=0x%llx (pc-off=0x%llx base=0x%llx) x0=0x%llx sp=0x%llx x1=0x%llx x2=0x%llx x19=0x%llx x20=0x%llx x21=0x%llx x23=0x%llx x24=0x%llx x30=0x%llx x6=0x%llx x16=0x%llx x17=0x%llx x22=0x%llx x25=0x%llx\n",
+                (unsigned long long)E.pc, (unsigned long long)(E.pc - g_base), (unsigned long long)g_base,
                 (unsigned long long)E.r[0], (unsigned long long)E.sp,
                 (unsigned long long)E.r[1], (unsigned long long)E.r[2],
                 (unsigned long long)E.r[19], (unsigned long long)E.r[20],

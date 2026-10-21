@@ -397,8 +397,14 @@ static long sys_mmap(uintptr_t addr, size_t len, int prot, int flags, int fd, of
     if (prot & 4) mprot |= PROT_EXEC;
     /* ★ 根因修复（真机 EBADF=-9）：guest 是 Linux musl，MAP_ANONYMOUS 在 Linux=0x20，
        iOS 的 MAP_ANON=0x1000 —— 两平台常量不同，iOS 不识别 0x20 为匿名 → EBADF。
-       翻译 0x20→0x1000；MAP_PRIVATE=0x2 / MAP_FIXED=0x10 两平台一致。匿名时 fd 强制 -1。 */
-    if (flags & 0x20) flags = (flags & ~0x20) | 0x1000;
+       v19.4：条件编译——Darwin 宿主翻译 0x20→0x1000；Linux 宿主(本地 harness)保留 0x20。
+       匿名时 fd 强制 -1（两平台一致）。 */
+    if (flags & 0x20) {
+        fd = -1;
+#ifdef __APPLE__
+        flags = (flags & ~0x20) | 0x1000;
+#endif
+    }
     if (flags & 0x1000) fd = -1;
     /* ★ v10 根因修复（真机 EINVAL=-22）：musl mallocng 用 MAP_FIXED 固定映射到
        已映射区域（典型=sys_brk 堆基址 0x12c002000）。Linux 语义 MAP_FIXED 覆盖已有
@@ -537,11 +543,6 @@ long translate_syscall(uint64_t nr,
                 (unsigned long long)a0, (unsigned long long)a1, (unsigned long long)a2);
         r = -ENOSYS;
     }
-    if (getenv("EMU_DBG")) /* 默认关：EMU_DBG=1 时开 syscall 轨迹（v19.4 收敛） */
-        fprintf(stderr, "[sys] nr=%llu -> %lld (x0=%llu x1=%llu x2=%llu x3=%llu x4=%llu x5=%llu)\n",
-                (unsigned long long)nr, (long long)r,
-                (unsigned long long)a0, (unsigned long long)a1, (unsigned long long)a2,
-                (unsigned long long)a3, (unsigned long long)a4, (unsigned long long)a5);
     return r;
 }
 

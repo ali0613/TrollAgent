@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>6.0.25</string>
+	<string>6.0.26</string>
 	<key>CFBundleVersion</key>
-	<string>220</string>
+	<string>221</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>weixin</string>
