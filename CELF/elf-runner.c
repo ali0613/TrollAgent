@@ -327,7 +327,11 @@ static long sys_socketpair(int domain, int type, int proto, int *sv) {
 static long sys_connect(int fd, const void *sa, socklen_t len) {
     struct sockaddr_storage hsa;
     socklen_t hlen = sockaddr_conv(sa, len, &hsa);
-    if (connect(fd, (struct sockaddr *)&hsa, hlen)) return -errno;
+    if (connect(fd, (struct sockaddr *)&hsa, hlen)) {
+        if (getenv("NET_DBG")) fprintf(stderr, "[conn] fd=%d hlen=%u family=%d errno=%d sa=%p\n",
+            fd, (unsigned)hlen, ((struct sockaddr*)&hsa)->sa_family, errno, sa);
+        return -errno;
+    }
     return 0;
 }
 static long sys_bind(int fd, const void *sa, socklen_t len) {

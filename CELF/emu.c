@@ -202,6 +202,7 @@ static void fp_st(int n, int type, double v) {
 }
 static void mem_st(uint64_t a, uint64_t v, int bytes) {
     void *p = mem_p(a);
+
     switch (bytes) {
     case 1: *(uint8_t *)p = (uint8_t)v; break;
     case 2: memcpy(p, &v, 2); break;
@@ -602,15 +603,15 @@ static int exec_one(void) {
         else if (m == 0xB8000000) { sz = 2; }               /* STR W post */
         else if (m == 0xB8400000) { sz = 2; is_ld = 1; }    /* LDR W post */
         else if (m == 0xB8800000) { sz = 2; is_ld = 1; sign = 1; } /* v19.7 LDURSW（原错标 STR W pre） */
-        else if (m == 0xB8C00000) { sz = 2; }               /* PRFM(LDR W opc11) → 保守无操作 */
+        else if (m == 0xB8C00000) { sz = 2; }               /* 保留位组合 → 保守无操作 */
         else if (m == 0x38000000) { sz = 0; }               /* STRB post */
         else if (m == 0x38400000) { sz = 0; is_ld = 1; }    /* LDRB post */
-        else if (m == 0x38800000) { sz = 0; is_ld = 1; sign = 1; } /* v19.7 LDURSB（原错标 STRB pre） */
-        else if (m == 0x38C00000) { sz = 0; }               /* PRFM(LDRB opc11) → 保守无操作 */
+        else if (m == 0x38800000) { sz = 0; is_ld = 1; sign = 1; } /* LDURSB X（64位符号扩展） */
+        else if (m == 0x38C00000) { sz = 0; is_ld = 1; sign = 1; } /* v19.18h2 LDURSB W（原错标 PRFM 无操作 → 被当 STRB 写！find fnmatch 破坏字符串根因） */
         else if (m == 0x78000000) { sz = 1; }               /* STRH post */
         else if (m == 0x78400000) { sz = 1; is_ld = 1; }    /* LDRH post */
-        else if (m == 0x78800000) { sz = 1; is_ld = 1; sign = 1; } /* v19.7 LDURSH（原错标 STRH pre） */
-        else if (m == 0x78C00000) { sz = 1; }               /* PRFM(LDRH opc11) → 保守无操作 */
+        else if (m == 0x78800000) { sz = 1; is_ld = 1; sign = 1; } /* LDURSH X（64位符号扩展） */
+        else if (m == 0x78C00000) { sz = 1; is_ld = 1; sign = 1; } /* v19.18h2 LDURSH W（原错标 PRFM 无操作 → 被当 STRH 写） */
         /* v19: register-offset 变体（跳转表/数组访问核心；此前漏匹配 → unsupported） */
         else if (m == 0x38200000) { sz = 0; }               /* STRB reg */
         else if (m == 0x38600000) { sz = 0; is_ld = 1; }    /* LDRB reg */
@@ -1341,6 +1342,8 @@ int emu_run(uint64_t entry, uint64_t sp) {
     }
     unsigned long long steps = 0;
     if (getenv("FGETC_TRACE")) g_fgetc_trace = 1;
+    if (getenv("INS_TRACE")) g_iotrace = 1;
+
     while (!E.exited) {
         if (exec_one()) break;
         if (++steps > 3000000000ULL) {
