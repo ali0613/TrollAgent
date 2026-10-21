@@ -347,6 +347,10 @@ static long sys_getdents64(int fd, void *buf, size_t count) {
     return r < 0 ? -errno : r;
 #endif
 }
+/* readv：guest/host iovec 布局一致（base+len 各 8 字节），直接透传 */
+static long sys_readv(int fd, const struct iovec *iov, int iovcnt) {
+    return (long)readv(fd, iov, iovcnt);
+}
 static long sys_writev(int fd, const struct iovec *iov, int iovcnt) {
     return (long)writev(fd, iov, iovcnt);
 }
@@ -481,6 +485,10 @@ static long sys_fstatfs(int fd, void *buf) {
     return r;
 }
 
+/* getgroups：直接透传（guest/host gid_t 同为 4 字节） */
+static long sys_getgroups(int size, gid_t *list) {
+    return (long)getgroups(size, list);
+}
 /* fcntl 简化（busybox 常用 F_GETFL/F_SETFL 等） */
 static long sys_fcntl(int fd, int cmd, long arg) {
     return (long)fcntl(fd, cmd, arg);
@@ -505,6 +513,8 @@ long translate_syscall(uint64_t nr,
         r = sys_getdents64((int)a0, (void*)(uintptr_t)a1, (size_t)a2);        break;
     case SYS_writev:
         r = sys_writev((int)a0, (const struct iovec*)(uintptr_t)a1, (int)a2);        break;
+    case 65:  /* arm64 readv */
+        r = sys_readv((int)a0, (const struct iovec*)(uintptr_t)a1, (int)a2);        break;
     case SYS_close:
         r = sys_close((int)a0);        break;
     case SYS_exit:        r = sys_exit((int)a0); break;
@@ -538,6 +548,7 @@ long translate_syscall(uint64_t nr,
     case SYS_clock_gettime:r = sys_clock_gettime((int)a0, (void*)(uintptr_t)a1); break;
     case SYS_fcntl:       r = sys_fcntl((int)a0, (int)a1, (long)a2); break;
     case SYS_ioctl:       r = sys_ioctl((int)a0, (unsigned long)a1, (long)a2); break;
+    case 158:             r = sys_getgroups((int)a0, (gid_t*)(uintptr_t)a1); break;  /* arm64 getgroups */
     case 96:              r = 0; break;   /* getrlimit（结构保持 0，busybox 启动查询用） */
     case 73:              r = 0; break;   /* 容错（arm64 编号未映射宏） */
     case 135:             r = 0; break;   /* rt_sigprocmask */

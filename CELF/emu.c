@@ -220,7 +220,7 @@ static int exec_one(void) {
 
     uint32_t i = fetch();
     if (E.exited) return 1;
-    /* ---- SVC ---- */
+        /* ---- SVC ---- */
     if ((i & 0xFF000000) == 0xD4000000) {
         /* aarch64 Linux ABI: syscall nr 在 x8（musl 裸 svc 直接 mov x8,nr;
            musl __syscall 封装也是 mov x8,x16 后再 svc，x8 恒为真值） */
@@ -556,7 +556,13 @@ static int exec_one(void) {
     {
         uint32_t m = i & 0xFFC00000;
         int sz = -1, is_ld = 0, sign = 0;
-        if (m == 0x39000000) { sz = 0; }
+        /* v19.11: LDRSB/LDRSH reg-offset（bit26=1）。此前 LDRSB W reg 的
+           m==0x38C00000 被误当 PRFM 无操作 → od 宽度表读 0 → sdiv 除零死循环 */
+        if ((i & 0xFFE00000) == 0x38E00000) { sz = 0; is_ld = 1; sign = 1; }  /* LDRSB W reg */
+        else if ((i & 0xFFE00000) == 0x39E00000) { sz = 0; is_ld = 1; sign = 1; }  /* LDRSB X reg */
+        else if ((i & 0xFFE00000) == 0x7AE00000) { sz = 1; is_ld = 1; sign = 1; }  /* LDRSH W reg */
+        else if ((i & 0xFFE00000) == 0x7FE00000) { sz = 1; is_ld = 1; sign = 1; }  /* LDRSH X reg */
+        else if (m == 0x39000000) { sz = 0; }
         else if (m == 0x39400000) { sz = 0; is_ld = 1; }
         else if (m == 0x39800000) { sz = 0; is_ld = 1; sign = 1; }
         else if (m == 0x39C00000) { sz = 0; is_ld = 1; sign = 1; }   /* v19.3 LDRSB X（64位符号扩展字节加载） */
