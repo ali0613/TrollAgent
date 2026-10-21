@@ -33,6 +33,7 @@
 #include <sys/ucontext.h>
 #include <dirent.h>
 #include <sys/uio.h>
+#include <sys/vfs.h>
 #include <signal.h>
 #include <setjmp.h>
 /* iOS SDK 缺 sys/ptrace.h（ptrace 为 Darwin 私有 API）——手写声明与常量，符号在 libSystem */
@@ -462,6 +463,20 @@ static long sys_clock_gettime(int clk, void *ts) {
     return 0;
 }
 
+/* statfs/fstatfs：guest 与 host 同为 64 位 Linux，struct statfs 布局一致直接 memcpy */
+static long sys_statfs(const char *path, void *buf) {
+    struct statfs s;
+    long r = (long)statfs(path, &s);
+    if (r == 0) memcpy(buf, &s, sizeof(struct statfs));
+    return r;
+}
+static long sys_fstatfs(int fd, void *buf) {
+    struct statfs s;
+    long r = (long)fstatfs(fd, &s);
+    if (r == 0) memcpy(buf, &s, sizeof(struct statfs));
+    return r;
+}
+
 /* fcntl 简化（busybox 常用 F_GETFL/F_SETFL 等） */
 static long sys_fcntl(int fd, int cmd, long arg) {
     return (long)fcntl(fd, cmd, arg);
@@ -508,6 +523,8 @@ long translate_syscall(uint64_t nr,
     case SYS_dup:         r = sys_dup((int)a0); break;
     case SYS_dup3:        r = sys_dup3((int)a0, (int)a1, (int)a2); break;
     case SYS_uname:       r = sys_uname((void*)(uintptr_t)a0); break;
+    case 43:              r = sys_statfs((const char*)(uintptr_t)a0, (void*)(uintptr_t)a1); break;  /* arm64 statfs */
+    case 44:              r = sys_fstatfs((int)a0, (void*)(uintptr_t)a1); break;  /* arm64 fstatfs */
     case SYS_brk:         r = sys_brk((uintptr_t)a0); break;
     case SYS_mmap:        r = sys_mmap((uintptr_t)a0, (size_t)a1, (int)a2, (int)a3, (int)a4, (off_t)a5); break;
     case SYS_munmap:      r = sys_munmap((uintptr_t)a0, (size_t)a1); break;

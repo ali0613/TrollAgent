@@ -220,7 +220,6 @@ static int exec_one(void) {
 
     uint32_t i = fetch();
     if (E.exited) return 1;
-
     /* ---- SVC ---- */
     if ((i & 0xFF000000) == 0xD4000000) {
         /* aarch64 Linux ABI: syscall nr 在 x8（musl 裸 svc 直接 mov x8,nr;
@@ -767,6 +766,7 @@ not_ldstp:
         (i & 0xFFE0FC00) == 0x0F008400 || (i & 0xFFE0FC00) == 0x4F008400 ||  /* MOVI/MVNI 4H/8H */
         (i & 0xFFE0FC00) == 0x0F00E400 || (i & 0xFFE0FC00) == 0x4F00E400 ||  /* MOVI 8B/16B */
         (i & 0xFFE0FC00) == 0x6F00E400 ||                                     /* MOVI 2D（imm8=0 或 0xFF） */
+        (i & 0xFFE0FC00) == 0x2F00E400 ||                                     /* MOVI D（64 位标量零/FF） */
         (i & 0xFFE0FC00) == 0x2F000400 || (i & 0xFFE0FC00) == 0x6F000400 ||  /* MVNI 2S/4S */
         (i & 0xFFE0FC00) == 0x2F008400 || (i & 0xFFE0FC00) == 0x6F008400 ||  /* MVNI 4H/8H */
         (i & 0xFFE0FC00) == 0x0F00A400 || (i & 0xFFE0FC00) == 0x4F00A400) {  /* MOVI H lsl #8 */
@@ -920,6 +920,11 @@ not_ldstp:
         if (m == 0x3C800000) {                            /* STUR q（imm9 带符号） */
             uint64_t a = RSP(rn(i)) + (uint64_t)sext((i >> 12) & 0x1FF, 9);
             mem_st(a, E.v[rd(i)][0], 8); mem_st(a + 8, E.v[rd(i)][1], 8);
+            E.pc += 4; return 0;
+        }
+        if (m == 0x3CC00000 && (i & 0x200000)) {         /* LDR q（register offset） */
+            uint64_t a = RSP(rn(i)) + RZR((i >> 16) & 0x1F);
+            E.v[rd(i)][0] = mem_ld(a, 8); E.v[rd(i)][1] = mem_ld(a + 8, 8);
             E.pc += 4; return 0;
         }
         if (m == 0x3CC00000) {                            /* LDUR q */
@@ -1127,7 +1132,7 @@ not_ldstp:
     if ((i & 0xFFFFFC00) == 0xDAC00400) { uint64_t v = RZR(rn(i)); W(rd(i), ((v & 0xFF00FF00FF00FF00ULL) >> 8) | ((v & 0x00FF00FF00FF00FFULL) << 8)); E.pc += 4; return 0; } /* REV16 X */
     if ((i & 0xFFFFFC00) == 0x5AC00800) { uint32_t v = (uint32_t)RZR(rn(i)); W(rd(i), (uint64_t)(uint32_t)__builtin_bswap32(v)); E.pc += 4; return 0; } /* REV32 W */
     if ((i & 0xFFFFFC00) == 0xDAC00800) { uint64_t v = RZR(rn(i)); W(rd(i), __builtin_bswap64(v)); E.pc += 4; return 0; } /* REV32 X */
-    if ((i & 0xFFFFFC00) == 0xDAC00A00) { uint64_t v = RZR(rn(i)); W(rd(i), __builtin_bswap64(v)); E.pc += 4; return 0; } /* REV X */
+    if ((i & 0xFFFFFC00) == 0xDAC00C00) { uint64_t v = RZR(rn(i)); W(rd(i), __builtin_bswap64(v)); E.pc += 4; return 0; } /* REV X */
 
     /* ---- 标量浮点（v19.5：seq/printf %g 需要；host double 直算） ---- */
     if ((i & 0xFF20FC00) == 0x1E200800) {   /* FMUL s/d */
@@ -1210,6 +1215,46 @@ not_ldstp:
         if ((i >> 31) & 1) W(rd(i), (uint64_t)r); else W(rd(i), (uint64_t)(int32_t)r);
         E.pc += 4; return 0;
     }
+    if ((i & 0xFFFFFC00) == 0x5EE1B800) {   /* FCVTZS Vd.2D, Vn.2D（sleep 0.1 浮点→整数） */
+        double a1; memcpy(&a1, &E.v[(i >> 5) & 0x1F][1], 8);
+        E.v[rd(i)][0] = (uint64_t)(int64_t)fp_ld((i >> 5) & 0x1F, 1);
+        E.v[rd(i)][1] = (uint64_t)(int64_t)a1;
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFFC00) == 0x5E61B800) {   /* FCVTMS Vd.2D, Vn.2D（floor→int） */
+        double a1; memcpy(&a1, &E.v[(i >> 5) & 0x1F][1], 8);
+        E.v[rd(i)][0] = (uint64_t)(int64_t)floor(fp_ld((i >> 5) & 0x1F, 1));
+        E.v[rd(i)][1] = (uint64_t)(int64_t)floor(a1);
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFFC00) == 0x7E61B800) {   /* FCVTMU Vd.2D, Vn.2D（ceil→uint） */
+        double a1; memcpy(&a1, &E.v[(i >> 5) & 0x1F][1], 8);
+        E.v[rd(i)][0] = (uint64_t)ceil(fp_ld((i >> 5) & 0x1F, 1));
+        E.v[rd(i)][1] = (uint64_t)ceil(a1);
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFFC00) == 0x5E61D800) {   /* SCVTF Vd.2D, Vn.2D（int→double） */
+        E.v[rd(i)][0] = (uint64_t)(int64_t)fp_ld((i >> 5) & 0x1F, 1);
+        E.v[rd(i)][1] = 0;
+        fp_st(rd(i), 1, (double)(int64_t)fp_ld((i >> 5) & 0x1F, 1));
+        E.v[rd(i)][1] = 0;
+        { double a1; memcpy(&a1, &E.v[(i >> 5) & 0x1F][1], 8);
+          uint64_t b; double d1 = (double)(int64_t)a1; memcpy(&b, &d1, 8); E.v[rd(i)][1] = b; }
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFFC00) == 0x7E61D800) {   /* UCVTF Vd.2D, Vn.2D（uint→double） */
+        fp_st(rd(i), 1, (double)(uint64_t)fp_ld((i >> 5) & 0x1F, 1));
+        E.v[rd(i)][1] = 0;
+        { double a1; memcpy(&a1, &E.v[(i >> 5) & 0x1F][1], 8);
+          uint64_t b; double d1 = (double)(uint64_t)a1; memcpy(&b, &d1, 8); E.v[rd(i)][1] = b; }
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFFC00) == 0x7EE1B800) {   /* FCVTZU Vd.2D, Vn.2D */
+        double a1; memcpy(&a1, &E.v[(i >> 5) & 0x1F][1], 8);
+        E.v[rd(i)][0] = (uint64_t)fp_ld((i >> 5) & 0x1F, 1);
+        E.v[rd(i)][1] = (uint64_t)a1;
+        E.pc += 4; return 0;
+    }
     if ((i & 0xFFFFFC00) == 0x9E790000 || (i & 0xFFFFFC00) == 0x1E790000) {   /* FCVTZU x/w,d */
         double a = fp_ld((i >> 5) & 0x1F, 1);
         uint64_t r = (uint64_t)a;
@@ -1266,6 +1311,7 @@ int emu_run(uint64_t entry, uint64_t sp) {
         if (exec_one()) break;
         if (++steps > 500000000ULL) {
             fprintf(stderr, "[emu] STEP LIMIT pc=0x%llx\n", (unsigned long long)E.pc);
+            tr_dump();
             E.exited = 1; E.exit_code = -ETIMEDOUT;
         }
     }
