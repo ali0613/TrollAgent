@@ -37,7 +37,11 @@
 #include <sys/mount.h>
 #else
 #include <sys/vfs.h>
+#if defined(__APPLE__)
+#include <sys/sysctl.h>   /* Darwin: sysctl/CTL_KERN/KERN_BOOTTIME/CTL_HW/HW_MEMSIZE */
+#else
 #include <sys/sysinfo.h>
+#endif
 #include <sys/sendfile.h>
 #endif
 #include <signal.h>
@@ -499,11 +503,71 @@ static long sys_fstatfs(int fd, void *buf) {
 static long sys_getgroups(int size, gid_t *list) {
     return (long)getgroups(size, list);
 }
-/* sysinfo（arm64 nr 179）：ps 需要 uptime/loads/mem。LP64 布局与宿主一致，整块复制 */
+/* sysinfo（arm64 nr 179）：ps 需要 uptime/loads/mem。
+ * arm64 Linux struct sysinfo = LP64 128B 布局；iOS SDK 无此类型，手工定义（不依赖宿主头）。
+ * Darwin 无 sysinfo()，用 sysctl/getloadavg 手工填充。 */
+struct linux_sysinfo {
+    long uptime;                 /* 0   */
+    unsigned long loads[3];      /* 8   */
+    unsigned long totalram;      /* 32  */
+    unsigned long freeram;       /* 40  */
+    unsigned long sharedram;     /* 48  */
+    unsigned long bufferram;     /* 56  */
+    unsigned long totalswap;     /* 64  */
+    unsigned long freeswap;      /* 72  */
+    unsigned short procs;        /* 80  */
+    unsigned short pad;          /* 82  */
+    unsigned long totalhigh;     /* 88  */
+    unsigned long freehigh;      /* 96  */
+    unsigned int mem_unit;       /* 104 */
+    char _f[20 - 2*sizeof(long) - sizeof(unsigned int)]; /* 108 */
+};
 static long sys_sysinfo(void *buf) {
-    struct sysinfo si;
-    if (sysinfo(&si) < 0) return -1;
-    memcpy(buf, &si, sizeof(si));   /* arm64 struct sysinfo = LP64 128B 布局，与宿主一致 */
+    struct linux_sysinfo si;
+    memset(&si, 0, sizeof(si));
+#if defined(__APPLE__)
+    {
+        struct timeval boot, now;
+        size_t len = sizeof(boot);
+        int mib[2] = { CTL_KERN, KERN_BOOTTIME };
+        if (sysctl(mib, 2, &boot, &len, NULL, 0) == 0) {
+            gettimeofday(&now, NULL);
+            si.uptime = (long)(now.tv_sec - boot.tv_sec);
+        }
+        double load[3];
+        if (getloadavg(load, 3) == 3) {
+            si.loads[0] = (unsigned long)(load[0] * 65536.0);
+            si.loads[1] = (unsigned long)(load[1] * 65536.0);
+            si.loads[2] = (unsigned long)(load[2] * 65536.0);
+        }
+        uint64_t memsize = 0;
+        len = sizeof(memsize);
+        int mib2[2] = { CTL_HW, HW_MEMSIZE };
+        if (sysctl(mib2, 2, &memsize, &len, NULL, 0) == 0) {
+            si.totalram = (unsigned long)memsize;
+            si.freeram = (unsigned long)memsize;
+        }
+        si.mem_unit = 1;
+    }
+#else
+    {
+        struct sysinfo si0;
+        if (sysinfo(&si0) < 0) return -1;
+        si.uptime = si0.uptime;
+        memcpy(si.loads, si0.loads, sizeof(si.loads));
+        si.totalram = si0.totalram;
+        si.freeram = si0.freeram;
+        si.sharedram = si0.sharedram;
+        si.bufferram = si0.bufferram;
+        si.totalswap = si0.totalswap;
+        si.freeswap = si0.freeswap;
+        si.procs = si0.procs;
+        si.totalhigh = si0.totalhigh;
+        si.freehigh = si0.freehigh;
+        si.mem_unit = si0.mem_unit;
+    }
+#endif
+    memcpy(buf, &si, sizeof(si));
     return 0;
 }
 /* sendfile（arm64 nr 71）：busybox cp 大文件加速路径；offset 为 guest off_t*（LP64 一致，直透） */
