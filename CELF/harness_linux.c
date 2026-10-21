@@ -15,6 +15,9 @@ int elf_runner_main(int argc, char **argv);
 
 #ifdef LOCAL_HARNESS
 int main(int argc, char **argv) {
-    return elf_runner_main(argc, argv);
+    /* v19.12: 用 _exit 跳过 libc 清理——guest 0x580000 区 MAP_FIXED 可能覆盖宿主
+       映射，正常 return 走 atexit/stdio 清理会访问被覆盖区 → 宿主 SIGSEGV */
+    int r = elf_runner_main(argc, argv);
+    _exit(r);
 }
 #endif

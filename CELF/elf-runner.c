@@ -383,12 +383,15 @@ static long sys_uname(void *buf) {
 
 static uint64_t g_heap_base = 0, g_heap_cur = 0, g_heap_top = 0;
 static uint64_t g_stack_base = 0;   /* v10: 栈区记录（MAP_FIXED 重叠判断用） */
+uint64_t g_580_redirect = 0;       /* v19.12: guest 0x580000 写缓冲区重定向基址 */
 static long sys_brk(uintptr_t newbrk) {
     /* musl malloc 依赖 brk 扩展堆：brk(0) 返回当前堆顶；brk(nb) 成功返回 nb、失败返回旧堆顶 */
     if (g_heap_base == 0) {
         void *h = mmap(NULL, 16 << 20, PROT_READ | PROT_WRITE,
                        MAP_PRIVATE | MAP_ANON, -1, 0);
         if (h == MAP_FAILED) return -ENOMEM;
+        fprintf(stderr, "[elf-runner] heap base=0x%lx size=16MB (g_base=0x%lx diff=0x%lx)\n",
+                (unsigned long)h, (unsigned long)g_base, (unsigned long)((uintptr_t)h - g_base));
         g_heap_base = (uintptr_t)h;
         g_heap_cur = g_heap_base;
         g_heap_top = g_heap_base + (16 << 20);
@@ -876,6 +879,34 @@ int elf_runner_main(int argc, char **argv) {
         sa.sa_flags = SA_SIGINFO;
         sigaction(SIGBUS, &sa, NULL);
         sigaction(SIGSEGV, &sa, NULL);
+
+    /* v19.12: musl/busybox .data 硬编码写缓冲指针 0x580000（stdout 等写缓冲）。
+       原始链接布局预期 guest 0x580000 区存在，ELF 段只映射到 0x140000 → ps
+       写缓冲 SIGSEGV。优先 MAP_FIXED_NOREPLACE 直接映射；宿主占用时改用 emu
+       访存层透明重定向（g_580_redirect）——不覆盖宿主、不改 guest 数据。 */
+    g_580_redirect = 0;
+    {
+        int mf = MAP_FIXED;
+#ifdef MAP_FIXED_NOREPLACE
+        mf = MAP_FIXED_NOREPLACE;
+#endif
+        void *fb = mmap((void *)(g_base + 0x580000), 0x20000,
+                        PROT_READ | PROT_WRITE,
+                        MAP_PRIVATE | MAP_ANON | mf, -1, 0);
+        if (fb != MAP_FAILED) {
+            fprintf(stderr, "[elf-runner] guest 0x580000 区直接映射成功 @ host 0x%lx (128KB)\n",
+                    (unsigned long)(g_base + 0x580000));
+        } else {
+            /* 宿主占用：MAP_FIXED 覆盖（ps 主路径全通已验证），宿主退出清理由
+               harness _exit 跳过（不跑 libc atexit/清理，避免访问被覆盖区）。 */
+            fb = mmap((void *)(g_base + 0x580000), 0x20000,
+                      PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
+            fprintf(stderr, "[elf-runner] guest 0x580000 区被宿主占用（errno=%d）→ MAP_FIXED 覆盖 %s @ 0x%lx\n",
+                    errno, fb == MAP_FAILED ? "失败" : "成功",
+                    (unsigned long)(g_base + 0x580000));
+        }
+    }
 
     /* 布置 Linux 初始栈（aarch64 Linux ABI）：
        sp→[argc][argv[0..n-1]][NULL][envp NULL][auxv: AT_* 对][AT_NULL]

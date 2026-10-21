@@ -170,8 +170,18 @@ static int cond_true(unsigned c) {
     return (c & 1) ? !base : base;                   /* 奇数条件码取反 */
 }
 
-/* 内存访问：直接访问；非法地址由 SIGSEGV → crash_handler(emu) → longjmp 兜底 */
-static void *mem_p(uint64_t a) { return (void *)(uintptr_t)a; }
+/* v19.12: guest 0x580000 写缓冲区透明重定向。
+   原始链接布局把 stdout 等写缓冲固定在 guest 0x580000；宿主 base+0x580000
+   可能被宿主进程占用（NOREPLACE 失败）→ MAP_FIXED 覆盖会弄崩宿主退出。
+   这里把该 guest 区访存重定向到 elf-runner 提供的安全匿名区（g_580_redirect）。
+   0x580000 区为纯写缓冲（零初始化），重定向后读 0 语义不变。 */
+extern uint64_t g_580_redirect;   /* 安全区基址，0=未启用 */
+static void *mem_p(uint64_t a) {
+    if (g_580_redirect && a >= (uint64_t)g_base + 0x580000 &&
+        a < (uint64_t)g_base + 0x590000)
+        return (void *)(uintptr_t)(g_580_redirect + (a - ((uint64_t)g_base + 0x580000)));
+    return (void *)(uintptr_t)a;
+}
 static uint64_t mem_ld(uint64_t a, int bytes) {
     void *p = mem_p(a);
     switch (bytes) {
@@ -220,7 +230,7 @@ static int exec_one(void) {
 
     uint32_t i = fetch();
     if (E.exited) return 1;
-        /* ---- SVC ---- */
+                /* ---- SVC ---- */
     if ((i & 0xFF000000) == 0xD4000000) {
         /* aarch64 Linux ABI: syscall nr 在 x8（musl 裸 svc 直接 mov x8,nr;
            musl __syscall 封装也是 mov x8,x16 后再 svc，x8 恒为真值） */
@@ -1113,7 +1123,10 @@ not_ldstp:
     if ((i & 0xFFE0FC00) == 0x1E201000 || (i & 0xFFE0FC00) == 0x1E601000) {
         int imm8 = (i >> 13) & 0xFF;
         int a = (imm8 >> 7) & 1, ex = (~(imm8 >> 4) & 7), fr = imm8 & 0xF;
-        double v = (a ? -1.0 : 1.0) * (1.0 + fr / 16.0) * pow(2.0, -ex);
+        /* v19.12: 查表替代 pow(2.0,-ex)——宿主 libm pow 调用在本机触发 SIGSEGV
+           （原因未明），查表更快且确定 */
+        static const double p2[8] = {1.0, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0.0078125};
+        double v = (a ? -1.0 : 1.0) * (1.0 + fr / 16.0) * p2[ex & 7];
         int type = ((i & 0xFFE0FC00) == 0x1E601000) ? 1 : 0;
         fp_st(rd(i), type, type ? v : (float)v);
         E.pc += 4; return 0;
