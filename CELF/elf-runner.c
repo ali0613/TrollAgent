@@ -171,6 +171,7 @@ int g_emu_halt = 0;
 #define SYS_munmap            215
 #define SYS_brk               214
 #define SYS_uname             160
+#define SYS_umask             166
 #define SYS_getpid            172
 #define SYS_getuid            174
 #define SYS_geteuid           175
@@ -222,6 +223,12 @@ static long sys_getuid(void)            { return 0; }
 static long sys_geteuid(void)           { return 0; }
 static long sys_getgid(void)            { return 0; }
 static long sys_getegid(void)           { return 0; }
+static mode_t g_guest_umask = 0022;     /* v19.18d：guest umask 模拟（cp -r 目录权限 bug 根因） */
+static long sys_umask(mode_t mask) {
+    mode_t old = g_guest_umask;
+    g_guest_umask = mask & 0777;
+    return (long)old;
+}
 static long sys_getcwd(char *buf, size_t size) {
     if (!getcwd(buf, size)) return -errno;
     return (long)strlen(buf);
@@ -262,6 +269,7 @@ static long sys_linkat(int olddfd, const char *oldp, int newdfd, const char *new
     return 0;
 }
 static long sys_fchmodat(int dirfd, const char *path, mode_t mode) {
+    if (getenv("TRACE_CHMOD")) fprintf(stderr, "[chmod] fchmodat(%d, '%s', 0%o)\n", dirfd, path, mode);
     if (fchmodat(dirfd, path, mode, 0)) return -errno;
     return 0;
 }
@@ -946,6 +954,7 @@ long translate_syscall(uint64_t nr,
     case SYS_getgid:      r = sys_getgid(); break;
     case SYS_getegid:     r = sys_getegid(); break;
     case SYS_getcwd:      r = sys_getcwd((char*)(uintptr_t)a0, (size_t)a1); break;
+    case SYS_umask:       r = sys_umask((mode_t)a0); break;
     case SYS_mkdirat:     r = sys_mkdirat((int)a0, (const char*)(uintptr_t)a1, (mode_t)a2); break;
     case SYS_unlinkat:    r = sys_unlinkat((int)a0, (const char*)(uintptr_t)a1, (int)a2); break;
     case SYS_renameat:    r = sys_renameat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (const char*)(uintptr_t)a3); break;
@@ -957,6 +966,15 @@ long translate_syscall(uint64_t nr,
     case SYS_truncate:    r = sys_truncate((const char*)(uintptr_t)a0, (off_t)a1); break;
     case SYS_ftruncate:   r = sys_ftruncate((int)a0, (off_t)a1); break;
     case SYS_utimensat:   r = sys_utimensat((int)a0, (const char*)(uintptr_t)a1, (const struct timespec*)(uintptr_t)a2, (int)a3); break;
+    case SYS_readlinkat: {                                    /* 本地回归发现：readlink 缺失——guest readlink ln 返回 1 */
+        char *rbuf = malloc((size_t)a3 + 1);
+        if (!rbuf) { r = -ENOMEM; break; }
+        ssize_t n = readlinkat((int)a0, (const char*)(uintptr_t)a1, rbuf, (size_t)a3);
+        if (n < 0) { r = -errno; }
+        else { rbuf[n] = 0; memcpy((void*)(uintptr_t)a2, rbuf, (size_t)n + 1); r = n; }
+        free(rbuf);
+        break;
+    }
     case SYS_write:       r = sys_write((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
     case SYS_read:
         if ((int)a0 >= VPROC_BASE) r = vproc_read((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
@@ -1379,7 +1397,23 @@ int elf_runner_main(int argc, char **argv) {
     slot[a++] = (uintptr_t)narg;                  /* argc */
     for (i = 0; i < narg; i++) slot[a++] = argstr[i];   /* argv[] */
     slot[a++] = 0;                                /* argv 终止 */
-    slot[a++] = 0;                                /* envp[0]=NULL（空环境） */
+    /* v19.18d：guest 环境（PATH/HOME）——printenv/env 可用 */
+    {
+        const char *env_def[] = { "PATH=/sbin:/usr/sbin:/bin:/usr/bin",
+                                  "HOME=/var/mobile" };
+        uintptr_t envstr[8];
+        int ne = 0;
+        for (i = 0; i < 2; i++) {
+            size_t l = strlen(env_def[i]) + 1;
+            if ((uintptr_t)(p - l) < (sp_top - 4096)) break;  /* 防溢出字符串区 */
+            memcpy(p, env_def[i], l);
+            envstr[ne++] = (uintptr_t)p;
+            p += l;
+        }
+        slot[a++] = envstr[0];
+        slot[a++] = envstr[1];
+        slot[a++] = 0;                            /* envp 终止 */
+    }
     uint64_t *aux = (uint64_t *)&slot[a];         /* auxv（envp NULL 之后；+2 会覆盖 envp NULL→reloc 崩） */
     int aa = 0;
     aux[aa++] = 3;  aux[aa++] = g_base + g_phoff; /* AT_PHDR */
