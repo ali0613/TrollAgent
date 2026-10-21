@@ -33,7 +33,11 @@
 #include <sys/ucontext.h>
 #include <dirent.h>
 #include <sys/uio.h>
+#ifdef __APPLE__
+#include <sys/mount.h>
+#else
 #include <sys/vfs.h>
+#endif
 #include <signal.h>
 #include <setjmp.h>
 /* iOS SDK 缺 sys/ptrace.h（ptrace 为 Darwin 私有 API）——手写声明与常量，符号在 libSystem */
