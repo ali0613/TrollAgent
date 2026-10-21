@@ -189,6 +189,13 @@ int g_emu_halt = 0;
 #define SYS_getcwd            17
 #define SYS_renameat          38
 #define SYS_renameat2         276
+#define SYS_symlinkat         36
+#define SYS_linkat            37
+#define SYS_fchmodat          53
+#define SYS_fchownat          54
+#define SYS_truncate          45
+#define SYS_ftruncate         46
+#define SYS_utimensat         88
 #define SYS_rmdir             21
 #define SYS_dup               23
 #define SYS_dup3              24
@@ -241,6 +248,36 @@ static long sys_renameat2(int olddfd, const char *oldp, int newdfd, const char *
        flags==0 时语义等价于 POSIX renameat（iOS 有）；非 0 时 iOS 无对应语义，返回 ENOSYS。 */
     if (flags) return -ENOSYS;
     if (renameat(olddfd, oldp, newdfd, newp)) return -errno;
+    return 0;
+}
+/* v19.18c：元数据类 syscall 翻译（touch/ln/chmod/chown/truncate 等此前 ENOSYS → "Function not implemented"） */
+static long sys_symlinkat(const char *target, int newdirfd, const char *linkpath) {
+    if (symlinkat(target, newdirfd, linkpath)) return -errno;
+    return 0;
+}
+static long sys_linkat(int olddfd, const char *oldp, int newdfd, const char *newp, unsigned flags) {
+    if (flags) return -ENOSYS;   /* AT_SYMLINK_FOLLOW 等 iOS 语义差异 */
+    if (linkat(olddfd, oldp, newdfd, newp, 0)) return -errno;
+    return 0;
+}
+static long sys_fchmodat(int dirfd, const char *path, mode_t mode) {
+    if (fchmodat(dirfd, path, mode, 0)) return -errno;
+    return 0;
+}
+static long sys_fchownat(int dirfd, const char *path, uid_t uid, gid_t gid, int flags) {
+    if (fchownat(dirfd, path, uid, gid, flags)) return -errno;
+    return 0;
+}
+static long sys_truncate(const char *path, off_t len) {
+    if (truncate(path, len)) return -errno;
+    return 0;
+}
+static long sys_ftruncate(int fd, off_t len) {
+    if (ftruncate(fd, len)) return -errno;
+    return 0;
+}
+static long sys_utimensat(int dirfd, const char *path, const struct timespec times[2], int flags) {
+    if (utimensat(dirfd, path, times, flags)) return -errno;
     return 0;
 }
 
@@ -843,6 +880,13 @@ long translate_syscall(uint64_t nr,
     case SYS_unlinkat:    r = sys_unlinkat((int)a0, (const char*)(uintptr_t)a1, (int)a2); break;
     case SYS_renameat:    r = sys_renameat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (const char*)(uintptr_t)a3); break;
     case SYS_renameat2:   r = sys_renameat2((int)a0, (const char*)(uintptr_t)a1, (int)a2, (const char*)(uintptr_t)a3, (unsigned)a4); break;
+    case SYS_symlinkat:   r = sys_symlinkat((const char*)(uintptr_t)a0, (int)a1, (const char*)(uintptr_t)a2); break;
+    case SYS_linkat:      r = sys_linkat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (const char*)(uintptr_t)a3, (unsigned)a4); break;
+    case SYS_fchmodat:    r = sys_fchmodat((int)a0, (const char*)(uintptr_t)a1, (mode_t)a2); break;
+    case SYS_fchownat:    r = sys_fchownat((int)a0, (const char*)(uintptr_t)a1, (uid_t)a2, (gid_t)a3, (int)a4); break;
+    case SYS_truncate:    r = sys_truncate((const char*)(uintptr_t)a0, (off_t)a1); break;
+    case SYS_ftruncate:   r = sys_ftruncate((int)a0, (off_t)a1); break;
+    case SYS_utimensat:   r = sys_utimensat((int)a0, (const char*)(uintptr_t)a1, (const struct timespec*)(uintptr_t)a2, (int)a3); break;
     case SYS_write:       r = sys_write((int)a0, (void*)(uintptr_t)a1, (size_t)a2); break;
     case SYS_read:
         if ((int)a0 >= VPROC_BASE) r = vproc_read((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
