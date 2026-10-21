@@ -37,6 +37,7 @@
 #include <sys/mount.h>
 #else
 #include <sys/vfs.h>
+#include <sys/sysinfo.h>
 #endif
 #include <signal.h>
 #include <setjmp.h>
@@ -492,6 +493,13 @@ static long sys_fstatfs(int fd, void *buf) {
 static long sys_getgroups(int size, gid_t *list) {
     return (long)getgroups(size, list);
 }
+/* sysinfo（arm64 nr 179）：ps 需要 uptime/loads/mem。LP64 布局与宿主一致，整块复制 */
+static long sys_sysinfo(void *buf) {
+    struct sysinfo si;
+    if (sysinfo(&si) < 0) return -1;
+    memcpy(buf, &si, sizeof(si));   /* arm64 struct sysinfo = LP64 128B 布局，与宿主一致 */
+    return 0;
+}
 /* fcntl 简化（busybox 常用 F_GETFL/F_SETFL 等） */
 static long sys_fcntl(int fd, int cmd, long arg) {
     return (long)fcntl(fd, cmd, arg);
@@ -552,6 +560,7 @@ long translate_syscall(uint64_t nr,
     case SYS_fcntl:       r = sys_fcntl((int)a0, (int)a1, (long)a2); break;
     case SYS_ioctl:       r = sys_ioctl((int)a0, (unsigned long)a1, (long)a2); break;
     case 158:             r = sys_getgroups((int)a0, (gid_t*)(uintptr_t)a1); break;  /* arm64 getgroups */
+    case 179:             r = sys_sysinfo((void*)(uintptr_t)a0); break;  /* arm64 sysinfo：ps 需要 */
     case 96:              r = 0; break;   /* getrlimit（结构保持 0，busybox 启动查询用） */
     case 73:              r = 0; break;   /* 容错（arm64 编号未映射宏） */
     case 135:             r = 0; break;   /* rt_sigprocmask */
