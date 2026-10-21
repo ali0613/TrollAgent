@@ -970,12 +970,22 @@ static long sys_setpriority(int which, int who, int prio) {
     return 0;
 }
 static long sys_sched_getaffinity(pid_t pid, size_t size, void *mask) {
+#ifdef __APPLE__
+    (void)pid; (void)size; (void)mask;
+    return -ENOSYS;   /* Darwin 无 sched_getaffinity（busybox taskset 仅 Linux） */
+#else
     if (sched_getaffinity(pid, size, (cpu_set_t *)mask)) return -errno;
     return 0;
+#endif
 }
 static long sys_sched_setaffinity(pid_t pid, size_t size, const void *mask) {
+#ifdef __APPLE__
+    (void)pid; (void)size; (void)mask;
+    return -ENOSYS;
+#else
     if (sched_setaffinity(pid, size, (const cpu_set_t *)mask)) return -errno;
     return 0;
+#endif
 }
 static long sys_fstat(int fd, void *statbuf) {
     /* guest Linux stat 布局（aarch64）：st_dev..st_size..st_mtime..（与宿主 Linux x86_64 不同但 aarch64 宿主一致）；
@@ -993,9 +1003,15 @@ static long sys_fstat(int fd, void *statbuf) {
     g->uid = hs.st_uid; g->gid = hs.st_gid;
     g->rdev = hs.st_rdev; g->size = hs.st_size;
     g->blksize = hs.st_blksize; g->blocks = hs.st_blocks;
+#ifdef __APPLE__
+    g->atime = hs.st_atimespec.tv_sec; g->atime_ns = hs.st_atimespec.tv_nsec;
+    g->mtime = hs.st_mtimespec.tv_sec; g->mtime_ns = hs.st_mtimespec.tv_nsec;
+    g->ctime = hs.st_ctimespec.tv_sec; g->ctime_ns = hs.st_ctimespec.tv_nsec;
+#else
     g->atime = hs.st_atime; g->atime_ns = hs.st_atim.tv_nsec;
     g->mtime = hs.st_mtime; g->mtime_ns = hs.st_mtim.tv_nsec;
     g->ctime = hs.st_ctime; g->ctime_ns = hs.st_ctim.tv_nsec;
+#endif
     return 0;
 }
 static long sys_wait4(pid_t pid, int *status, int options, void *rusage) {
@@ -1358,8 +1374,20 @@ long translate_syscall(uint64_t nr,
     case SYS_fstat:       r = sys_fstat((int)a0, (void*)(uintptr_t)a1); break;
     case SYS_pipe2: {     /* tar -czf 调 gzip 子进程的管道 */
         int p[2];
+#ifdef __APPLE__
+        int fl = (int)a1;
+        if (pipe(p)) r = -errno;
+        else {
+            if (fl & 0x800) { /* O_CLOEXEC：Darwin 手动 fcntl */
+                int fd = (p[0] < p[1]) ? p[1] : p[0];
+                fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+            }
+            ((int*)(uintptr_t)a0)[0] = p[0]; ((int*)(uintptr_t)a0)[1] = p[1]; r = 0;
+        }
+#else
         if (pipe2(p, (int)a1)) r = -errno;
         else { ((int*)(uintptr_t)a0)[0] = p[0]; ((int*)(uintptr_t)a0)[1] = p[1]; r = 0; }
+#endif
         break;
     }
     case 260:             r = sys_wait4((pid_t)a0, (int*)(uintptr_t)a1, (int)a2, (void*)(uintptr_t)a3); break;  /* wait4：xargs 父进程回收 */
@@ -1403,7 +1431,11 @@ long translate_syscall(uint64_t nr,
     case 73: {            /* ppoll——nc 等网络 applet 的 I/O 等待（原容错返回 0 导致 nc 假超时退出） */
         struct timespec ppts, *ppts_p = NULL;
         if (a2) { memcpy(&ppts, (const void*)(uintptr_t)a2, sizeof(ppts)); ppts_p = &ppts; }
+#ifdef __APPLE__
+        int prv = poll((struct pollfd*)(uintptr_t)a0, (nfds_t)a1, (ppts_p ? (int)(ppts_p->tv_sec * 1000 + ppts_p->tv_nsec / 1000000) : -1));
+#else
         int prv = ppoll((struct pollfd*)(uintptr_t)a0, (nfds_t)a1, ppts_p, (const sigset_t*)(uintptr_t)a3);
+#endif
         r = (prv < 0) ? -errno : (long)prv;
         break;
     }
