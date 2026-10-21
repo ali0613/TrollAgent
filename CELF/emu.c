@@ -69,7 +69,6 @@ static void tr_dump(void) {
 static uint64_t RZR(int n) { return n == 31 ? 0 : E.r[n]; }
 static uint64_t RSP(int n) { return n == 31 ? E.sp : E.r[n]; }
 static void W(int n, uint64_t v) {
-        fprintf(stderr, "[w26] pc=0x%05llx v=0x%llx\n", (unsigned long long)(E.pc - g_base) & 0xFFFFFF, (unsigned long long)v);
     if (n == 31) E.sp = v; else if (n < 31) E.r[n] = v;
 }
 
@@ -95,6 +94,16 @@ static int rm(uint32_t i) { return (i >> 16) & 0x1F; }
 
 static uint64_t shift_reg(uint64_t v, uint32_t i) {
     int sh = (i >> 22) & 3, amt = (i >> 10) & 0x3F;
+    int sf = (i >> 31) & 1;
+    if (!sf) {
+        uint32_t w = (uint32_t)v;
+        switch (sh) {
+        case 0: return (uint64_t)(uint32_t)(w << amt);
+        case 1: return (uint64_t)(uint32_t)(w >> amt);
+        case 2: return (int64_t)(int32_t)((int32_t)w >> amt);
+        default: return (uint64_t)(uint32_t)(amt ? (w >> amt) | (w << (32 - amt)) : w);
+        }
+    }
     switch (sh) {
     case 0: return v << amt;
     case 1: return v >> amt;
@@ -181,8 +190,6 @@ static void fp_st(int n, int type, double v) {
     else { uint64_t b; memcpy(&b, &v, 8); E.v[n][0] = b; E.v[n][1] = 0; }
 }
 static void mem_st(uint64_t a, uint64_t v, int bytes) {
-        fprintf(stderr, "[wst] pc=0x%llx off=%#llx st [%llx] <- %llx (%d)\n", (unsigned long long)E.pc,
-                (unsigned long long)(E.pc - g_base), (unsigned long long)a, (unsigned long long)v, bytes);
     void *p = mem_p(a);
     switch (bytes) {
     case 1: *(uint8_t *)p = (uint8_t)v; break;
@@ -209,25 +216,9 @@ static int exec_one(void) {
                 (unsigned long long)(E.pc - g_base),
                 (unsigned int)(E.pc >= g_base && E.pc + 4 <= g_base + g_total_size
                     ? *(const uint32_t *)(uintptr_t)E.pc : 0));
-        fprintf(stderr, "[who] pc=0x%05llx\n", (unsigned long long)((E.pc - g_base) & 0xFFFFFF));
-        { double _d; memcpy(&_d, &E.v[0][0], 8);
-          fprintf(stderr, "[d0000] x0=%#llx x1=%#llx x2=%#llx x3=%#llx x19=%#llx x20=%#llx x21=%#llx x22=%#llx x23=%#llx x24=%#llx x25=%#llx x26=%#llx x27=%#llx x28=%#llx x30=%#llx sp=%#llx d0=%g d0bits=%#llx\n",
-            (unsigned long long)E.r[0], (unsigned long long)E.r[1], (unsigned long long)E.r[2], (unsigned long long)E.r[3],
-            (unsigned long long)E.r[19], (unsigned long long)E.r[20], (unsigned long long)E.r[21], (unsigned long long)E.r[22],
-            (unsigned long long)E.r[23], (unsigned long long)E.r[24], (unsigned long long)E.r[25], (unsigned long long)E.r[26],
-            (unsigned long long)E.r[27], (unsigned long long)E.r[28], (unsigned long long)E.r[30], (unsigned long long)E.sp,
-            _d, (unsigned long long)E.v[0][0]); }
-        fprintf(stderr, "TRACE pc=0x%llx insn=0x%08x x0=0x%llx x1=0x%llx x2=0x%llx x19=0x%llx x20=0x%llx x21=0x%llx x23=0x%llx x24=0x%llx x30=0x%llx sp=0x%llx\n",
-            (unsigned long long)E.pc, (unsigned)(*(volatile uint32_t *)(uintptr_t)E.pc),
-            (unsigned long long)E.r[0], (unsigned long long)E.r[1],
-            (unsigned long long)E.r[2], (unsigned long long)E.r[19], (unsigned long long)E.r[20],
-            (unsigned long long)E.r[21], (unsigned long long)E.r[23], (unsigned long long)E.r[24],
-            (unsigned long long)E.r[30], (unsigned long long)E.sp);
 
     uint32_t i = fetch();
     if (E.exited) return 1;
-    { uint8_t _h = (i >> 24) & 0xFF;
-        fprintf(stderr, "[fp] pc-off=0x%05llx insn=%08x\n", (unsigned long long)(E.pc - g_base) & 0xFFFFFF, i); }
 
     /* ---- SVC ---- */
     if ((i & 0xFF000000) == 0xD4000000) {
@@ -705,6 +696,70 @@ not_ldstp:
     if ((i & 0xFFFFF000) == 0xD53B0000) { W(rd(i), 0); E.pc += 4; return 0; }  /* MRS dczid_el0 → 0（禁用 dc zva 路径） */
     if ((i & 0xFFFFF01F) == 0xD50B7000) { E.pc += 4; return 0; }               /* DC ZVA → NOP（v19.3: 0xD50B7400 带 bit20 被掩码清除→恒假，改 0xD50B7000 真匹配） */
 
+    /* ---- SIMD/Scalar 移位 by immediate：SHL（逻辑左移）/ SSHR（算术右移） ----
+       scalar d:   0x5F 前缀（busybox 0xF663C scalbn 的 shl d1,d1,#52）
+       vector:     0x4F/0x0F 前缀（v.2d/v.4s/v.2s/v.8b）
+       imm 解码（keystone 实测）：imm = immh5 + (q<<5)，q=bit21；esize 由 immh5 最高位定
+       SSHR 右移量 = esize*2 - immh5（8b:16-10=6；2d:64-19=45 实测） */
+    if ((i & 0xFF000000) == 0x5F000000 && ((i >> 22) & 3) == 1) {  /* scalar D SHL */
+        int Rd = i & 0x1F, Rn = (i >> 5) & 0x1F;
+        int imm = ((i >> 16) & 0x1F) + (((i >> 21) & 1) << 5);
+        E.v[Rd][0] = E.v[Rn][0] << imm;
+        E.v[Rd][1] = 0;
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFE000000) == 0x4E000000) {  /* vector SHL/SSHR by imm（Q 含 0/1） */
+        int Rd = i & 0x1F, Rn = (i >> 5) & 0x1F;
+        int immh5 = (i >> 16) & 0x1F, q = (i >> 21) & 1;
+        int imm = immh5 + (q << 5);
+        if ((i & 0x0060FC00) == 0x00400000) {  /* 0x1F 类 SHL（immb=0x15 模式，bit10-15） */
+            int esize;
+            if (immh5 & 0x10) esize = 64;
+            else if (immh5 & 0x08) esize = 32;
+            else if (immh5 & 0x04) esize = 16;
+            else esize = 8;
+            switch (esize) {
+            case 64: E.v[Rd][0] = E.v[Rn][0] << imm; E.v[Rd][1] = E.v[Rn][1] << imm; break;
+            case 32: {
+                int n = esize / 32;
+                for (int e = 0; e < (q ? 4 : 2); e++)
+                    E.v[Rd][e] = (uint32_t)((uint32_t)E.v[Rn][e] << imm);
+                break;
+            }
+            case 16: {
+                for (int e = 0; e < (q ? 8 : 4); e++) {
+                    uint16_t u = (uint16_t)E.v[Rn][e];
+                    E.v[Rd][e] = (uint16_t)(u << imm);
+                }
+                break;
+            }
+            default: {
+                for (int e = 0; e < (q ? 16 : 8); e++) {
+                    uint8_t u = (uint8_t)E.v[Rn][e];
+                    E.v[Rd][e] = (uint8_t)(u << imm);
+                }
+                break;
+            }
+            }
+            E.pc += 4; return 0;
+        }
+        if ((i & 0x0060FC00) == 0x00000000 && immh5) {  /* SSHR（bit15-10=0，immb=0） */
+            int esize;
+            if (immh5 & 0x10) esize = 64;
+            else if (immh5 & 0x08) esize = 32;
+            else if (immh5 & 0x04) esize = 16;
+            else esize = 8;
+            int sh = esize * 2 - immh5;
+            switch (esize) {
+            case 64: E.v[Rd][0] = (uint64_t)((int64_t)E.v[Rn][0] >> sh); E.v[Rd][1] = (uint64_t)((int64_t)E.v[Rn][1] >> sh); break;
+            case 32: { int n = esize / 32; for (int e = 0; e < (q ? 4 : 2); e++) E.v[Rd][e] = (uint32_t)((int32_t)E.v[Rn][e] >> sh); break; }
+            case 16: { for (int e = 0; e < (q ? 8 : 4); e++) E.v[Rd][e] = (uint16_t)((int16_t)E.v[Rn][e] >> sh); break; }
+            default: { for (int e = 0; e < (q ? 16 : 8); e++) E.v[Rd][e] = (uint8_t)((int8_t)E.v[Rn][e] >> sh); break; }
+            }
+            E.pc += 4; return 0;
+        }
+    }
+
     /* ---- NEON 精简支持（musl memset/memcpy 优化） ---- */
     if ((i & 0xFFE0FC00) == 0x0F000400 || (i & 0xFFE0FC00) == 0x4F000400 ||  /* MOVI/MVNI 2S/4S */
         (i & 0xFFE0FC00) == 0x0F008400 || (i & 0xFFE0FC00) == 0x4F008400 ||  /* MOVI/MVNI 4H/8H */
@@ -971,8 +1026,9 @@ not_ldstp:
     /* ---- CSEL/CSINC/CSINV/CSNEG ---- (CSEL/CSINC=0x1A800000 系 op=00；CSINV/CSNEG=0x5A800000 系 op=10；op2: 00=base/01=inc/neg；SDIV/UDIV 的 op2=11 由 op 位排除) */
     if ((i & 0xFFE00000) == 0x1A800000 || (i & 0xFFE00000) == 0x5A800000 ||
         (i & 0xFFE00000) == 0x9A800000 || (i & 0xFFE00000) == 0xDA800000) {
-        int op = (i >> 21) & 3;           /* 00=CSEL/CSINC  10=CSINV/CSNEG */
+        int op = (i >> 29) & 3;           /* 00=CSEL/CSINC  10=CSINV/CSNEG（v19.6：原误取 bits22:21 → 0x5A80A401 cneg 被当 CSINC，keystone 实证 bits30:29） */
         int op2 = (i >> 10) & 3;          /* 00=base 01=inc/neg */
+        int sf = (i >> 31) & 1, cond = (i >> 12) & 0xF;
         int c = (i >> 12) & 0xF;          /* v19.2 修复：CSEL 条件码在 bit[15:12]（原 i&0xF 误取 Rd 低位） */
         uint64_t a = RZR(rn(i)), b = RZR(rm(i));
         int t = cond_true(c);
@@ -981,8 +1037,13 @@ not_ldstp:
             if (op2 == 1) res = t ? a : (b + 1);
             else res = t ? a : b;
         } else {
-            if (op2 == 1) res = t ? a : (~b + 1);
-            else res = t ? a : ~b;
+            /* CSINV/CSNEG 的 cond 字段按工具链约定 = 标准^1（keystone/capstone/unicorn 三一致；
+               unicorn 完整序列实证 0xf248 cneg w1,w0,lt(0x5A80A401,cond=0xA) 取反当 N≠V；
+               busybox strtod 正确性依赖此语义） */
+            t = cond_true((cond ^ 1) & 0xF);
+            if (op2 == 1) res = t ? (~b + 1) : a;   /* CSNEG：cond 真→~Xm+1、假→Xn */
+            else res = t ? ~b : a;                  /* CSINV：cond 真→~Xm、假→Xn */
+            if (!sf) res = (uint32_t)res;
         }
         W(rd(i), res); E.pc += 4; return 0;
     }
@@ -1099,7 +1160,7 @@ not_ldstp:
         (i & 0xFFE0FC1F) == 0x1E602008 || (i & 0xFFE0FC1F) == 0x1E602018) {
         /* FCMP/FCMPE d,d / d,#0.0（含 0x1E612000 系与 opc 变体） */
         double a = fp_ld(rn(i), 1);
-        double b = (i & 0x08) ? 0.0 : fp_ld((i & 0x1F), 1);
+        double b = (i & 0x08) ? 0.0 : fp_ld((i >> 16) & 0x1F, 1);   /* FCMP Rm 在 bit[20:16]（0xb22a4 fcmpe d0,d10 实证） */
         int un = isnan(a) || isnan(b);
         uint32_t f = 0;
         if (a < b) f |= 1u << 31;      /* N */
@@ -1111,6 +1172,36 @@ not_ldstp:
     }
     if ((i & 0xFFFFFC00) == 0x1E22C000) { fp_st(rd(i), 1, (double)fp_ld(rn(i), 0)); E.pc += 4; return 0; } /* FCVT d,s */
     if ((i & 0xFFFFFC00) == 0x1E624000) { fp_st(rd(i), 0, (float)fp_ld(rn(i), 1)); E.pc += 4; return 0; } /* FCVT s,d */
+    /* ---- SCVTF/UCVTF fixed（#fbits）：w/x 源 → d，d = s / 2^fbits ---- */
+    if ((i & 0xFFFF03C0) == 0x1E420000 || (i & 0xFFFF03C0) == 0x9E420000) {   /* SCVTF Dd, Wn/Xn, #fbits */
+        int sf = (i >> 31) & 1, fbits = 64 - ((i >> 10) & 0x3F);
+        int64_t s = sf ? (int64_t)RZR(rn(i)) : (int32_t)(uint32_t)RZR(rn(i));
+        fp_st(rd(i), 1, ldexp((double)s, -fbits));
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFF03C0) == 0x1E430000 || (i & 0xFFFF03C0) == 0x9E430000) {   /* UCVTF Dd, Wn/Xn, #fbits */
+        int sf = (i >> 31) & 1, fbits = 64 - ((i >> 10) & 0x3F);
+        uint64_t s = sf ? RZR(rn(i)) : (uint32_t)RZR(rn(i));
+        fp_st(rd(i), 1, ldexp((double)s, -fbits));
+        E.pc += 4; return 0;
+    }
+    /* ---- FCVTZS/FCVTZU fixed（#fbits）：d/s 源 → 整数（向零截断） ---- */
+    if ((i & 0xFFFF03C0) == 0x9E7C0000 || (i & 0xFFFF03C0) == 0x1E7C0000 ||
+        (i & 0xFFFF03C0) == 0x9E7D0000 || (i & 0xFFFF03C0) == 0x1E7D0000) {   /* x/w,d 源 */
+        int sf = (i >> 31) & 1, fbits = 64 - ((i >> 10) & 0x3F);
+        double scaled = fp_ld(rn(i), 1) * ldexp(1.0, fbits);
+        if (i & 0x10000) { uint64_t u = (uint64_t)scaled; E.r[rd(i)] = sf ? u : (uint32_t)u; }
+        else { int64_t s = (int64_t)scaled; E.r[rd(i)] = sf ? (uint64_t)s : (uint32_t)s; }
+        E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFF03C0) == 0x9E180000 || (i & 0xFFFF03C0) == 0x1E180000 ||
+        (i & 0xFFFF03C0) == 0x9E190000 || (i & 0xFFFF03C0) == 0x1E190000) {   /* x/w,s 源 */
+        int sf = (i >> 31) & 1, fbits = 64 - ((i >> 10) & 0x3F);
+        double scaled = fp_ld(rn(i), 0) * ldexp(1.0, fbits);
+        if (i & 0x10000) { uint64_t u = (uint64_t)scaled; E.r[rd(i)] = sf ? u : (uint32_t)u; }
+        else { int64_t s = (int64_t)scaled; E.r[rd(i)] = sf ? (uint64_t)s : (uint32_t)s; }
+        E.pc += 4; return 0;
+    }
     if ((i & 0xFFFFFC00) == 0x9E780000 || (i & 0xFFFFFC00) == 0x1E780000) {   /* FCVTZS x/w,d */
         double a = fp_ld((i >> 5) & 0x1F, 1);
         int64_t r = (int64_t)a;
@@ -1135,11 +1226,13 @@ not_ldstp:
     }
     if ((i & 0xFFFFFC00) == 0x1E260000) { W(rd(i), (uint64_t)(int32_t)fp_ld(rn(i), 0)); E.pc += 4; return 0; } /* FMOV w,s */
     if ((i & 0xFFFFFC00) == 0x1E270000) { fp_st(rd(i), 0, (float)(int32_t)RZR(rn(i))); E.pc += 4; return 0; } /* FMOV s,w */
-    if ((i & 0xFFFFFC00) == 0x9E660000) { W(rd(i), (uint64_t)fp_ld(rn(i), 1)); E.pc += 4; return 0; } /* FMOV x,d */
-    if ((i & 0xFFFFFC00) == 0x9E670000) { fp_st(rd(i), 1, (double)RZR(rn(i))); E.pc += 4; return 0; } /* FMOV d,x */
-    if ((i & 0xFF200800) == 0x1F400000 || (i & 0xFF200800) == 0x1F400800) {   /* FMADD/FMSUB d */
+    if ((i & 0xFFFFFC00) == 0x9E660000) { W(rd(i), E.v[rn(i)][0]); E.pc += 4; return 0; } /* FMOV x,d：位模式复制（0xf470 long double 构造依赖） */
+    if ((i & 0xFFFFFC00) == 0x9E670000) { E.v[rd(i)][0] = RZR(rn(i)); E.v[rd(i)][1] = 0; E.pc += 4; return 0; } /* FMOV d,x：位模式复制（非数值转换！0xf880 窄化依赖） */
+    if ((i & 0xFFFFFC00) == 0x9EAE0000) { E.r[i & 0x1F] = E.v[(i >> 5) & 0x1F][1]; E.pc += 4; return 0; } /* FMOV Xd, Vn.D[1]：高 64 位→GP（0xF62D0 等） */
+    if ((i & 0xFFFFFC00) == 0x9E6E0000) { E.v[i & 0x1F][1] = RZR((i >> 5) & 0x1F); E.pc += 4; return 0; } /* FMOV Vd.D[1], Xn：GP→高 64 位（0xF6324 等） */
+    if ((i & 0xFF000000) == 0x1F000000) {   /* FMADD/FMSUB/FNMADD/FNMSUB——ARM: Sd = Sa ± Sn*Sm；Sa=bits[14:10]、Sn=bits[20:16]、Sm=bits[9:5]（0xb229c fmadd d0,d8,d1,d9 依赖；rn/rm 宏反义不可用） */
         int type = (i >> 22) & 1;
-        double a = fp_ld(rd(i), type), b = fp_ld((i >> 5) & 0x1F, type), c = fp_ld((i >> 16) & 0x1F, type);
+        double a = fp_ld((i >> 10) & 0x1F, type), b = fp_ld((i >> 16) & 0x1F, type), c = fp_ld((i >> 5) & 0x1F, type);
         double r = ((i >> 15) & 1) ? a - b * c : a + b * c;
         fp_st(rd(i), type, r); E.pc += 4; return 0;
     }
