@@ -38,6 +38,7 @@
 #else
 #include <sys/vfs.h>
 #include <sys/sysinfo.h>
+#include <sys/sendfile.h>
 #endif
 #include <signal.h>
 #include <setjmp.h>
@@ -220,6 +221,11 @@ static long sys_mkdirat(int dirfd, const char *path, mode_t mode) {
     return 0;
 }
 static long sys_unlinkat(int dirfd, const char *path, int flags) {
+    if (flags & 0x200 /* AT_REMOVEDIR：Linux 专有，Darwin 无此语义，转 rmdir */) {
+        if (dirfd != AT_FDCWD) return -EINVAL;
+        if (rmdir(path)) return -errno;
+        return 0;
+    }
     if (unlinkat(dirfd, path, flags)) return -errno;
     return 0;
 }
@@ -500,6 +506,10 @@ static long sys_sysinfo(void *buf) {
     memcpy(buf, &si, sizeof(si));   /* arm64 struct sysinfo = LP64 128B 布局，与宿主一致 */
     return 0;
 }
+/* sendfile（arm64 nr 71）：busybox cp 大文件加速路径；offset 为 guest off_t*（LP64 一致，直透） */
+static long sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
+    return (long)sendfile(out_fd, in_fd, offset, count);
+}
 /* fcntl 简化（busybox 常用 F_GETFL/F_SETFL 等） */
 static long sys_fcntl(int fd, int cmd, long arg) {
     return (long)fcntl(fd, cmd, arg);
@@ -515,6 +525,11 @@ long translate_syscall(uint64_t nr,
                               uint64_t a0, uint64_t a1, uint64_t a2,
                               uint64_t a3, uint64_t a4, uint64_t a5) {
     long r;
+    if (getenv("EMU_TRACE")) {
+        fprintf(stderr, "[trace] nr=%llu a0=%llx a1=%llx a2=%llx a3=%llx\n",
+                (unsigned long long)nr, (unsigned long long)a0,
+                (unsigned long long)a1, (unsigned long long)a2, (unsigned long long)a3);
+    }
     switch (nr) {
     case SYS_openat:
         r = sys_openat((int)a0, (const char*)(uintptr_t)a1, (int)a2, (mode_t)a3);        break;
@@ -561,6 +576,7 @@ long translate_syscall(uint64_t nr,
     case SYS_ioctl:       r = sys_ioctl((int)a0, (unsigned long)a1, (long)a2); break;
     case 158:             r = sys_getgroups((int)a0, (gid_t*)(uintptr_t)a1); break;  /* arm64 getgroups */
     case 179:             r = sys_sysinfo((void*)(uintptr_t)a0); break;  /* arm64 sysinfo：ps 需要 */
+    case 71:              r = sys_sendfile((int)a0, (int)a1, (off_t*)(uintptr_t)a2, (size_t)a3); break;  /* arm64 sendfile：cp 大文件 */
     case 96:              r = 0; break;   /* getrlimit（结构保持 0，busybox 启动查询用） */
     case 73:              r = 0; break;   /* 容错（arm64 编号未映射宏） */
     case 135:             r = 0; break;   /* rt_sigprocmask */
