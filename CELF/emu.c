@@ -19,6 +19,7 @@
 #include <string.h>
 #include <errno.h>
 #include <setjmp.h>
+#include <math.h>
 
 extern uintptr_t g_base;
 extern size_t g_total_size;
