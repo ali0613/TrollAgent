@@ -225,7 +225,7 @@ static long sys_mkdirat(int dirfd, const char *path, mode_t mode) {
 }
 static long sys_unlinkat(int dirfd, const char *path, int flags) {
     if (flags & 0x200 /* AT_REMOVEDIR：Linux 专有，Darwin 无此语义，转 rmdir */) {
-        if (dirfd != AT_FDCWD) return -EINVAL;
+        if (dirfd != -100 /* AT_FDCWD（Linux 值；iOS 宿主 AT_FDCWD=-2 会误判 → 真机 rmdir EINVAL） */) return -EINVAL;
         if (rmdir(path)) return -errno;
         return 0;
     }

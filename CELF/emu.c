@@ -218,6 +218,7 @@ static int unsupported(uint32_t i) {
 }
 
 static int g_iotrace = 0;   /* v18: ioctl 后指令轨迹开关 */
+static int g_fgetc_trace = 0;  /* v19.17.1 探针：fgetc 死循环（FGETC_TRACE=1） */
 static int exec_one(void) {
     /* v11: 每条指令进 ring buffer（崩点带出最后 64 条） */
     tr_record(E.pc, E.pc >= g_base && E.pc + 4 <= g_base + g_total_size
@@ -230,6 +231,15 @@ static int exec_one(void) {
 
     uint32_t i = fetch();
     if (E.exited) return 1;
+    /* ---- v19.17.1 探针：fgetc 死循环定位 ---- */
+    if (g_fgetc_trace) {
+        uint64_t po = E.pc - g_base;
+        if (po == 0xeddd8 || po == 0xcfc68 || po == 0xcfc6c || po == 0xcfcdc) {
+            fprintf(stderr, "[fgt] pc-off=0x%04llx x0=%016llx x1=%016llx x2=%016llx x3=%016llx w21=%08llx x20=%016llx\n",
+                    (unsigned long long)po, E.r[0], E.r[1], E.r[2], E.r[3],
+                    (unsigned long long)(E.r[21] & 0xFFFFFFFF), E.r[20]);
+        }
+    }
                 /* ---- SVC ---- */
     if ((i & 0xFF000000) == 0xD4000000) {
         /* aarch64 Linux ABI: syscall nr 在 x8（musl 裸 svc 直接 mov x8,nr;
@@ -892,34 +902,35 @@ not_ldstp:
         int sz = ((i >> 31) & 1) << 1 | ((i >> 30) & 1);  /* B=0 H=1 S=2 D=3 */
         int rd = i & 0x1F, opc = (i >> 22) & 3;
         int nbytes = 1 << sz;
-        if (i & 0x04000000) {                             /* bit26=1：STR/LDR imm12 */
+        if (i & 0x00200000) {                             /* bit21=1：寄存器偏移 str/ldr b/h/s/d, [xn, xm, <ext>]（v19.17.1 修正：原先判 imm12 误吞 reg） */
+            int opt = (i >> 13) & 7, s = (i >> 12) & 1, rm = (i >> 16) & 0x1F;
+            uint64_t off;
+            if (opt == 2) off = (uint64_t)(uint32_t)RZR(rm);     /* UXTW */
+            else if (opt == 3) off = RZR(rm);                    /* LSL(64) */
+            else if (opt == 6) off = (uint64_t)(int64_t)(int32_t)RZR(rm);  /* SXTW */
+            else if (opt == 7) off = (uint64_t)(int64_t)RZR(rm);  /* SXTX */
+            else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opt=%d i=%#x pc=%#llx\n", opt, i, (unsigned long long)E.pc); return 1; }
+            if (s) off <<= sz;
+            uint64_t a = RSP(rn(i)) + off;
+            if (opc == 0) mem_st(a, E.v[rd][0], nbytes);
+            else if (opc == 1) { uint64_t x = mem_ld(a, nbytes); E.v[rd][0] = x; }
+            else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opc=%d pc=%#llx\n", opc, (unsigned long long)E.pc); return 1; }
+            E.pc += 4; return 0;
+        }
+        if (i & 0x01000000) {                             /* bit24=1：STR/LDR imm12（bit21=0 且 bit24=1） */
             uint64_t a = RSP(rn(i)) + ((((i >> 10) & 0xFFF) << sz));
             if (opc == 0) mem_st(a, E.v[rd][0], nbytes);  /* STR B/H/S/D */
             else if (opc == 1) { uint64_t x = mem_ld(a, nbytes); E.v[rd][0] = x; }
             else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opc=%d pc=%#llx\n", opc, (unsigned long long)E.pc); return 1; }
             E.pc += 4; return 0;
         }
-        if (i & 0x00200000) {                             /* bit21=1：STUR/LDUR imm9（unscaled） */
+        {                                             /* STUR/LDUR imm9（unscaled，bit26=1 且 bit21=0 且 bit24=0） */
             uint64_t a = RSP(rn(i)) + (uint64_t)sext((i >> 12) & 0x1FF, 9);
             if (opc == 0) mem_st(a, E.v[rd][0], nbytes);
             else if (opc == 1) { uint64_t x = mem_ld(a, nbytes); E.v[rd][0] = x; }
             else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opc=%d pc=%#llx\n", opc, (unsigned long long)E.pc); return 1; }
             E.pc += 4; return 0;
         }
-        /* bit21=0：寄存器偏移 str/ldr b/h/s/d, [xn, xm, <ext>] */
-        int opt = (i >> 13) & 7, s = (i >> 12) & 1, rm = (i >> 16) & 0x1F;
-        uint64_t off;
-        if (opt == 2) off = (uint64_t)(uint32_t)RZR(rm);     /* UXTW */
-        else if (opt == 3) off = RZR(rm);                    /* LSL(64) */
-        else if (opt == 6) off = (uint64_t)(int64_t)(int32_t)RZR(rm);  /* SXTW */
-        else if (opt == 7) off = (uint64_t)(int64_t)RZR(rm);  /* SXTX */
-        else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opt=%d i=%#x pc=%#llx\n", opt, i, (unsigned long long)E.pc); return 1; }
-        if (s) off <<= sz;
-        uint64_t a = RSP(rn(i)) + off;
-        if (opc == 0) mem_st(a, E.v[rd][0], nbytes);
-        else if (opc == 1) { uint64_t x = mem_ld(a, nbytes); E.v[rd][0] = x; }
-        else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opc=%d pc=%#llx\n", opc, (unsigned long long)E.pc); return 1; }
-        E.pc += 4; return 0;
     }
     {   /* SIMD&FP 访存：str/ldr q（imm12）、stur/ldur q（imm9）、stp/ldp q（imm7） */
         uint32_t m = i & 0xFFC00000;
@@ -1326,9 +1337,10 @@ int emu_run(uint64_t entry, uint64_t sp) {
         return E.exit_code ? (int)E.exit_code : -EFAULT;
     }
     unsigned long long steps = 0;
+    if (getenv("FGETC_TRACE")) g_fgetc_trace = 1;
     while (!E.exited) {
         if (exec_one()) break;
-        if (++steps > 500000000ULL) {
+        if (++steps > 3000000000ULL) {
             fprintf(stderr, "[emu] STEP LIMIT pc=0x%llx\n", (unsigned long long)E.pc);
             tr_dump();
             E.exited = 1; E.exit_code = -ETIMEDOUT;
