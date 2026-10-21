@@ -13,6 +13,8 @@ int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize) {
 
 int elf_runner_main(int argc, char **argv);
 
+#ifdef LOCAL_HARNESS
 int main(int argc, char **argv) {
     return elf_runner_main(argc, argv);
 }
+#endif
