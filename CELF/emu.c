@@ -1568,7 +1568,19 @@ not_ldstp:
             E.v[rd(i)][0] = mem_ld(a, 8); E.v[rd(i)][1] = mem_ld(a + 8, 8);
             E.pc += 4; return 0;
         }
-        if (m == 0x3C800000) {                            /* STUR q（imm9 带符号） */
+        if (m == 0x3C800000 && (i & 0x200000)) {         /* STR q（register offset，bit21=1） */
+            uint64_t r = RZR((i >> 16) & 0x1F);
+            int opt = (i >> 13) & 7, ss = (i >> 12) & 1;
+            if (opt == 3 && ss) r <<= 1;                 /* LSL #1 */
+            else if (opt == 7) r = (uint64_t)(int64_t)r; /* SXTX */
+            else if (opt == 2) r = (uint32_t)r;          /* UXTW */
+            else if (opt == 6) r = (uint64_t)(int32_t)r; /* SXTW */
+            else if (opt == 0 && ss) r <<= 1;            /* LSL #1 */
+            uint64_t a = RSP(rn(i)) + r;
+            mem_st(a, E.v[rd(i)][0], 8); mem_st(a + 8, E.v[rd(i)][1], 8);
+            E.pc += 4; return 0;
+        }
+        if (m == 0x3C800000 && !(i & 0x200000)) {         /* STUR q（imm9 带符号） */
             uint64_t a = RSP(rn(i)) + (uint64_t)sext((i >> 12) & 0x1FF, 9);
             mem_st(a, E.v[rd(i)][0], 8); mem_st(a + 8, E.v[rd(i)][1], 8);
             E.pc += 4; return 0;
