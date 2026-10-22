@@ -695,7 +695,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ish-stage
-          key: ish-stage-${{ hashFiles('scripts/ish-build/*.sh') }}-v4
+          key: ish-stage-${{ hashFiles('scripts/ish-build/*.sh') }}-v5
 
       - name: Build iSH engine (libish.a + alpine rootfs)
         # v3.0.37：编译 iSH-ARM64 静态库与 Alpine rootfs，供 shell.exec 新引擎使用。
@@ -703,7 +703,22 @@ jobs:
         # 缓存命中时跳过（构建产物一致；改 scripts/ish-build/*.sh 需 bump key）。
         if: steps.cache-ish.outputs.cache-hit != 'true'
         run: |
-          brew install meson ninja libarchive llvm lld qemu >/dev/null 2>&1 || true
+          brew install meson ninja libarchive llvm lld >/dev/null 2>&1 || true
+          # v6.5.2：qemu 显式安装（qemu-aarch64 供 rootfs 预装 apk.static 交叉装包）。
+          # 之前 brew install qemu 被 || true 吞错 → qemu-aarch64 缺失 → 预装跳过 → rootfs 最小版。
+          if ! command -v qemu-aarch64 >/dev/null 2>&1; then
+            echo "::warning::qemu-aarch64 missing, installing qemu via brew"
+            brew install qemu 2>&1 | tail -3 || true
+          fi
+          if ! command -v qemu-aarch64 >/dev/null 2>&1; then
+            echo "::warning::brew qemu failed, downloading static qemu-aarch64"
+            mkdir -p "$HOME/bin"
+            curl -sL --fail --retry 3 -o "$HOME/bin/qemu-aarch64" \
+              "https://github.com/multiarch/qemu-user-static/releases/download/v7.2.14-1/qemu-aarch64-static" || true
+            chmod +x "$HOME/bin/qemu-aarch64" 2>/dev/null || true
+            export PATH="$HOME/bin:$PATH"
+          fi
+          command -v qemu-aarch64 && echo "qemu-aarch64 OK" || echo "::warning::qemu-aarch64 STILL MISSING (预装将跳过)"
           # lld 供 iSH VDSO 构建（-fuse-ld=lld）：macos 预装 llvm 不含 lld，单独 brew install lld
           export PATH="/opt/homebrew/opt/llvm/bin:/opt/homebrew/opt/lld/bin:$PATH"
           ln -sf "$(which lld)" /opt/homebrew/opt/lld/bin/ld.lld 2>/dev/null || true

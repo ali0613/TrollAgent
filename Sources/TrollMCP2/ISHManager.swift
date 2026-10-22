@@ -1,6 +1,7 @@
 import Foundation
 import ZIPFoundation
 import CISH
+import CommonCrypto
 
 /// iSH-ARM64 引擎（TrollAgent 版）
 /// - boot：首次调用时把 bundle 内 alpine-rootfs.zip 解压到 Documents，再 cish_boot 挂载 fakefs
@@ -63,6 +64,16 @@ enum ISHEngine {
     static var cwd: String { guestCwd }
 
     /// v3.6.8: 重置会话目录到真实存在的 /root（Alpine 纯隔离，无 /workspace 桥接）
+    /// v6.5.2：计算文件 MD5（rootfs bundle 版本比对用）
+    private static func fileMD5(_ path: String) -> String? {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { return nil }
+        var digest = [UInt8](repeating: 0, count: Int(CC_MD5_DIGEST_LENGTH))
+        data.withUnsafeBytes { buf in
+            _ = CC_MD5(buf.baseAddress, CC_LONG(data.count), &digest)
+        }
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
     static func resetCwd() {
         lock.lock()
         defer { lock.unlock() }
@@ -282,15 +293,18 @@ enum ISHEngine {
         }
         state = .booting
 
-        // 1. rootfs 解压（首次）
+        // 1. rootfs 解压（首次）/ 版本校验（覆盖安装后 bundle rootfs 更新则自动重解压）
+        // v6.5.2：记录 bundle zip 的 MD5 到 .rootfs-version；启动比对不一致 → 备份旧系统区后重解压，
+        // 根治"覆盖安装后仍用旧精简 rootfs"（缺 git/curl/ca-certificates/https 证书）。
         let fm = FileManager.default
+        let parent = URL(fileURLWithPath: rootfsDir).deletingLastPathComponent()
+        let versionFile = URL(fileURLWithPath: rootfsDir).appendingPathComponent(".rootfs-version").path
         if !fm.fileExists(atPath: dataPath) {
             guard let zipURL = Bundle.main.url(forResource: "alpine-rootfs", withExtension: "zip") else {
                 state = .failed("alpine-rootfs.zip missing from bundle")
                 return "[ish] kernel init failed: alpine-rootfs.zip missing from bundle"
             }
             do {
-                let parent = URL(fileURLWithPath: rootfsDir).deletingLastPathComponent()
                 try fm.createDirectory(at: parent, withIntermediateDirectories: true)
                 try fm.unzipItem(at: zipURL, to: parent)
             } catch {
@@ -300,6 +314,27 @@ enum ISHEngine {
             if !fm.fileExists(atPath: dataPath) {
                 state = .failed("rootfs 解压后缺少 data 目录")
                 return "[ish] 内核初始化失败: rootfs 解压后缺少 data 目录"
+            }
+            if let h = Self.fileMD5((Bundle.main.url(forResource: "alpine-rootfs", withExtension: "zip")?.path) ?? "") {
+                try? h.write(toFile: versionFile, atomically: true, encoding: .utf8)
+            }
+        } else if let zipURL = Bundle.main.url(forResource: "alpine-rootfs", withExtension: "zip"),
+                  let newHash = Self.fileMD5(zipURL.path),
+                  let oldHash = try? String(contentsOfFile: versionFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+                  !oldHash.isEmpty, newHash != oldHash {
+            // bundle rootfs 已更新——备份旧系统区，重解压（保留备份供回滚）
+            let backup = dataPath + ".old"
+            do {
+                try? fm.removeItem(atPath: backup)
+                try fm.moveItem(atPath: dataPath, toPath: backup)
+                try fm.unzipItem(at: zipURL, to: parent)
+                try newHash.write(toFile: versionFile, atomically: true, encoding: .utf8)
+                NSLog("[ish] rootfs 版本更新：重解压完成（旧 rootfs 备份于 .old）")
+            } catch {
+                // 重解压失败——回滚备份
+                try? fm.removeItem(atPath: dataPath)
+                try? fm.moveItem(atPath: backup, toPath: dataPath)
+                NSLog("[ish] rootfs 重解压失败，已回滚旧 rootfs: \(error.localizedDescription)")
             }
         }
 

@@ -239,10 +239,12 @@ provision_rootfs_tar() {
     # qemu 交叉装包：常用工具链一次到位（--no-scripts 跳过 guest post-install）
     # v4.3.77：曾加 py3-pandas——实测 iSH 模拟器 import numpy/openblas 段错误闪退
     # （崩溃栈 cpu_run_to_interrupt），预装 pandas 反成陷阱，v4.4.2 移除。
+    # v6.5.2：补全基础集（wget/jq/openssl/bash/bind-tools）——对齐 InstallTools network 组，
+    # 根治"运行时 apk 联网装工具缺证书鸡生蛋"。
     qemu-aarch64 "$CACHE_DIR/sbin/apk.static" add --root "$STAGE" --arch "$ALPINE_ARCH" --no-scripts \
         --repository "https://mirrors.aliyun.com/alpine/v${ALPINE_VERSION}/main" \
         --repository "https://mirrors.aliyun.com/alpine/v${ALPINE_VERSION}/community" \
-        python3 py3-pip binutils git file sqlite3 tar unzip curl ca-certificates \
+        python3 py3-pip binutils git file sqlite3 tar unzip curl wget jq openssl bash bind-tools ca-certificates \
         > "$CACHE_DIR/provision.log" 2>&1
     local RC=$?
     if [ $RC -ne 0 ]; then
