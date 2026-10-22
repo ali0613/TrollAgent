@@ -909,21 +909,23 @@ static long vproc_close(int fd) {
 }
 static long sys_getdents64(int fd, void *buf, size_t count) {
 #ifdef __APPLE__
-    /* Darwin 无 Linux getdents64、getdirentries 在 64 位 inode 下不可用：
-       fdopendir+readdir（Darwin dirent → 转 Linux dirent64）；DIR 按 fd 缓存，
-       sys_close 负责释放，避免 busybox 后续 close(fd) 时 double-close。 */
-    if (fd < 0 || fd >= 16) return -EBADF;
-    if (!g_dir_cache[fd]) {
-        g_dir_cache[fd] = fdopendir(fd);
-        if (!g_dir_cache[fd]) return -errno;
-    }
-    DIR *d = g_dir_cache[fd];
+    /* v19.26: 弃 fdopendir/readdir（真机 ls 列目录 total 0 = readdir 空）。
+       改 Darwin 原生 getdirentries64：从 fd 当前偏移续读、basep 推进，
+       语义与 Linux getdents64 一致（busybox 循环调用直到 0）。
+       Darwin dirent64: d_ino(8) d_seekoff(8) d_reclen(2) d_namlen(2) d_type(1) d_name[] */
+    if (fd < 0) return -EBADF;
+    char dbuf[4096];
+    long basep = 0;
+    long n = getdirentries64(fd, dbuf, sizeof(dbuf), &basep);
+    fprintf(stderr, "[gdd] getdirentries64 fd=%d n=%ld errno=%d(%s) basep=%ld\n",
+            fd, n, errno, strerror(errno), basep);
+    if (n < 0) return -errno;
+    if (n == 0) return 0;
     unsigned char *out = buf;
-    long o = 0;
-    struct dirent *de;
-    errno = 0;
-    while ((de = readdir(d)) != NULL) {
-        size_t namlen = strlen(de->d_name);
+    long o = 0, i = 0;
+    while (i < n) {
+        struct dirent *de = (struct dirent *)(dbuf + i);
+        size_t namlen = de->d_namlen;
         size_t lreclen = (namlen + 1 + 19 + 7) & ~(size_t)7;
         if (o + (long)lreclen > (long)count) break;
         memset(out + o, 0, lreclen);
@@ -933,8 +935,12 @@ static long sys_getdents64(int fd, void *buf, size_t count) {
         ld->d_reclen = (uint16_t)lreclen;
         ld->d_type = de->d_type;
         memcpy(ld->d_name, de->d_name, namlen);
+        fprintf(stderr, "[gdd]   ent ino=%llu namlen=%zu reclen=%u name='%.*s'\n",
+                (unsigned long long)de->d_ino, namlen, de->d_reclen, (int)namlen, de->d_name);
         o += (long)lreclen;
+        i += de->d_reclen;
     }
+    fprintf(stderr, "[gdd] -> out %ld bytes\n", o);
     return o;
 #else
     /* 本地对照：Linux 原生 getdents64 透传（布局即 Linux dirent64） */
