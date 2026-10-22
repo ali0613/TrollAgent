@@ -96,6 +96,19 @@ lpine binutils 替代：objdump/nm/readelf/size/strings）；
             echo ">>> native $t bundled ($(du -h "$APP/bin/$t" | cut -f1))"
         fi
     done
+    # v6.6.0-fix15: 原生 node（nodejs-mobile iOS arm64）——node-native 显式命令
+    #（AI 重 node 任务选择：构建/打包工具芯片直跑；轻量 JS 用统一环境 Alpine nodejs）。
+    if [ -f "native-node-out/node" ]; then
+        cp "native-node-out/node" "$APP/bin/node"
+        chmod +x "$APP/bin/node"
+        echo ">>> native node bundled ($(du -h "$APP/bin/node" | cut -f1))"
+        # NodeMobile dylib：install name @rpath/NodeMobile.framework/NodeMobile → 必须 framework 目录结构
+        if [ -f "native-node-out/NodeMobile.dylib" ]; then
+            mkdir -p "$APP/Frameworks/NodeMobile.framework"
+            cp "native-node-out/NodeMobile.dylib" "$APP/Frameworks/NodeMobile.framework/NodeMobile"
+            echo ">>> NodeMobile.framework/NodeMobile bundled"
+        fi
+    fi
     # v4.4.9-fix3cn: git 替代——iOS 拦 fork() 真 git 跑不了；dulwich 纯 Python 在 site-packages,
     # 此封装脚本(porcelain API, 绕开 dulwich CLI 的 add bug)进 bin/——v6.6.0 起 git 统一走 Alpine(rootfs 预装), git.py 仅作 rootfs 缺失兜底
     if [ -f "scripts/git.py" ]; then

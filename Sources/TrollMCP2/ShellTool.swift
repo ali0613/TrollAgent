@@ -36,7 +36,7 @@ enum ShellDiag {
 final class ShellExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "shell.exec",
-        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux 完整工具链执行（Asbestos 解释器——apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写；iOS 特有命令(plutil/sysctl 等)内部自动走 iOS 原生兜底——无需指定环境、无需感知环境。py3-native = 原生 Python 显式命令（芯片直跑 numpy/pandas 深度运算——重计算用；日常 python3 走统一环境 Alpine）。缺轻量工具自动 apk add 并重试一次；重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)需 tool.install 手动装. Use for: file ops, system info, network, text processing.",
+        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux 完整工具链执行（Asbestos 解释器——apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写；iOS 特有命令(plutil/sysctl 等)内部自动走 iOS 原生兜底——无需指定环境、无需感知环境。py3-native = 原生 Python 显式命令（芯片直跑 numpy/pandas 深度运算——重计算用；日常 python3 走统一环境 Alpine）；node-native = 原生 node 显式命令（V8 芯片直跑重负载——重 node 任务用；轻量 JS 走统一环境 Alpine nodejs）。缺轻量工具自动 apk add 并重试一次；重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)需 tool.install 手动装. Use for: file ops, system info, network, text processing.",
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",
@@ -151,6 +151,11 @@ final class ShellExecTool: MCPTool {
             // AI 按场景选择：重计算（大矩阵/数据分析/模型）→ py3-native；日常/装包/生态 → python3（Alpine）。
             if trimmed == "py3-native" || trimmed.hasPrefix("py3-native ") {
                 return runNativePython(String(trimmed.dropFirst("py3-native".count)).trimmingCharacters(in: .whitespaces))
+            }
+            // v6.6.0-fix15: node-native 显式命令——原生 node（V8 芯片直跑——重 node 任务/构建工具）。
+            // AI 按场景选择：重 node 负载 → node-native；轻量 JS 脚本 → 统一环境 Alpine nodejs。
+            if trimmed == "node-native" || trimmed.hasPrefix("node-native ") {
+                return runNativeNode(String(trimmed.dropFirst("node-native".count)).trimmingCharacters(in: .whitespaces))
             }
             // v3.7.7: 自动 bind——Alpine 命令引用 iOS 路径时自动挂载顶层 + 改写路径，
             // 让 Alpine 直接读写 iOS 文件（消灭环境漂移，替代单向字节桥接）。
@@ -608,8 +613,8 @@ final class ShellExecTool: MCPTool {
         // v6.6.0: 精简——仅真实原生实现（plutil/sqlite3/ta）+ bin/ 内置二进制。
         // 其余命令统一环境（Alpine）执行——python3 统一走 Alpine（完整 CPython+pip）。
         "plutil", "sqlite3", "ta",
-        // bin/ 内置：jtool2（Mach-O 解析专长）+ py3-native（原生 Python 深度运算——AI 重计算场景选择）
-        "jtool2", "py3-native"
+        // bin/ 内置：jtool2（Mach-O 解析专长）+ py3-native（原生 Python）+ node-native（原生 node——重负载场景）
+        "jtool2", "py3-native", "node-native"
     ]
     
     /// v4.3.9: 反向路径翻译——iOS 原生命令收到 Alpine 挂载路径时翻译回 iOS 真实路径。
@@ -1215,6 +1220,23 @@ final class ShellExecTool: MCPTool {
         if res.timedOut { out += "\n[py3-native 执行超时被终止]" }
         return ["command": "py3-native " + args, "exit_code": res.exitCode, "stdout": out,
                 "hint": "py3-native：原生 Python（iPhone 芯片直跑 numpy/pandas 深度运算）。日常/装包/生态用 python3（统一环境 Alpine）"]
+    }
+
+    /// v6.6.0-fix15: node-native 执行器——原生 node（App bin/node，V8 芯片直跑重负载）。
+    /// 显式命令专用（AI 重 node 任务选择）；轻量 JS 用统一环境 Alpine nodejs。
+    private static func runNativeNode(_ args: String) -> [String: Any] {
+        let nodePath = Bundle.main.bundlePath + "/bin/node"
+        guard FileManager.default.isExecutableFile(atPath: nodePath) else {
+            return ["command": "node-native " + args, "exit_code": 1,
+                    "stdout": "node-native: 原生 node 未内置（此构建未集成 nodejs-mobile）——请用 node（统一环境 Alpine nodejs）"]
+        }
+        let split = shellSplitArgs(args)
+        let res = BuildRunner.shared.run(executable: nodePath, args: split, env: ["PATH": Bundle.main.bundlePath + "/bin"], timeout: 120)
+        var out = res.stdout
+        if !res.stderr.isEmpty { out += (out.isEmpty ? "" : "\n") + res.stderr }
+        if res.timedOut { out += "\n[node-native 执行超时被终止]" }
+        return ["command": "node-native " + args, "exit_code": res.exitCode, "stdout": out,
+                "hint": "node-native：原生 node（V8 芯片直跑——重 node 任务/构建工具）。轻量 JS/日常用 node（统一环境 Alpine nodejs）"]
     }
 
     private static func probeTargetOfSegment(_ seg: String) -> String? {

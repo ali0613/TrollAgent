@@ -18,7 +18,7 @@ jobs:
     # 等它确保 python artifact 就位，build 才能真正集成（此前并行时 download 拿不到→python 被跳过）
     # v4.4.6-fix3u: needs native-nmap（continue-on-error job，失败不阻塞出包）
     # v4.4.8-fix3w: needs native-llvm（LLVM 单工具 + jtool2；下载 continue-on-error，失败不出这些工具但出包）
-    needs: [native-python, native-wheels, native-nmap, native-llvm]
+    needs: [native-python, native-wheels, native-nmap, native-llvm, native-node]
     runs-on: macos-latest
     env:
       RELEASE_VERSION: 6.0.25
@@ -227,6 +227,14 @@ jobs:
           merge-multiple: true
         continue-on-error: true
 
+
+      - name: Download native node (nodejs-mobile iOS arm64)
+        uses: actions/download-artifact@v4
+        with:
+          name: native-node
+          path: native-node-out
+          merge-multiple: true
+        continue-on-error: true
 
       - name: Download native nmap (if ready)
         uses: actions/download-artifact@v4
@@ -769,3 +777,72 @@ jobs:
           name: native-llvm
           path: llvm-out/*
           if-no-files-found: warn
+
+  # v6.6.0-fix15: 原生 node（nodejs-mobile iOS 预编译）——显式 node-native 命令
+  #（AI 重 node 任务选择：构建/打包工具芯片直跑；轻量 JS 用统一环境 Alpine nodejs）。
+  native-node:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch nodejs (nodejs-mobile iOS prebuilt) + build CLI
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/node-ios native-node-out
+          curl -sL -o /tmp/node-ios.zip https://github.com/JaneaSystems/nodejs-mobile/releases/download/nodejs-mobile-v0.3.3/nodejs-mobile-v0.3.3-ios.zip
+          unzip -q -o /tmp/node-ios.zip -d /tmp/node-ios 2>/dev/null || true
+          # 优先 arm64 Mach-O executable（MH_EXECUTE）；找不到用 NodeMobile dylib + C wrapper 编成真可执行
+          found=""
+          for f in $(find /tmp/node-ios -type f \( -name "node" -o -name "NodeMobile" -o -name "nodejs-mobile" \) 2>/dev/null); do
+            if file "$f" 2>/dev/null | grep -q "Mach-O 64-bit arm64 executable"; then found="$f"; break; fi
+          done
+          if [ -z "$found" ]; then
+            found=$(find /tmp/node-ios -type f -exec file {} \; 2>/dev/null | grep "Mach-O 64-bit arm64 executable" | head -1 | cut -d: -f1)
+          fi
+          if [ -n "$found" ] && [ -f "$found" ]; then
+            cp "$found" native-node-out/node
+            chmod +x native-node-out/node
+            echo ">>> node: $(file "$found" | head -c 120)"
+          else
+            # NodeMobile dylib → C wrapper(node_start) 编成真 executable
+            NODEMOBILE=$(find /tmp/node-ios -type f -name "NodeMobile" 2>/dev/null | head -1)
+            if [ -z "$NODEMOBILE" ]; then
+              echo "!!! NodeMobile 未找到——node 构建失败" >&2
+              exit 1
+            fi
+            lipo "$NODEMOBILE" -thin arm64 -output /tmp/NodeMobile_arm64.dylib 2>/dev/null || cp "$NODEMOBILE" /tmp/NodeMobile_arm64.dylib
+            cat > /tmp/nodecli.c <<'NC'
+            #include <stdio.h>
+            extern int node_start(int argc, char **argv);
+            int main(int argc, char **argv) {
+                // iOS 无 tty stdout 全缓冲——V8 输出滞留不 flush → 空结果。行缓冲 + 退出强刷。
+                setvbuf(stdout, NULL, _IOLBF, 0);
+                setvbuf(stderr, NULL, _IOLBF, 0);
+                int rc = node_start(argc, argv);
+                fflush(stdout);
+                fflush(stderr);
+                return rc;
+            }
+            NC
+            SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+            if xcrun -sdk iphoneos clang -arch arm64 -isysroot "$SDK" -o native-node-out/node /tmp/nodecli.c /tmp/NodeMobile_arm64.dylib -Wl,-undefined,dynamic_lookup -Wl,-rpath,@executable_path/../Frameworks 2>/tmp/node_build.err; then
+              ORIG_INAME=$(otool -D native-node-out/node 2>/dev/null | tail -1)
+              if [ -n "$ORIG_INAME" ]; then
+                install_name_tool -change "$ORIG_INAME" @executable_path/../Frameworks/NodeMobile.framework/NodeMobile native-node-out/node 2>/dev/null || true
+              fi
+              cp /tmp/NodeMobile_arm64.dylib native-node-out/NodeMobile.dylib
+              chmod +x native-node-out/node
+              echo ">>> node: C wrapper(node_start) + NodeMobile.dylib OK"
+            else
+              echo "!!! node wrapper 编译失败" >&2
+              tail -3 /tmp/node_build.err >&2
+              exit 1
+            fi
+          fi
+      - name: Upload native-node
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-node
+          path: native-node-out/*
+          if-no-files-found: error
+
