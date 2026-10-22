@@ -1713,11 +1713,11 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
     int fd = open(path, O_RDONLY);
     if (fd < 0) { perror("elf-runner: open"); return -1; }
     struct stat st;
-    if (fstat(fd, &st) != 0 || st.st_size < sizeof(Elf64_Ehdr)) { close(fd); return -1; }
+    if (fstat(fd, &st) != 0 || st.st_size < sizeof(Elf64_Ehdr)) { fprintf(stderr, "[le] fstat fail errno=%d size=%lld\n", errno, (long long)st.st_size); fflush(stderr); close(fd); return -1; }
 
     uint8_t *raw = malloc(st.st_size);
-    if (!raw) { close(fd); return -1; }
-    if (read(fd, raw, st.st_size) != st.st_size) { free(raw); close(fd); return -1; }
+    if (!raw) { fprintf(stderr, "[le] malloc %lld fail\n", (long long)st.st_size); fflush(stderr); close(fd); return -1; }
+    if (read(fd, raw, st.st_size) != st.st_size) { fprintf(stderr, "[le] read fail errno=%d\n", errno); fflush(stderr); free(raw); close(fd); return -1; }
     close(fd);
 
     Elf64_Ehdr *eh = (Elf64_Ehdr *)raw;
