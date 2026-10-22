@@ -118,9 +118,13 @@ int cish_boot(const char *data_path) {
     (void)e2;
 
     // v3.7.1：bind mount 默认关闭（恢复纯 boot）。
-    // 原因：fakefs_bind_mount 在 boot 中途写 meta.db 会污染权限记录，导致后续 exec
-    // 读到无执行位（rc=-13 EACCES，OpenMinis 上游 bind mount 为运行时调用设计）。
-    // bind 能力保留在 cish_bind_mount/cish_bind_unmount，需要时显式按需挂载。
+    // 原因（OpenMinis 老引擎）：fakefs_bind_mount 在 boot 中途写 meta.db 会污染权限记录，
+    // 导致后续 exec 读到无执行位（rc=-13 EACCES）。bind 能力保留在显式按需挂载。
+    // v6.6.0-fix23 审计（rcarmo 新引擎 fs/fake.c——已修老坑）：
+    //   - 挂载动作只写挂载点 top_mode（read_only?0555:0755），不再递归污染子树权限
+    //   - 访问 bind 路径按需探测宿主 stat 建正确 inode（bind_mount_ensure_inode——目录 0755/文件 0644）
+    //   - 只读强制用代码检查（is_under_readonly_bind_mount——root 绕过 DAC 也 EROFS）
+    // 结论：新引擎 bind mount 可安全启用；v3.7.1 默认关闭的决策待真机最终确认后放开。
     // v3.7.2：iSH 内核 patch —— meta.db 缺失/空时 sqlite3_open_v2 加 CREATE 并注入初始
     // schema（paths/stats/meta），boot 不再 rc=-22，可自动重建干净 meta.db（无需手动恢复）。
 
