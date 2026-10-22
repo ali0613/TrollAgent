@@ -75,7 +75,6 @@ final class SystemPrompts {
                   iOS 路径自动 bind 为 /ios_* 直读直写（/var/mobile/Documents/Workspace→/ios_workspace 等）
                 - python3/python 在统一环境（Alpine）运行——完整 CPython + pip（apk 可装 numpy/pandas）
                 - iOS 特有命令（plutil 等）内部自动原生兜底——无需指定环境
-                - 结果里看 `runtime_actual` 字段确认实际执行环境（alpine=统一环境 / ios=原生）
                 - 缺轻量工具（tar/jq/gdb 等）自动 apk add 并重试一次；重量级工具用 tool.install 装
               * combos: screenshot+OCR → control screenshot → multimodal vision; web+content → browser navigate → browser text;
                 inject → inject list(find bundle_id) → inject → app launch(verify); tap button → control screenshot
@@ -421,8 +420,8 @@ final class SystemPrompts {
     - UNIFIED ENVIRONMENT (v6.6.0——路由废除): shell.exec 无 runtime 参数——全部命令默认在统一环境
       TrollRuntime（Alpine Linux 完整工具链——Asbestos 解释器）执行；iOS 路径自动 bind（/ios_* 直读直写）。
       iOS 特有命令（plutil/sysctl/notifyutil 等 Alpine 无）内部自动原生兜底；其余全部命令统一在环境执行。
-      结果里看 `runtime_actual`（alpine=统一环境 / ios=原生）。遇 "native pipe not supported" 等错误，
-      先查 auto-bind 路径/命令本身，不要当成环境切换失败——环境是统一的，无需切换。
+      统一环境内命令/管道/路径全支持，
+      先查 auto-bind 路径/命令本身——环境是统一的。
     - UNIFIED COVERAGE (v6.6.0——单一环境): 全部命令在统一环境（TrollRuntime/Alpine 完整工具链）执行——
       ls/cat/grep/find/sed/awk/tar/git/python3/sqlite3/curl/ps/df 等全部可用，apk add 任意装包（pip/git/编译链）。
       原生兜底仅两类：iOS 特有命令（plutil/sysctl/notifyutil/uicache/sbreload/idevice_id/swift——Alpine 无）

@@ -36,7 +36,7 @@ enum ShellDiag {
 final class ShellExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "shell.exec",
-        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux 完整工具链执行（Asbestos 解释器——apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写；iOS 特有命令(plutil/sysctl 等)内部自动走 iOS 原生兜底——无需指定环境，结果里看 runtime_actual 字段。缺轻量工具自动 apk add 并重试一次；重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)需 tool.install 手动装. Use for: file ops, system info, network, text processing.",
+        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux 完整工具链执行（Asbestos 解释器——apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写；iOS 特有命令(plutil/sysctl 等)内部自动走 iOS 原生兜底——无需指定环境、无需感知环境。缺轻量工具自动 apk add 并重试一次；重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)需 tool.install 手动装. Use for: file ops, system info, network, text processing.",
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",
@@ -44,7 +44,6 @@ final class ShellExecTool: MCPTool {
             "limit": "Optional Int: result string truncation cap (default 16000 chars——覆盖多数分析输出；仍不够用 full=true). If diagnostics output is trimmed and the body is invisible, pass limit=20000 或更大；full=true 则不截断返回完整结果",
             "full": "Optional Bool: true=返回完整结果不截断 (慎用，大输出占满上下文)",
             "offset": "Optional Int: skip first N chars of output before showing (default 0), combine with limit to read a middle slice",
-            "env": "已弃用(v6.6.0 统一环境)：环境由系统自动决定——默认 Alpine Linux 完整工具链（iOS 路径自动 bind），python3 首词走原生 CPython，iOS 特有命令自动原生兜底。无需也不接受 runtime 参数。"
         ],
         verified: true
     )
@@ -133,7 +132,6 @@ final class ShellExecTool: MCPTool {
                     "iOS 路径自动 bind 为 /ios_* 直读直写；iOS 特有命令自动原生兜底",
                     "提示: 无需指定环境——统一执行。含 | ; && > 复合命令在环境内正常组合"
                 ].joined(separator: "\n"),
-                "ios_native": true,
                 "hint": "env probe: diagnose execution environment issues"
             ]
         }
@@ -174,7 +172,7 @@ final class ShellExecTool: MCPTool {
             // (>2MB 超限 / 不存在)，Alpine 必然读不到 → 执行前直接拦截并给出明确下一步，
             // 而不是放进去跑出空结果让 AI 反复瞎试（根治 jinx 会话 40 次工具调用绕圈的根因）。
             if let guardMsg = ShellExecTool.alpineIOSPathGuard(boundCmd) {
-                return ["command": trimmed, "exit_code": 1, "ios_native": false,
+                return ["command": trimmed, "exit_code": 1,
                         "stdout": guardMsg,
                         "hint": "该命令在统一环境（TrollRuntime）执行，但读不到该 iOS 路径（非绑定目录(Workspace/Containers/System/App数据容器)，或文件>2MB）。三种解法：①先 cp 到 Workspace：`cp <file> /var/mobile/Documents/Workspace/`，再走 Alpine /ios_workspace 直读分析；②App 数据容器走 /ios_appdata 下 UUID 路径；③用原生 shell 工具（strings/nm/hexdump 直读大文件）；④对二进制用 binary.symbols / file analyze。"]
             }
@@ -192,9 +190,7 @@ final class ShellExecTool: MCPTool {
                 "command": trimmed,
                 "exit_code": finalExit,
                 "stdout": stdout,
-                "cwd": TrollRuntimeEngine.cwd,
-                "ios_native": false,
-                "runtime_actual": "alpine",   // v6.0.28: 标明实际运行环境
+                "cwd": TrollRuntimeEngine.cwd,   // v6.0.28: 标明实际运行环境
                 "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Unified environment (Alpine Linux — TrollRuntime). 缺工具时系统已自动 apk add 安装并重试一次。"
             ]
             if finalTimed { result["timed_out"] = true }
@@ -701,14 +697,13 @@ final class ShellExecTool: MCPTool {
                     var out = res.stdout
                     if res.timedOut { out += "\n[执行超时 \(Int(timeout))s 被终止]" }
                     return ["command": segment, "exit_code": res.exitCode, "stdout": out,
-                            "stderr": res.stderr, "ios_native": true]
+                            "stderr": res.stderr]
                 }
             }
             return [
                 "command": segment,
                 "exit_code": 1,
-                "stdout": "iOS 原生模式不支持该命令: \(word) (请用 Alpine 全功能 shell 或换用支持的 36 个 iOS 原生命令)",
-                "ios_native": true
+                "stdout": "iOS 原生模式不支持该命令: \(word) (请用 Alpine 全功能 shell 或换用支持的 36 个 iOS 原生命令)"
             ]
         }
     }
@@ -719,7 +714,7 @@ final class ShellExecTool: MCPTool {
     static func runIOSPipeline(_ command: String, limit: Int = 16000, offset: Int = 0, timeout: TimeInterval = 30) -> [String: Any] {
         let segments = splitShellSegments(command)
         guard !segments.isEmpty else {
-            return ["command": command, "exit_code": 1, "stdout": "空命令", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "空命令"]
         }
         
         // 切链：[(链内段列表, 本链进入前的分隔符)]
@@ -742,8 +737,6 @@ final class ShellExecTool: MCPTool {
         
         var stdoutChunks: [String] = []
         var lastExit = 0
-        var anyIOS = false
-        var firstIOS = false
         
         for chain in chains {
             // && / || 短路：上一条链的 exit 决定本链是否执行
@@ -769,8 +762,6 @@ final class ShellExecTool: MCPTool {
                 let isIOSCmd = iosNativeCommands.contains(word) ||
                     (!word.contains("/") && !word.contains("..") &&
                      (FileManager.default.fileExists(atPath: Bundle.main.bundlePath + "/bin/" + word)))
-                if isIOSCmd { anyIOS = true }
-                if cidx == 0 && isIOSCmd { firstIOS = true }
                 // v4.3.13: base64 -d 带重定向时改为 var，特判后置 false 跳过文本重定向
                 var redirect = redirect0
                 
@@ -782,11 +773,10 @@ final class ShellExecTool: MCPTool {
                         // 旧实现把解码硬写 .decoded + pipeline 把提示文本重定向到 outFile，目标被写成提示串(损坏)。
                         if word == "base64", redirect, body.contains("-d"),
                            let msg = ShellExecTool.base64DecodeRedirect(body, outFile: outFile) {
-                            result = ["command": body, "exit_code": 0, "stdout": msg, "ios_native": true]
+                            result = ["command": body, "exit_code": 0, "stdout": msg]
                             redirect = false  // 已直接写二进制，跳过下方文本 writeRedirected
                         } else {
                             result = runIOSNativeSegment(body, timeout: timeout)
-                            result["ios_native"] = true
                         }
                     } else {
                         var (output, outputExit, timedOut) = TrollRuntimeEngine.exec(body, timeout: timeout)
@@ -837,12 +827,7 @@ final class ShellExecTool: MCPTool {
             "command": command,
             "exit_code": lastExit,
             "stdout": finalOut,
-            "ios_native": firstIOS,
-            "hint": firstIOS
-                ? "iOS 原生复合命令：支持管道/分号/重定向 (Swift 过滤器 head/tail/grep/wc/sed/awk/sort/uniq/cut/tr/echo)"
-                : (anyIOS
-                    ? "统一环境复合命令：管道/分号/重定向正常组合（iOS 原生过滤器 + TrollRuntime 工具链自动衔接）"
-                    : "复合命令 (统一环境)：管道/分号/重定向已正确解析")
+            "hint": "复合命令（统一环境）：管道/分号/重定向已正确解析"
         ]
     }
     
@@ -1149,7 +1134,7 @@ final class ShellExecTool: MCPTool {
             }
             return Data(input.utf8).base64EncodedString()
         default:
-            return "iOS native pipe does not support filter: \(word) (available: head/tail/grep/wc/sed/awk/sort/uniq/cut/tr/rev/echo/cat/base64)\nOriginal output:\n\(input)"
+            return "复合命令过滤器不支持 \(word) (available: head/tail/grep/wc/sed/awk/sort/uniq/cut/tr/rev/echo/cat/base64)\nOriginal output:\n\(input)"
         }
     }
     
@@ -1228,8 +1213,7 @@ final class ShellExecTool: MCPTool {
         let pythonPath = Bundle.main.bundlePath + "/bin/python3"
         guard FileManager.default.isExecutableFile(atPath: pythonPath) else {
             return ["command": command, "exit_code": 1,
-                    "stdout": "python3: 原生 Python 未内置（此构建未集成 Python.xcframework）— 请用统一环境版：sh -c 'python3 ...'（注意解释器内不能 import numpy/pandas，会段错误）",
-                    "ios_native": true]
+                    "stdout": "python3: 原生 Python 未内置（此构建未集成 Python.xcframework）— 请用统一环境版：sh -c 'python3 ...'（注意解释器内不能 import numpy/pandas，会段错误）"]
         }
         let body = command.dropFirst("python3".count)
         let args = shellSplitArgs(String(body))
@@ -1304,7 +1288,7 @@ final class ShellExecTool: MCPTool {
         try? FileManager.default.removeItem(atPath: pyOutPath)
         try? FileManager.default.removeItem(atPath: docsBase + "/troll_py_out.txt")
         return ["command": command, "exit_code": res.exitCode, "stdout": out,
-                "stderr": res.stderr, "ios_native": true]
+                "stderr": res.stderr]
     }
 
     /// v6.1.5-14bp：原生工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令）
@@ -1365,7 +1349,7 @@ final class ShellExecTool: MCPTool {
         }
         // cd 纯状态查询 → 返回当前 cwd（原生，无副作用）
         if target == "cd" && body.isEmpty {
-            return ["command": seg, "exit_code": 0, "stdout": "当前工作目录：\(TrollRuntimeEngine.cwd)", "ios_native": true]
+            return ["command": seg, "exit_code": 0, "stdout": "当前工作目录：\(TrollRuntimeEngine.cwd)"]
         }
         // 原生命令表：curl/wget/python3/ta/base64/strings 等有 Swift 原生实现，直接报已装+可直跑
         if iosNativeCommands.contains(target) {
@@ -1374,8 +1358,7 @@ final class ShellExecTool: MCPTool {
                 note += "\n直接执行：\(target) 参数...（原生直跑，不闪退不挂起）"
             }
             return ["command": seg, "exit_code": 0,
-                    "stdout": "\(target): ✅ 已安装（App 原生命令实现，可直接 \(target) ... 执行）",
-                    "ios_native": true, "note": note]
+                    "stdout": "\(target): ✅ 已安装（App 原生命令实现，可直接 \(target) ... 执行）", "note": note]
         }
         // v6.6.0：git 探测（command -v git / which git）——真实可用性：
         // ①统一环境 Alpine rootfs 预装 git（v6.5.2 起）②App 内置 bin/git.py(dulwich) 兜底。
@@ -1385,21 +1368,18 @@ final class ShellExecTool: MCPTool {
             let gitPy = Bundle.main.bundlePath + "/bin/git.py"
             if fm.fileExists(atPath: gitPy) {
                 return ["command": seg, "exit_code": 0,
-                        "stdout": "git: ✅ 已安装（App 内置纯 Python git：git.py/dulwich，原生直跑）\n用法：直接 git clone/add/commit/push/log/status ...（App 内置纯 Python git，原生直跑；仓库目录 = 会话 cwd）",
-                        "ios_native": true, "note": "探测结果来自 bin/git.py（dulwich porcelain，iOS 沙箱拦 fork 真 git 但 git.py 原生可用）"]
+                        "stdout": "git: ✅ 已安装（App 内置纯 Python git：git.py/dulwich，原生直跑）\n用法：直接 git clone/add/commit/push/log/status ...（App 内置纯 Python git，原生直跑；仓库目录 = 会话 cwd）", "note": "探测结果来自 bin/git.py（dulwich porcelain，iOS 沙箱拦 fork 真 git 但 git.py 原生可用）"]
             }
             let rootfs = NSHomeDirectory() + "/Documents/alpine-rootfs"
             for sub in ["/usr/bin/", "/bin/"] {
                 let p = rootfs + sub + "git"
                 if fm.isExecutableFile(atPath: p) {
                     return ["command": seg, "exit_code": 0,
-                            "stdout": "git: ✅ 已安装（Alpine rootfs 预装，直接 git ... 执行，不走自动装不闪退）\n用法：git clone/add/commit/push/log/status ...（Alpine 内，rootfs 自带无需 apk）",
-                            "ios_native": true, "note": "探测结果来自 alpine-rootfs 预装 git"]
+                            "stdout": "git: ✅ 已安装（Alpine rootfs 预装，直接 git ... 执行，不走自动装不闪退）\n用法：git clone/add/commit/push/log/status ...（Alpine 内，rootfs 自带无需 apk）", "note": "探测结果来自 alpine-rootfs 预装 git"]
                 }
             }
             return ["command": seg, "exit_code": 1,
-                    "stdout": "git: ❌ 不可用（无 bin/git.py 也无 rootfs git）\n说明：iOS 沙箱拦 fork 真 git 跑不了；git.py 是唯一原生路径（dulwich），若缺失请反馈构建打包问题",
-                    "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体）"]
+                    "stdout": "git: ❌ 不可用（无 bin/git.py 也无 rootfs git）\n说明：iOS 沙箱拦 fork 真 git 跑不了；git.py 是唯一原生路径（dulwich），若缺失请反馈构建打包问题", "note": "探测结果来自文件系统（未执行命令本体）"]
         }
         let fm = FileManager.default
         // 1) App 原生 bin
@@ -1422,8 +1402,7 @@ final class ShellExecTool: MCPTool {
             } else {
                 out += "\n运行方式：\(runHint)"
             }
-            return ["command": seg, "exit_code": 0, "stdout": out,
-                    "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发解释器高 CPU 被系统杀）"]
+            return ["command": seg, "exit_code": 0, "stdout": out, "note": "探测结果来自文件系统（未执行命令本体，避免触发解释器高 CPU 被系统杀）"]
         }
         var out = "\(target): ❌ 未安装（iOS 无原生 \(target)）"
         if target == "git" || target == "vim" || target == "curl" || target == "wget" {
@@ -1431,8 +1410,7 @@ final class ShellExecTool: MCPTool {
         } else {
             out += "\n安装提示：用 tool.install 安装，或统一环境里 apk add \(target)。"
         }
-        return ["command": seg, "exit_code": 1, "stdout": out,
-                "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发模拟器高 CPU 被系统杀）"]
+        return ["command": seg, "exit_code": 1, "stdout": out, "note": "探测结果来自文件系统（未执行命令本体，避免触发模拟器高 CPU 被系统杀）"]
     }
 
     /// v6.1.5-14bp/14br/14bs：原生工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令/
@@ -1478,7 +1456,7 @@ final class ShellExecTool: MCPTool {
                 stdout += (r["stdout"] as? String ?? "") + "\n"
                 if (r["exit_code"] as? Int ?? 0) != 0 { exitCode = 1 }
             }
-            return ["command": trimmed, "exit_code": exitCode, "stdout": stdout, "ios_native": true,
+            return ["command": trimmed, "exit_code": exitCode, "stdout": stdout,
                     "note": "批量探测结果来自文件系统/原生命令表（未执行命令本体，避免触发解释器高 CPU 被系统杀）"]
         }
         guard let target = probeTargetOfSegment(trimmed) else { return nil }
@@ -1517,8 +1495,7 @@ final class ShellExecTool: MCPTool {
             return [
                 "command": command,
                 "exit_code": 1,
-                "stdout": "Usage: grep [-i] [-r] [-l] [-c] [-n] [-v] '<pattern>' <file|dir>...",
-                "ios_native": true
+                "stdout": "Usage: grep [-i] [-r] [-l] [-c] [-n] [-v] '<pattern>' <file|dir>..."
             ]
         }
         
@@ -1545,8 +1522,7 @@ final class ShellExecTool: MCPTool {
                         return [
                             "command": command,
                             "exit_code": 1,
-                            "stdout": "grep: \(t): Is a directory (use -r to recurse)",
-                            "ios_native": true
+                            "stdout": "grep: \(t): Is a directory (use -r to recurse)"
                         ]
                     }
                 } else {
@@ -1556,14 +1532,13 @@ final class ShellExecTool: MCPTool {
                 return [
                     "command": command,
                     "exit_code": 1,
-                    "stdout": "grep: \(t): No such file or directory",
-                    "ios_native": true
+                    "stdout": "grep: \(t): No such file or directory"
                 ]
             }
         }
         
         guard !files.isEmpty else {
-            return ["command": command, "exit_code": 1, "stdout": "grep: no files matched", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "grep: no files matched"]
         }
         
         // v3.6.19d: 修复 grep 对二进制失效的根因——原来用 String(contentsOfFile:encoding:.utf8) 读文件，
@@ -1645,7 +1620,6 @@ final class ShellExecTool: MCPTool {
             "command": command,
             "exit_code": 0,
             "stdout": out,
-            "ios_native": true,
             "hint": "iOS native grep: -i/-r/-l/-c/-n/-v 同标准；默认按字面字节匹配(可搜二进制如 cdhash/CodeDirectory)，-E 启用正则；-a 自动(二进制可打印化)。不再因二进制 UTF-8 解码失败而静默输出空。"
         ]
     }
@@ -1667,13 +1641,13 @@ final class ShellExecTool: MCPTool {
         // v4.0.0: 支持选项(如 -r/-f)，跳过选项取源/目标路径
         let args = parts.dropFirst().filter { !$0.hasPrefix("-") }
         guard args.count >= 2 else {
-            return ["command": command, "exit_code": 1, "stdout": "Usage: cp [-r] [-f] <source> <destination>", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "Usage: cp [-r] [-f] <source> <destination>"]
         }
         
         let src = ShellExecTool.normalizePath((args[0] as NSString).expandingTildeInPath)
         let dst = ShellExecTool.normalizePath((args[1] as NSString).expandingTildeInPath)
         guard fm.fileExists(atPath: src) else {
-            return ["command": command, "exit_code": 1, "stdout": "cp: \(src): No such file or directory", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "cp: \(src): No such file or directory"]
         }
         
         // v4.3.13: 目标若是已存在目录 → 复制到 dst/(basename)。旧实现 dst=目录且含同名文件时报"同名项目"。
@@ -1684,20 +1658,20 @@ final class ShellExecTool: MCPTool {
             : dst
         
         if fm.fileExists(atPath: target), !force {
-            return ["command": command, "exit_code": 1, "stdout": "cp: \(target) already exists (use cp -f to overwrite)", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "cp: \(target) already exists (use cp -f to overwrite)"]
         }
         if fm.fileExists(atPath: target) {
             // -f 覆盖：先删已存在目标再复制
             do { try fm.removeItem(atPath: target) }
             catch {
-                return ["command": command, "exit_code": 1, "stdout": "cp: failed to remove \(target): \(error.localizedDescription)", "ios_native": true]
+                return ["command": command, "exit_code": 1, "stdout": "cp: failed to remove \(target): \(error.localizedDescription)"]
             }
         }
         do {
             try fm.copyItem(atPath: src, toPath: target)
-            return ["command": command, "exit_code": 0, "stdout": "Copied: \(src) -> \(target)", "ios_native": true]
+            return ["command": command, "exit_code": 0, "stdout": "Copied: \(src) -> \(target)"]
         } catch {
-            return ["command": command, "exit_code": 1, "stdout": "cp failed: \(error.localizedDescription)", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "cp failed: \(error.localizedDescription)"]
         }
     }
     
@@ -1748,7 +1722,7 @@ final class ShellExecTool: MCPTool {
         let parts = command.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
         
         guard parts.count >= 2 else {
-            return ["command": command, "exit_code": 1, "stdout": "Usage: plutil -p <file.plist>  或  plutil -convert xml1 [-o out.xml] <file.plist>", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "Usage: plutil -p <file.plist>  或  plutil -convert xml1 [-o out.xml] <file.plist>"]
         }
         
         // 解析参数：-convert xml1 / -o <out> / -p；文件路径=首个非 - 参数
@@ -1771,39 +1745,39 @@ final class ShellExecTool: MCPTool {
         }
         
         guard !filePath.isEmpty else {
-            return ["command": command, "exit_code": 1, "stdout": "plutil: no file specified", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "plutil: no file specified"]
         }
         
         let path = ShellExecTool.normalizePath((filePath as NSString).expandingTildeInPath)
         guard fm.fileExists(atPath: path) else {
-            return ["command": command, "exit_code": 1, "stdout": "plutil: \(path): No such file or directory", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "plutil: \(path): No such file or directory"]
         }
         
         // v4.3.13: 改用 PropertyListSerialization 全类型解析——支持二进制 plist、嵌套 Data/Date/数字/布尔。
         // 旧实现用 NSDictionary(contentsOfFile:)+JSONSerialization，遇 Data/Date 抛错、二进制 plist 读取失败 → 空输出。
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) else {
-            return ["command": command, "exit_code": 1, "stdout": "plutil: Failed to read plist (binary/xml parse)", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "plutil: Failed to read plist (binary/xml parse)"]
         }
         
         if convertXML {
             guard let xml = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else {
-                return ["command": command, "exit_code": 1, "stdout": "plutil: Failed to convert to xml1", "ios_native": true]
+                return ["command": command, "exit_code": 1, "stdout": "plutil: Failed to convert to xml1"]
             }
             if let out = outPath {
                 let dest = ShellExecTool.normalizePath((out as NSString).expandingTildeInPath)
                 do {
                     try xml.write(to: URL(fileURLWithPath: dest))
-                    return ["command": command, "exit_code": 0, "stdout": "Converted plist to XML: \(dest)", "ios_native": true]
+                    return ["command": command, "exit_code": 0, "stdout": "Converted plist to XML: \(dest)"]
                 } catch {
-                    return ["command": command, "exit_code": 1, "stdout": "plutil: failed to write \(dest): \(error.localizedDescription)", "ios_native": true]
+                    return ["command": command, "exit_code": 1, "stdout": "plutil: failed to write \(dest): \(error.localizedDescription)"]
                 }
             }
-            return ["command": command, "exit_code": 0, "stdout": String(data: xml, encoding: .utf8) ?? "", "ios_native": true]
+            return ["command": command, "exit_code": 0, "stdout": String(data: xml, encoding: .utf8) ?? ""]
         }
         
         // -p 打印：递归序列化为可读文本（全类型）
-        return ["command": command, "exit_code": 0, "stdout": plutilPrint(plist, indent: 0), "ios_native": true]
+        return ["command": command, "exit_code": 0, "stdout": plutilPrint(plist, indent: 0)]
     }
     
     /// v4.3.13: plutil -p 打印辅助——递归把 plist 全类型(字典/数组/Data/Date/数字/布尔/字符串)转为可读文本
@@ -1858,14 +1832,14 @@ final class ShellExecTool: MCPTool {
         else if dq != nil { openQuote = "\"" }
         else if sq != nil { openQuote = "'" }
         else {
-            return ["command": command, "exit_code": 1, "stdout": "Usage: sqlite3 <db_file> \"SELECT * FROM table\"", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "Usage: sqlite3 <db_file> \"SELECT * FROM table\""]
         }
         guard let qStart = command.firstIndex(of: openQuote) else {
-            return ["command": command, "exit_code": 1, "stdout": "Usage: sqlite3 <db_file> \"SELECT * FROM table\"", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "Usage: sqlite3 <db_file> \"SELECT * FROM table\""]
         }
         let qRest = command[command.index(after: qStart)...]
         guard let qEnd = qRest.firstIndex(of: openQuote) else {
-            return ["command": command, "exit_code": 1, "stdout": "Usage: sqlite3 <db_file> \"SELECT * FROM table\"", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "Usage: sqlite3 <db_file> \"SELECT * FROM table\""]
         }
         let query = String(qRest[..<qEnd])
 
@@ -1873,19 +1847,19 @@ final class ShellExecTool: MCPTool {
         let beforeQuote = command[..<qStart].trimmingCharacters(in: .whitespaces)
         let parts = beforeQuote.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
         guard parts.count >= 2 else {
-            return ["command": command, "exit_code": 1, "stdout": "Usage: sqlite3 <db_file> \"SELECT * FROM table\"", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "Usage: sqlite3 <db_file> \"SELECT * FROM table\""]
         }
         var dbArg = parts[1]
         if dbArg.hasPrefix("\""), dbArg.hasSuffix("\"") { dbArg = String(dbArg.dropFirst().dropLast()) }
         if dbArg.hasPrefix("'"), dbArg.hasSuffix("'") { dbArg = String(dbArg.dropFirst().dropLast()) }
         let dbPath = ShellExecTool.normalizePath((dbArg as NSString).expandingTildeInPath)
         guard fm.fileExists(atPath: dbPath) else {
-            return ["command": command, "exit_code": 1, "stdout": "sqlite3: \(dbPath): No such file", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "sqlite3: \(dbPath): No such file"]
         }
         
         var db: OpaquePointer? = nil
         guard sqlite3_open(dbPath, &db) == SQLITE_OK else {
-            return ["command": command, "exit_code": 1, "stdout": "sqlite3: Failed to open database", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "sqlite3: Failed to open database"]
         }
         defer { sqlite3_close(db) }
 
@@ -1916,28 +1890,28 @@ final class ShellExecTool: MCPTool {
             switch cmd {
             case ".tables":
                 let (r, e) = execSQL("SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY name")
-                if let e = e { return ["command": command, "exit_code": 1, "stdout": "sqlite3 error: \(e)", "ios_native": true] }
-                return ["command": command, "exit_code": 0, "stdout": r.isEmpty ? "(no tables)" : r.joined(separator: "\n"), "ios_native": true]
+                if let e = e { return ["command": command, "exit_code": 1, "stdout": "sqlite3 error: \(e)"] }
+                return ["command": command, "exit_code": 0, "stdout": r.isEmpty ? "(no tables)" : r.joined(separator: "\n")]
             case ".databases":
-                return ["command": command, "exit_code": 0, "stdout": dbPath, "ios_native": true]
+                return ["command": command, "exit_code": 0, "stdout": dbPath]
             case ".schema":
                 let tbl = comps.count > 1 ? comps[1] : ""
                 let sql = tbl.isEmpty
                     ? "SELECT sql FROM sqlite_master WHERE type IN ('table','view','index') ORDER BY name"
                     : "SELECT sql FROM sqlite_master WHERE type IN ('table','view','index') AND tbl_name='\(tbl)' ORDER BY name"
                 let (r, e) = execSQL(sql)
-                if let e = e { return ["command": command, "exit_code": 1, "stdout": "sqlite3 error: \(e)", "ios_native": true] }
-                return ["command": command, "exit_code": 0, "stdout": r.isEmpty ? "(no schema)" : r.joined(separator: "\n"), "ios_native": true]
+                if let e = e { return ["command": command, "exit_code": 1, "stdout": "sqlite3 error: \(e)"] }
+                return ["command": command, "exit_code": 0, "stdout": r.isEmpty ? "(no schema)" : r.joined(separator: "\n")]
             case ".indexes":
                 let tbl = comps.count > 1 ? comps[1] : ""
                 let sql = tbl.isEmpty
                     ? "SELECT name FROM sqlite_master WHERE type='index' ORDER BY name"
                     : "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='\(tbl)' ORDER BY name"
                 let (r, e) = execSQL(sql)
-                if let e = e { return ["command": command, "exit_code": 1, "stdout": "sqlite3 error: \(e)", "ios_native": true] }
-                return ["command": command, "exit_code": 0, "stdout": r.isEmpty ? "(no indexes)" : r.joined(separator: "\n"), "ios_native": true]
+                if let e = e { return ["command": command, "exit_code": 1, "stdout": "sqlite3 error: \(e)"] }
+                return ["command": command, "exit_code": 0, "stdout": r.isEmpty ? "(no indexes)" : r.joined(separator: "\n")]
             default:
-                return ["command": command, "exit_code": 1, "stdout": "sqlite3: unsupported dot command '\(cmd)'. Supported: .tables .schema [tbl] .databases .indexes [tbl]. For arbitrary queries use: sqlite3 \(dbPath) \"SELECT ...\"", "ios_native": true]
+                return ["command": command, "exit_code": 1, "stdout": "sqlite3: unsupported dot command '\(cmd)'. Supported: .tables .schema [tbl] .databases .indexes [tbl]. For arbitrary queries use: sqlite3 \(dbPath) \"SELECT ...\""]
             }
         }
 
@@ -1945,9 +1919,9 @@ final class ShellExecTool: MCPTool {
         guard sqlite3_prepare_v2(db, query, -1, &statement, nil) == SQLITE_OK else {
             if let err = sqlite3_errmsg(db) {
                 let msg = String(cString: err)
-                return ["command": command, "exit_code": 1, "stdout": "sqlite3 error: \(msg)", "ios_native": true]
+                return ["command": command, "exit_code": 1, "stdout": "sqlite3 error: \(msg)"]
             }
-            return ["command": command, "exit_code": 1, "stdout": "sqlite3: Failed to prepare query", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "sqlite3: Failed to prepare query"]
         }
         defer { sqlite3_finalize(statement) }
 
@@ -1987,8 +1961,7 @@ final class ShellExecTool: MCPTool {
         return [
             "command": command,
             "exit_code": 0,
-            "stdout": rows.joined(separator: "\n"),
-            "ios_native": true
+            "stdout": rows.joined(separator: "\n")
         ]
     }
     
@@ -2004,15 +1977,15 @@ final class ShellExecTool: MCPTool {
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
         var size = 0
         guard sysctl(&mib, u_int(mib.count), nil, &size, nil, 0) == 0, size > 0 else {
-            return ["command": command, "exit_code": 1, "stdout": "ps: 无法读取进程列表 (sysctl size)", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "ps: 无法读取进程列表 (sysctl size)"]
         }
         let count = size / MemoryLayout<kinfo_proc>.size
         guard count > 0, count < 2000 else {
-            return ["command": command, "exit_code": 1, "stdout": "ps: 进程数异常 (\(count))", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "ps: 进程数异常 (\(count))"]
         }
         var procList = [kinfo_proc](repeating: kinfo_proc(), count: count)
         guard sysctl(&mib, u_int(mib.count), &procList, &size, nil, 0) == 0 else {
-            return ["command": command, "exit_code": 1, "stdout": "ps: 无法读取进程列表 (sysctl read)", "ios_native": true]
+            return ["command": command, "exit_code": 1, "stdout": "ps: 无法读取进程列表 (sysctl read)"]
         }
         
         var lines = ["PID   PPID  NAME"]
@@ -2033,7 +2006,6 @@ final class ShellExecTool: MCPTool {
             "command": command,
             "exit_code": 0,
             "stdout": lines.joined(separator: "\n"),
-            "ios_native": true,
             "hint": "iOS native ps: real process table (sysctl), max 200 entries"
         ]
     }
