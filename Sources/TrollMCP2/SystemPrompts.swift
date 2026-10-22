@@ -73,7 +73,7 @@ final class SystemPrompts {
               * shell.exec 统一环境(v6.6.0——无需选择环境):
                 - 全部命令默认在 TrollRuntime（Alpine Linux 完整工具链——Asbestos 解释器）执行；
                   iOS 路径自动 bind 为 /ios_* 直读直写（/var/mobile/Documents/Workspace→/ios_workspace 等）
-                - python3/python 首词自动走原生 ARM64 CPython（芯片直跑 numpy/pandas——快）；要 Alpine 版 Python 用 sh -c 'python3 ...'
+                - python3/python 在统一环境（Alpine）运行——完整 CPython + pip（apk 可装 numpy/pandas）
                 - iOS 特有命令（plutil 等）内部自动原生兜底——无需指定环境
                 - 结果里看 `runtime_actual` 字段确认实际执行环境（alpine=统一环境 / ios=原生）
                 - 缺轻量工具（tar/jq/gdb 等）自动 apk add 并重试一次；重量级工具用 tool.install 装
@@ -433,15 +433,13 @@ final class SystemPrompts {
       完整内容再分析, 绝不基于截断片段下结论; 逆向/分析类命令建议 full=true 或 limit=50000。
     - UNIFIED ENVIRONMENT (v6.6.0——路由废除): shell.exec 无 runtime 参数——全部命令默认在统一环境
       TrollRuntime（Alpine Linux 完整工具链——Asbestos 解释器）执行；iOS 路径自动 bind（/ios_* 直读直写）。
-      python3 首词自动走原生 CPython（芯片直跑）；iOS 特有命令（plutil 等）内部自动原生兜底。
+      iOS 特有命令（plutil/sysctl/notifyutil 等 Alpine 无）内部自动原生兜底；其余全部命令统一在环境执行。
       结果里看 `runtime_actual`（alpine=统一环境 / ios=原生）。遇 "native pipe not supported" 等错误，
       先查 auto-bind 路径/命令本身，不要当成环境切换失败——环境是统一的，无需切换。
-    - NATIVE COVERAGE (v14c3 原生化): 以下命令【原生已覆盖，直接调用即原生】：
-      ls/cat/echo/pwd/touch/wc/md5sum/sha256sum/diff/hexdump/curl/wget/plutil/sqlite3/unzip/df/free/uname/uptime/
-      hostname/ps/top/kill/ifconfig/netstat/nslookup/tar/gzip/gunzip/base64/strings/nm/objdump/class-dump/
-      python3/git/chmod/chown/lua/node/r2/cstool/jq/tree/xz/which 及 bin 注入工具(ldid/optool 等)。
-      【保留在统一环境（Alpine）的完整版】：sed/awk/grep/find/head/tail/rm/mv/cp/mkdir/ln/sh 等系统命令——
-      复杂文本处理/脚本仍走统一环境（原生是基础版，复杂 regex/-i 等用环境完整版）。
+    - UNIFIED COVERAGE (v6.6.0——单一环境): 全部命令在统一环境（TrollRuntime/Alpine 完整工具链）执行——
+      ls/cat/grep/find/sed/awk/tar/git/python3/sqlite3/curl/ps/df 等全部可用，apk add 任意装包（pip/git/编译链）。
+      原生兜底仅两类：iOS 特有命令（plutil/sysctl/notifyutil/uicache/sbreload/idevice_id/swift——Alpine 无）
+      与 bin/ 内置二进制（llvm-objdump/llvm-nm/llvm-strings/readelf 等——App 自带原生工具）。
     - COMMAND EXISTENCE (v4.5.9, 实测边界): App 视角下 `ls /usr/bin` 目录枚举只显示系统 daemon 子集
       (swift-inspect/sysdiagnose 等)，常用命令(chmod/ls/cp/launchctl)不会出现在目录列表里——但【直接路径访问正常】。
       确认某命令是否存在，用 `command -v <名>` 或 `ls -la /usr/bin/<名>` / `/usr/sbin/<名>`；【不要】用 `ls <目录>` 枚举
@@ -452,8 +450,7 @@ final class SystemPrompts {
       /var/mobile 整棵【不】自动绑定(自引用→内核污染→崩溃); 读指定 App 数据容器用 /ios_appdata 下 UUID 路径 或 bind_app bundle_id:<id>→/ios_data_<app>
       (只读), 写用 bind_app_write(先自动备份 Documents+Library 到工作区 backups/)。auto-bind 只改命令行不改脚本内
       路径 — sh/heredoc 脚本里用 /ios_* 路径, 或改原生 python3 脚本。
-    - GIT (v4.4.9, iOS 沙箱拦 fork 真 git 跑不了): 用 App 内置纯 Python git `python3 <app>/bin/git.py clone <url> <dir>` /
-      init/add/commit/log/status / push [remote] [refspec]; https 或 PAT(SSH 需 paramiko 未内置)。首次用 clone 冒烟。
+    - GIT (v6.6.0): 统一环境（Alpine）直接使用——rootfs 预装 git 2.x，clone/pull/push/log 全支持；
     - PROVISION (auto): 缺工具自动 apk add + 重试一次; 安装失败读结构化诊断, 重试一次或说明真因, 不盲重试;
       安装进度 60-240s 属正常, 别解读为卡死。iOS 构建工具链(Theos+clang)不可装, 用 PC 交叉编译 / GitHub Actions。
 
@@ -472,7 +469,7 @@ final class SystemPrompts {
     - 读 App 数据容器: `bind_app bundle_id:<id>` 后 python3/原生读小文件; 【写】用 `app_write_file`(原生直写, 写前自动备份)。
     - Native `grep -a` on binary/Mach-O content is UNRELIABLE (returns 0 even for literal class names) — don't grep a
       binary; use `inject binary_symbols` or grep only extracted text (already-copied .txt / decrypted payload).
-    - `file` 走 Alpine(auto-bind)可读 iOS 文件。`otool`/`class-dump` 是 macOS-only 不在 Alpine; nm/strings 未打包进 App(靠 binary_symbols 原生 fallback)。
+    - `file` 在统一环境（Alpine auto-bind）可读 iOS 文件。`otool`/`class-dump` 是 macOS-only 不在 Alpine；nm/strings/objdump 用统一环境 Alpine binutils 或 inject binary_symbols 原生。
     - LOCALIZATION files (Localizable.strings): if they are BINARY plists, run `plutil -convert json -o <out> <in>` /
       `plutil -p <in>` FIRST, then grep the converted text. Don't grep binary .strings directly.
     - IAP / in-app-purchase analysis: search product-ID patterns (`com.<bundle>.[a-z_]+`) and StoreKit method names

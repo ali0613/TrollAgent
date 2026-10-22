@@ -74,7 +74,7 @@
 
 ## 架构要点
 - **注册中心**：`MCPCore.swift` 单点注册全部工具，默认全量启用（37 个大工具）
-- **Alpine 用户态**：内置 iSH，AI 可自动 `apk add` 安装任意 Linux 工具（python3/git/sqlite/jq…），并通过自动 bind 直读 iOS 文件
+- **统一 Linux 用户态**：内置 TrollRuntime（Asbestos 解释器——Alpine 完整工具链），AI 可自动 `apk add` 安装任意 Linux 工具（python3/git/sqlite/jq…），并通过自动 bind 直读 iOS 文件（iSH 已退役）
 - **原生 iOS 工具三通道**：内置 bin / GitHub Actions 交叉编译 / 自写 dylib（`inject load_dylib`）
 - **TrollStore 机制**：内置 setuid root 工具链（ldid/optool/insert_dylib/ct_bypass）、trollstorehelper 静默安装
 - **失败边界**：高优先级工具统一 `error_code/reason/next_step`，拒绝误导性报错

@@ -36,7 +36,7 @@ enum ShellDiag {
 final class ShellExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "shell.exec",
-        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux 完整工具链执行（Asbestos 解释器——apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写；python3/python 首词自动走原生 ARM64 CPython（芯片直跑 numpy，性能快）；iOS 特有命令(plutil/sysctl 等)内部自动走 iOS 原生兜底——无需指定环境，结果里看 runtime_actual 字段。缺轻量工具自动 apk add 并重试一次；重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)需 tool.install 手动装. Use for: file ops, system info, network, text processing.",
+        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux 完整工具链执行（Asbestos 解释器——apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写；iOS 特有命令(plutil/sysctl 等)内部自动走 iOS 原生兜底——无需指定环境，结果里看 runtime_actual 字段。缺轻量工具自动 apk add 并重试一次；重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)需 tool.install 手动装. Use for: file ops, system info, network, text processing.",
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",
@@ -195,7 +195,7 @@ final class ShellExecTool: MCPTool {
                 "cwd": TrollRuntimeEngine.cwd,
                 "ios_native": false,
                 "runtime_actual": "alpine",   // v6.0.28: 标明实际运行环境
-                "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Alpine Linux environment (auto-routed: needs full toolchain). 缺工具时系统已自动 apk add 安装并重试一次。"
+                "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Unified environment (Alpine Linux — TrollRuntime). 缺工具时系统已自动 apk add 安装并重试一次。"
             ]
             if finalTimed { result["timed_out"] = true }
             AuditLog.shared.log("shell.exec (alpine auto)", detail: String(trimmed.prefix(100)))
