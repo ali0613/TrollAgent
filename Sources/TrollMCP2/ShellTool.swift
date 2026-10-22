@@ -156,7 +156,6 @@ final class ShellExecTool: MCPTool {
             return probe
         }
 
-        // P2 环境自动路由：不再由 agent 手动 env 指定切环境（横跳旋钮拆掉）。
         // v6.6.0: 统一环境——移除 runtime/auto 路由。默认全部命令走 TrollRuntime
         // （Alpine Linux 完整工具链——Asbestos 解释器）；iOS 特有命令（plutil 等 Alpine 无）
         // 内部自动原生兜底（不暴露参数，AI 无感）。
@@ -177,7 +176,7 @@ final class ShellExecTool: MCPTool {
             if let guardMsg = ShellExecTool.alpineIOSPathGuard(boundCmd) {
                 return ["command": trimmed, "exit_code": 1, "ios_native": false,
                         "stdout": guardMsg,
-                        "hint": "该命令会被路由到 Alpine，但 Alpine 读不到该 iOS 路径（非绑定目录(Workspace/Containers/System/App数据容器)，或文件>2MB）。三种解法：①先 cp 到 Workspace：`cp <file> /var/mobile/Documents/Workspace/`，再走 Alpine /ios_workspace 直读分析；②App 数据容器走 /ios_appdata 下 UUID 路径；③用原生 shell 工具（strings/nm/hexdump 直读大文件）；④对二进制用 binary.symbols / file analyze。"]
+                        "hint": "该命令在统一环境（TrollRuntime）执行，但读不到该 iOS 路径（非绑定目录(Workspace/Containers/System/App数据容器)，或文件>2MB）。三种解法：①先 cp 到 Workspace：`cp <file> /var/mobile/Documents/Workspace/`，再走 Alpine /ios_workspace 直读分析；②App 数据容器走 /ios_appdata 下 UUID 路径；③用原生 shell 工具（strings/nm/hexdump 直读大文件）；④对二进制用 binary.symbols / file analyze。"]
             }
             let (output, exitCode, timedOut) = TrollRuntimeEngine.exec(boundCmd, timeout: timeout)
             // 14c3 P1原生化: Alpine 工具裁剪（幂等）——原生已覆盖命令从 Alpine 移除，AI 只能走原生
@@ -724,8 +723,8 @@ final class ShellExecTool: MCPTool {
         return removed > 0 ? "Alpine 已裁剪 \(removed) 个原生重复工具（系统命令/busybox 保留）" : ""
     }
 
-    /// P2 环境自动路由：按命令类型自动判定是否必须走 Alpine。
-    /// agent 不再手动传 env 切环境——凡 iOS 原生工具链缺失的命令
+    /// v6.6.0 统一环境辅助：判定命令是否需要 TrollRuntime 工具链（Alpine 完整版）。
+    /// 供 provisionAndRerun 白名单装包用——命令
     /// (装包/解包 deb/完整 shell 脚本/需要 python 等) 自动进 Alpine；
     /// 其余(文件操作/系统信息/网络/分析)默认走 iOS 原生。
     /// v6.6.0: iOS 特有命令检测——Alpine/TrollRuntime 无此命令，内部自动原生兜底
@@ -1242,8 +1241,8 @@ final class ShellExecTool: MCPTool {
             "hint": firstIOS
                 ? "iOS 原生复合命令：支持管道/分号/重定向 (Swift 过滤器 head/tail/grep/wc/sed/awk/sort/uniq/cut/tr/echo)"
                 : (anyIOS
-                    ? "首段走 Alpine 环境执行（链内含 iOS 原生过滤器 head/tail 等）；Alpine 工具（tree/jq 等）在 Alpine 环境正常"
-                    : "复合命令 (含 Alpine 段)：管道/分号/重定向已正确解析")
+                    ? "统一环境复合命令：管道/分号/重定向正常组合（iOS 原生过滤器 + TrollRuntime 工具链自动衔接）"
+                    : "复合命令 (统一环境)：管道/分号/重定向已正确解析")
         ]
     }
     
@@ -2305,7 +2304,7 @@ final class ShellExecTool: MCPTool {
         let pythonPath = Bundle.main.bundlePath + "/bin/python3"
         guard FileManager.default.isExecutableFile(atPath: pythonPath) else {
             return ["command": command, "exit_code": 1,
-                    "stdout": "python3: 原生 Python 未内置（此构建未集成 Python.xcframework）— 请用 iSH 版：sh -c 'python3 ...'（注意 iSH 内不能 import numpy/pandas，会段错误闪退）",
+                    "stdout": "python3: 原生 Python 未内置（此构建未集成 Python.xcframework）— 请用统一环境版：sh -c 'python3 ...'（注意解释器内不能 import numpy/pandas，会段错误）",
                     "ios_native": true]
         }
         let body = command.dropFirst("python3".count)
@@ -2482,7 +2481,7 @@ final class ShellExecTool: MCPTool {
         if iosNativeCommands.contains(target) {
             var note = "探测结果来自原生命令表（\(target) 有 App 内置 Swift 原生实现，无需 Alpine 无需装包）"
             if target == "curl" || target == "wget" {
-                note += "\n直接执行：\(target) 参数...（不走 iSH，不闪退不挂起）"
+                note += "\n直接执行：\(target) 参数...（原生直跑，不闪退不挂起）"
             }
             return ["command": seg, "exit_code": 0,
                     "stdout": "\(target): ✅ 已安装（App 原生命令实现，可直接 \(target) ... 执行）",
@@ -2497,7 +2496,7 @@ final class ShellExecTool: MCPTool {
             let gitPy = Bundle.main.bundlePath + "/bin/git.py"
             if fm.fileExists(atPath: gitPy) {
                 return ["command": seg, "exit_code": 0,
-                        "stdout": "git: ✅ 已安装（App 内置纯 Python git：git.py/dulwich，原生直跑）\n用法：直接 git clone/add/commit/push/log/status ...（原生 ARM64 路由，不走 Alpine 不装包不闪退；仓库目录 = 会话 cwd）",
+                        "stdout": "git: ✅ 已安装（App 内置纯 Python git：git.py/dulwich，原生直跑）\n用法：直接 git clone/add/commit/push/log/status ...（App 内置纯 Python git，原生直跑；仓库目录 = 会话 cwd）",
                         "ios_native": true, "note": "探测结果来自 bin/git.py（dulwich porcelain，iOS 沙箱拦 fork 真 git 但 git.py 原生可用）"]
             }
             let rootfs = NSHomeDirectory() + "/Documents/alpine-rootfs"
@@ -2535,7 +2534,7 @@ final class ShellExecTool: MCPTool {
                 out += "\n运行方式：\(runHint)"
             }
             return ["command": seg, "exit_code": 0, "stdout": out,
-                    "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发 iSH 高 CPU 被系统杀）"]
+                    "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发解释器高 CPU 被系统杀）"]
         }
         var out = "\(target): ❌ 未安装（iOS 无原生 \(target)）"
         if target == "git" || target == "vim" || target == "curl" || target == "wget" {
@@ -2591,7 +2590,7 @@ final class ShellExecTool: MCPTool {
                 if (r["exit_code"] as? Int ?? 0) != 0 { exitCode = 1 }
             }
             return ["command": trimmed, "exit_code": exitCode, "stdout": stdout, "ios_native": true,
-                    "note": "批量探测结果来自文件系统/原生命令表（未执行命令本体，避免触发 iSH 高 CPU 被系统杀）"]
+                    "note": "批量探测结果来自文件系统/原生命令表（未执行命令本体，避免触发解释器高 CPU 被系统杀）"]
         }
         guard let target = probeTargetOfSegment(trimmed) else { return nil }
         return probeSingleTool(target, command: trimmed)
@@ -2721,7 +2720,7 @@ final class ShellExecTool: MCPTool {
             out += (grabbed.isEmpty ? "（无关键行，可能为二进制/旧格式）\n" : grabbed.joined(separator: "\n") + "\n")
         }
         if out.isEmpty { out = "崩溃日志存在但解析为空（可能是 .ips JSON 格式）。可改用: cat \(candidates[0].path)（大文件用 tail）\n" }
-        out += "\n判定参考：Termination Reason 含 JETSAM/CPU/Elapsed CPU → 系统 watchdog 杀（iSH 高 CPU 嫌疑）；EXC_BAD_ACCESS/SIGSEGV → 段错误；EXC_CRASH(SIGKILL) → 被系统终止。把上面输出发回即可定论。"
+        out += "\n判定参考：Termination Reason 含 JETSAM/CPU/Elapsed CPU → 系统 watchdog 杀（解释器高 CPU 嫌疑）；EXC_BAD_ACCESS/SIGSEGV → 段错误；EXC_CRASH(SIGKILL) → 被系统终止。把上面输出发回即可定论。"
         return ["command": command, "exit_code": 0, "stdout": out, "ios_native": true]
     }
 
@@ -4279,7 +4278,7 @@ final class ShellExecTool: MCPTool {
         // unzip/zip 命令已由 autoRouteNeedsAlpine 自动路由到 Alpine 真工具链（真解压，autoBind 后能读 iOS 文件）。
         // 这里兜底：明确报错指向 Alpine，绝不再静默返回假列表。
         return ["command": command, "exit_code": 1, "ios_native": true,
-                "stdout": "native unzip 不支持真实解压（已弃用假列表实现）。unzip/zip 会自动路由到 Alpine 真工具链——直接写 `unzip <iOS路径>/x.zip -d <iOS路径>/out` 即可，系统会 autoBind 并真解压。"]
+                "stdout": "native unzip 不支持真实解压（已弃用假列表实现）。unzip/zip 在统一环境（TrollRuntime）内真解压——直接写 `unzip <iOS路径>/x.zip -d <iOS路径>/out` 即可，系统会 autoBind 并真解压。"]
     }
     
     /// v3.1.33: iOS 原生 df 命令——磁盘空间

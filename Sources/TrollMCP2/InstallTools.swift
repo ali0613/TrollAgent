@@ -79,7 +79,7 @@ final class ToolInstallTool: MCPTool {
                 let isPy = pkg.hasPrefix("py3-") || Self.pythonHints.contains(name)
                 let (ok, note) = smokeTest(name, importMode: isPy)
                 return ["ok": true, "tool": name, "status": ok ? "installed" : "installed_unverified", "source": "alpine_apk", "package": pkg,
-                        "hint": "已 apk add \(pkg)（" + note + "）。直接调用 `\(name) <参数>` 即可——shell.exec 会自动路由 Alpine 并 bind 直读 iOS 路径（如 \(name) /var/mobile/xxx 自动改 /ios_mobile/xxx）；缺依赖时首次调用会自动补齐。若冒烟异常：先 `\(name) --help` 看用法；仍无输出用文件重定向验证（`\(name) ... > /tmp/x; cat /tmp/x`）"]
+                        "hint": "已 apk add \(pkg)（" + note + "）。直接调用 `\(name) <参数>` 即可——统一环境（TrollRuntime）内执行并自动 bind 直读 iOS 路径（如 \(name) /var/mobile/xxx 自动改 /ios_mobile/xxx）；缺依赖时首次调用会自动补齐。若冒烟异常：先 `\(name) --help` 看用法；仍无输出用文件重定向验证（`\(name) ... > /tmp/x; cat /tmp/x`）"]
             }
             InstallationRegistry.shared.finish(ok: false, summary: TrollRuntimeEngine.installDiagnose(apk.output, timedOut: apk.timedOut, exitCode: apk.exitCode))
             lastApkErr = apk.output
@@ -109,7 +109,7 @@ final class ToolInstallTool: MCPTool {
                 InstallationRegistry.shared.finish(ok: true, summary: "pip 已装 \(pipName)")
                 let (ok, note) = smokeTest(pipName, importMode: true)
                 return ["ok": true, "tool": name, "status": ok ? "installed" : "installed_unverified", "source": "pip",
-                        "hint": "已 pip install \(pipName)（" + note + "）。调用必须 `sh -c 'python3 -c ...'` 强制 Alpine（命令名 python3 走原生看不到 Alpine 包）；解释器上含 C 扩展的包较慢，优先用 apk 的 py3- 预编译版"]
+                        "hint": "已 pip install \(pipName)（" + note + "）。调用用 `sh -c 'python3 -c ...'`（命令名 python3 走原生 CPython 看不到 Alpine 包）；解释器上含 C 扩展的包较慢，优先用 apk 的 py3- 预编译版"]
             }
             InstallationRegistry.shared.finish(ok: false, summary: TrollRuntimeEngine.installDiagnose(pip.output, timedOut: pip.timedOut, exitCode: pip.exitCode))
             lastApkErr = pip.output
@@ -158,7 +158,7 @@ final class ToolInstallTool: MCPTool {
                 let out = (r["stdout"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 let exit = r["exit_code"] as? Int ?? 1
                 if exit == 0 && out.contains("IMPORT_OK") {
-                    return (true, "Alpine python 冒烟 `import \(safe)` OK（" + String(out.prefix(60)) + "）——注意：调用必须用 `sh -c 'python3 ...'` 强制 Alpine（命令名 python3 走原生看不到 Alpine 包）")
+                    return (true, "Alpine python 冒烟 `import \(safe)` OK（" + String(out.prefix(60)) + "）——注意：调用用 `sh -c 'python3 ...'`（命令名 python3 走原生 CPython 看不到 Alpine 包）")
                 }
                 let errNote = out.isEmpty ? "无输出" : String(out.prefix(80))
                 return (false, "Alpine python `import \(safe)` 失败（exit \(exit)：" + errNote + "）——包可能没装进 Alpine python，或 C 扩展在解释器段错误（numpy/pandas 用原生 python，已内置）")

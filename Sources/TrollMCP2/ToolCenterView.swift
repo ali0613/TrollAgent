@@ -102,7 +102,7 @@ struct ToolCenterView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("工具按执行环境分三层")
                             .font(.headline)
-                        Text("iOS 系统层直接操作 iPhone；原生层在 App 内执行；Alpine 层跑 Linux 工具链（装包/编译）。shell.exec 自动路由到合适环境。")
+                        Text("统一环境（TrollRuntime）：iOS 原生能力 + Alpine Linux 完整工具链，shell.exec 统一执行——iOS 路径自动 bind 直读直写，无需选择环境。")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }

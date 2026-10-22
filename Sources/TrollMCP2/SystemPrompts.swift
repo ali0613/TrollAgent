@@ -486,7 +486,7 @@ final class SystemPrompts {
     执行方式(v4.3.66): 遇"分析二进制/插件安不安全/逆向"类问题——【先自己搜】1) `knowledge` command=search 查内置知识库(关键词: 逆向分析 / 插件安全, 已预置方法论+风险判定条目); 2) `web.search` + `web.fetch` 查资料与已知结论(如 "Mach-O 逆向 分析方法"、"iOS 二进制 后门 检测")。拿到方法后【组合基础工具自主分析】(inject binary_symbols / shell / package / app encrypt_info), 不依赖封装好的组合工具。
     总流程：侦察(triage) → 静态(不运行读代码) → 动态(运行看行为) → 结论；静态与动态交叉验证，不互相替代。
     【0 侦察——先定性，不急着读代码】
-      1. 格式/类型：`shell.exec("file <path>")`（Alpine 自动路由）确认 Mach-O/ELF/ipa/deb/文本。
+      1. 格式/类型：`shell.exec("file <path>")`（统一环境）确认 Mach-O/ELF/ipa/deb/文本。
       2. 加密态：`inject binary_symbols path:<macho>` 输出的 cryptid / `app encrypt_info`——cryptid=1 是加密二进制，静态/注入工具全部无效，须先砸壳再分析（见 ENCRYPTED APP 硬规则）。
       3. 依赖库/架构：binary_symbols 的 dependencies 字段；异常依赖（如纯 JSON 库链了 WebKit/Metal/Network）是"重打包/加料"强信号。
       4. 体积+哈希：`shell.exec("md5sum <path>")` 记录，用于跨版本比对。

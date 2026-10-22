@@ -142,7 +142,7 @@ enum SeedKnowledgeData {
 # TrollRuntime Alpine Linux 用户态环境
 
 ## 原理
-- 在 iOS 上跑真实 Alpine Linux 用户态：usermode x86 模拟 + 系统调用翻译，类似 WSL1 / Wine。
+- 在 iOS 上跑真实 Alpine Linux 用户态：ARM64 解释器（Asbestos——无 JIT，iOS W^X 合规）+ 系统调用翻译，类似 WSL1。
 - 不是虚拟机/容器：x86 指令由自研解释器 Asbestos（汇编写、direct-threading）逐条解释；
   Linux 进程映射到 iOS 线程组，文件操作转发到 App 沙盒。
 - 无需越狱，iOS 13+；沙盒内始终是 root（权限=宿主 App 的权限）。
@@ -247,7 +247,7 @@ enum SeedKnowledgeData {
 """),
 
     ("内置-逆向-环境工具选择.md", """
-# 工具选择与环境边界（AI 自主决策路由）
+# 工具选择与环境边界（统一环境——无路由）
 
 ## 先判断设备/环境能做什么
 - 手机端（本 App / TrollStore）：侦察、静态提取、砸壳、注入、运行时 Hook、抓包、归档。
