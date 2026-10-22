@@ -1371,6 +1371,8 @@ static long sys_ioctl(int fd, unsigned long req, long arg) {
    真机/本地测试把 Alpine lib 目录挂到 ELF_LIB_PATH。 */
 static const char *guest_path_map(const char *p) {
     const char *lib = getenv("ELF_LIB_PATH");
+    /* v19.28l: 无 env 时 fallback 真机 alpine lib 目录（App 进程不带 env） */
+    if (!lib || !*lib) lib = "/var/mobile/Documents/alpine-rootfs/data/lib";
     if (lib && *lib && p && strncmp(p, "/lib/", 5) == 0) {
         static __thread char buf[512];
         snprintf(buf, sizeof(buf), "%s/%s", lib, p + 5);
@@ -1835,14 +1837,34 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
 }
 
 /* v19.18j: 动态 ELF 检测——返回 interp 是否已加载（elf_runner_main 用）
-   ELF_INTERP_PATH env 覆盖 interp 宿主路径（测试/真机部署用）。 */
+   ELF_INTERP_PATH env 覆盖 interp 宿主路径（测试/真机部署用）。
+   v19.28l: 无 env 时 fallback 真机常见路径（App 进程不带 env，/lib 在 iOS 沙盒不存在）。 */
+static const char *interp_candidates[] = {
+    "/var/mobile/Documents/alpine-rootfs/data/lib/ld-musl-aarch64.so.1",
+    "/var/mobile/Documents/Workspace/linux/ld-musl-aarch64.so.1",
+    NULL
+};
 static int load_dynamic_interp(void) {
     if (!g_interp_name[0]) return 0;
     const char *ip = getenv("ELF_INTERP_PATH");
-    if (!ip || !*ip) ip = g_interp_name;
-    fprintf(stderr, "[elf-runner] 动态 ELF：加载 interp %s\n", ip);
+    if (ip && *ip) {
+        fprintf(stderr, "[elf-runner] 动态 ELF：加载 interp %s\n", ip);
+        uintptr_t i_base = 0, i_entry = 0;
+        if (load_interp(ip, &i_base, &i_entry) != 0) return -1;
+        return 1;
+    }
+    /* 默认 g_interp_name（如 /lib/ld-musl-aarch64.so.1）在 iOS 沙盒不存在，
+       逐个试真机 fallback 路径 */
+    for (int i = 0; interp_candidates[i]; i++) {
+        if (access(interp_candidates[i], R_OK) != 0) continue;
+        fprintf(stderr, "[elf-runner] 动态 ELF：加载 interp %s\n", interp_candidates[i]);
+        uintptr_t i_base = 0, i_entry = 0;
+        if (load_interp(interp_candidates[i], &i_base, &i_entry) != 0) return -1;
+        return 1;
+    }
+    fprintf(stderr, "[elf-runner] interp 无 fallback 可用，尝试原始路径 %s\n", g_interp_name);
     uintptr_t i_base = 0, i_entry = 0;
-    if (load_interp(ip, &i_base, &i_entry) != 0) return -1;
+    if (load_interp(g_interp_name, &i_base, &i_entry) != 0) return -1;
     return 1;
 }
 
