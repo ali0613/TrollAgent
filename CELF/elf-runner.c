@@ -1550,15 +1550,34 @@ static long sys_ioctl(int fd, unsigned long req, long arg) {
 
 /* v19.18j: guest /lib 路径 → 宿主映射（ELF_LIB_PATH env）。
    ld-musl 按 guest 路径找 libc.so（/lib/libc.musl-aarch64.so.1），
-   真机/本地测试把 Alpine lib 目录挂到 ELF_LIB_PATH。 */
+   真机/本地测试把 Alpine lib 目录挂到 ELF_LIB_PATH。
+   v19.28p: 扩展为 guest 根文件系统映射——/bin /usr /etc /sbin /tmp → rootfs 对应目录。
+   alpine-rootfs 的工具是符号链接（usr/bin/awk → /bin/busybox），guest open /bin/busybox
+   需落到 rootfs/bin/busybox 才能解析。 */
 static const char *guest_path_map(const char *p) {
-    const char *lib = getenv("ELF_LIB_PATH");
-    /* v19.28l: 无 env 时 fallback 真机 alpine lib 目录（App 进程不带 env） */
-    if (!lib || !*lib) lib = "/var/mobile/Documents/alpine-rootfs/data/lib";
-    if (lib && *lib && p && strncmp(p, "/lib/", 5) == 0) {
-        static __thread char buf[512];
-        snprintf(buf, sizeof(buf), "%s/%s", lib, p + 5);
-        return buf;
+    static const char *root = NULL;
+    if (!root) {
+        const char *lib = getenv("ELF_LIB_PATH");
+        if (lib && *lib && strstr(lib, "/lib")) {
+            /* ELF_LIB_PATH 指向 <root>/lib → root 为其上一级 */
+            static char rootbuf[512];
+            snprintf(rootbuf, sizeof(rootbuf), "%s", lib);
+            char *s = strrchr(rootbuf, '/');
+            if (s) *s = 0;
+            root = rootbuf;
+        } else {
+            root = "/var/mobile/Documents/alpine-rootfs/data";
+        }
+    }
+    if (p && p[0] == '/' && strncmp(p, "/var/mobile/", 12) != 0) {
+        static __thread char buf[1024];
+        if (strncmp(p, "/lib/", 5) == 0 || strncmp(p, "/bin/", 5) == 0 ||
+            strncmp(p, "/usr/", 5) == 0 || strncmp(p, "/etc/", 5) == 0 ||
+            strncmp(p, "/sbin/", 6) == 0 || strncmp(p, "/tmp/", 5) == 0 ||
+            strncmp(p, "/home/", 6) == 0 || strncmp(p, "/root", 5) == 0) {
+            snprintf(buf, sizeof(buf), "%s%s", root, p);
+            return buf;
+        }
     }
     return p;
 }
