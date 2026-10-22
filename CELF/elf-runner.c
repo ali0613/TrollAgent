@@ -909,29 +909,29 @@ static long vproc_close(int fd) {
 }
 static long sys_getdents64(int fd, void *buf, size_t count) {
 #ifdef __APPLE__
-    /* v19.26: 弃 fdopendir/readdir（真机 ls 列目录 total 0 = readdir 空）。
-       改 Darwin 原生 getdirentries64：从 fd 当前偏移续读、basep 推进，
-       语义与 Linux getdents64 一致（busybox 循环调用直到 0）。
-       v19.27b 修编译：iPhoneOS26.5 SDK dirent.h 未声明 getdirentries64
-       （只有 getdirentries——且其为 64 位 inode 陷阱符号，链接报
-       'getdirentries_is_not_available_when_64_bit_inodes_are_in_effect'）；
-       系统库实际导出 getdirentries64，手动 extern 声明即可。
-       Darwin dirent64: d_ino(8) d_seekoff(8) d_reclen(2) d_namlen(2) d_type(1) d_name[] */
-    extern long getdirentries64(int, void *, size_t, long *);
-    if (fd < 0) return -EBADF;
-    char dbuf[4096];
-    long basep = 0;
-    long n = getdirentries64(fd, dbuf, sizeof(dbuf), &basep);
-    fprintf(stderr, "[gdd] getdirentries64 fd=%d n=%ld errno=%d(%s) basep=%ld\n",
-            fd, n, errno, strerror(errno), basep);
-    if (n < 0) return -errno;
-    if (n == 0) return 0;
+    /* v19.28: 回到 fdopendir+readdir（iOS 无 getdirentries64 符号、getdirentries
+       是 64 位 inode 陷阱符号——两条路都不通；fdopendir/readdir 是 iOS 唯一
+       可用目录读取 API）。v19.25 此方案真机 ls total 0（readdir 空），本次
+       加无条件探针装真机定位真因（fdopendir 失败？readdir 空？转换错？）。 */
+    if (fd < 0 || fd >= 16) return -EBADF;
+    if (!g_dir_cache[fd]) {
+        g_dir_cache[fd] = fdopendir(fd);
+        fprintf(stderr, "[gdd] fdopendir(fd=%d) -> %p errno=%d(%s)\n",
+                fd, (void *)g_dir_cache[fd], errno, strerror(errno));
+        if (!g_dir_cache[fd]) return -errno;
+    }
+    DIR *d = g_dir_cache[fd];
     unsigned char *out = buf;
-    long o = 0, i = 0;
-    while (i < n) {
-        struct dirent *de = (struct dirent *)(dbuf + i);
-        size_t namlen = de->d_namlen;
+    long o = 0;
+    struct dirent *de;
+    errno = 0;
+    int nent = 0;
+    while ((de = readdir(d)) != NULL) {
+        nent++;
+        size_t namlen = strlen(de->d_name);
         size_t lreclen = (namlen + 1 + 19 + 7) & ~(size_t)7;
+        fprintf(stderr, "[gdd]   readdir#%d ino=%llu type=%d namlen=%zu name='%s'\n",
+                nent, (unsigned long long)de->d_ino, de->d_type, namlen, de->d_name);
         if (o + (long)lreclen > (long)count) break;
         memset(out + o, 0, lreclen);
         struct linux_dirent64 *ld = (struct linux_dirent64 *)(out + o);
@@ -940,12 +940,10 @@ static long sys_getdents64(int fd, void *buf, size_t count) {
         ld->d_reclen = (uint16_t)lreclen;
         ld->d_type = de->d_type;
         memcpy(ld->d_name, de->d_name, namlen);
-        fprintf(stderr, "[gdd]   ent ino=%llu namlen=%zu reclen=%u name='%.*s'\n",
-                (unsigned long long)de->d_ino, namlen, de->d_reclen, (int)namlen, de->d_name);
         o += (long)lreclen;
-        i += de->d_reclen;
     }
-    fprintf(stderr, "[gdd] -> out %ld bytes\n", o);
+    fprintf(stderr, "[gdd] fd=%d entries=%d errno=%d(%s) -> out %ld bytes\n",
+            fd, nent, errno, strerror(errno), o);
     return o;
 #else
     /* 本地对照：Linux 原生 getdents64 透传（布局即 Linux dirent64） */
