@@ -572,9 +572,10 @@ static long sys_write(int fd, const void *buf, size_t count) {
 static long sys_read(int fd, void *buf, size_t count) {
     return (long)read(fd, buf, count);
 }
-static DIR *g_dir_cache[16];   /* getdents64：fdopendir 缓存（busybox close 时释放） */
+static DIR *g_dir_cache[256];   /* getdents64：fdopendir 缓存——guest fd 直接在 App 宿主 fd 表分配（首个可达 19+），16 硬上限曾误拒 EBADF */
+#define DIR_CACHE_MAX 256
 static long sys_close(int fd) {
-    if (fd >= 0 && fd < 16 && g_dir_cache[fd]) {
+    if (fd >= 0 && fd < DIR_CACHE_MAX && g_dir_cache[fd]) {
         closedir(g_dir_cache[fd]);
         g_dir_cache[fd] = NULL;
         return 0;   /* DIR 接管 fd，closedir 已释放 */
@@ -925,7 +926,7 @@ static long sys_getdents64(int fd, void *buf, size_t count) {
        fcntl(F_GETPATH)+opendir(path)——标准 POSIX 路径打开，避开 iOS
        fdopendir 的 fd 语义坑；DIR 仍按 fd 缓存（guest 多次 getdents64
        从上次位置续读）。 */
-    if (fd < 0 || fd >= 16) return -EBADF;
+    if (fd < 0 || fd >= DIR_CACHE_MAX) return -EBADF;
     if (!g_dir_cache[fd]) {
         char path[1024];
         if (fcntl(fd, F_GETPATH, path) < 0) {
