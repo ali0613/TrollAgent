@@ -237,8 +237,9 @@ provision_rootfs_tar() {
     chmod +x "$CACHE_DIR/sbin/apk.static" 2>/dev/null || true
 
     # qemu 交叉装包：常用工具链一次到位（--no-scripts 跳过 guest post-install）
-    # v4.3.77：曾加 py3-pandas——实测解释器 import numpy/openblas 段错误闪退（历史；现原生 Python 直跑 numpy）
-    # （崩溃栈 cpu_run_to_interrupt），预装 pandas 反成陷阱，v4.4.2 移除。
+    # v4.3.77：曾加 py3-pandas——OpenMinis 解释器 import numpy/openblas 段错误（崩溃栈 cpu_run_to_interrupt）；
+    # v6.5.0 起 Asbestos 已修复该问题。v6.6.0 原生 Python 退役——统一环境 python3 是唯一路径，
+    # py3-numpy/py3-pandas 按需 apk add（重包不预装——tool.install 手动）。
     # v6.5.2：补全基础集（wget/jq/openssl/bash/bind-tools）——对齐 InstallTools network 组，
     # 根治"运行时 apk 联网装工具缺证书鸡生蛋"。
     qemu-aarch64 "$CACHE_DIR/sbin/apk.static" add --root "$STAGE" --arch "$ALPINE_ARCH" --no-scripts \
