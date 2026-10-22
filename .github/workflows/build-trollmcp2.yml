@@ -807,17 +807,17 @@ jobs:
             if [ -n "$NODEMOBILE" ]; then
               lipo "$NODEMOBILE" -thin arm64 -output /tmp/NodeMobile_arm64.dylib 2>/dev/null || cp "$NODEMOBILE" /tmp/NodeMobile_arm64.dylib
               cat > /tmp/nodecli.c <<'NC'
-              #include <stdio.h>
-              extern int node_start(int argc, char **argv);
-              int main(int argc, char **argv) {
-                  setvbuf(stdout, NULL, _IOLBF, 0);
-                  setvbuf(stderr, NULL, _IOLBF, 0);
-                  int rc = node_start(argc, argv);
-                  fflush(stdout);
-                  fflush(stderr);
-                  return rc;
-              }
-              NC
+          #include <stdio.h>
+          extern int node_start(int argc, char **argv);
+          int main(int argc, char **argv) {
+          setvbuf(stdout, NULL, _IOLBF, 0);
+          setvbuf(stderr, NULL, _IOLBF, 0);
+          int rc = node_start(argc, argv);
+          fflush(stdout);
+          fflush(stderr);
+          return rc;
+          }
+          NC
               SDK=$(xcrun --sdk iphoneos --show-sdk-path)
               if xcrun -sdk iphoneos clang -arch arm64 -isysroot "$SDK" -o native-node-out/node /tmp/nodecli.c /tmp/NodeMobile_arm64.dylib -Wl,-undefined,dynamic_lookup -Wl,-rpath,@executable_path/../Frameworks 2>/tmp/node_build.err; then
                 ORIG_INAME=$(otool -D native-node-out/node 2>/dev/null | tail -1)
