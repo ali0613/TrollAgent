@@ -323,6 +323,18 @@ static socklen_t sockaddr_conv(const void *guest_sa, socklen_t guest_len,
     return guest_len;
 #endif
 }
+/* v19.28j：guest 分配 fd 追踪——guest 异常退出/未 close 的 fd 会泄漏宿主 fd 表；
+   sys_close 不从这里移除（guest close 后宿主已关，退出时 fcntl 有效性检查兜底）。
+   放 socket 族前面（sys_socket/sys_socketpair 最先调用 guest_fd_record）。 */
+static DIR *g_dir_cache[256];   /* getdents64：fdopendir 缓存——guest fd 直接在 App 宿主 fd 表分配（首个可达 19+），16 硬上限曾误拒 EBADF */
+#define DIR_CACHE_MAX 256
+static int g_guest_fds[512];
+static int g_guest_fd_cnt = 0;
+static void guest_fd_record(int fd) {
+    if (fd < 3 || fd >= 512) return;
+    for (int i = 0; i < g_guest_fd_cnt; i++) if (g_guest_fds[i] == fd) return;
+    if (g_guest_fd_cnt < 512) g_guest_fds[g_guest_fd_cnt++] = fd;
+}
 static long sys_socket(int domain, int type, int proto) {
     int fd = socket(domain, type, proto);
     if (fd >= 3) guest_fd_record(fd);
@@ -573,17 +585,6 @@ static long sys_write(int fd, const void *buf, size_t count) {
 }
 static long sys_read(int fd, void *buf, size_t count) {
     return (long)read(fd, buf, count);
-}
-static DIR *g_dir_cache[256];   /* getdents64：fdopendir 缓存——guest fd 直接在 App 宿主 fd 表分配（首个可达 19+），16 硬上限曾误拒 EBADF */
-#define DIR_CACHE_MAX 256
-/* v19.28j：guest 分配 fd 追踪——guest 异常退出/未 close 的 fd 会泄漏宿主 fd 表；
-   sys_close 不从这里移除（guest close 后宿主已关，退出时 fcntl 有效性检查兜底） */
-static int g_guest_fds[512];
-static int g_guest_fd_cnt = 0;
-static void guest_fd_record(int fd) {
-    if (fd < 3 || fd >= 512) return;
-    for (int i = 0; i < g_guest_fd_cnt; i++) if (g_guest_fds[i] == fd) return;
-    if (g_guest_fd_cnt < 512) g_guest_fds[g_guest_fd_cnt++] = fd;
 }
 static long sys_close(int fd) {
     if (fd >= 0 && fd < DIR_CACHE_MAX && g_dir_cache[fd]) {
