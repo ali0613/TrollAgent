@@ -1365,6 +1365,17 @@ long translate_syscall(uint64_t nr,
                               uint64_t a0, uint64_t a1, uint64_t a2,
                               uint64_t a3, uint64_t a4, uint64_t a5) {
     long r;
+    /* v19.28f：无条件 syscall 轨迹（一行一个）——任何命令卡死，LOG 最后一行即卡点；
+       路径类附带 guest 路径（供核对翻译）。正常命令几百行，体积可控。 */
+    {
+        static const char *nm[] = {0};
+        const char *p = (nr==SYS_openat || nr==SYS_newfstatat || nr==SYS_statx ||
+                         nr==SYS_faccessat || nr==SYS_execve) ? (const char*)(uintptr_t)a1 : NULL;
+        fprintf(stderr, "[sy] %llu a0=%llx%s%s\n",
+                (unsigned long long)nr, (unsigned long long)a0,
+                p ? " path=" : "", p ? p : "");
+        fflush(stderr);
+    }
     if (getenv("EMU_TRACE")) {
         fprintf(stderr, "[trace] nr=%llu a0=%llx a1=%llx a2=%llx a3=%llx\n",
                 (unsigned long long)nr, (unsigned long long)a0,
