@@ -637,6 +637,7 @@ static long sys_newfstatat(int dirfd, const char *path, struct linux_stat *st, i
         return 0;
     }
     struct stat s;
+    if (getenv("FSTAT_TRACE")) fprintf(stderr, "[fst] fstatat(dfd=%d path='%s' flags=%d)\n", dirfd, path, flags);
     if (fstatat(dirfd, path, &s, xlate_atflags(flags)) != 0) return -errno;
     memset(st, 0, sizeof(*st));
     st->st_dev = s.st_dev; st->st_ino = s.st_ino; st->st_mode = s.st_mode;
@@ -940,6 +941,16 @@ static long sys_getdents64(int fd, void *buf, size_t count) {
     long r = syscall(217, fd, buf, count);   /* x86_64 getdents64 */
     if (getenv("GDD_TRACE")) {
         fprintf(stderr, "[gdd] fd=%d count=%zu ret=%ld\n", fd, count, r);
+        if (r > 0) {
+            unsigned char *b = buf;
+            for (int k = 0; k < (r < 48 ? r : 48); k++) {
+                fprintf(stderr, "%02x%c", b[k], (k % 16 == 15) ? '\n' : ' ');
+            }
+            fprintf(stderr, "\n");
+            struct { unsigned long ino, off; unsigned short reclen; unsigned char type; char nm[64]; } *d = buf;
+            fprintf(stderr, "[gdd] d0: ino=%lu reclen=%u type=%u name='%s'\n",
+                    d->ino, d->reclen, d->type, d->nm);
+        }
     }
     return r < 0 ? -errno : r;
 #endif
@@ -1052,6 +1063,7 @@ static uint64_t g_heap_base = 0, g_heap_cur = 0, g_heap_top = 0;
 static uint64_t g_stack_base = 0;   /* v10: 栈区记录（MAP_FIXED 重叠判断用） */
 uint64_t g_580_redirect = 0;       /* v19.12: guest 0x580000 写缓冲区重定向基址 */
 static long sys_brk(uintptr_t newbrk) {
+    if (getenv("BRK_TRACE")) fprintf(stderr, "[brk] newbrk=%lx\n", (unsigned long)newbrk);
     /* musl malloc 依赖 brk 扩展堆：brk(0) 返回当前堆顶；brk(nb) 成功返回 nb、失败返回旧堆顶 */
     if (g_heap_base == 0) {
         void *h = mmap(NULL, 16 << 20, PROT_READ | PROT_WRITE,
@@ -1346,7 +1358,9 @@ long translate_syscall(uint64_t nr,
         else r = sys_close((int)a0);
         break;
     case SYS_exit:        r = sys_exit((int)a0); break;
-    case SYS_exit_group:  r = sys_exit_group((int)a0); break;
+    case SYS_exit_group:
+        if (getenv("EXIT_TRACE")) fprintf(stderr, "[exit] code=%d\n", (int)a0);
+        r = sys_exit_group((int)a0); break;
     case SYS_getpid:      r = sys_getpid(); break;
     case SYS_getppid:     r = sys_getppid(); break;
     case SYS_getuid:      r = sys_getuid(); break;

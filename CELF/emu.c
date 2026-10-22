@@ -1012,6 +1012,34 @@ not_ldstp:
         else { E.v[rd][0] = v; E.v[rd][1] = 0; }
         E.pc += 4; return 0;
     }
+    /* ---- SSHLL/USHLL 长型扩展左移（memchr/strstr/tre literal 向量） ----
+           v19.20：immh→sesize 映射 1→8/2→16/4→32/8→64（原实现顺序写反），
+           desize=sesize*2，nelem=128/desize；Q=0 读 Vn 低 64、Q=1 读高 64；目的恒为 128 位视图。
+           immb=shift。修复 0x4b694 str q31 装载错位（锚 ^/$ 与字面量内存污染根因）。 */
+    if ((i & 0x8F80F000) == 0x0F00A000) {
+        int immh = (i >> 19) & 0xF, immb = (i >> 16) & 0xF, q = (i >> 30) & 1;
+        int sesize = 0;
+        if (immh == 1) sesize = 8; else if (immh == 2) sesize = 16;
+        else if (immh == 4) sesize = 32; else if (immh == 8) sesize = 64;
+        if (sesize == 0) { fprintf(stderr, "[emu] SSHLL immh=%d unhandled pc=%llx\n", immh, (unsigned long long)E.pc); E.pc += 4; return 0; }
+        int desize = sesize * 2, nelem = 128 / desize;
+        uint64_t srclo = q ? E.v[rn(i)][1] : E.v[rn(i)][0];
+        for (int k = 0; k < nelem; k++) {
+            uint64_t el = (srclo >> (k * sesize)) & ((1ULL << sesize) - 1);
+            E.v[rd(i)][(k * desize) >> 6] |= (el << immb) << ((k * desize) & 63);
+        }
+        E.pc += 4; return 0;
+    }
+    /* ---- INS vD.elem, Rn（mov vD.b/h/s/d[l], wN/xN）grep/memchr 向量路径 ---- */
+    if ((i & 0xFFE0FC00) == 0x4E001C00) {
+        int esz = (i >> 22) & 3, idx = (i >> 16) & 0xF, rn = (i >> 5) & 0x1F;
+        int q = (i >> 30) & 1;
+        if (esz == 0) { int l = idx & 7; E.v[rd(i)][l >> 3] = (E.v[rd(i)][l >> 3] & ~(0xFFULL << ((l & 7) << 3))) | ((uint64_t)(uint8_t)RZR(rn) << ((l & 7) << 3)); }
+        else if (esz == 1) { int l = idx & 3; E.v[rd(i)][l >> 2] = (E.v[rd(i)][l >> 2] & ~(0xFFFFULL << ((l & 3) << 4))) | ((uint64_t)(uint16_t)RZR(rn) << ((l & 3) << 4)); }
+        else if (esz == 2) { int l = idx & 1; E.v[rd(i)][l] = (E.v[rd(i)][l] & ~0xFFFFFFFFULL) | (uint32_t)RZR(rn); }
+        else { if (q) E.v[rd(i)][1] = RZR(rn); else E.v[rd(i)][0] = RZR(rn); }
+        E.pc += 4; return 0;
+    }
     /* ---- SIMD&FP 双寄存器对访存：STP/LDP S/D/Q（seq 的 ldp d19,d20 等） ---- */
     if ((i & 0x3FC00000) == 0x2D000000 || (i & 0x3FC00000) == 0x2C000000 ||
         (i & 0x3FC00000) == 0x2D400000 || (i & 0x3FC00000) == 0x2C400000) {
@@ -1111,8 +1139,17 @@ not_ldstp:
             else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opc=%d pc=%#llx\n", opc, (unsigned long long)E.pc); return 1; }
             E.pc += 4; return 0;
         }
-        {                                             /* STUR/LDUR imm9（unscaled，bit26=1 且 bit21=0 且 bit24=0） */
-            uint64_t a = RSP(rn(i)) + (uint64_t)sext((i >> 12) & 0x1FF, 9);
+        {                                             /* STUR/LDUR imm9（unscaled）+ pre/post-index（bit26=1 且 bit21=0 且 bit24=0）；
+                                                         v19.20：补 opt 判定——pre(bits11-10=3)/post(=1) 需写回 Rn，
+                                                         此前全按 unscaled 处理导致 str d15,[x1,#0x38]! 不写回 x1，
+                                                         后续 str w,[x1,#8] 误写首项 code_max=0xffffffff（[0-9]/./a+ 全行匹配根因） */
+            int64_t imm9 = sext((i >> 12) & 0x1FF, 9);
+            int opt = (i >> 10) & 3;
+            uint64_t base = RSP(rn(i)), a;
+            if (opt == 0) a = base + (uint64_t)imm9;                       /* unscaled */
+            else if (opt == 1) { a = base; W(rn(i), base + (uint64_t)imm9); }   /* post-index：addr=base，Rn+=imm9 */
+            else if (opt == 3) { a = base + (uint64_t)imm9; W(rn(i), a); }      /* pre-index：addr=base+imm9，Rn=addr */
+            else a = base + (uint64_t)imm9;                                /* opt=2 保留位，保守 unscaled */
             if (opc == 0) mem_st(a, E.v[rd][0], nbytes);
             else if (opc == 1) { uint64_t x = mem_ld(a, nbytes); E.v[rd][0] = x; }
             else { fprintf(stderr, "[emu] UNSUPPORTED fp-ld/st opc=%d pc=%#llx\n", opc, (unsigned long long)E.pc); return 1; }
@@ -1331,11 +1368,11 @@ not_ldstp:
     }
 
     /* ---- EXTR（strtod/floatscan 位提取） ---- */
-    if ((i & 0xFFF00000) == 0x93C00000) {
+    if ((i & 0xFFE00000) == 0x93C00000) {
         int imm = (i >> 10) & 0x3F; uint64_t v = RZR(rn(i)), w = RZR((i >> 16) & 0x1F);
         W(rd(i), imm == 0 ? v : ((v << (64 - imm)) | (w >> imm))); E.pc += 4; return 0;
     }
-    if ((i & 0xFFF00000) == 0x13800000) {
+    if ((i & 0xFFE00000) == 0x13800000) {
         int imm = (i >> 10) & 0x1F; uint32_t v = (uint32_t)RZR(rn(i)), w = (uint32_t)RZR((i >> 16) & 0x1F);
         W(rd(i), (uint64_t)(imm == 0 ? v : ((v << (32 - imm)) | (w >> imm)))); E.pc += 4; return 0;
     }
@@ -1488,8 +1525,8 @@ not_ldstp:
         uint64_t v = ((i >> 31) & 1) ? RZR(rn(i)) : (uint32_t)RZR(rn(i));
         fp_st(rd(i), type, (double)v); E.pc += 4; return 0;
     }
-    if ((i & 0xFFFFFC00) == 0x1E260000) { W(rd(i), (uint64_t)(int32_t)fp_ld(rn(i), 0)); E.pc += 4; return 0; } /* FMOV w,s */
-    if ((i & 0xFFFFFC00) == 0x1E270000) { fp_st(rd(i), 0, (float)(int32_t)RZR(rn(i))); E.pc += 4; return 0; } /* FMOV s,w */
+    if ((i & 0xFFFFFC00) == 0x1E260000) { union { float f; uint32_t u; } cv; cv.f = (float)fp_ld(rn(i), 0); W(rd(i), cv.u); E.pc += 4; return 0; } /* FMOV w,s：位复制（非数值转换！grep 正则 . 的 floatscan 依赖） */
+    if ((i & 0xFFFFFC00) == 0x1E270000) { union { float f; uint32_t u; } cv; cv.u = (uint32_t)RZR(rn(i)); fp_st(rd(i), 0, cv.f); E.pc += 4; return 0; } /* FMOV s,w：位复制 */
     if ((i & 0xFFFFFC00) == 0x9E660000) { W(rd(i), E.v[rn(i)][0]); E.pc += 4; return 0; } /* FMOV x,d：位模式复制（0xf470 long double 构造依赖） */
     if ((i & 0xFFFFFC00) == 0x9E670000) { E.v[rd(i)][0] = RZR(rn(i)); E.v[rd(i)][1] = 0; E.pc += 4; return 0; } /* FMOV d,x：位模式复制（非数值转换！0xf880 窄化依赖） */
     if ((i & 0xFFFFFC00) == 0x9EAE0000) { E.r[i & 0x1F] = E.v[(i >> 5) & 0x1F][1]; E.pc += 4; return 0; } /* FMOV Xd, Vn.D[1]：高 64 位→GP（0xF62D0 等） */
