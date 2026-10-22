@@ -796,14 +796,14 @@ jobs:
             if file "$f" 2>/dev/null | grep -q "Mach-O 64-bit arm64 executable"; then found="$f"; break; fi
           done
           if [ -z "$found" ]; then
-            found=$(find /tmp/node-ios -type f -exec file {} \; 2>/dev/null | grep "Mach-O 64-bit arm64 executable" | head -1 | cut -d: -f1)
+            found=$(find /tmp/node-ios -type f -exec file {} \; 2>/dev/null | grep "Mach-O 64-bit arm64 executable" | head -1 | cut -d: -f1) || true  # v6.6.0-fix26: grep 无匹配退出 1，pipefail+set -e 会挂——|| true
           fi
           if [ -n "$found" ] && [ -f "$found" ]; then
             cp "$found" native-node-out/node
             chmod +x native-node-out/node
             echo ">>> node: $(file "$found" | head -c 120)"
           else
-            NODEMOBILE=$(find /tmp/node-ios -type f -name "NodeMobile" 2>/dev/null | head -1)
+            NODEMOBILE=$(find /tmp/node-ios -type f -name "NodeMobile" 2>/dev/null | head -1) || true  # v6.6.0-fix26
             if [ -n "$NODEMOBILE" ]; then
               lipo "$NODEMOBILE" -thin arm64 -output /tmp/NodeMobile_arm64.dylib 2>/dev/null || cp "$NODEMOBILE" /tmp/NodeMobile_arm64.dylib
               cat > /tmp/nodecli.c <<'NC'
