@@ -16,7 +16,7 @@ let package = Package(
         // 静态库在 ish-stage/libs（CI 产物；本地构建需先跑 scripts/ish-build/*.sh 生成）
         .target(
             name: "TrollRuntime",
-            path: "TrollRuntime",
+            path: "CISH",   // v6.6.0-fix27: fix18 改名漏改 path——目录实际叫 CISH
             cSettings: [
                 // 头文件由 CI 复制到 CISH/include/（build_ish.sh 产物 ish-stage/include/ish）——target 名 TrollRuntime（iSH 血统引擎）
                 // 双根：wrapper.c 用 "ish/..."，iSH 源码内部用 "fs/.../kernel/.../misc.h" 等
