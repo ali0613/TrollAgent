@@ -1528,6 +1528,19 @@ static long sys_sendfile(int out_fd, int in_fd, off_t *offset, size_t count) {
 }
 /* fcntl 简化（busybox 常用 F_GETFL/F_SETFL 等） */
 static long sys_fcntl(int fd, int cmd, long arg) {
+#ifdef F_DUPFD
+    /* v19.28o: iOS 沙盒对 fcntl(F_DUPFD, arg>某值) 报 EPERM（sh 重定向 `>file` 用
+       fcntl(1,F_DUPFD,28) 失败）。手动实现：dup 循环直到 >=arg（Linux 语义）。 */
+    if (cmd == F_DUPFD) {
+        if (arg < 0) return -EINVAL;
+        for (;;) {
+            int n = dup(fd);
+            if (n < 0) return -errno;
+            if (n >= arg) return n;
+            close(n);   /* 太低，继续 */
+        }
+    }
+#endif
     return (long)fcntl(fd, cmd, arg);
 }
 /* ioctl 简化（busybox 常用 TIOCGWINSZ 等） */
@@ -2332,8 +2345,19 @@ int elf_runner_main(int argc, char **argv) {
        transition 表）——含 LMT 历史条目的 tzdata（容器/iOS 同）ttinfo[0]=LMT
        → date 1890。改用 POSIX 格式 TZ（CST-8 = UTC+8 无 DST），不走 TZif
        解析，date 输出正确。emu 忠实执行 musl，非解释器 bug。 */
+    /* v19.28o: PATH 动态加 elf 所在目录——busybox applet 需自身路径可执行
+       （iOS 无 /bin 符号链接机制，sh 内 `grep` 等找 busybox 目录才通）。
+       elf_path 如 /var/.../busybox → PATH 尾加 /var/.../ */
     {
-        const char *env_def[] = { "PATH=/sbin:/usr/sbin:/bin:/usr/bin",
+        char pathbuf[256] = "PATH=/sbin:/usr/sbin:/bin:/usr/bin";
+        const char *slash = strrchr(elf_path, '/');
+        if (slash && slash != elf_path) {
+            size_t blen = strlen(pathbuf);
+            snprintf(pathbuf + blen, sizeof(pathbuf) - blen, ":%s", elf_path);
+            char *tail = strrchr(pathbuf + blen + 1, '/');
+            if (tail) *tail = 0;   /* 去掉文件名，留目录 */
+        }
+        const char *env_def[] = { pathbuf,
                                   "HOME=/var/mobile",
                                   "TZ=CST-8" };
         uintptr_t envstr[8];
