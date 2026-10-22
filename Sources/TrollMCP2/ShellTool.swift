@@ -150,12 +150,12 @@ final class ShellExecTool: MCPTool {
             // v6.6.0-fix15: py3-native 显式命令——原生 Python（iPhone 芯片直跑 numpy/pandas 深度运算）。
             // AI 按场景选择：重计算（大矩阵/数据分析/模型）→ py3-native；日常/装包/生态 → python3（Alpine）。
             if trimmed == "py3-native" || trimmed.hasPrefix("py3-native ") {
-                return runNativePython(String(trimmed.dropFirst("py3-native".count)).trimmingCharacters(in: .whitespaces))
+                return ShellExecTool.runNativePython(String(trimmed.dropFirst("py3-native".count)).trimmingCharacters(in: .whitespaces))
             }
             // v6.6.0-fix15: node-native 显式命令——原生 node（V8 芯片直跑——重 node 任务/构建工具）。
             // AI 按场景选择：重 node 负载 → node-native；轻量 JS 脚本 → 统一环境 Alpine nodejs。
             if trimmed == "node-native" || trimmed.hasPrefix("node-native ") {
-                return runNativeNode(String(trimmed.dropFirst("node-native".count)).trimmingCharacters(in: .whitespaces))
+                return ShellExecTool.runNativeNode(String(trimmed.dropFirst("node-native".count)).trimmingCharacters(in: .whitespaces))
             }
             // v3.7.7: 自动 bind——Alpine 命令引用 iOS 路径时自动挂载顶层 + 改写路径，
             // 让 Alpine 直接读写 iOS 文件（消灭环境漂移，替代单向字节桥接）。
@@ -1238,6 +1238,10 @@ final class ShellExecTool: MCPTool {
         return ["command": "node-native " + args, "exit_code": res.exitCode, "stdout": out,
                 "hint": "node-native：原生 node（V8 芯片直跑——重 node 任务/构建工具）。轻量 JS/日常用 node（统一环境 Alpine nodejs）"]
     }
+
+    /// 工具探测集合（command -v/which/type 判定用）——统一环境（Alpine）已有工具。
+    /// fix7 误删此定义导致编译错——probeTargetOfSegment 仍依赖它。
+    private static let probeNames: Set<String> = ["git", "vim", "vi", "curl", "wget", "make", "cmake", "gcc", "clang", "tar", "unzip", "zip", "gdb", "jq", "r2", "radare2", "python3", "python", "cd"]
 
     private static func probeTargetOfSegment(_ seg: String) -> String? {
         let t = seg.trimmingCharacters(in: .whitespaces)
