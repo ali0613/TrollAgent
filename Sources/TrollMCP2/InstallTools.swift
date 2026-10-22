@@ -149,8 +149,8 @@ final class ToolInstallTool: MCPTool {
     /// 治"装了但不可用"：apk exit 0 但包没进当前环境（pandas 误报）、stdout 缓冲空输出（python3/r2）、
     /// 精简版缺参数（BusyBox tree -L）。返回 (ok, 可读说明)。
     private func smokeTest(_ name: String, importMode: Bool = false) -> (ok: Bool, note: String) {
-        // python 包（pip/apk py3- 装的）：包只在 Alpine python 可见——命令名 python3 走 iOS 原生看不到
-        // （pandas 误报根源）→ sh -c 强制 Alpine + import 验证；import 成功打印 OK 供输出可见判断
+        // python 包（pip/apk py3- 装的）：包只在统一环境 python3（Alpine）可见——import 验证；
+        // 重计算（numpy/pandas 深度运算）显式 py3-native（原生芯片直跑）——两者共享 Workspace 文件流转
         if importMode {
             let safe = name.replacingOccurrences(of: "[^A-Za-z0-9_.-]", with: "_", options: .regularExpression)
             do {
@@ -161,7 +161,7 @@ final class ToolInstallTool: MCPTool {
                     return (true, "Alpine python 冒烟 `import \(safe)` OK（" + String(out.prefix(60)) + "）——统一环境 python3（Alpine）——apk 包直接可见可用")
                 }
                 let errNote = out.isEmpty ? "无输出" : String(out.prefix(80))
-                return (false, "Alpine python `import \(safe)` 失败（exit \(exit)：" + errNote + "）——包可能没装进 Alpine python，或 C 扩展在解释器段错误（numpy/pandas 用原生 python，已内置）")
+                return (false, "Alpine python `import \(safe)` 失败（exit \(exit)：" + errNote + "）——包可能没装进统一环境 python3，或 C 扩展在解释器跑不动——重计算用显式 py3-native（原生 numpy/pandas 已内置），轻量装包用 apk py3-xxx")
             } catch {
                 return (false, "Alpine python `import \(safe)` 冒烟异常：\(error)")
             }

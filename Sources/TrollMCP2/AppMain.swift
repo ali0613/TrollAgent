@@ -21,7 +21,7 @@ struct TrollAgentApp {
         } else if args.contains("-check") {
             exit(HUDCheck())      // 查悬浮存活（EXIT_FAILURE=存活 / EXIT_SUCCESS=未跑）
         } else {
-            // v6.6.0: 移除 --elf-runner 分支（CELF 退役——统一环境由 CISH/Asbestos 提供）
+            // v6.6.0: 移除 --elf-runner 分支（CELF 退役——统一环境由 TrollRuntime/Asbestos 提供）
             UIApplicationMain(
                 CommandLine.argc,
                 CommandLine.unsafeArgv,

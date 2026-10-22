@@ -3,7 +3,7 @@ import Darwin
 
 /// 桌面悬浮 HUD 进程 pid 文件（HUDMainStart 写入）
 private let PID_PATH = "/var/mobile/Library/Caches/trollagent.hud.pid"
-/// start() 诊断日志（写到 /tmp，8790 ios_native 可直接 cat 读，确证 start 执行到哪步）
+/// start() 诊断日志（写到 /tmp，8790 终端 API 可直接 cat 读，确证 start 执行到哪步）
 private let TMP_LOG = "/tmp/hud.start.log"
 
 /// v6.0.4：桌面悬浮 HUD 提权 spawn 用 CLaunch（C 层 troll_launch_hud）——persona 99 提权在 C 里做
@@ -102,7 +102,7 @@ final class HUDManager {
                 try? data.write(to: url, options: .atomic)
             }
         }
-        // 诊断副本写 /tmp（8790 ios_native 可直接 cat 读，确证 start 执行到哪步）
+        // 诊断副本写 /tmp（8790 终端 API 可直接 cat 读，确证 start 执行到哪步）
         let tmpURL = URL(fileURLWithPath: TMP_LOG)
         if let h = try? FileHandle(forWritingTo: tmpURL) {
             h.seekToEndOfFile(); h.write(data); try? h.close()

@@ -15,10 +15,10 @@ let package = Package(
         // v3.0.37：iSH-ARM64 C 包装层。头文件由 CI 的 build_ish.sh 生成到 ish-stage/include，
         // 静态库在 ish-stage/libs（CI 产物；本地构建需先跑 scripts/ish-build/*.sh 生成）
         .target(
-            name: "CISH",
-            path: "CISH",
+            name: "TrollRuntime",
+            path: "TrollRuntime",
             cSettings: [
-                // 头文件由 CI 复制到 CISH/include/（build_ish.sh 产物 ish-stage/include/ish）
+                // 头文件由 CI 复制到 CISH/include/（build_ish.sh 产物 ish-stage/include/ish）——target 名 TrollRuntime（iSH 血统引擎）
                 // 双根：wrapper.c 用 "ish/..."，iSH 源码内部用 "fs/.../kernel/.../misc.h" 等
                 .headerSearchPath("include"),
                 .headerSearchPath("include/ish"),
@@ -92,7 +92,7 @@ let package = Package(
             dependencies: [
                 .product(name: "RSKGrowingTextView", package: "RSKGrowingTextView"),
                 .product(name: "ZIPFoundation", package: "ZIPFoundation"),
-                "CISH",
+                "TrollRuntime",
                 "MitmCore",
                 "CMitm",
                 "CLaunch"   // v6.6.0: 移除 CELF（退役）

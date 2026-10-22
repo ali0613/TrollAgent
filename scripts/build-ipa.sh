@@ -399,7 +399,7 @@ if [ -n "$XCF_DIR" ]; then
             done
             echo ">>> site-packages: $(du -sh "$SP" | cut -f1)"
         else
-            echo "!!! native-wheels not present — numpy/pandas 未进包 (iSH 版仍会段错误)" >&2
+            echo "!!! native-wheels not present — py3-native numpy/pandas 未进包（Alpine 侧 apk py3-numpy 仍可用）" >&2
         fi
         # fix3cn: 真机实测 _ios_support 未进包 → platform.uname() 走 ios_ver() 崩(import 失败) → pandas
         # import 崩(traceback 实证)。os.uname() 真机可用(Darwin/iPhone14,3)——patch platform.py 的 ios

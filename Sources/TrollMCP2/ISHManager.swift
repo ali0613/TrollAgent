@@ -1,6 +1,6 @@
 import Foundation
 import ZIPFoundation
-import CISH
+import TrollRuntime
 import CommonCrypto
 
 /// TrollRuntime 统一环境引擎（TrollAgent 版——核心 = rcarmo Asbestos，iSH 血统）

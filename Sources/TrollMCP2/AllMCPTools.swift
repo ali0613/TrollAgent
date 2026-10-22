@@ -34,7 +34,7 @@ final class SystemOverviewTool: MCPTool {
             "system": "TrollAgent",
             "version": ver,
             "total_tools": names.count,
-            "important_note": "All dotted tools below (app.decrypt, injection.enable, browser.snapshot...) are individually registered and callable directly. The BIG TOOLS (app/inject/control/container...) additionally accept `name` + `command`/`action` subcommand syntax (e.g. `app` + command:decrypt) which maps to the same implementation — both syntaxes are equivalent, prefer the dotted tool from the schema. Single tools callable as-is include shell.exec, web.search, web.fetch, network.capture, vpn.capture, skills.read, env.setup_re.",
+            "important_note": "All dotted tools below (app.decrypt, injection.enable, browser.navigate...) are individually registered and callable directly. The BIG TOOLS (app/inject/control/container...) additionally accept `name` + `command`/`action` subcommand syntax (e.g. `app` + command:decrypt) which maps to the same implementation — both syntaxes are equivalent, prefer the dotted tool from the schema. Single tools callable as-is include shell.exec, web.search, web.fetch, network.capture, vpn.capture, skills.read, env.setup_re.",
             "tool_categories": cats,
             "ios_version_support": [
                 "trollstore_supported": [
