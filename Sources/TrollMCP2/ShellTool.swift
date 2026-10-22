@@ -271,7 +271,7 @@ final class ShellExecTool: MCPTool {
         }
         
 
-        // fix3cl4: 通用单段原生路由——命令名在 App bin/ 存在即可执行即走原生（覆盖 llvm-objdump/nm/
+        // fix3cl4: 通用单段原生路由——命令名在 App bin/ 存在即可执行即走原生（覆盖 jtool2 等 bin/ 内置；v6.6.0 起 llvm-* 已清）
         // readelf/size/strings 等全部内置工具）。之前只枚举 lua/node/r2/cstool，llvm 家族单段落 Alpine
         // not found。放 python3/470 分支之后，互不冲突；含 / 或 .. 的路径不匹配（防误判）。
         // fix3cl5: 排除"文件操作/签名/管理"类——这些 bin/ 原生版处理 iOS 路径，而 AI 惯用 Alpine
@@ -631,8 +631,9 @@ final class ShellExecTool: MCPTool {
         // v6.6.0: 精简——仅真实原生实现（plutil/sqlite3/ta/python3）+ bin/ 内置二进制。
         // 其余命令统一环境（Alpine）执行——probe 不再误报"原生已覆盖"。
         "plutil", "sqlite3", "ta", "python3",
-        // bin/ 内置（native-tools/LLVM 交叉编译进 App bin/）——原生直跑
-        "llvm-objdump", "llvm-nm", "llvm-readelf", "llvm-size", "llvm-strings", "jtool2"
+        // bin/ 内置（v6.6.0 精简：仅 jtool2——Mach-O 解析专长，Alpine 无替代；
+        // llvm-* 已清——统一环境 Alpine binutils objdump/nm/readelf/size/strings 替代）
+        "jtool2"
     ]
     
     /// v4.3.9: 反向路径翻译——iOS 原生命令收到 Alpine 挂载路径时翻译回 iOS 真实路径。

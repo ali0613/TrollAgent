@@ -815,7 +815,7 @@ jobs:
           [ -d "$APP" ] || APP=$(find "$GITHUB_WORKSPACE" -maxdepth 3 -name "*.app" -type d 2>/dev/null | head -1)
           echo "APP: $APP"
           echo "=== bin/ 工具断言 ==="
-          for t in lua node r2 cstool nmap llvm-objdump llvm-nm llvm-readelf jtool2 objdump class-dump ldid optool; do
+          for t in jtool2 objdump class-dump ldid optool nmap; do
             if [ -f "$APP/bin/$t" ]; then echo "IN   : $t"; else echo "MISSING: $t"; fi
           done
           echo "=== site-packages 断言 ==="
@@ -1298,83 +1298,13 @@ jobs:
           path: nmap-out/*
           if-no-files-found: warn
 
-  # v4.4.8-fix3w: LLVM 工具链（llvm-objdump/nm/readelf/size/strings）+ jtool2。
-  # LLVM: 17.0.6 源码交叉编译 iOS arm64——只编 5 个单工具 + AArch64 target（不编全 LLVM, 25-45min）。
-  # jtool2: newosxbook 官网 prebuilt universal binary（x86_64+arm64+arm64e），lipo 提 arm64 切片,
-  #         otool 验证只依赖 libSystem（iOS 有）即可跑。
+  # v6.6.0 精简: LLVM 工具链已清（统一环境 Alpine binutils objdump/nm/readelf/size/strings 替代）——
+  # 只产 jtool2（newosxbook prebuilt universal binary，lipo 提 arm64 切片，Mach-O 解析专长 Alpine 无替代）。
   native-llvm:
     runs-on: macos-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/cache@v4
-        id: llvm-cache
-        with:
-          path: |
-            llvm-build
-            llvm-host
-          key: llvm-v2
-          save-always: false
-
-      - name: Install ninja
-        run: python3 -m pip install -q ninja 2>/dev/null || brew install ninja
-
-      - name: Build LLVM tools (iOS arm64, host tblgen + cross single tools)
-        if: steps.llvm-cache.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          mkdir -p llvm-src llvm-host llvm-build llvm-out
-          curl -sL -o /tmp/llvm.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/llvm-project-17.0.6.src.tar.xz
-          tar -xJf /tmp/llvm.tar.xz -C llvm-src --strip-components=1
-          SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-          # Step 1: host (macOS) 编译 llvm-tblgen —— LLVM cross 必须的 TableGen host 工具
-          cmake -G Ninja -S llvm-src/llvm -B llvm-host \
-            -DCMAKE_BUILD_TYPE=Release -DLLVM_TARGETS_TO_BUILD=AArch64 \
-            -DLLVM_BUILD_TOOLS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF \
-            -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_ENABLE_ZLIB=OFF -DLLVM_ENABLE_TERMINFO=OFF \
-            -DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_ZSTD=OFF
-          ninja -C llvm-host llvm-tblgen
-          echo ">>> host llvm-tblgen: $(ls llvm-host/bin/llvm-tblgen 2>/dev/null)"
-          # fix3y→fix3z: CMAKE_SYSTEM_NAME=iOS 下 install(TARGETS) 强制 BUNDLE DESTINATION 校验
-          #   (CMAKE_SKIP_INSTALL_RULES 不生效——configure 期校验) → 改 Generic + 手动交叉 flags:
-          #   无 Apple 平台特性 → 无 BUNDLE 校验; 编译 flag 由 CFLAGS/LDFLAGS 提供(arch+isysroot+min-version)
-          # fix3ab: Generic 不设 UNIX → LLVM_ON_UNIX 未定义 → getSize/EnvPathSeparator 缺失
-          # fix3ad: AddLLVM.cmake:297 的 -Wl,--gc-sections 受 LLVM_GC_SECTIONS 控制(GNU ld 选项,
-          #         Apple ld 不认→'unknown options: --gc-sections' 链接失败)——显式关闭
-          # fix3ae: 注释行严禁夹在 \ 续行中间(# 吞掉后续参数行, 下个参数行成独立命令→exit 127)
-          # fix3ag: -DLLVM_GC_SECTIONS=OFF 未生效(链接命令仍带 --gc-sections, if 条件非此变量)——
-          #         直接 sed 删除 AddLLVM.cmake 里的 -Wl,--gc-sections(绕过变量逻辑, 一劳永逸)
-          sed -i '' 's/ -Wl,--gc-sections//' llvm-src/llvm/cmake/modules/AddLLVM.cmake
-          grep -n "gc-sections" llvm-src/llvm/cmake/modules/AddLLVM.cmake || echo ">>> gc-sections 已删除"
-          cmake -G Ninja -S llvm-src/llvm -B llvm-build \
-            -DCMAKE_SYSTEM_NAME=Generic -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER=$(xcrun --find clang) -DCMAKE_CXX_COMPILER=$(xcrun --find clang++) \
-            -DCMAKE_C_FLAGS="-arch arm64 -isysroot $SDK -mios-version-min=15.0 -DLLVM_ON_UNIX=1" \
-            -DCMAKE_CXX_FLAGS="-arch arm64 -isysroot $SDK -mios-version-min=15.0 -DLLVM_ON_UNIX=1" \
-            -DCMAKE_EXE_LINKER_FLAGS="-arch arm64 -isysroot $SDK -mios-version-min=15.0" \
-            -DLLVM_TARGETS_TO_BUILD=AArch64 -DLLVM_ENABLE_PROJECTS="" \
-            -DLLVM_BUILD_TOOLS=ON -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF \
-            -DLLVM_GC_SECTIONS=OFF \
-            -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_INCLUDE_UTILS=OFF \
-            -DLLVM_ENABLE_ZLIB=OFF -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_LIBXML2=OFF \
-            -DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_BACKTRACES=OFF -DLLVM_ENABLE_LLD=OFF \
-            -DLLVM_BUILD_LLVM_DYLIB=OFF -DLLVM_LINK_LLVM_DYLIB=OFF \
-            -DLLVM_TABLEGEN=$PWD/llvm-host/bin/llvm-tblgen \
-            -DLLVM_NATIVE_TOOL_DIR=$PWD/llvm-host/bin
-          ninja -C llvm-build llvm-objdump llvm-nm llvm-readelf llvm-size llvm-strings
-          ls llvm-build/bin/ 2>/dev/null | head
-
-      - name: Copy LLVM tools to out (cache hit 也复制)
-        run: |
-          mkdir -p llvm-out
-          for t in llvm-objdump llvm-nm llvm-readelf llvm-size llvm-strings; do
-            if [ -f "llvm-build/bin/$t" ]; then
-              cp "llvm-build/bin/$t" "llvm-out/$t"; chmod +x "llvm-out/$t"
-              file "llvm-out/$t" 2>/dev/null; echo ">>> LLVM $t"
-            fi
-          done
 
       - name: Extract jtool2 arm64 slice (prebuilt, verify deps)
         run: |

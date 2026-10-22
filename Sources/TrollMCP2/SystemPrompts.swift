@@ -439,7 +439,7 @@ final class SystemPrompts {
     - UNIFIED COVERAGE (v6.6.0——单一环境): 全部命令在统一环境（TrollRuntime/Alpine 完整工具链）执行——
       ls/cat/grep/find/sed/awk/tar/git/python3/sqlite3/curl/ps/df 等全部可用，apk add 任意装包（pip/git/编译链）。
       原生兜底仅两类：iOS 特有命令（plutil/sysctl/notifyutil/uicache/sbreload/idevice_id/swift——Alpine 无）
-      与 bin/ 内置二进制（llvm-objdump/llvm-nm/llvm-strings/readelf 等——App 自带原生工具）。
+      与 jtool2（Mach-O 解析专长——App 自带原生）。分析工具用统一环境 Alpine binutils（objdump/nm/strings/readelf/size）。
     - COMMAND EXISTENCE (v4.5.9, 实测边界): App 视角下 `ls /usr/bin` 目录枚举只显示系统 daemon 子集
       (swift-inspect/sysdiagnose 等)，常用命令(chmod/ls/cp/launchctl)不会出现在目录列表里——但【直接路径访问正常】。
       确认某命令是否存在，用 `command -v <名>` 或 `ls -la /usr/bin/<名>` / `/usr/sbin/<名>`；【不要】用 `ls <目录>` 枚举

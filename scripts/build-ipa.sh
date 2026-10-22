@@ -87,45 +87,9 @@ if [ -d "Resources/bin" ]; then
     # lua=源码编译, node=nodejs-mobile iOS 预编译, r2=radare2 r2ios-sdk 预编译, cstool=capstone 交叉编译,
     # jq=源码编译(v4.4.9-fix3cm 补, 消除提示词示例有/实物无的不一致)；
     # 14c2 P1原生化: tree/xz/which=v16 新增（14c4 曾编译成功但未进包——此处白名单漏加, 已补）
-    # 14c6 P1原生化: file/zip=v17 新增（扩军第二批；file 的 magic.mgc 数据文件随包）
-    # v6.6.0: elf-runner 退役（CELF 路线淘汰）——白名单移除
-    # 均随 tool.install 绑定）
-    for t in lua node r2 cstool jq tree xz which file; do
-        if [ -f "native-tools-out/$t" ]; then
-            cp "native-tools-out/$t" "$APP/bin/$t"
-            chmod +x "$APP/bin/$t"
-            echo ">>> native $t bundled ($(du -h "$APP/bin/$t" | cut -f1))"
-        fi
-    done
-    # 14c6: file 的 magic 数据文件（libmagic 运行时必需；ShellTool 调 file 时设 MAGIC 指向它）
-    # 14c7 fix7: CI 用 macOS file -C -m Magdir 生成 Magdir.mgc（交叉 file 在 runner 跑不了）→ 兼容 *.mgc
-    MG=$(ls native-tools-out/*.mgc 2>/dev/null | head -1)
-    if [ -n "$MG" ]; then
-        cp "$MG" "$APP/bin/magic.mgc"
-        echo ">>> magic.mgc bundled ($(du -h "$APP/bin/magic.mgc" | cut -f1))"
-    fi
-    # v6.6.0: busybox 静态 ELF 路线退役（CELF 淘汰）——统一环境由 Asbestos+Alpine rootfs 提供。
-    # fix3bo/fix3cl: node C wrapper 的运行时库（NodeMobile dylib）——install name 是
-    # @rpath/NodeMobile.framework/NodeMobile，必须按 framework 目录结构放进 App/Frameworks/，
-    # 放 bin/ 会让 dyld 按 @rpath 找 Frameworks/NodeMobile.framework 时 Library not loaded。
-    if [ -f "native-tools-out/NodeMobile.dylib" ]; then
-        mkdir -p "$APP/Frameworks/NodeMobile.framework"
-        cp "native-tools-out/NodeMobile.dylib" "$APP/Frameworks/NodeMobile.framework/NodeMobile"
-        echo ">>> NodeMobile.framework/NodeMobile bundled (install name @rpath/NodeMobile.framework/NodeMobile)"
-    fi
-    # capstone 静态库（cstool 的引擎，未来 C 扩展/嵌入可链接）
-    if [ -f "native-tools-out/libcapstone.a" ]; then
-        cp "native-tools-out/libcapstone.a" "$APP/bin/libcapstone.a"
-        echo ">>> libcapstone.a bundled ($(du -h "$APP/bin/libcapstone.a" | cut -f1))"
-    fi
-    # v4.4.6-fix3u→fix3ac: nmap 源码 iOS 编不过(SDK 缺 Linux 头)→ 降级 nscan.py(Python 端口扫描, 原生 python3 跑)
-    if [ -f "nmap-out/nscan.py" ]; then
-        cp "nmap-out/nscan.py" "$APP/bin/nscan.py"
-        chmod +x "$APP/bin/nscan.py"
-        echo ">>> nscan.py bundled"
-    fi
-    # v4.4.8-fix3w: LLVM 工具链（native-llvm job 交叉编译）+ jtool2（prebuilt arm64 切片）
-    for t in llvm-objdump llvm-nm llvm-readelf llvm-size llvm-strings jtool2; do
+lpine binutils 替代：objdump/nm/readelf/size/strings）；
+    # jtool2 保留（Mach-O 解析专长——Alpine 无替代）
+    for t in jtool2; do
         if [ -f "native-llvm-out/$t" ]; then
             cp "native-llvm-out/$t" "$APP/bin/$t"
             chmod +x "$APP/bin/$t"
