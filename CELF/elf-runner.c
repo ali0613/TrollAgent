@@ -909,15 +909,24 @@ static long vproc_close(int fd) {
 }
 static long sys_getdents64(int fd, void *buf, size_t count) {
 #ifdef __APPLE__
-    /* v19.28: 回到 fdopendir+readdir（iOS 无 getdirentries64 符号、getdirentries
-       是 64 位 inode 陷阱符号——两条路都不通；fdopendir/readdir 是 iOS 唯一
-       可用目录读取 API）。v19.25 此方案真机 ls total 0（readdir 空），本次
-       加无条件探针装真机定位真因（fdopendir 失败？readdir 空？转换错？）。 */
+    /* v19.28d: 真机 fdopendir(fd) 挂起卡死 App（[gdd] 探针在 fdopendir 后
+       打不出 = 卡在 fdopendir 本身；v19.25 偶发通过但不可靠）。改用
+       fcntl(F_GETPATH)+opendir(path)——标准 POSIX 路径打开，避开 iOS
+       fdopendir 的 fd 语义坑；DIR 仍按 fd 缓存（guest 多次 getdents64
+       从上次位置续读）。 */
     if (fd < 0 || fd >= 16) return -EBADF;
     if (!g_dir_cache[fd]) {
-        g_dir_cache[fd] = fdopendir(fd);
-        fprintf(stderr, "[gdd] fdopendir(fd=%d) -> %p errno=%d(%s)\n",
-                fd, (void *)g_dir_cache[fd], errno, strerror(errno));
+        char path[1024];
+        if (fcntl(fd, F_GETPATH, path) < 0) {
+            fprintf(stderr, "[gdd] F_GETPATH fd=%d fail errno=%d(%s)\n",
+                    fd, errno, strerror(errno));
+            fflush(stderr);
+            return -errno;
+        }
+        g_dir_cache[fd] = opendir(path);
+        fprintf(stderr, "[gdd] opendir('%s') fd=%d -> %p errno=%d(%s)\n",
+                path, fd, (void *)g_dir_cache[fd], errno, strerror(errno));
+        fflush(stderr);
         if (!g_dir_cache[fd]) return -errno;
     }
     DIR *d = g_dir_cache[fd];
