@@ -18,22 +18,6 @@ struct BrowserStatusTool: MCPTool {
     }
 }
 
-struct BrowserOpenTool: MCPTool {
-    var definition = ToolDefinition(
-        name: "browser.open",
-        summary: "Open the built-in browser and navigate to a URL. Use for: open a website, start browsing. Don't use for: control native iPhone apps (use control.*), read page content (use browser.text after open). Example: user says 'open Baidu' → open https://www.baidu.com.",
-        parameters: ["url": "Website URL to open (e.g. https://www.baidu.com)"],
-    verified: true, category: "browser")
-    func invoke(_ params: [String: Any]) throws -> [String: Any] {
-        guard let url = params["url"] as? String else {
-            throw MCPError.invalidParams("browser.open requires url param")
-        }
-        let msg = BrowserManager.shared.open(url)
-        AuditLog.shared.log("browser.open", detail: url)
-        return ["ok": true, "message": msg]
-    }
-}
-
 struct BrowserWaitTool: MCPTool {
     var definition = ToolDefinition(
         name: "browser.wait",
@@ -189,21 +173,6 @@ struct BrowserTypeTool: MCPTool {
         let msg = BrowserManager.shared.typeText(idx, text)
         AuditLog.shared.log("browser.type", detail: "idx=\(idx) len=\(text.count)")
         return ["ok": !msg.hasPrefix("ERR"), "message": msg]
-    }
-}
-
-struct BrowserEvalTool: MCPTool {
-    var definition = ToolDefinition(
-        name: "browser.eval",
-        summary: "Run custom JavaScript code in the web page. Use for: advanced page manipulation, extract data, automate complex actions. Don't use for: simple click/type (use browser.click/type), read text (use browser.text). Example: user says 'use JS to extract all page links' → eval JS.",
-    verified: true)
-    func invoke(_ params: [String: Any]) throws -> [String: Any] {
-        guard let js = params["js"] as? String else {
-            throw MCPError.invalidParams("browser.eval requires js param")
-        }
-        let r = BrowserManager.shared.evaluate(js)
-        AuditLog.shared.log("browser.eval", detail: String(js.prefix(60)))
-        return ["ok": !r.hasPrefix("ERR"), "result": r]
     }
 }
 
