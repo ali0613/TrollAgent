@@ -36,7 +36,7 @@ enum ShellDiag {
 final class ShellExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "shell.exec",
-        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux 完整工具链执行（Asbestos 解释器——apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写；iOS 特有命令(plutil/sysctl 等)内部自动走 iOS 原生兜底——无需指定环境、无需感知环境。缺轻量工具自动 apk add 并重试一次；重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)需 tool.install 手动装. Use for: file ops, system info, network, text processing.",
+        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux 完整工具链执行（Asbestos 解释器——apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写；iOS 特有命令(plutil/sysctl 等)内部自动走 iOS 原生兜底——无需指定环境、无需感知环境。py3-native = 原生 Python 显式命令（芯片直跑 numpy/pandas 深度运算——重计算用；日常 python3 走统一环境 Alpine）。缺轻量工具自动 apk add 并重试一次；重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)需 tool.install 手动装. Use for: file ops, system info, network, text processing.",
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",
@@ -146,6 +146,11 @@ final class ShellExecTool: MCPTool {
             // 即使判定 Alpine，ta 也走宿主路由，杜绝"环境漂移"。
             if trimmed == "ta" || trimmed.hasPrefix("ta ") {
                 return OffloadRouter.run(trimmed)
+            }
+            // v6.6.0-fix15: py3-native 显式命令——原生 Python（iPhone 芯片直跑 numpy/pandas 深度运算）。
+            // AI 按场景选择：重计算（大矩阵/数据分析/模型）→ py3-native；日常/装包/生态 → python3（Alpine）。
+            if trimmed == "py3-native" || trimmed.hasPrefix("py3-native ") {
+                return runNativePython(String(trimmed.dropFirst("py3-native".count)).trimmingCharacters(in: .whitespaces))
             }
             // v3.7.7: 自动 bind——Alpine 命令引用 iOS 路径时自动挂载顶层 + 改写路径，
             // 让 Alpine 直接读写 iOS 文件（消灭环境漂移，替代单向字节桥接）。
@@ -603,9 +608,8 @@ final class ShellExecTool: MCPTool {
         // v6.6.0: 精简——仅真实原生实现（plutil/sqlite3/ta）+ bin/ 内置二进制。
         // 其余命令统一环境（Alpine）执行——python3 统一走 Alpine（完整 CPython+pip）。
         "plutil", "sqlite3", "ta",
-        // bin/ 内置（v6.6.0 精简：仅 jtool2——Mach-O 解析专长，Alpine 无替代；
-        // llvm-* 已清——统一环境 Alpine binutils objdump/nm/readelf/size/strings 替代）
-        "jtool2"
+        // bin/ 内置：jtool2（Mach-O 解析专长）+ py3-native（原生 Python 深度运算——AI 重计算场景选择）
+        "jtool2", "py3-native"
     ]
     
     /// v4.3.9: 反向路径翻译——iOS 原生命令收到 Alpine 挂载路径时翻译回 iOS 真实路径。
@@ -1187,6 +1191,30 @@ final class ShellExecTool: MCPTool {
         }
         if !cur.isEmpty { args.append(cur) }
         return args
+    }
+
+    /// v6.6.0-fix15: py3-native 执行器——原生 Python（App bin/python3，iPhone 芯片直跑深度运算）。
+    /// 显式命令专用（AI 重计算场景选择）；日常 python3 走统一环境 Alpine。
+    private static func runNativePython(_ args: String) -> [String: Any] {
+        let pythonPath = Bundle.main.bundlePath + "/bin/python3"
+        guard FileManager.default.isExecutableFile(atPath: pythonPath) else {
+            return ["command": "py3-native " + args, "exit_code": 1,
+                    "stdout": "py3-native: 原生 Python 未内置（此构建未集成 Python.xcframework）——请用 python3（统一环境 Alpine，apk 装 py3-numpy）"]
+        }
+        let split = shellSplitArgs(args)
+        var env = ["PYTHONIOENCODING": "utf-8"]
+        let wsBase = "/var/mobile/Documents/Workspace"
+        try? FileManager.default.createDirectory(atPath: wsBase, withIntermediateDirectories: true)
+        let pyOutPath = wsBase + "/troll_py_out.txt"
+        try? FileManager.default.removeItem(atPath: pyOutPath)
+        env["TROLL_PY_OUT"] = pyOutPath
+        let res = BuildRunner.shared.run(executable: pythonPath, args: split, env: env, timeout: 120)
+        var out = res.stdout
+        if let d = try? String(contentsOfFile: pyOutPath, encoding: .utf8), !d.isEmpty { out += d }
+        try? FileManager.default.removeItem(atPath: pyOutPath)
+        if res.timedOut { out += "\n[py3-native 执行超时被终止]" }
+        return ["command": "py3-native " + args, "exit_code": res.exitCode, "stdout": out,
+                "hint": "py3-native：原生 Python（iPhone 芯片直跑 numpy/pandas 深度运算）。日常/装包/生态用 python3（统一环境 Alpine）"]
     }
 
     private static func probeTargetOfSegment(_ seg: String) -> String? {

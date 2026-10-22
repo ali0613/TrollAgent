@@ -422,6 +422,9 @@ final class SystemPrompts {
       iOS 特有命令（plutil/sysctl/notifyutil 等 Alpine 无）内部自动原生兜底；其余全部命令统一在环境执行。
       统一环境内命令/管道/路径全支持，
       先查 auto-bind 路径/命令本身——环境是统一的。
+    - PY3-NATIVE (v6.6.0-fix15——AI 按场景选): python3 默认统一环境（Alpine——生态完整 apk/pip）；
+      numpy/pandas 深度运算（大矩阵/数据分析/模型）→ 显式 `py3-native`（原生 Python 芯片直跑——性能好）。
+      轻量脚本/装包/生态用 python3；重计算用 py3-native。两者共享 Workspace 文件系统（中间数据文件流转）。
     - UNIFIED COVERAGE (v6.6.0——单一环境): 全部命令在统一环境（TrollRuntime/Alpine 完整工具链）执行——
       ls/cat/grep/find/sed/awk/tar/git/python3/sqlite3/curl/ps/df 等全部可用，apk add 任意装包（pip/git/编译链）。
       原生兜底仅两类：iOS 特有命令（plutil/sysctl/notifyutil/uicache/sbreload/idevice_id/swift——Alpine 无）

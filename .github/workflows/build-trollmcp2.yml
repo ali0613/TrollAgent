@@ -18,7 +18,7 @@ jobs:
     # 等它确保 python artifact 就位，build 才能真正集成（此前并行时 download 拿不到→python 被跳过）
     # v4.4.6-fix3u: needs native-nmap（continue-on-error job，失败不阻塞出包）
     # v4.4.8-fix3w: needs native-llvm（LLVM 单工具 + jtool2；下载 continue-on-error，失败不出这些工具但出包）
-    needs: [native-nmap, native-llvm]
+    needs: [native-python, native-wheels, native-nmap, native-llvm]
     runs-on: macos-latest
     env:
       RELEASE_VERSION: 6.0.25
@@ -211,6 +211,23 @@ jobs:
       # 而 Download 步骤排在其后 → download 永远赶不上（fix3d 失败根因：build-ipa.sh 的
       # 现在顺序 = 全部 download 前置 → 唯一一次 build-ipa.sh 集成 nmap/llvm(jtool2) 工具链。
 
+      - name: Download native Python xcframework (if ready)
+        uses: actions/download-artifact@v4
+        with:
+          name: python-ios-xcframework
+          path: python-ios
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Download native wheels (numpy/pandas iOS)
+        uses: actions/download-artifact@v4
+        with:
+          name: native-wheels
+          path: native-wheels
+          merge-multiple: true
+        continue-on-error: true
+
+
       - name: Download native nmap (if ready)
         uses: actions/download-artifact@v4
         with:
@@ -295,6 +312,413 @@ jobs:
   # OpenMinis 模拟器跑不了 openblas）。正解 = 原生 Python.framework 直接跑在 iPhone 芯片上。
   # 独立 job：编译失败不影响主出包（build job 不依赖本 job）；成功后 artifact 供后续集成
   # （Python.framework + stdlib 打进 .app + ShellTool 路由 python3 → 原生 CLI）。
+  native-python:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: python/cpython
+          ref: v3.14.8
+          path: cpython
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      # v4.4.4: 缓存编译产物（tar.gz ~79MB）——CPython iOS 编译 60-90 分钟，
+      # 命中缓存后本 job 秒级完成，build job 才能稳定集成到 App。
+      # 必须在 checkout 之后 restore（checkout clean 会清掉 cache 恢复的目录）。
+      - uses: actions/cache@v4
+        id: pycache
+        with:
+          path: cpython/cross-build/dist
+          # fix3g: save-always:false——编译失败不写缓存，防空产物毒化
+          # fix3clf: v4——旧缓存(v3)的 dist/ 只有 tar.gz、无 static-lib（上版从未生成成功），
+          #         bump 强制全量重编一次，让 dist/static-lib 进缓存（dist 整体在 cache path 内）
+          key: python-ios-dist-3.14.8-v4
+          save-always: false
+
+      - name: Build Python.xcframework (iOS arm64, official Apple build script)
+        if: steps.pycache.outputs.cache-hit != 'true'
+        run: |
+          cd cpython
+          python Apple build iOS
+          ls -la cross-build/dist/
+
+      # v4.4.9-fix3bx: 原生 python3 配 pip——pip wheel 是纯 Python，解压进 site-packages 即可用
+      # (原生 python3 无 pip→ensurepip 在 iOS 超时/不可靠；解压 wheel 无编译秒级完成)。
+      # 缓存命中时也跑（缓存是旧内容，解压进恢复目录后 upload artifact 会带上 pip）。
+      - name: Bundle pip into native site-packages (fix3bx)
+        run: |
+          curl -sL -m 60 -o /tmp/pip.whl https://bootstrap.pypa.io/pip/pip-25.0.1-py3-none-any.whl || curl -sL -m 60 -o /tmp/pip.whl https://pypi.tuna.tsinghua.edu.cn/packages/pip/pip-25.0.1-py3-none-any.whl || true
+          if [ ! -s /tmp/pip.whl ]; then echo "pip wheel download failed (skip)"; exit 0; fi
+          SP=$(find cpython/cross-build/dist -type d -name site-packages 2>/dev/null | head -1)
+          if [ -z "$SP" ]; then
+            echo "site-packages not found; dist layout:"; find cpython/cross-build/dist -maxdepth 3 -type d 2>/dev/null | head -25
+            exit 0
+          fi
+          python3 -c "import zipfile; zipfile.ZipFile('/tmp/pip.whl').extractall('$SP')"
+          ls "$SP" | head -8
+          echo "pip bundled into $SP"
+
+      # fix3clc/fix3cle: 静态链接 libpython3.14.a 进 python3 CLI（绕开 iOS 子进程 dyld 加载 framework 的 SIGKILL）。
+      # fix3clf 实证修正：原实现 in-source `make libpython3.14.a` 在 cpython/ 根目录跑 → 没产出（iOS 是 out-of-tree
+      # 构建，configure 在 cross-build/arm64-apple-ios/）→ 被 fallback exit 0 静默吞掉 → 空 static-lib 进 upload
+      # （if-no-files-found: warn）→ build job 走 dynamic fallback → 真机 python3 仍 137。教训：fallback 吞错 = 用户拿废包。
+      # 正解：官方 Apple build iOS 的 out-of-tree 构建（cross-build/arm64-apple-ios/）在组 framework 时
+      # 已生成 libpython3.14.a（arm64-apple-ios-ar rcs + -all_load），直接从构建树提取即可，无需再 make。
+      # 失败必须 exit 1（不再静默）——build job 会因缺 static-lib 而明显失败，杜绝"AI 以为有、真机没有"。
+      - name: Build static libpython3.14.a (iOS arm64, extract from official build tree)
+        if: steps.pycache.outputs.cache-hit != 'true'
+        run: |
+          set -x
+          cd cpython
+          LIB=$(find cross-build/arm64-apple-ios -maxdepth 1 -name 'libpython3.14.a' 2>/dev/null | head -1)
+          if [ -n "$LIB" ] && [ -s "$LIB" ]; then
+            mkdir -p cross-build/dist/static-lib
+            cp "$LIB" cross-build/dist/static-lib/libpython3.14.a
+            cp -R Include cross-build/dist/static-lib/include
+            echo ">>> static libpython3.14.a ready: $(ls -la cross-build/dist/static-lib/libpython3.14.a | awk '{print $5}') bytes"
+          else
+            echo "!!! static libpython3.14.a NOT FOUND in cross-build/arm64-apple-ios — python3 将 dynamic fallback" >&2
+            exit 1
+          fi
+
+      - name: Upload Python iOS xcframework
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-ios-xcframework
+          path: |
+            cpython/cross-build/dist/*.tar.gz
+            cpython/cross-build/dist/static-lib/**
+          if-no-files-found: warn
+
+  # v4.4.5-fix3h: 原生 numpy iOS wheel——手动 meson 交叉编译（beeware 真实路线）。
+  # cibuildwheel 对 numpy 水土不服：meson-python 的 backend deps(ninja/cmake)在 iOS venv 无
+  # iOS wheel→pip 源码编译失败, 且默认 -Dallow-noblas=false 强制 BLAS(无解)。
+  # meson-python 0.19+ 原生支持 iOS target；--no-build-isolation 用宿主 ninja/cython，
+  # _PYTHON_HOST_PLATFORM + _PYTHON_SYSCONFIGDATA_NAME 加载 iOS Python 的交叉 sysconfigdata，
+  # sed 把 sysconfigdata 相对路径 hack 成绝对路径(指向解包的 Python.xcframework)。
+  native-wheels:
+    runs-on: macos-latest
+    needs: native-python
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - uses: actions/cache@v4
+        id: wheels-cache
+        with:
+          path: wheels-out
+          # fix3g: save-always:false——构建失败绝不写缓存，根治空缓存毒化死循环
+          # fix3h: v3→v4（numpy 手动 meson 方案），pandas 拆出下轮单独做
+          key: ios-numpy-cp314-v4
+          save-always: false
+
+      - name: Download Python iOS xcframework (headers + sysconfigdata)
+        uses: actions/download-artifact@v4
+        with:
+          name: python-ios-xcframework
+          path: python-ios
+          merge-multiple: true
+
+      - name: Build numpy iOS wheel (cp314 arm64 iphoneos, manual meson cross)
+        if: steps.wheels-cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          mkdir -p wheels-out wheel-src
+          # 宿主后端工具（mac wheel，避免 iOS venv 里 pip 源码装 ninja/cmake 失败）
+          # fix3k: 显式装 wheel——meson-python 打包 wheel 依赖它
+          pip install meson-python==0.19.* ninja cython wheel
+          # 解包 Python.xcframework（native-python job 产物）
+          tar -xzf python-ios/python-*.tar.gz -C python-ios/
+          XCF=$(find python-ios -type d -name "Python.xcframework" | head -1)
+          PYIOS="$(pwd)/$XCF/ios-arm64"
+          echo ">>> PYIOS=$PYIOS"
+          # hack sysconfigdata：PEP 730 记录的是相对路径(Apple/iOS/Frameworks/arm64-iphoneos/...)
+          # → 改成绝对路径，meson 才能找到 include/lib
+          # fix3i: macOS 是 BSD sed，-i 后必须带备份后缀（-i ""）
+          SC="$PYIOS/lib-arm64/python3.14/_sysconfigdata__ios_arm64-iphoneos.py"
+          sed -i "" "s|'Apple/iOS/Frameworks/arm64-iphoneos|'$PYIOS|g" "$SC"
+          grep -o "'INCLUDEPY': '[^']*'" "$SC" | head -1
+          # fix3j: sysconfigdata 文件名带连字符(-iphoneos)无法 importlib import(Python 模块名
+          # 禁连字符)→ pip sysconfig 初始化 ModuleNotFoundError。复制下划线命名副本，
+          # _PYTHON_SYSCONFIGDATA_NAME 指向它即可被 PYTHONPATH 正常 import。
+          cp "$SC" "$PYIOS/lib-arm64/python3.14/_sysconfigdata__ios_arm64_iphoneos.py"
+          # meson cross 文件（xcrun SDK 工具链，arm64 真机）
+          cat > ios-meson.ini <<INI
+          [binaries]
+          c = ['xcrun', '--sdk', 'iphoneos', 'clang', '-arch', 'arm64', '-mios-version-min=15.0']
+          cpp = ['xcrun', '--sdk', 'iphoneos', 'clang++', '-arch', 'arm64', '-mios-version-min=15.0']
+          ar = ['xcrun', '--sdk', 'iphoneos', 'ar']
+          strip = ['xcrun', '--sdk', 'iphoneos', 'strip']
+          pkg-config = 'false'
+          [host_machine]
+          system = 'ios'
+          cpu_family = 'aarch64'
+          cpu = 'arm64'
+          endian = 'little'
+          [properties]
+          # fix3m: numpy/_core/meson.build:408 用 cc.run() 检测 long double 内存布局——
+          # cross 环境不能运行 iOS 测试程序。numpy 官方设计: meson.get_external_property
+          # 从 cross 文件读 longdouble_format。Apple arm64 的 long double = 64 位 double(小端)。
+          longdouble_format = 'IEEE_DOUBLE_LE'
+          INI
+          # numpy sdist（meson 源码包）
+          pip download --no-deps --no-binary :all: numpy==2.1.3 -d wheel-src
+          tar -xzf wheel-src/numpy-2.1.3.tar.gz -C wheel-src
+          # fix3k: 环境变量只在 pip wheel 前生效(避免污染前面的 pip download/install)——
+          # _PYTHON_HOST_PLATFORM + _PYTHON_SYSCONFIGDATA_NAME + PYTHONPATH 加载 iOS 交叉
+          # sysconfigdata(PEP 730 机制)。先断言验证生效，失败立即暴露而非盲等 meson。
+          export _PYTHON_HOST_PLATFORM=ios-arm64
+          export _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata__ios_arm64_iphoneos
+          # fix3au: meson 的 python 模块可能读宿主 SC(交叉 SC sed 影响不到 LDSHARED 的 framework)——双保险:
+          #          sed 宿主 SC 副本放 PYTHONPATH(无论读哪个 SC, -framework Python 都删干净)
+          mkdir -p /tmp/pyfix
+          # fix3az: 宿主 SC 文件名不猜(3.14 可能是 _sysconfigdata_darwin_darwin 或 _sysconfigdata__macosx_*)
+          #         原 cp $HOSTSCNAME.py 2>/dev/null 静默失败→set -e exit 1 无输出(首次执行实锤)
+          #         →glob 宿主 lib 下所有 _sysconfigdata*.py 全 sed, 去掉 2>/dev/null 让错误可见
+          # fix3ba: sysconfig 在 3.14 是包(__file__ 在 .../sysconfig/__init__.py)→dirname 取到子目录, SC 在上一级
+          #         →改用 sys.prefix 拼 lib/pythonX.Y(标准位置, 不依赖 __file__ 形态)
+          HOSTLIB=$(env -u _PYTHON_SYSCONFIGDATA_NAME python3 -c 'import sys, os; print(os.path.join(sys.prefix, "lib", "python%d.%d" % sys.version_info[:2]))')
+          echo ">>> HOSTLIB=$HOSTLIB"
+          cp "$HOSTLIB"/_sysconfigdata*.py /tmp/pyfix/
+          ls /tmp/pyfix/ | head -3
+          sed -i '' 's/-framework Python//g' /tmp/pyfix/_sysconfigdata*.py
+          grep -c "framework" /tmp/pyfix/_sysconfigdata*.py || echo ">>> host SC framework 已删干净"
+          export PYTHONPATH="/tmp/pyfix:$PYIOS/lib-arm64/python3.14${PYTHONPATH:+:$PYTHONPATH}"
+          # fix3l: meson-python 0.19 检测到 cross 会自动生成 cross-file 并用 PEP 730 官方编译器
+          # arm64-apple-ios-clang(在 XCFramework ios-arm64/bin/ 里)——必须加进 PATH
+          export PATH="$PYIOS/bin:$PATH"
+          python3 -c "
+          import sysconfig, sys
+          ip = sysconfig.get_config_var('INCLUDEPY') or ''
+          print('sysconfig INCLUDEPY =', ip)
+          assert 'ios-arm64' in ip and ip.startswith('/'), 'sysconfigdata 未生效或路径未绝对化: ' + ip
+          lp = sysconfig.get_config_var('LIBDIR') or ''
+          print('sysconfig LIBDIR =', lp)
+          assert 'ios-arm64' in lp, 'LIBDIR 未指向 ios-arm64: ' + lp
+          # fix3bb: 实锤 meson 将读到的 LDSHARED——framework 双保险 sed 后到底删没删
+          print('LDSHARED =', sysconfig.get_config_var('LDSHARED'))
+          print('LDFLAGS  =', sysconfig.get_config_var('LDFLAGS'))
+          print('LIBS     =', sysconfig.get_config_var('LIBS'))
+          "
+          # fix3o: meson-python 0.19 打 iOS wheel tag 时若未设部署目标会调用 platform.ios_ver()
+          # (macOS 上 release='' → int('') 崩)。官方设计: IPHONEOS_DEPLOYMENT_TARGET 覆盖版本解析。
+          export IPHONEOS_DEPLOYMENT_TARGET=15.0
+          python -m pip wheel --no-deps --no-build-isolation \
+            -Csetup-args=--cross-file=$PWD/ios-meson.ini \
+            -Csetup-args=-Dallow-noblas=true \
+            -Csetup-args=-Dc_args=-mios-version-min=15.0 \
+            -Csetup-args=-Dcpp_args=-mios-version-min=15.0 \
+            -Csetup-args=-Dcpu-dispatch=none \
+            wheel-src/numpy-2.1.3 -w wheels-out
+          ls -la wheels-out/
+          # 验证 wheel tag
+          for w in wheels-out/*.whl; do unzip -p "$w" "*/METADATA" 2>/dev/null | head -3; echo "--- $w"; done
+
+      # v4.4.6-fix3u: pandas 3.0.6（已迁移 meson，机制与 numpy 同：cross-file + PEP 730 sysconfigdata）
+      # 宿主装 Cython+numpy 供头文件（cross 标准法，arm64 host 与 iOS arm64 类型一致）；
+      # 注意顺序（fix3k 教训）：宿主 pip install 必须在 iOS env vars 之前——_PYTHON_HOST_PLATFORM
+      # 会劫持 pip 平台判断（以为在 iOS 上跑→没有 macOS wheel→装失败）。
+      # fix3x: 去掉 if 缓存条件——此前绑定 numpy 缓存, 缓存命中时 pandas 步骤被跳过(假进包)；
+      #        现在无条件每次编译（约 3-5min），保证 pandas wheel 每次都产出并上传。
+      # fix3ad: 本 step 独立 shell——完整复制 numpy 环境准备(解包+sysconfigdata hack+副本+cross-file),
+      #         不再假设 numpy 步骤遗留就位(修复 'No module named _sysconfigdata' 根因: 副本/cross-file
+      #         是 numpy 步骤局部产物, 本步骤必须自给自足); pip 前补装 meson-python/ninja/wheel(幂等)。
+      - name: Build pandas iOS wheel (cp314 arm64 iphoneos, meson cross)
+        run: |
+          set -euo pipefail
+          # 0) 宿主后端工具（幂等, 防 numpy 步骤未执行/缓存命中导致缺失）
+          pip install -q meson-python ninja cython wheel
+          # 1) 解包 Python.xcframework（native-python job 产物, download-artifact 已放 python-ios/）
+          tar -xzf python-ios/python-*.tar.gz -C python-ios/
+          XCF=$(find python-ios -type d -name "Python.xcframework" | head -1)
+          PYIOS="$(pwd)/$XCF/ios-arm64"
+          echo ">>> PYIOS=$PYIOS"
+          # 2) sysconfigdata hack（PEP 730 相对路径→绝对路径）+ 下划线副本（import 可加载）
+          # fix3ak: pandas 扩展链接带 -framework Python(sysconfig LDSHARED), iOS 交叉无 Python.framework→
+          #         ld: framework 'Python' not found——sed 删掉; Python C API 符号靠 dynamic_lookup 动态解析
+          SC="$PYIOS/lib-arm64/python3.14/_sysconfigdata__ios_arm64-iphoneos.py"
+          sed -i "" "s|'Apple/iOS/Frameworks/arm64-iphoneos|'$PYIOS|g" "$SC"
+          # fix3as: LDSHARED 以 -framework Python 开头(无前导空格), 之前 sed 只删带空格的→没删掉——
+          #         全局删(含开头), 链接命令即去 framework(仅留 -F 搜索路径, 无害)
+          sed -i '' 's/-framework Python//g; s/-Wl,-framework,Python//g; s/-framework Python.framework//g; s|-F /Library/Frameworks/Python.framework[^ ]*||g' "$SC"
+          cp "$SC" "$PYIOS/lib-arm64/python3.14/_sysconfigdata__ios_arm64_iphoneos.py"
+          # fix3at: 断言 LDSHARED 已无 framework(之前 sed 后仍残留, 失败立即暴露而非盲等 meson)
+          grep -c "framework" "$SC" || echo ">>> SC framework 已删干净"
+          # fix3bf: HOSTPY 必须在 cross-file heredoc 展开前定义(set -u 否则 heredoc 内 $HOSTPY unbound 直接退出)
+          HOSTPY=$(which python3)
+          echo ">>> HOSTPY=$HOSTPY"
+          # 3) meson cross 文件（xcrun SDK 工具链, arm64 真机）
+          cat > ios-meson.ini <<INI
+          [binaries]
+          c = ['xcrun', '--sdk', 'iphoneos', 'clang', '-arch', 'arm64', '-mios-version-min=15.0']
+          cpp = ['xcrun', '--sdk', 'iphoneos', 'clang++', '-arch', 'arm64', '-mios-version-min=15.0']
+          ar = ['xcrun', '--sdk', 'iphoneos', 'ar']
+          strip = ['xcrun', '--sdk', 'iphoneos', 'strip']
+          pkg-config = 'false'
+          # fix3at: pandas 用 import('python').find_installation() 取链接参数——不指定 python 时
+          #         meson 用宿主(macOS framework 版)→LDSHARED 带 -framework Python(交叉 SC 的 sed 影响不到)
+          #         →显式指定宿主 python + _PYTHON_SYSCONFIGDATA_NAME 环境让其读交叉 SC
+          # fix3be: cross-file python 改用 hostedtoolcache(which python3, runner 可写可 sed)——
+          #         /Library/Frameworks 的 python.org SC 不可写, meson 读它时 LDSHARED 带 framework 无法 sed
+          python = ['$HOSTPY']
+          # fix3bc: meson 交叉报 "Compiler for language c/cpp/cython for the build machine not found"——
+          #         cross-file 只有 host(iOS) 编译器, build machine 需显式(宿主 clang, meson 1.12 交叉不自动探测)
+          build.c = ['clang']
+          build.cpp = ['clang++']
+          cython = ['cython']
+          [host_machine]
+          system = 'ios'
+          cpu_family = 'aarch64'
+          cpu = 'arm64'
+          endian = 'little'
+          [properties]
+          allow-noblas = true
+          cpu-dispatch = 'none'
+          [built-in options]
+          c_args = ['-mios-version-min=15.0']
+          cpp_args = ['-mios-version-min=15.0']
+          # fix3al: c_link_args 必须在 cross 文件(pip 命令行传 -Dc_link_args 也覆盖不了 LDSHARED)——
+          #         -undefined dynamic_lookup: Python C API 符号动态解析(无 Python.framework 可链接)
+          c_link_args = ['-Wl,-undefined,dynamic_lookup', '-mios-version-min=15.0']
+          # fix3bk: C++ 扩展(aggregations 等 .pyx.cpp)走 cpp_link_args——不加则无 dynamic_lookup,
+          #         __pyx_fatalerror 等 Python C API 符号找不到(假 framework 无符号)→ symbol not found
+          cpp_link_args = ['-Wl,-undefined,dynamic_lookup', '-mios-version-min=15.0']
+          INI
+          # fix3be: sed hostedtoolcache 宿主 SC 删 -framework Python——meson 读它(宿主 SC 已干净)
+          HSCLIB=$($HOSTPY -c 'import sys,os; print(os.path.join(sys.prefix,"lib","python%d.%d"%sys.version_info[:2]))')
+          ls "$HSCLIB"/_sysconfigdata*.py
+          sed -i '' 's/-framework Python//g' "$HSCLIB"/_sysconfigdata*.py
+          grep -c "framework" "$HSCLIB"/_sysconfigdata*.py || echo ">>> hostedtoolcache SC framework 已删干净"
+          # fix3bd: meson 的 build machine 工具必须在 native-file(cross-file 的 build.* 被忽略, meson 1.12 交叉不自动探测)
+          cat > ios-native.ini <<INI
+          [binaries]
+          c = ['clang']
+          cpp = ['clang++']
+          cython = ['cython']
+          INI
+          # fix3bd: 用 cross-file 指定的 python 实锤 meson 将读到的 LDSHARED(还有 framework 就是 SC 没删干净)
+          /Library/Frameworks/Python.framework/Versions/3.14/bin/python -c "
+          import sysconfig
+          print('>>> cross-python LDSHARED =', sysconfig.get_config_var('LDSHARED'))
+          print('>>> cross-python SC name =', sysconfig._get_sysconfigdata_name())
+          "
+          grep "LDSHARED" "$PYIOS/lib-arm64/python3.14/_sysconfigdata__ios_arm64_iphoneos.py" | head -2 || echo ">>> 交叉 SC 无 LDSHARED 键"
+          # 4) 宿主构建依赖（env vars 前！）：Cython(编译 .pyx) + numpy(头文件)
+          # fix3ag: pandas 3.0.6 metadata 生成需要 versioneer(ModuleNotFoundError)——补装
+          python -m pip install -q "Cython>3.1.0,<4" "numpy>=2.2,<3" versioneer
+          # fix3aw: pip download 对 sdist 强制 build isolation(宿主装 pandas 的 build deps, 6 分钟+ 且
+          #         metadata done 后仍 exit 1, 错误被吞)——改用 curl 直下 sdist(PyPI 固定 URL), 无隔离
+          mkdir -p wheel-src
+          curl -sL -o wheel-src/pandas-3.0.6.tar.gz https://files.pythonhosted.org/packages/source/p/pandas/pandas-3.0.6.tar.gz
+          ls -la wheel-src/
+          # fix3ax: BSD tar 解压静默失败(exit 1 无输出)——换 python tarfile 单行(跨平台稳, 失败有明确 traceback; heredoc 顶格破坏 YAML block 缩进, 故用 -c)
+          python3 -c "import tarfile; t=tarfile.open('wheel-src/pandas-3.0.6.tar.gz','r:gz'); t.extractall('wheel-src'); print('>>> tarfile 解压成功')"
+          ls wheel-src/
+          # 5) iOS 交叉环境（与 numpy 步骤一致）
+          export PATH="$PYIOS/bin:$PATH"
+          export _PYTHON_HOST_PLATFORM=ios-arm64
+          export _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata__ios_arm64_iphoneos
+          # fix3au: meson 的 python 模块可能读宿主 SC(交叉 SC sed 影响不到 LDSHARED 的 framework)——双保险:
+          #          sed 宿主 SC 副本放 PYTHONPATH(无论读哪个 SC, -framework Python 都删干净)
+          mkdir -p /tmp/pyfix
+          # fix3az: 宿主 SC 文件名不猜(3.14 可能是 _sysconfigdata_darwin_darwin 或 _sysconfigdata__macosx_*)
+          #         原 cp $HOSTSCNAME.py 2>/dev/null 静默失败→set -e exit 1 无输出(首次执行实锤)
+          #         →glob 宿主 lib 下所有 _sysconfigdata*.py 全 sed, 去掉 2>/dev/null 让错误可见
+          # fix3ba: sysconfig 在 3.14 是包(__file__ 在 .../sysconfig/__init__.py)→dirname 取到子目录, SC 在上一级
+          #         →改用 sys.prefix 拼 lib/pythonX.Y(标准位置, 不依赖 __file__ 形态)
+          HOSTLIB=$(env -u _PYTHON_SYSCONFIGDATA_NAME python3 -c 'import sys, os; print(os.path.join(sys.prefix, "lib", "python%d.%d" % sys.version_info[:2]))')
+          echo ">>> HOSTLIB=$HOSTLIB"
+          cp "$HOSTLIB"/_sysconfigdata*.py /tmp/pyfix/
+          ls /tmp/pyfix/ | head -3
+          sed -i '' 's/-framework Python//g' /tmp/pyfix/_sysconfigdata*.py
+          grep -c "framework" /tmp/pyfix/_sysconfigdata*.py || echo ">>> host SC framework 已删干净"
+          export PYTHONPATH="/tmp/pyfix:$PYIOS/lib-arm64/python3.14${PYTHONPATH:+:$PYTHONPATH}"
+          export IPHONEOS_DEPLOYMENT_TARGET=15.0
+          # 6) 断言 sysconfigdata 生效（环境自证, 失败立即暴露而非盲等 meson）
+          python3 -c "
+          import sysconfig
+          ip = sysconfig.get_config_var('INCLUDEPY') or ''
+          assert 'ios-arm64' in ip, 'sysconfigdata 失效: ' + ip
+          "
+          echo ">>> env: python3=$(which python3) PYTHONPATH=$PYTHONPATH"
+          ls -la "$PYIOS/lib-arm64/python3.14/" | grep sysconfigdata || echo "!!! sysconfigdata 副本缺失"
+          # fix3ai→fix3aj: allow-noblas/cpu-dispatch 都是 numpy 的 meson 选项, pandas 3.0.6
+          #          meson.build 都没有(连续 Unknown option)→ 全部去掉, 只留 cross-file + c_args/cpp_args
+          # fix3bj: 假 Python.framework 纯 bash(必执行)——ld -framework Python 找到假 dylib
+          #         →符号全走 -Wl,-undefined,dynamic_lookup 动态解析; 创建后立即用与 meson 相同命令实测
+          FWROOT=/Library/Frameworks/Python.framework/Versions/3.14
+          mkdir -p "$FWROOT/Python.framework" 2>/dev/null || sudo mkdir -p "$FWROOT/Python.framework"
+          xcrun --sdk iphoneos clang -arch arm64 -dynamiclib -Wl,-undefined,dynamic_lookup -mios-version-min=15.0 -x c /dev/null -o /tmp/pydummy.dylib
+          cp /tmp/pydummy.dylib "$FWROOT/Python.framework/Python" 2>/dev/null || sudo cp /tmp/pydummy.dylib "$FWROOT/Python.framework/Python"
+          ls -la "$FWROOT/Python.framework/"
+          xcrun --sdk iphoneos clang -arch arm64 -dynamiclib -Wl,-undefined,dynamic_lookup -mios-version-min=15.0 -x c /dev/null -o /tmp/fwtest.so -framework Python -F "$FWROOT" && echo ">>> FAKE FW LINK OK" || echo ">>> FAKE FW LINK FAIL"
+          python -m pip wheel --no-deps --no-build-isolation \
+            -Csetup-args=--cross-file=$PWD/ios-meson.ini \
+            -Csetup-args=--native-file=$PWD/ios-native.ini \
+            -Csetup-args=-Dc_args=-mios-version-min=15.0 \
+            -Csetup-args=-Dcpp_args=-mios-version-min=15.0 \
+            wheel-src/pandas-3.0.6 -w wheels-out
+          ls -la wheels-out/
+          for w in wheels-out/*pandas*.whl; do unzip -p "$w" "*/METADATA" 2>/dev/null | head -3; echo "--- $w"; done
+
+      - name: Download pandas deps (python-dateutil, pure-python wheel)
+        run: |
+          # pandas 3.0.6 依赖 python-dateutil(纯 Python, py2.py3-none-any)——无需交叉编译,
+          # 直接下载 wheel 与 numpy/pandas 一起进 site-packages(build-ipa.sh 的 unzip 循环解包)。
+          # 缺它 → 真机 import pandas 报 ModuleNotFoundError: dateutil(fix3cm 实证)。
+          # six: dateutil 2.9.0 的 Requires-Dist(six>=1.5)——dateutil/tz/tz.py import six, --no-deps 漏了它,
+          # 真机实证 pandas._libs.tslibs.timezones → dateutil.tz → import six 崩。
+          pip download --no-deps --only-binary :all: "python-dateutil==2.9.0" "six" -d wheels-out
+          ls -la wheels-out/
+
+      - name: Bundle pure-python git (dulwich + urllib3 + certifi)
+        run: |
+          set -e
+          # git 替代方案：iOS 沙箱拦 fork()，真 git 二进制 spawn 子进程即死；libgit2 要交叉编译 C+CMake
+          # 且无 CLI。用纯 Python 的 dulwich(0.22, HTTP/SSH 传输, clone/commit/push/log 全支持)：
+          # ①PyPI wheel 带 C 扩展 _core(macOS .so, iOS 跑不了)→ 取 sdist 纯 Python 源码；
+          # ②urllib3+certifi 是 https 传输必需(纯 Python wheel)。
+          # 调用方式(环境提示词同步)：git 操作 = python3 -m dulwich.cli <git 子命令>
+          pip download --no-deps --no-binary :all: "dulwich==0.22.1" -d /tmp/dw
+          pip download --no-deps --only-binary :all: "urllib3" "certifi" "typing_extensions" -d wheels-out
+          mkdir -p /tmp/dw/unpack
+          tar -xzf /tmp/dw/dulwich-*.tar.gz -C /tmp/dw/unpack
+          cd /tmp/dw/unpack/dulwich-*
+          python3 -c "
+          import zipfile, os
+          whl = '/tmp/dw/dulwich_pure.whl'
+          with zipfile.ZipFile(whl, 'w') as z:
+              for root, dirs, files in os.walk('.'):
+                  for f in files:
+                      p = os.path.join(root, f)
+                      rel = os.path.relpath(p, '.')
+                      if rel.startswith('dulwich') and not rel.endswith(('.c','.h','.pxd','.pyx')):
+                          z.write(p, rel)
+          print('dulwich pure wheel done')
+          "
+          cp /tmp/dw/dulwich_pure.whl "$GITHUB_WORKSPACE/wheels-out/dulwich-0.22.1-py3-none-any.whl"
+          ls -la "$GITHUB_WORKSPACE/wheels-out/"
+
+      - name: Upload native wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-wheels
+          path: wheels-out/*.whl
+          if-no-files-found: error
+
+  # v4.4.6-fix3u→fix3ac: nmap 源码交叉 iOS 判定不可行——iOS SDK 缺 Linux 网络头
+  # (net/if_arp.h 等, libpcap 亦报 architecture not supported), 业界无 iOS nmap prebuilt。
+  # 诚实降级: 改为内置 Python TCP 端口扫描器 nscan.py(原生 python3 直跑, 功能等效端口扫描),
+  # 不再跑失败的源码编译; job 保留 continue-on-error 防意外。
   native-nmap:
     runs-on: macos-latest
     timeout-minutes: 10

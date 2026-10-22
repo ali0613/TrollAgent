@@ -340,6 +340,135 @@ else
     echo "!!! openssl-stage 与 fuck_vpn 均缺失 — skipping VpnTunnel appex (VPN mode unavailable)"
 fi
 
+# v6.6.0-fix15: 原生 Python（CPython 3.14 iOS, PEP 730）恢复——作为 py3-native 显式命令
+#（AI 按场景选择：numpy/pandas 深度运算 → py3-native 芯片直跑；日常/装包 → python3 统一环境 Alpine）。
+# CI 由 native-python job 编译 Python.xcframework 并 upload artifact（tar.gz 包装）；build job download 到 python-ios/。
+# 本地构建无 artifact 时自动跳过。
+if ls python-ios/python-*.tar.gz >/dev/null 2>&1; then
+    mkdir -p python-ios/unpacked
+    tar -xzf python-ios/python-*.tar.gz -C python-ios/unpacked
+fi
+# 定位 Python.xcframework：不猜 tar 顶层目录名（官方产物可能是 python-3.14.8-iOS-XCframework/
+# 包一层，也可能直接散落），find 一次命中。|| true：download 未就位/缺失时不得触发
+# set -euo pipefail 杀死整个打包（fix3d 曾因此静默失败——find 找不到目录 exit 1）
+XCF_DIR=$(find python-ios -type d -name "Python.xcframework" 2>/dev/null | head -1 || true)
+if [ -n "$XCF_DIR" ]; then
+    SLICE="$XCF_DIR/ios-arm64"
+    if [ -d "$SLICE" ]; then
+        echo ">>> integrating native Python (iOS arm64)..."
+        # 1. Python.framework → App/Frameworks（CLI 链接 libPython，rpath 指向 ../Frameworks）
+        mkdir -p "$APP/Frameworks"
+        cp -R "$SLICE/Python.framework" "$APP/Frameworks/"
+        # 2. stdlib（PYTHONHOME = App/python）：PEP 730 布局 = XCFramework 顶层共享
+        #    lib/python3.14/（纯 Python 模块 + ensurepip + site-packages）+
+        #    ios-arm64/lib-arm64/python3.14/lib-dynload/（平台 .so 扩展）
+        if [ -d "$XCF_DIR/lib/python3.14" ]; then
+            mkdir -p "$APP/python/lib"
+            cp -R "$XCF_DIR/lib/python3.14" "$APP/python/lib/"
+            echo ">>> stdlib: $(du -sh "$APP/python" | cut -f1)"
+        else
+            echo "!!! XCFramework lib/python3.14 missing (shared stdlib)" >&2
+        fi
+        if [ -d "$SLICE/lib-arm64/python3.14/lib-dynload" ]; then
+            mkdir -p "$APP/python/lib/python3.14"
+            cp -R "$SLICE/lib-arm64/python3.14/lib-dynload" "$APP/python/lib/python3.14/"
+            echo ">>> lib-dynload merged: $(ls "$APP/python/lib/python3.14/lib-dynload" | wc -l | tr -d ' ') exts"
+        else
+            echo "!!! ios-arm64 lib-dynload missing (platform extensions)" >&2
+        fi
+        # 3. numpy/pandas iOS wheel（CI native-wheels job 用 cibuildwheel 编的 cp314 arm64 iphoneos wheel）
+        #    解包进 site-packages——原生 python3 直接 import numpy/pandas
+        if ls native-wheels/*.whl >/dev/null 2>&1; then
+            SP="$APP/python/lib/python3.14/site-packages"
+            mkdir -p "$SP"
+            for w in native-wheels/*.whl; do
+                unzip -oq "$w" -d "$SP" && echo ">>> wheel unpacked: $(basename "$w")"
+            done
+            echo ">>> site-packages: $(du -sh "$SP" | cut -f1)"
+        else
+            echo "!!! native-wheels not present — numpy/pandas 未进包 (iSH 版仍会段错误)" >&2
+        fi
+        # fix3cn: 真机实测 _ios_support 未进包 → platform.uname() 走 ios_ver() 崩(import 失败) → pandas
+        # import 崩(traceback 实证)。os.uname() 真机可用(Darwin/iPhone14,3)——patch platform.py 的 ios
+        # 分支 try/except 保护, fallback 保留 os.uname 结果, pandas 即可正常 import。
+        PLATFORM_PY="$APP/python/lib/python3.14/platform.py"
+        if [ -f "$PLATFORM_PY" ]; then
+            perl -0pi -e "s/if sys\.platform == 'ios':\n\s+system, release, _, _ = ios_ver\(\)/if sys.platform == 'ios':\n        try:\n            system, release, _, _ = ios_ver()\n        except Exception:\n            pass/" "$PLATFORM_PY"
+            echo ">>> platform.py ios_ver try/except patched"
+        fi
+        # fix3cn: python-ios dist 未生成 _sysconfigdata 模块 → sysconfig.get_config_var() import 崩 →
+        # pandas compat._constants 的 ISMUSL 检查崩(traceback 实证)。patch sysconfig._get_sysconfigdata
+        # try/except 返回空 dict——get_config_var 对缺失项返回 None(标准行为), 一次性覆盖任意缺失。
+        SYSCONFIG_PY="$APP/python/lib/python3.14/sysconfig/__init__.py"
+        if [ -f "$SYSCONFIG_PY" ]; then
+            perl -0pi -e "s/def _get_sysconfigdata\(\):\n    import importlib\n\n    name = _get_sysconfigdata_name\(\)\n    path = os\.environ\.get\('_PYTHON_SYSCONFIGDATA_PATH'\)\n    module = _import_from_directory\(path, name\) if path else importlib\.import_module\(name\)\n\n    return module\.build_time_vars/def _get_sysconfigdata():\n    import importlib\n\n    name = _get_sysconfigdata_name()\n    path = os.environ.get('_PYTHON_SYSCONFIGDATA_PATH')\n    try:\n        module = _import_from_directory(path, name) if path else importlib.import_module(name)\n        return module.build_time_vars\n    except Exception:\n        return {}/" "$SYSCONFIG_PY"
+            echo ">>> sysconfig _get_sysconfigdata fallback patched"
+        fi
+        # 4. 编译 py3-native CLI（嵌入式入口：PyConfig + PYTHONHOME + -c/-m/script）
+        if [ -f "Sources/PythonCLI/main.c" ] && [ -f "$APP/Frameworks/Python.framework/Headers/Python.h" ]; then
+            # fix3ck: 用户定案用动态版——动态 wrapper 链 Python.framework（官方 PEP 730 --enable-framework 产物，
+            # node 同款 @rpath/NodeMobile.framework 方案已被验证可跑）。fix3cg 补签 no-sandbox 对两条路径都覆盖；
+            # 137 根因=签名(未签 no-sandbox)，与静态/动态无关。动态版省 ~5.8MB、升级 Python 只换 framework。
+            # 静态库分支仅作兜底（动态失败时）。
+            echo ">>> py3-native CLI: dynamic link (primary, @rpath/Python.framework/Python)"
+            xcrun -sdk iphoneos clang -arch arm64 -isysroot "$SDK" -miphoneos-version-min=13.0 \
+                -I"$APP/Frameworks/Python.framework/Headers" \
+                -F"$APP/Frameworks" -framework Python \
+                -Wl,-rpath,@executable_path/../Frameworks \
+                -o "$APP/bin/python3" Sources/PythonCLI/main.c || \
+                { echo "!!! py3-native CLI dynamic build FAILED, fallback static" >&2; rm -f "$APP/bin/python3"; }
+            if [ ! -f "$APP/bin/python3" ] && [ -f "python-ios/static-lib/libpython3.14.a" ]; then
+                echo ">>> py3-native CLI: static link (fallback)"
+                xcrun -sdk iphoneos clang -arch arm64 -isysroot "$SDK" -miphoneos-version-min=13.0 \
+                    -I"$APP/Frameworks/Python.framework/Headers" \
+                    -I"python-ios/static-lib/include" \
+                    -o "$APP/bin/python3" Sources/PythonCLI/main.c \
+                    python-ios/static-lib/libpython3.14.a \
+                    -lpthread -ldl -lutil -lm || \
+                    { echo "!!! py3-native CLI static build FAILED" >&2; rm -f "$APP/bin/python3"; }
+            fi
+            # fix3cn: python3 是核心能力——两条路径都失败必须 exit 1（此前吞错继续 → 出
+            # "run success 但包内无 python3" 的残缺包, 真机 AI 调用 python3 报"未内置", 用户白装一轮）。
+            # 本地构建无 python artifact 时走外层 if 跳过, 不受影响；只有"有 artifact 却编不出来"才 fail。
+            if [ ! -f "$APP/bin/python3" ]; then
+                echo "!!! py3-native CLI BOTH dynamic and static failed — failing build (no silent half-package)" >&2
+                exit 1
+            fi
+            if [ -f "$APP/bin/python3" ]; then
+                chmod +x "$APP/bin/python3"
+                echo ">>> native py3-native CLI built ($(du -h "$APP/bin/python3" | cut -f1))"
+                # fix3cg: python3 是本脚本内后生成的——前面的 bin 签名循环(≈123-150 行)展开时它还不存在，
+                # 未签 no-sandbox entitlements → iOS 沙箱按每次 exec 的二进制签名计算 → 真机 spawn 套普通沙箱
+                # → 启动即被 SIGKILL(137)。编译成功后必须补签一次 no-sandbox（动态/静态两条路径都覆盖）。
+                if [ -f "Support/bin-entitlements.plist" ]; then
+                    if command -v ldid >/dev/null 2>&1; then
+                        if ! ldid -S"Support/bin-entitlements.plist" "$APP/bin/python3" 2>/dev/null \
+                            || ! ldid -e "$APP/bin/python3" 2>/dev/null | grep -q no-sandbox; then
+                            echo "!!! python3 no-sandbox re-sign FAILED —— 真机 python3 将套普通沙箱（网络/容器权限缺失）" >&2
+                            exit 1
+                        fi
+                        echo ">>> python3 re-signed no-sandbox (ldid, verified)"
+                    elif command -v codesign >/dev/null 2>&1; then
+                        codesign -s - -f --entitlements "Support/bin-entitlements.plist" "$APP/bin/python3" 2>/dev/null \
+                            && echo ">>> python3 re-signed no-sandbox (codesign)" \
+                            || { echo "!!! python3 no-sandbox re-sign FAILED (codesign)" >&2; exit 1; }
+                    else
+                        echo "!!! no sign tool for python3 — stays sandboxed" >&2
+                    fi
+                else
+                    echo "!!! bin-entitlements.plist missing — python3 stays sandboxed" >&2
+                fi
+            fi
+        else
+            echo "!!! PythonCLI/main.c or Python.h missing — native Python skipped" >&2
+        fi
+    else
+        echo "!!! ios-arm64 slice missing in $XCF_DIR — native Python skipped" >&2
+    fi
+else
+    echo ">>> python-ios xcframework not present — native Python skipped" >&2
+fi
+
 # 把特权 entitlements 签入主二进制，TrollStore 安装时才能继承 no-sandbox/no-container/task_for_pid 等权限
 # v2.9.64：强制用 ldid 签名（TrollStore 官方明确要求 ldid -S 格式；codesign ad-hoc 签名格式不同，可能导致 entitlements 不被保留）
 if [ -f "Support/TrollAgent.entitlements" ]; then
