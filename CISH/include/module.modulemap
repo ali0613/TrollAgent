@@ -1,4 +1,4 @@
-module CISH {
+module TrollRuntime {
     header "wrapper.h"
     export *
 }
