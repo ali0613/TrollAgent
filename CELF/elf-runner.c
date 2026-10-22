@@ -63,6 +63,7 @@ extern int ptrace(int request, pid_t pid, char *addr, int data);
 #define ELF_MAGIC      0x464C457F   /* \x7fELF */
 #define EM_AARCH64     183
 #define PT_LOAD        1
+#define PT_INTERP      3
 #define PF_X           1
 #define PF_W           2
 #define PF_R           4
@@ -138,8 +139,16 @@ static uint64_t g_phentsize = 0;
 static uint64_t g_phnum = 0;
 
 /* 段保护信息（patch 完成后统一 mprotect） */
-#define MAX_SEGS 32
-static struct { uintptr_t off; size_t len; int prot; } g_segs[MAX_SEGS];
+#define MAX_SEGS 64
+static struct { uintptr_t base; uintptr_t off; size_t len; int prot; } g_segs[MAX_SEGS];
+/* v19.18j: 动态 ELF（PT_INTERP）——蓝本 iSH kernel/exec.c（GPL 只读参考，代码自研）
+   M1: 加载 ld-musl 到独立基址，entry 指向 ld-musl；动态解析（DT_NEEDED/.so/重定位）由 guest 内 ld-musl 完成 */
+static char g_interp_name[256] = {0};
+/* v19.18j: interp 区基址/大小非 static（emu.c extern 引用 fetch OOB 检查） */
+uintptr_t g_interp_base = 0;
+size_t g_interp_size = 0;
+static uintptr_t g_interp_entry = 0;
+static uintptr_t g_app_entry = 0;   /* 动态模式：主程序 e_entry（auxv AT_ENTRY 用） */
 static int g_nsegs = 0;
 static int g_rwx = 0;      /* 14da: mmap 走 RWX 直连(allow-unsigned)时置 1——保持 RWX 直接执行，不再 mprotect */
 static sigjmp_buf g_exit_jmp; /* 14dc: 主进程内跑模式的 ELF 退出出口（exit_group → siglongjmp 回） */
@@ -1098,6 +1107,9 @@ static long sys_mmap(uintptr_t addr, size_t len, int prot, int flags, int fd, of
         }
     }
     void *r = mmap((void*)addr, len, mprot, flags, fd, off);
+    if (getenv("MAP_TRACE") && r != MAP_FAILED)
+        fprintf(stderr, "[map] mmap -> 0x%lx len=%zu prot=%d flags=0x%x\n",
+                (unsigned long)r, len, prot, flags);
     if (r == MAP_FAILED) {
         /* v10: MAP_FIXED 仍失败（与未知映射冲突）→ 去 FIXED 重试（musl 同款 fallback） */
         if ((flags & 0x10) && addr != 0) {
@@ -1288,6 +1300,19 @@ static long sys_ioctl(int fd, unsigned long req, long arg) {
     return (long)ioctl(fd, req, arg);
 }
 
+/* v19.18j: guest /lib 路径 → 宿主映射（ELF_LIB_PATH env）。
+   ld-musl 按 guest 路径找 libc.so（/lib/libc.musl-aarch64.so.1），
+   真机/本地测试把 Alpine lib 目录挂到 ELF_LIB_PATH。 */
+static const char *guest_path_map(const char *p) {
+    const char *lib = getenv("ELF_LIB_PATH");
+    if (lib && *lib && p && strncmp(p, "/lib/", 5) == 0) {
+        static __thread char buf[512];
+        snprintf(buf, sizeof(buf), "%s/%s", lib, p + 5);
+        return buf;
+    }
+    return p;
+}
+
 /* 主翻译入口：Linux syscall 号 → 本地实现
  * EMU_SYSCALL=1 时打印每个 syscall 的 nr/args/ret（v14 诊断）。 */
 long translate_syscall(uint64_t nr,
@@ -1301,13 +1326,13 @@ long translate_syscall(uint64_t nr,
     }
     switch (nr) {
     case SYS_openat: {
-        const char *p = (const char*)(uintptr_t)a1;
+        const char *p = guest_path_map((const char*)(uintptr_t)a1);
         if (is_proc_path(p)) r = vproc_open(p, (int)a2);
         else r = sys_openat((int)a0, p, (int)a2, (mode_t)a3);
         break;
     }
     case SYS_newfstatat:
-        r = sys_newfstatat((int)a0, (const char*)(uintptr_t)a1, (struct linux_stat*)(uintptr_t)a2, (int)a3);        break;
+        r = sys_newfstatat((int)a0, guest_path_map((const char*)(uintptr_t)a1), (struct linux_stat*)(uintptr_t)a2, (int)a3);        break;
     case SYS_getdents64:
         if ((int)a0 >= VPROC_BASE) r = vproc_getdents((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
         else r = sys_getdents64((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
@@ -1555,7 +1580,7 @@ static void crash_handler(int sig, siginfo_t *si, void *ucv) {
  * PIE 的 GOT/数据含"相对加载基址"的项，需 *(base+r_offset)=base+r_addend 填入，
  * 否则跳入 entry 访问 GOT 指向未映射区 → SIGBUS。musl 静态 PIE 仅 RELATIVE 类型。
  * 必须在 load_elf 内 raw(free 前)调用：section header 表可能在 LOAD 段外未加载到 g_base。 */
-static int apply_relocations(const uint8_t *raw, const Elf64_Ehdr *eh) {
+static int apply_relocations(const uint8_t *raw, const Elf64_Ehdr *eh, uintptr_t base) {
     if (!eh || eh->e_shoff == 0 || eh->e_shnum == 0 || eh->e_shstrndx >= eh->e_shnum) {
         fprintf(stderr, "[elf-runner] reloc: 无 section headers(ET_EXEC?) 跳过\n");
         return 0;
@@ -1571,8 +1596,8 @@ static int apply_relocations(const uint8_t *raw, const Elf64_Ehdr *eh) {
         for (size_t j = 0; j < n; j++) {
             uint64_t type = rela[j].r_info & 0xffffffffULL;
             if (type == R_AARCH64_RELATIVE) {
-                uint64_t *p = (uint64_t *)(g_base + rela[j].r_offset);
-                *p = g_base + (uint64_t)rela[j].r_addend;
+                uint64_t *p = (uint64_t *)(base + rela[j].r_offset);
+                *p = base + (uint64_t)rela[j].r_addend;
                 done++;
             } else {
                 if (skipped < 5)
@@ -1588,6 +1613,7 @@ static int apply_relocations(const uint8_t *raw, const Elf64_Ehdr *eh) {
     return 0;
 }
 
+static int load_interp(const char *path, uintptr_t *ibase_out, uintptr_t *ientry_out); /* v19.18j 前置声明 */
 static int load_elf(const char *path, uintptr_t *entry_out) {
     int fd = open(path, O_RDONLY);
     if (fd < 0) { perror("elf-runner: open"); return -1; }
@@ -1681,10 +1707,25 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
         // 直接 g_base+off 未对齐→mprotect EINVAL。段起止对齐到页供 mprotect(memcpy 仍用精确 dst)。
         uintptr_t seg_start = dst & ~(uintptr_t)4095;
         uintptr_t seg_end = (dst + ph->p_memsz + 4095) & ~(uintptr_t)4095;
+        g_segs[g_nsegs].base = g_base;
         g_segs[g_nsegs].off = seg_start - g_base;
         g_segs[g_nsegs].len = seg_end - seg_start;
         g_segs[g_nsegs].prot = prot;
         g_nsegs++;
+    }
+
+    /* v19.18j: 检测 PT_INTERP（动态 ELF）→ 记录 interp 路径（guest 内路径，如 /lib/ld-musl-aarch64.so.1） */
+    g_interp_name[0] = 0;
+    for (int i = 0; i < eh->e_phnum; i++) {
+        Elf64_Phdr *ph = (Elf64_Phdr *)(raw + eh->e_phoff + i * eh->e_phentsize);
+        if (ph->p_type == PT_INTERP) {
+            size_t n = ph->p_filesz;
+            if (n >= sizeof(g_interp_name)) n = sizeof(g_interp_name) - 1;
+            memcpy(g_interp_name, raw + ph->p_offset, n);
+            g_interp_name[n] = 0;
+            fprintf(stderr, "[elf-runner] PT_INTERP: %s\n", g_interp_name);
+            break;
+        }
     }
 
     /* 入口需加基址偏移（g_load_vaddr 为原始 vaddr；g_base 为实际映射基址） */
@@ -1692,8 +1733,93 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
     fprintf(stderr, "[elf-runner] load done: entry=0x%lx\n", (unsigned long)*entry_out);
 
     /* 14c8: PIE 重定位(RELATIVE) 须在 free(raw) 前、段仍 RW 时执行 */
-    if (apply_relocations(raw, eh) != 0) { free(raw); return -1; }
+    if (apply_relocations(raw, eh, g_base) != 0) { free(raw); return -1; }
 
+    free(raw);
+    return 0;
+}
+
+/* v19.18j: 动态 ELF 检测——返回 interp 是否已加载（elf_runner_main 用）
+   ELF_INTERP_PATH env 覆盖 interp 宿主路径（测试/真机部署用）。 */
+static int load_dynamic_interp(void) {
+    if (!g_interp_name[0]) return 0;
+    const char *ip = getenv("ELF_INTERP_PATH");
+    if (!ip || !*ip) ip = g_interp_name;
+    fprintf(stderr, "[elf-runner] 动态 ELF：加载 interp %s\n", ip);
+    uintptr_t i_base = 0, i_entry = 0;
+    if (load_interp(ip, &i_base, &i_entry) != 0) return -1;
+    return 1;
+}
+
+/* v19.18j: 加载动态链接器（ld-musl）到独立基址。
+   与主程序同模式：mmap 整块 → copy PT_LOAD → 记录段 → RELATIVE reloc。
+   interp 是 ET_DYN(static-pie 链接)，vaddr 从 0 起，映射到宿主任意地址（位置无关）。 */
+static int load_interp(const char *path, uintptr_t *ibase_out, uintptr_t *ientry_out) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) { perror("elf-runner: interp open"); return -1; }
+    struct stat st;
+    if (fstat(fd, &st) != 0 || st.st_size < sizeof(Elf64_Ehdr)) { close(fd); return -1; }
+    uint8_t *raw = malloc(st.st_size);
+    if (!raw) { close(fd); return -1; }
+    if (read(fd, raw, st.st_size) != st.st_size) { free(raw); close(fd); return -1; }
+    close(fd);
+    Elf64_Ehdr *eh = (Elf64_Ehdr *)raw;
+    if (eh->magic != ELF_MAGIC || eh->ei_class != 2 || eh->e_machine != EM_AARCH64) {
+        fprintf(stderr, "elf-runner: interp 不是 aarch64 ELF64（%s）\n", path);
+        free(raw); return -1;
+    }
+    uintptr_t lo = UINTPTR_MAX, hi = 0;
+    for (int i = 0; i < eh->e_phnum; i++) {
+        Elf64_Phdr *ph = (Elf64_Phdr *)(raw + eh->e_phoff + i * eh->e_phentsize);
+        if (ph->p_type != PT_LOAD) continue;
+        uintptr_t vlo = ph->p_vaddr & ~(uintptr_t)4095;
+        uintptr_t vhi = (ph->p_vaddr + ph->p_memsz + 4095) & ~(uintptr_t)4095;
+        if (vlo < lo) lo = vlo;
+        if (vhi > hi) hi = vhi;
+    }
+    if (lo == UINTPTR_MAX) { free(raw); return -1; }
+    size_t total = hi - lo;
+    total = (total + 0x3fff) & ~(size_t)0x3fff;
+    void *m = mmap(NULL, total, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANON | MAP_JIT, -1, 0);
+    if (m == MAP_FAILED) {
+        m = mmap(NULL, total, PROT_READ | PROT_WRITE | PROT_EXEC,
+                 MAP_PRIVATE | MAP_ANON, -1, 0);
+        if (m != MAP_FAILED) g_rwx = 1;
+    }
+    if (m == MAP_FAILED) {
+        fprintf(stderr, "elf-runner: interp mmap 失败 total=0x%zx (%s)\n", total, strerror(errno));
+        free(raw); return -1;
+    }
+    uintptr_t ibase = (uintptr_t)m;
+    for (int i = 0; i < eh->e_phnum && g_nsegs < MAX_SEGS; i++) {
+        Elf64_Phdr *ph = (Elf64_Phdr *)(raw + eh->e_phoff + i * eh->e_phentsize);
+        if (ph->p_type != PT_LOAD) continue;
+        uintptr_t dst = ibase + (ph->p_vaddr - lo);
+        fprintf(stderr, "[elf-runner] iseg#%d vaddr=0x%lx filesz=%zu dst=0x%lx\n",
+                i, (unsigned long)ph->p_vaddr, (size_t)ph->p_filesz, (unsigned long)dst);
+        if (ph->p_filesz > 0)
+            memcpy((void *)dst, raw + ph->p_offset, ph->p_filesz);
+        int prot = 0;
+        if (ph->p_flags & PF_R) prot |= PROT_READ;
+        if (ph->p_flags & PF_W) prot |= PROT_WRITE;
+        if (ph->p_flags & PF_X) prot |= PROT_EXEC;
+        uintptr_t seg_start = dst & ~(uintptr_t)4095;
+        uintptr_t seg_end = (dst + ph->p_memsz + 4095) & ~(uintptr_t)4095;
+        g_segs[g_nsegs].base = ibase;
+        g_segs[g_nsegs].off = seg_start - ibase;
+        g_segs[g_nsegs].len = seg_end - seg_start;
+        g_segs[g_nsegs].prot = prot;
+        g_nsegs++;
+    }
+    *ibase_out = ibase;
+    *ientry_out = ibase + (eh->e_entry - lo);
+    g_interp_base = ibase;
+    g_interp_size = total;
+    g_interp_entry = *ientry_out;
+    fprintf(stderr, "[elf-runner] interp loaded: base=0x%lx total=%zu entry=0x%lx\n",
+            (unsigned long)ibase, total, (unsigned long)*ientry_out);
+    if (apply_relocations(raw, eh, ibase) != 0) { free(raw); return -1; }
     free(raw);
     return 0;
 }
@@ -1701,15 +1827,17 @@ static int load_elf(const char *path, uintptr_t *entry_out) {
 /* ---- patch: svc #0 → brk #1（在加载内存内扫描；此时段仍 RW） ---- */
 static int patch_svc(void) {
     int patched = 0;
-    fprintf(stderr, "[elf-runner] patch scanning 0..0x%zx (base 0x%lx)\n",
-            g_total_size, (unsigned long)g_base);
-    for (size_t off = 0; off + 4 <= g_total_size; off += 4) {
-        if ((off & 0xfffff) == 0)
-            fprintf(stderr, "[elf-runner]   scan off=0x%lx\n", (unsigned long)off);
-        uint32_t *insn = (uint32_t *)(g_base + off);
-        if (*insn == SVC_0) {
-            *insn = BRK_1;
-            patched++;
+    for (int s = 0; s < g_nsegs; s++) {
+        uintptr_t base = g_segs[s].base;
+        size_t len = g_segs[s].len;
+        fprintf(stderr, "[elf-runner] patch scan seg%d base=0x%lx len=%zu\n",
+                s, (unsigned long)base, len);
+        for (size_t off = 0; off + 4 <= len; off += 4) {
+            uint32_t *insn = (uint32_t *)(base + off);
+            if (*insn == SVC_0) {
+                *insn = BRK_1;
+                patched++;
+            }
         }
     }
     fprintf(stderr, "[elf-runner] patch done: %d svc sites\n", patched);
@@ -1736,7 +1864,7 @@ static int apply_seg_prot(void) {
         }
         fprintf(stderr, "[elf-runner] mprotect seg%d off=0x%lx len=%zu prot=%d\n",
                 i, (unsigned long)g_segs[i].off, g_segs[i].len, g_segs[i].prot);
-        if (mprotect((void *)(g_base + g_segs[i].off), g_segs[i].len, g_segs[i].prot) != 0) {
+        if (mprotect((void *)(g_segs[i].base + g_segs[i].off), g_segs[i].len, g_segs[i].prot) != 0) {
             perror("mprotect seg");
             return -1;
         }
@@ -1767,6 +1895,7 @@ int elf_runner_main(int argc, char **argv) {
            后内存耗尽（mmap Cannot allocate memory → App 假死/被杀）。 */
         if (g_stack_base) { munmap((void *)g_stack_base, 32 << 20); g_stack_base = 0; }
         if (g_heap_base)  { munmap((void *)g_heap_base, 16 << 20); g_heap_base = g_heap_cur = g_heap_top = 0; }
+        if (g_interp_base) { munmap((void *)g_interp_base, g_interp_size); g_interp_base = 0; }
         if (g_base) {
             munmap((void *)(g_base + 0x580000), 0x20000);   /* guest 0x580000 写缓冲区（独立映射） */
             munmap((void *)g_base, g_total_size);
@@ -1804,6 +1933,12 @@ int elf_runner_main(int argc, char **argv) {
        iOS16 App fork 子进程必被 SIGBUS 杀（st=0xa 三版复现，pre-stop 日志未出）。 */
     uintptr_t entry = 0;
     if (load_elf(elf_path, &entry) != 0) return 1;
+    g_app_entry = entry;   /* 主程序 entry（AT_ENTRY 应指向它，musl CRTJMP 用） */
+
+    /* v19.18j: 动态 ELF → entry 指向 ld-musl（动态解析由 guest 内 ld-musl 完成） */
+    int dyn = load_dynamic_interp();
+    if (dyn < 0) return 3;
+    if (dyn > 0) entry = g_interp_entry;
 
     /* 14e1: 解释器模式（用户选 A）——不再 patch_svc / apply_seg_prot / jump 直跑。
        iOS16.3+TrollStore 无 MAP_JIT 可用（csflags 实测 debugged=0、allow-jit 位不在），
@@ -1893,15 +2028,18 @@ int elf_runner_main(int argc, char **argv) {
         slot[a++] = envstr[1];
         slot[a++] = 0;                            /* envp 终止 */
     }
-    uint64_t *aux = (uint64_t *)&slot[a];         /* auxv（envp NULL 之后；+2 会覆盖 envp NULL→reloc 崩） */
+    /* v19.18j 修复：a 已在 envp NULL（slot[a-1]）写入后自增——slot[a] 就是
+       auxv 起点。实测 &slot[a+1] 会让 slot[a] 残留 0，musl 把 0 当 AT_NULL
+       → auxv 全空 → AT_BASE=0 → RELATIVE 处理崩。 */
+    uint64_t *aux = (uint64_t *)&slot[a];         /* auxv（envp NULL 之后） */
     int aa = 0;
     aux[aa++] = 3;  aux[aa++] = g_base + g_phoff; /* AT_PHDR */
     aux[aa++] = 4;  aux[aa++] = g_phentsize;        /* AT_PHENT */
     aux[aa++] = 5;  aux[aa++] = g_phnum;            /* AT_PHNUM */
     aux[aa++] = 6;  aux[aa++] = 4096;               /* AT_PAGESZ */
-    aux[aa++] = 7;  aux[aa++] = 0;                  /* AT_BASE(静态链接=0) */
+    aux[aa++] = 7;  aux[aa++] = g_interp_base;         /* AT_BASE（动态=interp 基址；静态=0） */
     aux[aa++] = 8;  aux[aa++] = 0;                  /* AT_FLAGS */
-    aux[aa++] = 9;  aux[aa++] = entry;              /* AT_ENTRY */
+    aux[aa++] = 9;  aux[aa++] = g_app_entry;        /* AT_ENTRY=主程序 entry（musl CRTJMP 跳它；不能用 interp entry） */
     aux[aa++] = 11; aux[aa++] = 0;                  /* AT_UID */
     aux[aa++] = 12; aux[aa++] = 0;                  /* AT_EUID */
     aux[aa++] = 13; aux[aa++] = 0;                  /* AT_GID */
@@ -1917,6 +2055,12 @@ int elf_runner_main(int argc, char **argv) {
 
     fprintf(stderr, "[elf-runner] loading %s entry=0x%lx base=0x%lx size=%zu\n",
             elf_path, (unsigned long)entry, (unsigned long)g_base, g_total_size);
+    if (getenv("AUX_TRACE")) {
+        fprintf(stderr, "[elf-runner] aux=%p a=%d slot0=%lx argc=%d\n",
+                (void*)aux, a, (unsigned long)slot[0], narg);
+        for (int z = 0; z < 14; z++)
+            fprintf(stderr, "[elf-runner]   slot[%d]=0x%lx\n", z, (unsigned long)slot[z]);
+    }
     fprintf(stderr, "[elf-runner] interpreter mode: entry=0x%lx sp=0x%lx\n",
             (unsigned long)entry, (unsigned long)slot);
 

@@ -73,11 +73,20 @@ static void W(int n, uint64_t v) {
     if (n == 31) E.sp = v; else if (n < 31) E.r[n] = v;
 }
 
+static uint64_t tb_last[40]; static int tb_pos = 0;
 static uint32_t fetch(void) {
     uint32_t insn = 0;
-    if (E.pc >= g_base && E.pc + 4 <= g_base + g_total_size) {
+    /* v19.18j: 合法取指区 = 主程序区 + interp 区（动态 ELF 的 ld-musl 在独立基址） */
+    extern uintptr_t g_interp_base;
+    extern size_t g_interp_size;
+    int ok = (E.pc >= g_base && E.pc + 4 <= g_base + g_total_size) ||
+             (g_interp_base && E.pc >= g_interp_base && E.pc + 4 <= g_interp_base + g_interp_size);
+    if (ok) {
         memcpy(&insn, (void *)(uintptr_t)E.pc, 4);
     } else {
+        fprintf(stderr, "[emu] last pcs:");
+        for (int k = 0; k < 40; k++) { int idx = (tb_pos - 40 + k) & 39; if (tb_last[idx]) fprintf(stderr, " 0x%lx", (unsigned long)tb_last[idx]); }
+        fprintf(stderr, "\n");
         fprintf(stderr, "[emu] fetch OOB pc=0x%llx (base=0x%llx size=%zu)\n",
                 (unsigned long long)E.pc, (unsigned long long)g_base, g_total_size);
         E.exited = 1; E.exit_code = -EFAULT; return 0;
@@ -222,16 +231,175 @@ static int g_iotrace = 0;   /* v18: ioctl 后指令轨迹开关 */
 static int g_fgetc_trace = 0;  /* v19.17.1 探针：fgetc 死循环（FGETC_TRACE=1） */
 static int exec_one(void) {
     /* v11: 每条指令进 ring buffer（崩点带出最后 64 条） */
-    tr_record(E.pc, E.pc >= g_base && E.pc + 4 <= g_base + g_total_size
+    extern uintptr_t g_interp_base;
+    extern size_t g_interp_size;
+    int insn_ok = (E.pc >= g_base && E.pc + 4 <= g_base + g_total_size) ||
+                  (g_interp_base && E.pc >= g_interp_base && E.pc + 4 <= g_interp_base + g_interp_size);
+    tr_record(E.pc, insn_ok
                   ? *(const uint32_t *)(uintptr_t)E.pc : 0);
     if (g_iotrace)
         fprintf(stderr, "[it] pc-off=0x%llx insn=0x%08x\n",
                 (unsigned long long)(E.pc - g_base),
-                (unsigned int)(E.pc >= g_base && E.pc + 4 <= g_base + g_total_size
+                (unsigned int)(insn_ok
                     ? *(const uint32_t *)(uintptr_t)E.pc : 0));
 
     uint32_t i = fetch();
     if (E.exited) return 1;
+    tb_last[tb_pos & 39] = E.pc; tb_pos++;
+    if ((i & 0xFF000000) == 0x94000000 || (i & 0xFF000000) == 0xD6000000 ||
+        (i & 0xFF000000) == 0x14000000 || (i & 0x7FE00000) == 0x54000000)
+        { tb_last[tb_pos & 39] = 0; }
+    /* v19.18j 打点：interp 内 0x1fd00（__init_tls 入口）——TLS 结构指针来源 */
+    extern uintptr_t g_interp_base;
+    if (g_interp_base && E.pc == g_interp_base + 0x1fd00) {
+        fprintf(stderr, "[pt] __init_tls entry: x0=0x%lx x1=0x%lx x2=0x%lx lr=0x%lx\n",
+                (unsigned long)RZR(0), (unsigned long)RZR(1), (unsigned long)RZR(2),
+                (unsigned long)E.r[30]);
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x1fd18) {
+        fprintf(stderr, "[pt] bl __set_thread_area: x0=0x%lx x2=0x%lx x19=0x%lx sp=0x%lx\n",
+                (unsigned long)RZR(0), (unsigned long)RZR(2), (unsigned long)RZR(19),
+                (unsigned long)E.sp);
+    }
+    if (E.pc == g_base + 0xa2a04) {
+        fprintf(stderr, "[pt] probe a2a04: sp=0x%lx x2=0x%lx x29=0x%lx x0=0x%lx\n",
+                (unsigned long)E.sp, (unsigned long)RZR(2), (unsigned long)RZR(29), (unsigned long)RZR(0));
+    }
+    if (E.pc == g_base + 0xa2a08) {
+        fprintf(stderr, "[pt] probe a2a08: sp=0x%lx x2=0x%lx n=%d\n",
+                (unsigned long)E.sp, (unsigned long)RZR(2), (E.sp == RZR(2)));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x696b8) {
+        static int dlstart_cnt = 0; dlstart_cnt++;
+        fprintf(stderr, "[pt] DLSTART #%d: lr=0x%lx x0=0x%lx sp=0x%lx last12:",
+                dlstart_cnt, (unsigned long)E.r[30], (unsigned long)RZR(0), (unsigned long)E.sp);
+        for (int k = 0; k < 12; k++) {
+            int idx = (tb_pos - 12 + k) & 39;
+            if (tb_last[idx]) fprintf(stderr, " 0x%lx", (unsigned long)tb_last[idx]);
+        }
+        fprintf(stderr, "\n");
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x69774) {
+        fprintf(stderr, "[pt] _start AT_BASE check: x3=0x%lx x0=0x%lx sp=0x%lx [sp+0x40]=0x%lx\n",
+                (unsigned long)RZR(3), (unsigned long)RZR(0), (unsigned long)E.sp,
+                *(unsigned long*)(uintptr_t)(E.sp + 0x40));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6cfc8) {
+        fprintf(stderr, "[pt] dls3 entry-store: x0=0x%lx x3=0x%lx x24=0x%lx [x24+0x18]=0x%lx\n",
+                (unsigned long)RZR(0), (unsigned long)RZR(3), (unsigned long)RZR(24),
+                *(unsigned long*)(uintptr_t)(RZR(24)+0x18));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6c67c) {
+        fprintf(stderr, "[pt] dls3 bl-getenv: x0=0x%lx str='%s'\n", (unsigned long)RZR(0),
+                (const char*)(uintptr_t)RZR(0));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6c73c) {
+        fprintf(stderr, "[pt] dls3 bl-69a10: x0=0x%lx x1=0x%lx\n", (unsigned long)RZR(0), (unsigned long)RZR(1));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6c768) {
+        fprintf(stderr, "[pt] dls3 bl-6b4ac: x0=0x%lx x1=0x%lx\n", (unsigned long)RZR(0), (unsigned long)RZR(1));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6c4ec) {
+        fprintf(stderr, "[pt] dls2 entry: x0=0x%lx x1=0x%lx x2=0x%lx x3=0x%lx lr=0x%lx sp=0x%lx\n",
+                (unsigned long)RZR(0), (unsigned long)RZR(1), (unsigned long)RZR(2),
+                (unsigned long)RZR(3), (unsigned long)E.r[30], (unsigned long)E.sp);
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x69758) {
+        fprintf(stderr, "[pt] dyn scan: x3=0x%lx [x3]=0x%lx x4=0x%lx\n",
+                (unsigned long)RZR(3),
+                *(unsigned long*)(uintptr_t)RZR(3), (unsigned long)RZR(4));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x69774) {
+        fprintf(stderr, "[pt] dyn DT_NULL: x3=0x%lx x2=0x%lx [x3]=0x%lx\n",
+                (unsigned long)RZR(3), (unsigned long)RZR(2),
+                *(unsigned long*)(uintptr_t)RZR(3));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6974c) {
+        fprintf(stderr, "[pt] dyn start: x3=0x%lx (x1=0x%lx)\n", (unsigned long)RZR(3), (unsigned long)RZR(1));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x69710) {
+        fprintf(stderr, "[pt] auxv copy start: x3=0x%lx x6=0x%lx\n", (unsigned long)RZR(3), (unsigned long)RZR(6));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6971c) {
+        if (getenv("AUX_TRACE"))
+            fprintf(stderr, "[pt] auxv copy: type=0x%lx val=0x%lx\n",
+                    (unsigned long)RZR(3),
+                    *(unsigned long*)(uintptr_t)(RZR(2) + 8));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6c4ec) {
+        fprintf(stderr, "[pt] dls3 enter: x0=0x%lx x1=0x%lx sp=0x%lx\n",
+                (unsigned long)RZR(0), (unsigned long)RZR(1), (unsigned long)E.sp);
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6c4d0) {
+        fprintf(stderr, "[pt] dls2b br-pre: x3=0x%lx [x3+8]=0x%lx x2=0x%lx x16=0x%lx\n",
+                (unsigned long)RZR(3),
+                *(unsigned long*)(uintptr_t)(RZR(3)+8),
+                (unsigned long)RZR(2), (unsigned long)RZR(16));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6c410) {
+        fprintf(stderr, "[pt] dls2 blr: x2=0x%lx x0=0x%lx x1=0x%lx\n",
+                (unsigned long)RZR(2), (unsigned long)RZR(0), (unsigned long)RZR(1));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6c280) {
+        fprintf(stderr, "[pt] dls2 envp: x19=0x%lx x2=0x%lx x1=0x%lx\n",
+                (unsigned long)RZR(19), (unsigned long)RZR(2), (unsigned long)RZR(1));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6c260) {
+        fprintf(stderr, "[pt] __dls2 enter: x0=0x%lx x1=0x%lx x2=0x%lx lr=0x%lx sp=0x%lx\n",
+                (unsigned long)RZR(0), (unsigned long)RZR(1), (unsigned long)RZR(2),
+                (unsigned long)E.r[30], (unsigned long)E.sp);
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x69774) {
+        static int phdr_cnt = 0; phdr_cnt++;
+        fprintf(stderr, "[pt] PHDRLDR #%d: prevpc=0x%lx\n", phdr_cnt,
+                (unsigned long)tb_last[(tb_pos - 2) & 39]);
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x697f4) {
+        static int rel1_cnt = 0; rel1_cnt++;
+        fprintf(stderr, "[pt] REL1 START #%d: prevpc=0x%lx lr=0x%lx\n", rel1_cnt,
+                (unsigned long)tb_last[(tb_pos - 2) & 39], (unsigned long)E.r[30]);
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x69830) {
+        static int relr_cnt = 0; relr_cnt++;
+        fprintf(stderr, "[pt] RELR START #%d: x3=0x%lx sp=0x%lx lr=0x%lx prevpc=0x%lx\n", relr_cnt,
+                (unsigned long)RZR(3), (unsigned long)E.sp, (unsigned long)E.r[30],
+                (unsigned long)tb_last[(tb_pos - 2) & 39]);
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x69864) {
+        fprintf(stderr, "[pt] RELR: x5=0x%lx x6=0x%lx x9=0x%lx\n",
+                (unsigned long)RZR(5), (unsigned long)RZR(6), (unsigned long)RZR(9));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6989c) {
+        fprintf(stderr, "[pt] br x16 pre: x1=0x%lx x2=0x%lx x8=0x%lx [x1+0x3b8]=0x%lx\n",
+                (unsigned long)RZR(1), (unsigned long)RZR(2), (unsigned long)RZR(8),
+                *(unsigned long*)(uintptr_t)(RZR(1) + 0x3b8));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x69778) {
+        fprintf(stderr, "[pt] AT_BASE after ldr: x3=0x%lx x0=0x%lx\n", (unsigned long)RZR(3), (unsigned long)RZR(0));
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6c590) {
+        if (getenv("AUX_TRACE")) {
+            fprintf(stderr, "[pt] sysinfo scan: x0=0x%lx x2=0x%lx (first 6: %lx %lx %lx %lx %lx %lx)\n",
+                    (unsigned long)RZR(0), (unsigned long)RZR(2),
+                    *(unsigned long*)(uintptr_t)RZR(0),
+                    *(unsigned long*)(uintptr_t)(RZR(0)+8),
+                    *(unsigned long*)(uintptr_t)(RZR(0)+16),
+                    *(unsigned long*)(uintptr_t)(RZR(0)+24),
+                    *(unsigned long*)(uintptr_t)(RZR(0)+32),
+                    *(unsigned long*)(uintptr_t)(RZR(0)+40));
+        }
+    }
+    if (g_interp_base && E.pc == g_interp_base + 0x6c55c) {
+        fprintf(stderr, "[pt] auxv scan: x0=0x%lx x21=0x%lx x6=0x%lx x4=0x%lx\n",
+                (unsigned long)RZR(0), (unsigned long)RZR(21), (unsigned long)RZR(6),
+                (unsigned long)RZR(4));
+        if (E.r[21] != 0 && E.r[21] < 0x1000) {
+            uintptr_t p = (uintptr_t)RZR(0);
+            unsigned long *q = (unsigned long *)(uintptr_t)(p - 8);
+            fprintf(stderr, "[pt]   dump: %lx %lx | %lx %lx | %lx %lx | %lx %lx | %lx %lx\n",
+                    q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7], q[8], q[9]);
+        }
+    }
     /* ---- v19.17.1 探针：fgetc 死循环定位 ---- */
     if (g_fgetc_trace) {
         uint64_t po = E.pc - g_base;
@@ -400,9 +568,14 @@ static int exec_one(void) {
             int sf = (i >> 31) & 1;
             int is_logic = kind >= 2;
             /* ADD/SUB（shifted register）Rn=31 → ZR；仅 extended register 的
-               ADD/SUB（无 S）Rn=31 → SP；ADDS/SUBS/逻辑 → ZR */
+               ADD/SUB（无 S）Rn=31 → SP；ADDS/SUBS/逻辑 → ZR。
+               ★ v19.19：CMP/CMN（SUBS/ADDS 且 Rd=31）的 Rn=31 语义是 SP——
+               musl/GCC stack-clash 探测用 cmp sp,x2（0xeb2263ff），误读 ZR 导致
+               nzcv 全错 → b.eq 不跳 → sp 减穿未映射区。 */
             int is_ext = !is_logic && ((i >> 21) & 1);
-            uint64_t a = (is_ext && !setf) ? RSP(rn(i)) : RZR(rn(i));
+            uint64_t a;
+            if (setf && rd(i) == 31 && rn(i) == 31) a = RSP(rn(i));   /* CMP/CMN: Rn=31=SP */
+            else a = (is_ext && !setf) ? RSP(rn(i)) : RZR(rn(i));
             uint64_t b, s;
             if (!is_logic && ((i >> 21) & 1)) {
                 /* extended register：option=bit15-13，imm3=bit12-10 */
@@ -717,8 +890,18 @@ not_ldstp:
     }
 
     /* ---- MRS/MSR：TPIDR_EL0 真实读写；其他系统寄存器忽略/置 0 ---- */
-    if ((i & 0xFFFFF000) == 0xD53BD000) { W(rd(i), E.tpidr); E.pc += 4; return 0; }
-    if ((i & 0xFFFFF000) == 0xD51BD000) { E.tpidr = RZR(rn(i)); E.pc += 4; return 0; }
+    if ((i & 0xFFFFF000) == 0xD53BD000) {
+        if (getenv("TPIDR_TRACE")) fprintf(stderr, "[tpidr] mrs x%d <- 0x%lx\n", rd(i), (unsigned long)E.tpidr);
+        W(rd(i), E.tpidr); E.pc += 4; return 0;
+    }
+    if ((i & 0xFFFFF000) == 0xD51BD000) {
+        /* v19.18k：msr tpidr_el0 的 Rt 在 bit[4:0]（=rd(i)），不是 bit[9:5]——
+           之前用 rn(i) 把 x2 的垃圾值写进 tpidr，__dls2 的 stur [tpidr-0xb0] 崩。 */
+        int rt = (int)(i & 31);
+        if (getenv("TPIDR_TRACE")) fprintf(stderr, "[tpidr] msr tpidr_el0 <- x%d = 0x%lx (lr=0x%lx pc=0x%lx)\n",
+                                          rt, (unsigned long)RZR(rt), (unsigned long)E.r[30], (unsigned long)E.pc);
+        E.tpidr = RZR(rt); E.pc += 4; return 0;
+    }
     if ((i & 0xFFF00000) == 0xD5300000) { W(rd(i), 0); E.pc += 4; return 0; }  /* 其他 MRS → 0 */
     if ((i & 0xFFF00000) == 0xD5100000) { E.pc += 4; return 0; }               /* 其他 MSR → 忽略 */
     if ((i & 0xFFFFF000) == 0xD53B0000) { W(rd(i), 0); E.pc += 4; return 0; }  /* MRS dczid_el0 → 0（禁用 dc zva 路径） */
