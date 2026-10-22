@@ -401,21 +401,14 @@ final class ShellExecTool: MCPTool {
     /// head/tail)【必须保留】——Alpine apk 装包脚本(post-install)依赖它们，删了装任何包都会挂。
     /// 这里只删"AI 高频用户命令 + 原生功能对等"的（AI 走原生即可，Alpine 同名属重复）。
     private static let nativeCoverage: Set<String> = [
-        // Swift 原生命令（功能对等）
-        "ls", "cat", "echo", "pwd", "touch", "wc", "md5sum", "sha256sum", "diff", "hexdump",
-        "curl", "wget", "plutil", "sqlite3", "unzip", "df", "free", "uname", "uptime",
-        "hostname", "ps", "top", "kill", "ifconfig", "netstat", "nslookup", "tar", "gzip",
-        "gunzip", "base64", "strings", "nm", "objdump", "class-dump", "python3", "git",
-        // bin/ 原生工具链
-        "lua", "node", "r2", "cstool", "jq", "tree", "xz", "which",
-        // 14c6 P1原生化: file 进 bin/（v17；file 依赖 magic.mgc 数据文件，调用时注入 MAGIC）。
-        // zip 已放弃交叉编译（老代码坑多）→ 用原生 python3 -m zipfile 提供 zip 能力；Alpine zip 保留。
-        "file",
+        // v6.6.0 精简：仅真实原生覆盖（统一环境主执行——Alpine 工具不裁剪）。
+        // iOS 特有/注入工具链（Alpine 无——shrink 对它们无影响；其余命令统一走 Alpine 完整工具链）
+        "plutil", "sqlite3",
         "ldid", "optool", "insert_dylib", "install_name_tool", "cp-15", "mv-15", "ct_bypass", "opainject"
     ]
 
-    /// 14c3 P1原生化: Alpine rootfs 工具裁剪——原生已覆盖命令从 Alpine 移除，AI 只能走原生。
-    /// 幂等（标记文件 .native-shrunk-14c3）；只删 symlink/普通文件；busybox 本体保留。
+    /// v6.6.0: 统一环境后原生覆盖极少（plutil/sqlite3 + iOS 注入工具）——裁剪不再删主环境工具；
+    /// 保留历史逻辑（幂等标记；只删 symlink/普通文件；busybox 本体保留）。
     static func shrinkAlpineRootfs() -> String {
         let fm = FileManager.default
         let rootfs = NSHomeDirectory() + "/Documents/alpine-rootfs"
