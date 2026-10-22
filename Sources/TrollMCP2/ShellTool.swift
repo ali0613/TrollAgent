@@ -71,23 +71,6 @@ final class ShellExecTool: MCPTool {
             }
         }
 
-        // v4.4.2：解释器段错误防护——import numpy/pandas/matplotlib 会加载 openblas，
-        // OpenMinis arm64 模拟器执行其指令段错误闪退（实测崩溃栈 cpu_run_to_interrupt + task_run_current）。
-        // 提前拦截给明确报错，避免 App 直接闪退（体验优于崩溃）。
-        // v4.4.4：原生 ARM64 Python 已集成（python3 首词 → 原生路由，能跑 numpy/openblas），
-        // 因此只拦 iSH 路径（sh -c 包装等），原生 python3 放行。
-        let cmdFirstWord = command.trimmingCharacters(in: .whitespaces)
-            .split(separator: " ").first.map(String.init) ?? ""
-        let nativePython = (cmdFirstWord == "python3" || cmdFirstWord == "python")
-        if !nativePython && (command.contains("import pandas") || command.contains("import numpy")
-            || command.contains("import matplotlib")) {
-            return [
-                "error": "解释器 numpy/pandas 段错误防护",
-                "command": command,
-                "hint": "解释器运行 numpy/openblas 会段错误（实测崩溃栈 cpu_run_to_interrupt 已修复——统一环境 Asbestos 下 python3 走原生 CPython 直跑 numpy/pandas/matplotlib）。数据分析直接用 python3（App 内置，iPhone 芯片直跑）。"
-            ]
-        }
-        
         // 重置工作目录
         if params["reset_cwd"] as? Bool == true {
             TrollRuntimeEngine.resetCwd()
@@ -177,20 +160,20 @@ final class ShellExecTool: MCPTool {
                         "hint": "该命令在统一环境（TrollRuntime）执行，但读不到该 iOS 路径（非绑定目录(Workspace/Containers/System/App数据容器)，或文件>2MB）。三种解法：①先 cp 到 Workspace：`cp <file> /var/mobile/Documents/Workspace/`，再走 Alpine /ios_workspace 直读分析；②App 数据容器走 /ios_appdata 下 UUID 路径；③用原生 shell 工具（strings/nm/hexdump 直读大文件）；④对二进制用 binary.symbols / file analyze。"]
             }
             let (output, exitCode, timedOut) = TrollRuntimeEngine.exec(boundCmd, timeout: timeout)
-            // 14c3 P1原生化: Alpine 工具裁剪（幂等）——原生已覆盖命令从 Alpine 移除，AI 只能走原生
+            // v6.6.0: Alpine 工具裁剪（幂等）——统一后原生覆盖极少，不影响主环境工具链
             _ = ShellExecTool.shrinkAlpineRootfs()            // P3 按需补给：Alpine 输出显示缺工具(command not found)且命中白名单 → 自动 apk add 并重跑一次，
             // 免 agent 反复探测缺什么、也避免"先探测→再装→再跑"的多轮试探。
             let (finalOut, finalExit, finalTimed, provisionNote) = ShellExecTool.provisionAndRerun(boundCmd, output: output, exitCode: exitCode, timedOut: timedOut, timeout: timeout)
             var stdout = ShellExecTool.filterNoise(finalOut)
             if outLimit > 0 && stdout.count > outLimit {
-                let spillPath = ToolRegistry.spillLarge("alpine", stdout)
+                let spillPath = ToolRegistry.spillLarge("runtime", stdout)
                 stdout = String(stdout.prefix(outLimit / 2)) + "\n…[输出太长total \(stdout.count) 字符，已截断；完整输出: \(spillPath)]…\n" + String(stdout.suffix(outLimit / 2))
             }
             var result: [String: Any] = [
                 "command": trimmed,
                 "exit_code": finalExit,
                 "stdout": stdout,
-                "cwd": TrollRuntimeEngine.cwd,   // v6.0.28: 标明实际运行环境
+                "cwd": TrollRuntimeEngine.cwd,
                 "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Unified environment (Alpine Linux — TrollRuntime). 缺工具时系统已自动 apk add 安装并重试一次。"
             ]
             if finalTimed { result["timed_out"] = true }
@@ -305,7 +288,7 @@ final class ShellExecTool: MCPTool {
             stdout = String(stdout.prefix(outLimit / 2)) + "\n…[输出太长total \(stdout.count) 字符，已截断；完整输出: \(spillPath)]…\n" + String(stdout.suffix(outLimit / 2))
         }
 
-        // 会话目录：iSH guest 路径
+        // 会话目录：TrollRuntime 路径
         var newPwd = TrollRuntimeEngine.cwd
 
         AuditLog.shared.log("shell.exec", detail: String(command.prefix(100)))
@@ -785,7 +768,7 @@ final class ShellExecTool: MCPTool {
                         (output, outputExit, timedOut, provNote) = ShellExecTool.provisionAndRerun(body, output: output, exitCode: outputExit, timedOut: timedOut, timeout: timeout)
                         var out = ShellExecTool.filterNoise(output)
                         if limit > 0 && out.count > limit {
-                            let spillPath = ToolRegistry.spillLarge("alpine", out)
+                            let spillPath = ToolRegistry.spillLarge("runtime", out)
                             out = String(out.prefix(limit / 2)) + "\n…[输出太长total \(out.count) 字符，已截断；完整输出: \(spillPath)]…\n" + String(out.suffix(limit / 2))
                         }
                         result = [
@@ -1364,22 +1347,23 @@ final class ShellExecTool: MCPTool {
         // ①统一环境 Alpine rootfs 预装 git（v6.5.2 起）②App 内置 bin/git.py(dulwich) 兜底。
         // git 命令本体统一走 Alpine（rootfs 预装）；git.py 仅作 rootfs 缺失时的备用路径。
         if target == "git" {
+            // v6.6.0: 主路径 = 统一环境 Alpine rootfs 预装 git；bin/git.py(dulwich) 仅作 rootfs 缺失兜底
             let fm = FileManager.default
-            let gitPy = Bundle.main.bundlePath + "/bin/git.py"
-            if fm.fileExists(atPath: gitPy) {
-                return ["command": seg, "exit_code": 0,
-                        "stdout": "git: ✅ 已安装（App 内置纯 Python git：git.py/dulwich，原生直跑）\n用法：直接 git clone/add/commit/push/log/status ...（App 内置纯 Python git，原生直跑；仓库目录 = 会话 cwd）", "note": "探测结果来自 bin/git.py（dulwich porcelain，iOS 沙箱拦 fork 真 git 但 git.py 原生可用）"]
-            }
             let rootfs = NSHomeDirectory() + "/Documents/alpine-rootfs"
             for sub in ["/usr/bin/", "/bin/"] {
                 let p = rootfs + sub + "git"
                 if fm.isExecutableFile(atPath: p) {
                     return ["command": seg, "exit_code": 0,
-                            "stdout": "git: ✅ 已安装（Alpine rootfs 预装，直接 git ... 执行，不走自动装不闪退）\n用法：git clone/add/commit/push/log/status ...（Alpine 内，rootfs 自带无需 apk）", "note": "探测结果来自 alpine-rootfs 预装 git"]
+                            "stdout": "git: ✅ 已安装（统一环境 rootfs 预装，直接 git ... 执行）\n用法：git clone/add/commit/push/log/status ...（统一环境内，rootfs 自带无需 apk）", "note": "探测结果来自统一环境 rootfs 预装 git"]
                 }
             }
+            let gitPy = Bundle.main.bundlePath + "/bin/git.py"
+            if fm.fileExists(atPath: gitPy) {
+                return ["command": seg, "exit_code": 0,
+                        "stdout": "git: ✅ 已安装（App 内置纯 Python git 兜底：git.py/dulwich）\n用法：git clone/add/commit/push/log/status ...（兜底路径；优先统一环境 rootfs git）", "note": "探测结果来自 bin/git.py（rootfs git 缺失时兜底）"]
+            }
             return ["command": seg, "exit_code": 1,
-                    "stdout": "git: ❌ 不可用（无 bin/git.py 也无 rootfs git）\n说明：iOS 沙箱拦 fork 真 git 跑不了；git.py 是唯一原生路径（dulwich），若缺失请反馈构建打包问题", "note": "探测结果来自文件系统（未执行命令本体）"]
+                    "stdout": "git: ❌ 不可用（无 rootfs git 也无 bin/git.py）\n说明：统一环境 rootfs 应预装 git；git.py 为兜底，若均缺失请反馈构建打包问题", "note": "探测结果来自文件系统（未执行命令本体）"]
         }
         let fm = FileManager.default
         // 1) App 原生 bin

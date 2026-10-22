@@ -15,7 +15,7 @@ import Foundation
 final class BindAppTool: MCPTool {
     let definition = ToolDefinition(
         name: "bind_app",
-        summary: "只读绑定指定 App 数据容器进 Alpine → /ios_data_<app>。参数 bundle_id。让 python3/sqlite3/strings 只读该 App Documents/Library(内购票据/购买状态/导出文件); 读得到写不进去, 永不写坏目标 App。要就地改数据用 bind_app_write(可写+先备份); 读 App Bundle 用 /ios_containers。",
+        summary: "只读绑定指定 App 数据容器 → /ios_data_<app>。参数 bundle_id。让 python3/sqlite3/strings 在统一环境只读该 App Documents/Library(内购票据/购买状态/导出文件); 读得到写不进去, 永不写坏目标 App。要就地改数据用 bind_app_write(可写+先备份); 读 App Bundle 用 /ios_containers。",
         parameters: [
             "bundle_id": "App bundle ID (required)"
         ], verified: true, category: "filesystem")
@@ -43,7 +43,7 @@ final class BindAppTool: MCPTool {
 final class BindAppWriteTool: MCPTool {
     let definition = ToolDefinition(
         name: "bind_app_write",
-        summary: "可写按需绑定指定 App 的数据容器进 Alpine → /ios_data_<app>，用于【就地修改】该 App 的数据(改内购状态/数值/设置/票据)。绑定前先把该 App 的 Documents+Library 自动备份到工作区 backups/，改坏了可从备份还原。风险：写坏该 App 数据容器→该 App 可能无法启动(仅影响目标App, 不影响AI环境)。绝【不】绑自身容器与整棵 /var/mobile(自引用崩溃源)。分析只读用 bind_app。Example: bind_app_write bundle_id:com.appstudio.Jinx → /ios_data_com_appstudio_jinx + backup 路径。",
+        summary: "可写按需绑定指定 App 的数据容器 → /ios_data_<app>，用于【就地修改】该 App 的数据(改内购状态/数值/设置/票据)。绑定前先把该 App 的 Documents+Library 自动备份到工作区 backups/，改坏了可从备份还原。风险：写坏该 App 数据容器→该 App 可能无法启动(仅影响目标App, 不影响AI环境)。绝【不】绑自身容器与整棵 /var/mobile(自引用崩溃源)。分析只读用 bind_app。Example: bind_app_write bundle_id:com.appstudio.Jinx → /ios_data_com_appstudio_jinx + backup 路径。",
         parameters: [
             "bundle_id": "App bundle ID (required)"
         ], verified: true, category: "filesystem")
