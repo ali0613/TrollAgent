@@ -1368,6 +1368,10 @@ long translate_syscall(uint64_t nr,
                               uint64_t a0, uint64_t a1, uint64_t a2,
                               uint64_t a3, uint64_t a4, uint64_t a5) {
     long r;
+    /* v19.28i：syscall 层看门狗——宿主调用挂起（fcntl/read/opendir 等）指令循环检测不到，
+       App 因此卡死。单次 syscall 超 8s 判超时返回，App 恢复。 */
+    struct timespec _wd0, _wd1;
+    clock_gettime(CLOCK_MONOTONIC, &_wd0);
     /* v19.28f：无条件 syscall 轨迹（一行一个）——任何命令卡死，LOG 最后一行即卡点；
        路径类附带 guest 路径（供核对翻译）。正常命令几百行，体积可控。 */
     {
@@ -1545,6 +1549,16 @@ long translate_syscall(uint64_t nr,
                 (unsigned long long)nr,
                 (unsigned long long)a0, (unsigned long long)a1, (unsigned long long)a2);
         r = -ENOSYS;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &_wd1);
+    {
+        long _ms = (_wd1.tv_sec - _wd0.tv_sec) * 1000 + (_wd1.tv_nsec - _wd0.tv_nsec) / 1000000;
+        if (_ms > 8000) {
+            fprintf(stderr, "[wd] syscall %llu took %ldms -> ETIMEDOUT (watchdog)\n",
+                    (unsigned long long)nr, _ms);
+            fflush(stderr);
+            r = -ETIMEDOUT;
+        }
     }
     return r;
 }

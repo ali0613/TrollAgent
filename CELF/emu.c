@@ -1477,7 +1477,7 @@ int emu_run(uint64_t entry, uint64_t sp) {
 
     while (!E.exited) {
         if (exec_one()) break;
-        if (++steps > 3000000000ULL) {
+        if (++steps > 50000000ULL) {
             fprintf(stderr, "[emu] STEP LIMIT pc=0x%llx\n", (unsigned long long)E.pc);
             tr_dump();
             E.exited = 1; E.exit_code = -ETIMEDOUT;
