@@ -1018,14 +1018,18 @@ not_ldstp:
            immb=shift。修复 0x4b694 str q31 装载错位（锚 ^/$ 与字面量内存污染根因）。 */
     if ((i & 0x8F80F000) == 0x0F00A000) {
         int immh = (i >> 19) & 0xF, immb = (i >> 16) & 0xF, q = (i >> 30) & 1;
+        int is_sshll = ((i >> 29) & 1) == 0;   /* U=0: SSHLL 符号扩展；U=1: USHLL 零扩展 */
         int sesize = 0;
         if (immh == 1) sesize = 8; else if (immh == 2) sesize = 16;
         else if (immh == 4) sesize = 32; else if (immh == 8) sesize = 64;
         if (sesize == 0) { fprintf(stderr, "[emu] SSHLL immh=%d unhandled pc=%llx\n", immh, (unsigned long long)E.pc); E.pc += 4; return 0; }
         int desize = sesize * 2, nelem = 128 / desize;
         uint64_t srclo = q ? E.v[rn(i)][1] : E.v[rn(i)][0];
+        E.v[rd(i)][0] = 0; E.v[rd(i)][1] = 0;   /* 覆盖，勿残留高位 */
         for (int k = 0; k < nelem; k++) {
             uint64_t el = (srclo >> (k * sesize)) & ((1ULL << sesize) - 1);
+            if (is_sshll && (el & (1ULL << (sesize - 1))))
+                el |= ~((1ULL << sesize) - 1);  /* 符号扩展至 64 位 */
             E.v[rd(i)][(k * desize) >> 6] |= (el << immb) << ((k * desize) & 63);
         }
         E.pc += 4; return 0;
