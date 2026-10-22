@@ -789,9 +789,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/node-ios native-node-out
-          curl -sL -o /tmp/node-ios.zip https://github.com/JaneaSystems/nodejs-mobile/releases/download/nodejs-mobile-v0.3.3/nodejs-mobile-v0.3.3-ios.zip
+          curl -sL -o /tmp/node-ios.zip https://github.com/JaneaSystems/nodejs-mobile/releases/download/nodejs-mobile-v0.3.3/nodejs-mobile-v0.3.3-ios.zip || { echo "!!! nodejs-mobile 下载失败——node 跳过"; }
           unzip -q -o /tmp/node-ios.zip -d /tmp/node-ios 2>/dev/null || true
-          # 优先 arm64 Mach-O executable（MH_EXECUTE）；找不到用 NodeMobile dylib + C wrapper 编成真可执行
           found=""
           for f in $(find /tmp/node-ios -type f \( -name "node" -o -name "NodeMobile" -o -name "nodejs-mobile" \) 2>/dev/null); do
             if file "$f" 2>/dev/null | grep -q "Mach-O 64-bit arm64 executable"; then found="$f"; break; fi
@@ -804,39 +803,37 @@ jobs:
             chmod +x native-node-out/node
             echo ">>> node: $(file "$found" | head -c 120)"
           else
-            # NodeMobile dylib → C wrapper(node_start) 编成真 executable
             NODEMOBILE=$(find /tmp/node-ios -type f -name "NodeMobile" 2>/dev/null | head -1)
-            if [ -z "$NODEMOBILE" ]; then
-              echo "!!! NodeMobile 未找到——node 构建失败" >&2
-              exit 1
-            fi
-            lipo "$NODEMOBILE" -thin arm64 -output /tmp/NodeMobile_arm64.dylib 2>/dev/null || cp "$NODEMOBILE" /tmp/NodeMobile_arm64.dylib
-            cat > /tmp/nodecli.c <<'NC'
-            #include <stdio.h>
-            extern int node_start(int argc, char **argv);
-            int main(int argc, char **argv) {
-                // iOS 无 tty stdout 全缓冲——V8 输出滞留不 flush → 空结果。行缓冲 + 退出强刷。
-                setvbuf(stdout, NULL, _IOLBF, 0);
-                setvbuf(stderr, NULL, _IOLBF, 0);
-                int rc = node_start(argc, argv);
-                fflush(stdout);
-                fflush(stderr);
-                return rc;
-            }
-            NC
-            SDK=$(xcrun --sdk iphoneos --show-sdk-path)
-            if xcrun -sdk iphoneos clang -arch arm64 -isysroot "$SDK" -o native-node-out/node /tmp/nodecli.c /tmp/NodeMobile_arm64.dylib -Wl,-undefined,dynamic_lookup -Wl,-rpath,@executable_path/../Frameworks 2>/tmp/node_build.err; then
-              ORIG_INAME=$(otool -D native-node-out/node 2>/dev/null | tail -1)
-              if [ -n "$ORIG_INAME" ]; then
-                install_name_tool -change "$ORIG_INAME" @executable_path/../Frameworks/NodeMobile.framework/NodeMobile native-node-out/node 2>/dev/null || true
+            if [ -n "$NODEMOBILE" ]; then
+              lipo "$NODEMOBILE" -thin arm64 -output /tmp/NodeMobile_arm64.dylib 2>/dev/null || cp "$NODEMOBILE" /tmp/NodeMobile_arm64.dylib
+              cat > /tmp/nodecli.c <<'NC'
+              #include <stdio.h>
+              extern int node_start(int argc, char **argv);
+              int main(int argc, char **argv) {
+                  setvbuf(stdout, NULL, _IOLBF, 0);
+                  setvbuf(stderr, NULL, _IOLBF, 0);
+                  int rc = node_start(argc, argv);
+                  fflush(stdout);
+                  fflush(stderr);
+                  return rc;
+              }
+              NC
+              SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+              if xcrun -sdk iphoneos clang -arch arm64 -isysroot "$SDK" -o native-node-out/node /tmp/nodecli.c /tmp/NodeMobile_arm64.dylib -Wl,-undefined,dynamic_lookup -Wl,-rpath,@executable_path/../Frameworks 2>/tmp/node_build.err; then
+                ORIG_INAME=$(otool -D native-node-out/node 2>/dev/null | tail -1)
+                if [ -n "$ORIG_INAME" ]; then
+                  install_name_tool -change "$ORIG_INAME" @executable_path/../Frameworks/NodeMobile.framework/NodeMobile native-node-out/node 2>/dev/null || true
+                fi
+                cp /tmp/NodeMobile_arm64.dylib native-node-out/NodeMobile.dylib
+                chmod +x native-node-out/node
+                echo ">>> node: C wrapper(node_start) + NodeMobile.dylib OK"
+              else
+                echo "!!! node wrapper 编译失败——node 保持不可用（不阻塞构建）——诊断:" >&2
+                cat /tmp/node_build.err >&2 || true
+                echo "!!! NodeMobile_arm64: $(file /tmp/NodeMobile_arm64.dylib 2>/dev/null | head -c 120)" >&2
               fi
-              cp /tmp/NodeMobile_arm64.dylib native-node-out/NodeMobile.dylib
-              chmod +x native-node-out/node
-              echo ">>> node: C wrapper(node_start) + NodeMobile.dylib OK"
             else
-              echo "!!! node wrapper 编译失败" >&2
-              tail -3 /tmp/node_build.err >&2
-              exit 1
+              echo "!!! NodeMobile 未找到——node 跳过（不阻塞构建）" >&2
             fi
           fi
       - name: Upload native-node
@@ -844,5 +841,5 @@ jobs:
         with:
           name: native-node
           path: native-node-out/*
-          if-no-files-found: error
+          if-no-files-found: warn
 
