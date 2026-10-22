@@ -87,7 +87,7 @@ if [ -d "Resources/bin" ]; then
     # lua=源码编译, node=nodejs-mobile iOS 预编译, r2=radare2 r2ios-sdk 预编译, cstool=capstone 交叉编译,
     # jq=源码编译(v4.4.9-fix3cm 补, 消除提示词示例有/实物无的不一致)；
     # 14c2 P1原生化: tree/xz/which=v16 新增（14c4 曾编译成功但未进包——此处白名单漏加, 已补）
-lpine binutils 替代：objdump/nm/readelf/size/strings）；
+# Alpine binutils 替代：objdump/nm/readelf/size/strings）；
     # jtool2 保留（Mach-O 解析专长——Alpine 无替代）
     for t in jtool2; do
         if [ -f "native-llvm-out/$t" ]; then
