@@ -325,11 +325,13 @@ static socklen_t sockaddr_conv(const void *guest_sa, socklen_t guest_len,
 }
 static long sys_socket(int domain, int type, int proto) {
     int fd = socket(domain, type, proto);
+    if (fd >= 3) guest_fd_record(fd);
     return (fd < 0) ? -errno : (long)fd;
 }
 static long sys_socketpair(int domain, int type, int proto, int *sv) {
     int pair[2];
     if (socketpair(domain, type, proto, pair)) return -errno;
+    guest_fd_record(pair[0]); guest_fd_record(pair[1]);
     sv[0] = pair[0]; sv[1] = pair[1];
     return 0;
 }
@@ -574,6 +576,15 @@ static long sys_read(int fd, void *buf, size_t count) {
 }
 static DIR *g_dir_cache[256];   /* getdents64：fdopendir 缓存——guest fd 直接在 App 宿主 fd 表分配（首个可达 19+），16 硬上限曾误拒 EBADF */
 #define DIR_CACHE_MAX 256
+/* v19.28j：guest 分配 fd 追踪——guest 异常退出/未 close 的 fd 会泄漏宿主 fd 表；
+   sys_close 不从这里移除（guest close 后宿主已关，退出时 fcntl 有效性检查兜底） */
+static int g_guest_fds[512];
+static int g_guest_fd_cnt = 0;
+static void guest_fd_record(int fd) {
+    if (fd < 3 || fd >= 512) return;
+    for (int i = 0; i < g_guest_fd_cnt; i++) if (g_guest_fds[i] == fd) return;
+    if (g_guest_fd_cnt < 512) g_guest_fds[g_guest_fd_cnt++] = fd;
+}
 static long sys_close(int fd) {
     if (fd >= 0 && fd < DIR_CACHE_MAX && g_dir_cache[fd]) {
         closedir(g_dir_cache[fd]);
@@ -1001,13 +1012,17 @@ static long sys_openat(int dirfd, const char *path, int flags, mode_t mode) {
         fprintf(stderr, "[oat] dirfd=%d path=%s flags=0x%x -> xlate 0x%x mode=0%o\n",
                 dirfd, path ? path : "(null)", flags, x, (unsigned)mode);
     }
-    return (long)openat(dirfd, path, x, mode);
+    int fd = openat(dirfd, path, x, mode);
+    if (fd >= 3) guest_fd_record(fd);
+    return (long)fd;
 }
 static long sys_faccessat(int dirfd, const char *path, int amode) {
     return (long)faccessat(dirfd, path, amode, 0);   /* Darwin 4 参（flags） */
 }
 static long sys_dup(int fd) {
-    return (long)dup(fd);
+    int n = dup(fd);
+    if (n >= 3) guest_fd_record(n);
+    return (long)n;
 }
 static long sys_chdir(const char *path) {
     if (chdir(path)) return -errno;
@@ -1077,6 +1092,7 @@ static long sys_wait4(pid_t pid, int *status, int options, void *rusage) {
 static long sys_dup3(int oldfd, int newfd, int flags) {
     (void)flags;
     if (dup2(oldfd, newfd) < 0) return -errno;
+    if (newfd >= 3) guest_fd_record(newfd);
     return newfd;
 }
 static long sys_uname(void *buf) {
@@ -1978,6 +1994,19 @@ int elf_runner_main(int argc, char **argv) {
             munmap((void *)(g_base + 0x580000), 0x20000);   /* guest 0x580000 写缓冲区（独立映射） */
             munmap((void *)g_base, g_total_size);
             g_base = 0;
+        }
+        /* v19.28j：资源统一回收——guest 异常退出/未 close 的宿主 fd、DIR 缓存、vproc 全释放。
+           fd 有效性用 fcntl(F_GETFD) 兜底（guest 已 close 的宿主侧已关，跳过；不误关 App 自身 fd）。 */
+        for (int i = 0; i < g_guest_fd_cnt; i++) {
+            int fd = g_guest_fds[i];
+            if (fcntl(fd, F_GETFD) >= 0) close(fd);
+        }
+        g_guest_fd_cnt = 0;
+        for (int i = 0; i < DIR_CACHE_MAX; i++) {
+            if (g_dir_cache[i]) { closedir(g_dir_cache[i]); g_dir_cache[i] = NULL; }
+        }
+        for (int i = 0; i < VPROC_MAX; i++) {
+            if (g_vproc[i].in_use) vproc_free(VPROC_BASE + i);
         }
         fprintf(stderr, "[elf-runner] ELF 退出 code=%d（进程内模式，主进程存活）\n", g_exit_code);
         return g_exit_code;
