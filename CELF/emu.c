@@ -913,8 +913,11 @@ not_ldstp:
     /* ---- SSHLL/USHLL 长型扩展左移（memchr/strstr/tre literal 向量） ----
            v19.20：immh→sesize 映射 1→8/2→16/4→32/8→64（原实现顺序写反），
            desize=sesize*2，nelem=128/desize；Q=0 读 Vn 低 64、Q=1 读高 64；目的恒为 128 位视图。
-           immb=shift。修复 0x4b694 str q31 装载错位（锚 ^/$ 与字面量内存污染根因）。 */
-    if ((i & 0x8F80F000) == 0x0F00A000) {
+           immb=shift。修复 0x4b694 str q31 装载错位（锚 ^/$ 与字面量内存污染根因）。
+           v19.27：掩码 0x8F80F000→0x8FC0F000——旧掩码误吞 FMADD/FMSUB（0x1F41A409
+           fmsub d9,d0,d1,d9 & 0x8F80F000 == 0x0F00A000），awk % 的 fmod 被当 SSHLL
+           执行 → d9 被覆盖 → 7%3 恒 0。SSHLL bit[23:22] 恒 00，加检查排除浮点。 */
+    if ((i & 0x8FC0F000) == 0x0F00A000) {
         int immh = (i >> 19) & 0xF, immb = (i >> 16) & 0xF, q = (i >> 30) & 1;
         int is_sshll = ((i >> 29) & 1) == 0;   /* U=0: SSHLL 符号扩展；U=1: USHLL 零扩展 */
         int sesize = 0;
@@ -1384,44 +1387,37 @@ not_ldstp:
         if ((i >> 31) & 1) W(rd(i), (uint64_t)r); else W(rd(i), (uint64_t)(int32_t)r);
         E.pc += 4; return 0;
     }
-    if ((i & 0xFFFFFC00) == 0x5EE1B800) {   /* FCVTZS Vd.2D, Vn.2D（sleep 0.1 浮点→整数） */
-        double a1; memcpy(&a1, &E.v[(i >> 5) & 0x1F][1], 8);
-        E.v[rd(i)][0] = (uint64_t)(int64_t)fp_ld((i >> 5) & 0x1F, 1);
-        E.v[rd(i)][1] = (uint64_t)(int64_t)a1;
+    if ((i & 0xFFFFFC00) == 0x5EE1B800) {   /* FCVTZS d（标量！0x5E61B800 系是 d 寄存器版，非 V.2D；
+                                                 V.2D 真向量是 0x4E61B800 系——capstone 实证。
+                                                 v19.27：只读写 v[0] 槽——旧版误读/写 v[1]（=d1 参数）
+                                                 破坏 fmod 的 y → awk % 恒 0（7%3=0）。 */
+        int rn = (i >> 5) & 0x1F, rd2 = rd(i);
+        double src = fp_ld(rn, 1);
+        E.v[rd2][0] = (uint64_t)(int64_t)src;
         E.pc += 4; return 0;
     }
-    if ((i & 0xFFFFFC00) == 0x5E61B800) {   /* FCVTMS Vd.2D, Vn.2D（floor→int） */
-        double a1; memcpy(&a1, &E.v[(i >> 5) & 0x1F][1], 8);
+    if ((i & 0xFFFFFC00) == 0x5E61B800) {   /* FCVTMS d（floor→int64→d，标量） */
         E.v[rd(i)][0] = (uint64_t)(int64_t)floor(fp_ld((i >> 5) & 0x1F, 1));
-        E.v[rd(i)][1] = (uint64_t)(int64_t)floor(a1);
         E.pc += 4; return 0;
     }
-    if ((i & 0xFFFFFC00) == 0x7E61B800) {   /* FCVTMU Vd.2D, Vn.2D（ceil→uint） */
-        double a1; memcpy(&a1, &E.v[(i >> 5) & 0x1F][1], 8);
+    if ((i & 0xFFFFFC00) == 0x7E61B800) {   /* FCVTMU d（ceil→uint64→d，标量） */
         E.v[rd(i)][0] = (uint64_t)ceil(fp_ld((i >> 5) & 0x1F, 1));
-        E.v[rd(i)][1] = (uint64_t)ceil(a1);
         E.pc += 4; return 0;
     }
-    if ((i & 0xFFFFFC00) == 0x5E61D800) {   /* SCVTF Vd.2D, Vn.2D（int→double） */
+    if ((i & 0xFFFFFC00) == 0x5E61D800) {   /* SCVTF d（int64 位模式→double→d，标量） */
         int rn = (i >> 5) & 0x1F;
         double d0 = (double)(int64_t)E.v[rn][0];
-        double d1 = (double)(int64_t)E.v[rn][1];
         memcpy(&E.v[rd(i)][0], &d0, 8);
-        memcpy(&E.v[rd(i)][1], &d1, 8);
         E.pc += 4; return 0;
     }
-    if ((i & 0xFFFFFC00) == 0x7E61D800) {   /* UCVTF Vd.2D, Vn.2D（uint→double） */
+    if ((i & 0xFFFFFC00) == 0x7E61D800) {   /* UCVTF d（uint64→double→d，标量） */
         int rn = (i >> 5) & 0x1F;
         double d0 = (double)(uint64_t)E.v[rn][0];
-        double d1 = (double)(uint64_t)E.v[rn][1];
         memcpy(&E.v[rd(i)][0], &d0, 8);
-        memcpy(&E.v[rd(i)][1], &d1, 8);
         E.pc += 4; return 0;
     }
-    if ((i & 0xFFFFFC00) == 0x7EE1B800) {   /* FCVTZU Vd.2D, Vn.2D */
-        double a1; memcpy(&a1, &E.v[(i >> 5) & 0x1F][1], 8);
+    if ((i & 0xFFFFFC00) == 0x7EE1B800) {   /* FCVTZU d（标量 d→uint64→d） */
         E.v[rd(i)][0] = (uint64_t)fp_ld((i >> 5) & 0x1F, 1);
-        E.v[rd(i)][1] = (uint64_t)a1;
         E.pc += 4; return 0;
     }
     if ((i & 0xFFFFFC00) == 0x9E790000 || (i & 0xFFFFFC00) == 0x1E790000) {   /* FCVTZU x/w,d */
