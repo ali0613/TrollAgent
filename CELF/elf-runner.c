@@ -1140,7 +1140,18 @@ static long sys_munmap(uintptr_t addr, size_t len) {
 }
 static long sys_nanosleep(const struct timespec *req, struct timespec *rem) {
     struct timespec r = *req;
-    nanosleep(&r, rem);
+    fprintf(stderr, "[ns] nanosleep: caller=%p req=%p sec=%lld nsec=%lld raw=[%08x %08x %08x %08x]\n",
+            __builtin_return_address(0), (void*)req,
+            (long long)r.tv_sec, (long long)r.tv_nsec,
+            ((unsigned*)req)[0], ((unsigned*)req)[1], ((unsigned*)req)[2], ((unsigned*)req)[3]);
+    /* 兼容非规范 timespec（guest usleep 余数链在 emu 下可能产生 nsec>=1e9）：进位归一化 */
+    if (r.tv_nsec >= 1000000000L) {
+        r.tv_sec += r.tv_nsec / 1000000000L;
+        r.tv_nsec %= 1000000000L;
+    }
+    int rc = nanosleep(&r, rem);
+    fprintf(stderr, "[ns] nanosleep rc=%d sec=%lld nsec=%lld\n", rc,
+            (long long)r.tv_sec, (long long)r.tv_nsec);
     return 0;
 }
 static long sys_gettimeofday(void *tv, void *tz) {
