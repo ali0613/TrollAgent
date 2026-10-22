@@ -39,6 +39,7 @@
 #include <sched.h>       /* v19.18f: cpu_set_t（sched_getaffinity） */
 #ifdef __APPLE__
 #include <sys/mount.h>
+#include <ifaddrs.h>     /* v19.28n: 虚拟 /proc/net/dev 用 getifaddrs 拿接口名 */
 #include <sys/sysctl.h>   /* Darwin: sysctl/CTL_KERN/KERN_BOOTTIME/CTL_HW/HW_MEMSIZE */
 #include <mach/mach.h>    /* v19.18d: host_statistics64/vm_kernel_page_size（/proc/meminfo 用） */
 #else
@@ -583,6 +584,136 @@ static long sys_utimensat(int dirfd, const char *path, const struct timespec tim
 static long sys_write(int fd, const void *buf, size_t count) {
     return (long)write(fd, buf, count);
 }
+/* ============ v19.28n: 虚拟 /proc 内容生成器（iOS 宿主无 /proc） ============
+   ifconfig/route/netstat/free 依赖 /proc/net/*、/proc/version 等。
+   生成器并入 vproc_open（fd 1000+），由 sys_read/close/lseek 统一处理。 */
+
+#ifdef __APPLE__
+static char *gen_net_dev(size_t *len) {
+    /* busybox ifconfig 先读 /proc/net/dev 拿接口列表，再 ioctl 查地址。
+       用 getifaddrs 拿真实接口名；计数器宿主拿不到，填 0。 */
+    size_t cap = 4096, n = 0;
+    char *b = malloc(cap);
+    if (!b) return NULL;
+    n += (size_t)snprintf(b + n, cap - n,
+        "Inter-|   Receive                                                |  Transmit\n"
+        " face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n");
+    struct ifaddrs *ifa = NULL;
+    if (getifaddrs(&ifa) == 0) {
+        /* 收集接口名（去重，AF_LINK 优先） */
+        for (struct ifaddrs *p = ifa; p; p = p->ifa_next) {
+            if (!p->ifa_name) continue;
+            if (p->ifa_addr && p->ifa_addr->sa_family != AF_LINK) continue;  /* 每个接口一条 */
+            int dup = 0;
+            for (struct ifaddrs *q = ifa; q != p; q = q->ifa_next)
+                if (q->ifa_name && strcmp(q->ifa_name, p->ifa_name) == 0 &&
+                    q->ifa_addr && q->ifa_addr->sa_family == AF_LINK) { dup = 1; break; }
+            if (dup) continue;
+            n += (size_t)snprintf(b + n, cap - n, "%8s: %16llu %7lu %6lu %6lu %6lu %6lu %6lu %6lu %7lu %6lu %6lu %6lu %6lu %6lu %6lu %6lu\n",
+                p->ifa_name, 0ULL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL,
+                0UL, 0UL, 0UL, 0UL, 0UL, 0UL, 0UL);
+        }
+        freeifaddrs(ifa);
+    }
+    *len = n;
+    return b;
+}
+#else
+static char *gen_net_dev(size_t *len) {
+    /* 本地 Linux：直接读真实 /proc/net/dev */
+    FILE *f = fopen("/proc/net/dev", "r");
+    if (!f) { *len = 0; return NULL; }
+    size_t cap = 8192, n = 0;
+    char *b = malloc(cap);
+    if (!b) { fclose(f); return NULL; }
+    n = fread(b, 1, cap - 1, f);
+    fclose(f);
+    b[n] = 0;
+    *len = n;
+    return b;
+}
+#endif
+
+static char *gen_net_route(size_t *len) {
+    /* 空路由表（busybox route -n 显示表头+空） */
+    char *b = malloc(256);
+    if (!b) return NULL;
+    size_t n = (size_t)snprintf(b, 256,
+        "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n");
+    *len = n;
+    return b;
+}
+
+static char *gen_self_status(size_t *len) {
+    char *b = malloc(2048);
+    if (!b) return NULL;
+    size_t n = (size_t)snprintf(b, 2048,
+        "Name:\tbusybox\nState:\tR (running)\nTgid:\t1\nPid:\t1\nPPid:\t0\n"
+        "Uid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\n"
+        "Groups:\t501 250 98\nVmSize:\t16384 kB\nVmRSS:\t4096 kB\n"
+        "Threads:\t1\n");
+    *len = n;
+    return b;
+}
+
+static char *gen_meminfo(size_t *len) {
+    char *b = malloc(512);
+    if (!b) return NULL;
+    size_t n = (size_t)snprintf(b, 512,
+        "MemTotal:       %llu kB\nMemFree:        %llu kB\nMemAvailable:   %llu kB\n"
+        "Buffers:         102400 kB\nCached:          614400 kB\nSwapTotal:            0 kB\nSwapFree:             0 kB\n",
+        (unsigned long long)4097152, (unsigned long long)2097152, (unsigned long long)2457600);
+    *len = n;
+    return b;
+}
+
+static char *gen_uptime(size_t *len) {
+    char *b = malloc(128);
+    if (!b) return NULL;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    size_t n = (size_t)snprintf(b, 128, "%lld.%02lld %lld.%02lld\n",
+        (long long)ts.tv_sec, (long long)(ts.tv_nsec / 10000000),
+        (long long)ts.tv_sec, (long long)(ts.tv_nsec / 10000000));
+    *len = n;
+    return b;
+}
+
+static char *gen_version(size_t *len) {
+    char *b = malloc(256);
+    if (!b) return NULL;
+    size_t n = (size_t)snprintf(b, 256,
+        "Linux version 5.15.0 (trollagent) #1 SMP Thu Oct 1 00:00:00 CST 2026\n");
+    *len = n;
+    return b;
+}
+
+static char g_cmdline0[128];  /* v19.28n: /proc/self/cmdline 内容（guest argv[0]） */
+static char *gen_cmdline(size_t *len) {
+    char *b = malloc(256);
+    if (!b) return NULL;
+    size_t n = 0;
+    if (g_cmdline0[0]) n = strlen(g_cmdline0) + 1, memcpy(b, g_cmdline0, n);
+    b[n] = 0;
+    *len = n;
+    return b;
+}
+
+/* 生成虚拟 /proc 内容；不支持返回 NULL（openat 报 ENOENT） */
+static char *proc_gen(const char *path, size_t *len_out) {
+    if (strcmp(path, "/proc/net/dev") == 0) return gen_net_dev(len_out);
+    if (strcmp(path, "/proc/net/route") == 0) return gen_net_route(len_out);
+    if (strcmp(path, "/proc/net/tcp") == 0 || strcmp(path, "/proc/net/udp") == 0) {
+        char *b = malloc(16); if (!b) return NULL; *len_out = 0; b[0] = 0; return b;
+    }
+    if (strcmp(path, "/proc/self/status") == 0) return gen_self_status(len_out);
+    if (strcmp(path, "/proc/meminfo") == 0) return gen_meminfo(len_out);
+    if (strcmp(path, "/proc/uptime") == 0) return gen_uptime(len_out);
+    if (strcmp(path, "/proc/version") == 0) return gen_version(len_out);
+    if (strcmp(path, "/proc/self/cmdline") == 0) return gen_cmdline(len_out);
+    return NULL;
+}
+
 static long sys_read(int fd, void *buf, size_t count) {
     return (long)read(fd, buf, count);
 }
@@ -733,8 +864,9 @@ static long vproc_open(const char *path, int flags) {
         if (end != rest && *end == '/') {
             rest = end + 1;
         } else if (strcmp(rest, "mounts") == 0 || strcmp(rest, "uptime") == 0
-                   || strcmp(rest, "meminfo") == 0) {
-            pid = -1;   /* v19.18c：顶层文件 /proc/mounts、/proc/uptime、/proc/meminfo（无 pid 前缀） */
+                   || strcmp(rest, "meminfo") == 0 || strcmp(rest, "version") == 0
+                   || strncmp(rest, "net/", 4) == 0) {
+            pid = -1;   /* v19.18c：顶层文件；v19.28n：/proc/version、/proc/net/* */
         } else return -ENOENT;
     }
     int fd = vproc_alloc();
@@ -855,6 +987,18 @@ static long vproc_open(const char *path, int flags) {
         v->len = strlen(buf);
         return fd;
     }
+    /* v19.28n: /proc/version、/proc/net/*、/proc/self/status、/proc/self/cmdline 内容生成 */
+    {
+        char full[256];
+        snprintf(full, sizeof(full), "/proc/%s", rest);
+        size_t plen = 0;
+        char *pc = proc_gen(full, &plen);
+        if (pc) {
+            v->data = pc;   /* proc_gen malloc 的缓冲，vproc_free 释放 */
+            v->len = plen;
+            return fd;
+        }
+    }
     /* 其他 /proc/<pid>/xxx：空文件（后续按需扩展） */
     v->data = strdup("");
     v->len = 0;
@@ -927,6 +1071,31 @@ static long vproc_lseek(int fd, off_t off, int whence) {
 static long vproc_close(int fd) {
     if (!vproc_get(fd)) return -EBADF;
     vproc_free(fd);
+    return 0;
+}
+/* v19.28n: 虚拟 proc 文件的 fstat——guest linux_stat 布局（cat 需 regular file + size） */
+static long vproc_fstat(int fd, void *statbuf) {
+    struct vproc_fd *v = vproc_get(fd);
+    if (!v) return -EBADF;
+    struct linux_stat { uint64_t dev; uint64_t ino; uint32_t mode; uint32_t nlink; uint32_t uid; uint32_t gid;
+                        uint64_t rdev; uint64_t size; uint64_t blksize; uint64_t blocks;
+                        uint64_t atime; uint64_t atime_ns; uint64_t mtime; uint64_t mtime_ns;
+                        uint64_t ctime; uint64_t ctime_ns; uint32_t unused[3]; };
+    struct linux_stat *g = (struct linux_stat *)statbuf;
+    memset(g, 0, sizeof(*g));
+    g->dev = 1; g->ino = (uint64_t)(0x1000 + (fd - VPROC_BASE));
+    if (v->is_dir) {
+        g->mode = S_IFDIR | 0755; g->nlink = 2; g->size = 0;
+    } else {
+        g->mode = S_IFREG | 0644; g->nlink = 1;
+        g->size = (uint64_t)v->len;
+    }
+    g->uid = 0; g->gid = 0;
+    g->blksize = 4096; g->blocks = (v->len + 511) / 512;
+    struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+    g->atime = (uint64_t)ts.tv_sec; g->atime_ns = (uint64_t)ts.tv_nsec;
+    g->mtime = (uint64_t)ts.tv_sec; g->mtime_ns = (uint64_t)ts.tv_nsec;
+    g->ctime = (uint64_t)ts.tv_sec; g->ctime_ns = (uint64_t)ts.tv_nsec;
     return 0;
 }
 static long sys_getdents64(int fd, void *buf, size_t count) {
@@ -1483,7 +1652,10 @@ long translate_syscall(uint64_t nr,
     case SYS_setpriority: r = sys_setpriority((int)a0, (int)a1, (int)a2); break;
     case SYS_sched_getaffinity: r = sys_sched_getaffinity((pid_t)a0, (size_t)a1, (void*)(uintptr_t)a2); break;
     case SYS_sched_setaffinity: r = sys_sched_setaffinity((pid_t)a0, (size_t)a1, (const void*)(uintptr_t)a2); break;
-    case SYS_fstat:       r = sys_fstat((int)a0, (void*)(uintptr_t)a1); break;
+    case SYS_fstat:
+        if ((int)a0 >= VPROC_BASE) r = vproc_fstat((int)a0, (void*)(uintptr_t)a1);
+        else r = sys_fstat((int)a0, (void*)(uintptr_t)a1);
+        break;
     case SYS_pipe2: {     /* tar -czf 调 gzip 子进程的管道 */
         int p[2];
 #ifdef __APPLE__
@@ -2042,6 +2214,8 @@ int elf_runner_main(int argc, char **argv) {
     }
     const char *elf_path = argv[1];
     fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-21 v19.4 clean)\n", argc, elf_path);
+    /* v19.28n: /proc/self/cmdline 内容 = guest 程序名 */
+    snprintf(g_cmdline0, sizeof(g_cmdline0), "%s", elf_path);
 
     /* v19.28m: iOS App 无终端 stdin——fd 0 无效时重定向 /dev/null，
        guest read(0) 得 EOF（uniq/sed/wc 等读 stdin 命令不报 I/O error）。
