@@ -925,8 +925,8 @@ static long sys_getdents64(int fd, void *buf, size_t count) {
     long o = 0;
     struct dirent *de;
     errno = 0;
-    int nent = 0;
-    while ((de = readdir(d)) != NULL) {
+    int nent = 0, guard = 0;
+    while ((de = readdir(d)) != NULL && guard++ < 200) {
         nent++;
         size_t namlen = strlen(de->d_name);
         size_t lreclen = (namlen + 1 + 19 + 7) & ~(size_t)7;
@@ -942,8 +942,10 @@ static long sys_getdents64(int fd, void *buf, size_t count) {
         memcpy(ld->d_name, de->d_name, namlen);
         o += (long)lreclen;
     }
+    if (guard >= 200) fprintf(stderr, "[gdd] GUARD 200 reached fd=%d (possible loop!)\n", fd);
     fprintf(stderr, "[gdd] fd=%d entries=%d errno=%d(%s) -> out %ld bytes\n",
             fd, nent, errno, strerror(errno), o);
+    fflush(stderr);
     return o;
 #else
     /* 本地对照：Linux 原生 getdents64 透传（布局即 Linux dirent64） */
