@@ -910,14 +910,16 @@ static long vproc_close(int fd) {
 static long sys_getdents64(int fd, void *buf, size_t count) {
 #ifdef __APPLE__
     /* v19.26: 弃 fdopendir/readdir（真机 ls 列目录 total 0 = readdir 空）。
-       改 Darwin 原生 getdirentries64：从 fd 当前偏移续读、basep 推进，
+       改 Darwin 原生 getdirentries：从 fd 当前偏移续读、basep 推进，
        语义与 Linux getdents64 一致（busybox 循环调用直到 0）。
+       iOS SDK 无 getdirentries64 声明（iPhoneOS26.5 dirent.h:204 只有 getdirentries）——
+       iOS 强制 64 位 inode，getdirentries 即 64 位语义（v19.27 修编译）。
        Darwin dirent64: d_ino(8) d_seekoff(8) d_reclen(2) d_namlen(2) d_type(1) d_name[] */
     if (fd < 0) return -EBADF;
     char dbuf[4096];
     long basep = 0;
-    long n = getdirentries64(fd, dbuf, sizeof(dbuf), &basep);
-    fprintf(stderr, "[gdd] getdirentries64 fd=%d n=%ld errno=%d(%s) basep=%ld\n",
+    int n = getdirentries(fd, dbuf, sizeof(dbuf), &basep);
+    fprintf(stderr, "[gdd] getdirentries fd=%d n=%d errno=%d(%s) basep=%ld\n",
             fd, n, errno, strerror(errno), basep);
     if (n < 0) return -errno;
     if (n == 0) return 0;
