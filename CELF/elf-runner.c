@@ -637,8 +637,17 @@ static long sys_newfstatat(int dirfd, const char *path, struct linux_stat *st, i
         return 0;
     }
     struct stat s;
-    if (getenv("FSTAT_TRACE")) fprintf(stderr, "[fst] fstatat(dfd=%d path='%s' flags=%d)\n", dirfd, path, flags);
-    if (fstatat(dirfd, path, &s, xlate_atflags(flags)) != 0) return -errno;
+    fprintf(stderr, "[nst] newfstatat dfd=%d path='%s' flags=0x%x xlate=0x%x\n",
+            dirfd, path ? path : "(null)", flags, xlate_atflags(flags));
+    fflush(stderr);
+    if (fstatat(dirfd, path, &s, xlate_atflags(flags)) != 0) {
+        fprintf(stderr, "[nst] fstatat FAILED errno=%d(%s)\n", errno, strerror(errno));
+        fflush(stderr);
+        return -errno;
+    }
+    fprintf(stderr, "[nst] fstatat ok mode=%o size=%lld\n",
+            (unsigned)s.st_mode, (long long)s.st_size);
+    fflush(stderr);
     memset(st, 0, sizeof(*st));
     st->st_dev = s.st_dev; st->st_ino = s.st_ino; st->st_mode = s.st_mode;
     st->st_nlink = s.st_nlink; st->st_uid = s.st_uid; st->st_gid = s.st_gid;
