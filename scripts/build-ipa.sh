@@ -88,9 +88,9 @@ if [ -d "Resources/bin" ]; then
     # jq=源码编译(v4.4.9-fix3cm 补, 消除提示词示例有/实物无的不一致)；
     # 14c2 P1原生化: tree/xz/which=v16 新增（14c4 曾编译成功但未进包——此处白名单漏加, 已补）
     # 14c6 P1原生化: file/zip=v17 新增（扩军第二批；file 的 magic.mgc 数据文件随包）
-    # 14c7 P5: elf-runner=v18 新增（aarch64 ELF 运行时入口；busybox-elf 单独放 Resources/linux）
+    # v6.6.0: elf-runner 退役（CELF 路线淘汰）——白名单移除
     # 均随 tool.install 绑定）
-    for t in lua node r2 cstool jq tree xz which file elf-runner; do
+    for t in lua node r2 cstool jq tree xz which file; do
         if [ -f "native-tools-out/$t" ]; then
             cp "native-tools-out/$t" "$APP/bin/$t"
             chmod +x "$APP/bin/$t"
@@ -104,13 +104,7 @@ if [ -d "Resources/bin" ]; then
         cp "$MG" "$APP/bin/magic.mgc"
         echo ">>> magic.mgc bundled ($(du -h "$APP/bin/magic.mgc" | cut -f1))"
     fi
-    # 14c7 P5: busybox 静态 aarch64 ELF（elf-runner 的第一个嫁接对象）
-    # 14c7 fix8→fix14: **busybox 彻底不进 bundle**——ELF 直接进包崩（14c7b）、gz 也崩（14c7e 实证）。
-    # 根因推论：Linux ELF 非 Mach-O，ldid 无法签名（bin/ 签名循环只对 Mach-O 生效）→ bundle 内出现
-    #           未授权"可执行内容" → iOS 启动校验拒绝（崩）。ELF 永远拿不到 iOS 签名 → 永远不能进 bundle。
-    # 方案：busybox-elf 由 release 发布段作为独立资产上传（busybox-elf），AI 首次使用时 curl 下载到
-    #       Documents/Workspace/linux/busybox 再交给 elf-runner。bundle 保持 14c7c 干净结构。
-    # 本段不打包任何 busybox 文件。
+    # v6.6.0: busybox 静态 ELF 路线退役（CELF 淘汰）——统一环境由 Asbestos+Alpine rootfs 提供。
     # fix3bo/fix3cl: node C wrapper 的运行时库（NodeMobile dylib）——install name 是
     # @rpath/NodeMobile.framework/NodeMobile，必须按 framework 目录结构放进 App/Frameworks/，
     # 放 bin/ 会让 dyld 按 @rpath 找 Frameworks/NodeMobile.framework 时 Library not loaded。

@@ -7,7 +7,7 @@ set -e
 # This script downloads Alpine Linux minirootfs (aarch64) and converts it to
 # iSH's fakefs format for use as a sandboxed ARM64 Linux environment.
 #
-# Repository: https://github.com/OpenMinis/ish-arm64 (branch: feature-arm64)
+# Repository: https://github.com/rcarmo/ios-linuxkit（v6.5.0 起——Asbestos ARM64 解释器，OpenMinis 已停更退役）
 #
 # Prerequisites:
 #   - Python 3 with meson (pip3 install meson)
@@ -237,7 +237,7 @@ provision_rootfs_tar() {
     chmod +x "$CACHE_DIR/sbin/apk.static" 2>/dev/null || true
 
     # qemu 交叉装包：常用工具链一次到位（--no-scripts 跳过 guest post-install）
-    # v4.3.77：曾加 py3-pandas——实测 iSH 模拟器 import numpy/openblas 段错误闪退
+    # v4.3.77：曾加 py3-pandas——实测解释器 import numpy/openblas 段错误闪退（历史；现原生 Python 直跑 numpy）
     # （崩溃栈 cpu_run_to_interrupt），预装 pandas 反成陷阱，v4.4.2 移除。
     # v6.5.2：补全基础集（wget/jq/openssl/bash/bind-tools）——对齐 InstallTools network 组，
     # 根治"运行时 apk 联网装工具缺证书鸡生蛋"。

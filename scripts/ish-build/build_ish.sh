@@ -8,7 +8,7 @@ set -e
 # for iOS (arm64) integration, using the ish-arm64 fork which emulates an
 # ARM64 Linux guest on iOS.
 #
-# Repository: https://github.com/OpenMinis/ish-arm64 (branch: feature-arm64)
+# Repository: https://github.com/rcarmo/ios-linuxkit（v6.5.0 起——Asbestos ARM64 解释器，OpenMinis 已停更退役）
 #
 # Prerequisites:
 #   - Xcode with iOS SDK
@@ -38,7 +38,7 @@ BUILD_TYPE="${1:-release}"
 # 修复 compat 模式下 MobileIcons/CoreImage 渲染分享扩展图标 SIGSEGV
 #（TrollStore/TrollFools 均双架构原生运行，故分享正常）。
 # v6.1.5(14c1): 回退纯 arm64——14ca3ca 双架构后 libish 编入 arm64e 切片，
-# A15 原生 arm64e 执行 iSH x86 模拟器(guest 代码)即段错误 cpu_run_to_interrupt
+# v6.5.0 起: guest 为 ARM64(Asbestos)——不再有 x86 模拟；历史: OpenMinis x86 时代 A15 段错误 cpu_run_to_interrupt
 # （真机 10-17 实测 busybox/sh/file 全崩；崩溃时间线 10-16 前无 cpu_run_to_interrupt）。
 # 纯 arm64 compat 模式 = 6.0.25 时代行为（Alpine 正常）。分享面板 SIGSEGV 留待后续单独处理。
 ARCHS="arm64"
@@ -581,7 +581,7 @@ create_umbrella_header() {
  * iSH-ARM64 - Linux shell for iOS (ARM64 guest emulation)
  * Umbrella header for static library integration
  *
- * https://github.com/OpenMinis/ish-arm64
+ * https://github.com/rcarmo/ios-linuxkit
  */
 
 #ifndef ISH_H
