@@ -25,7 +25,7 @@
 - 存储环形卡片 + 6 类缓存占用 + 快速/高级清理 Tab + 一键清理（setuid root 整目录重建）
 
 ### 📂 文件系统与数据
-- `file`（inspect / analyze）：跨环境文件检查（原生元信息；自动 bind 走 Alpine file+strings）
+- `file`（inspect / analyze）：文件检查（原生元信息；自动 bind 环境内 file+strings）
 - `db`（list / schema / query）：原生 sqlite3 直读 App 数据容器
 - `package`（inspect / unpack）：deb/ipa 解包（ar/tar/zip）
 - `artifact`（read / write / list）：工作区文件管理
@@ -48,7 +48,7 @@
 - 注入 ControlAgent.dylib → localhost:4789 HTTP API（/status /ui_tree /tap /swipe /type）
 
 ### 🏗️ 构建与工程
-- `tool.install`：统一工具安装闭环——内置原生 bin → Alpine apk 即装即用 → CI 交叉编译原生 iOS 二进制（`build-tool.yml`，best-effort）
+- `tool.install`：统一工具安装闭环——统一环境 apk 即装即用（apk→pip→CI，CI 交叉编译原生 iOS 二进制 best-effort）
 - `env.setup_re`：一键逆向工具链（binutils/file/python3/sqlite/tcpdump/7z…）
 - `github`（account_status / trigger_build / fetch_runs / download_artifact）：GitHub Actions 触发/查进度/取产物
 - `project`：工作区项目管理；`macro`（record / run / list / delete / export）：可录制重复操作

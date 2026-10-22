@@ -34,7 +34,7 @@ final class BindAppTool: MCPTool {
             "mode": "read_only",
             "mount_path": m,
             "host_path": h,
-            "hint": "只读挂载。在 Alpine shell.exec / python3 里用 \(m) 读该 App 数据(如 \(m)/Documents、\(m)/Library/Preferences)。只读，写不进去。",
+            "hint": "只读挂载。在统一环境 shell.exec / python3 里用 \(m) 读该 App 数据(如 \(m)/Documents、\(m)/Library/Preferences)。只读，写不进去。",
         ]
     }
 }

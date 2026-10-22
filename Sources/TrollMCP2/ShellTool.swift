@@ -276,7 +276,7 @@ final class ShellExecTool: MCPTool {
 
         // v4.3.76：单命令 Alpine 兜底同样享受"缺工具自动装"——objdump/jq/xxd/readelf/rabin2 等
         // v6.6.0: 统一环境——命令 not found 时白名单自动装并重跑一次（autoRoute 已删）。
-        // 参考 iOS 原生命令算法：36 个白名单命令都有自动实现；Alpine 工具也应"装了就能直接调"。
+        // 统一环境工具链：缺工具自动装——装了就能直接调。
         var provNote = ""
         var rOut = output, rExit = exitCode, rTimed = timedOut
         (rOut, rExit, rTimed, provNote) = ShellExecTool.provisionAndRerun(command, output: output, exitCode: exitCode, timedOut: timedOut, timeout: timeout)
@@ -598,11 +598,11 @@ final class ShellExecTool: MCPTool {
         return word
     }
     
-    /// iOS 原生命令集合 (36 个，与上方拦截清单一致）
+    /// iOS 原生命令集合（v6.6.0 精简：5 个——plutil/sqlite3/ta/python3 + bin/ jtool2）
     private static let iosNativeCommands: Set<String> = [
-        // v6.6.0: 精简——仅真实原生实现（plutil/sqlite3/ta/python3）+ bin/ 内置二进制。
-        // 其余命令统一环境（Alpine）执行——probe 不再误报"原生已覆盖"。
-        "plutil", "sqlite3", "ta", "python3",
+        // v6.6.0: 精简——仅真实原生实现（plutil/sqlite3/ta）+ bin/ 内置二进制。
+        // 其余命令统一环境（Alpine）执行——python3 统一走 Alpine（完整 CPython+pip）。
+        "plutil", "sqlite3", "ta",
         // bin/ 内置（v6.6.0 精简：仅 jtool2——Mach-O 解析专长，Alpine 无替代；
         // llvm-* 已清——统一环境 Alpine binutils objdump/nm/readelf/size/strings 替代）
         "jtool2"
@@ -686,7 +686,7 @@ final class ShellExecTool: MCPTool {
             return [
                 "command": segment,
                 "exit_code": 1,
-                "stdout": "iOS 原生模式不支持该命令: \(word) (请用 Alpine 全功能 shell 或换用支持的 36 个 iOS 原生命令)"
+                "stdout": "统一环境不支持该命令: \(word)（请用环境内可用命令或 tool.install 装包）"
             ]
         }
     }
@@ -1189,101 +1189,6 @@ final class ShellExecTool: MCPTool {
         return args
     }
 
-    /// v4.4.4: 原生 Python CLI——App/bin/python3（iPhone 芯片直跑，PEP 730 CPython iOS）。
-    /// 未内置时给明确指引（不静默降级到 iSH，避免 AI 误以为原生可用）。
-    /// v6.1.5-14bx: extraEnv 透传（git.py 用 TROLL_GIT_CWD 注入会话目录）。
-    private static func runIOSPython3(_ command: String, extraEnv: [String: String] = [:], timeout: TimeInterval = 30) -> [String: Any] {
-        let pythonPath = Bundle.main.bundlePath + "/bin/python3"
-        guard FileManager.default.isExecutableFile(atPath: pythonPath) else {
-            return ["command": command, "exit_code": 1,
-                    "stdout": "python3: 原生 Python 未内置（此构建未集成 Python.xcframework）— 请用统一环境版：sh -c 'python3 ...'（注意解释器内不能 import numpy/pandas，会段错误）"]
-        }
-        let body = command.dropFirst("python3".count)
-        let args = shellSplitArgs(String(body))
-        // fix3ck: iOS CPython 无 tty 时 fd 1/2 不可靠（os.write(1) 也丢），main.c 已改为把
-        // sys.stdout/stderr 重定向到 TROLL_PY_OUT 文件。fix3cl: 用 Workspace 绝对路径
-        // （App 数据容器一定可写可读），Documents//tmp/cwd 兜底——多通道总有一个能到。
-        // fix3cl3: 先 mkdir 保证 Workspace 目录存在（python3 子进程 fopen 依赖父目录，
-        // 目录不存在 → 全部 diag 静默失败 → 真机表现"exit 0 全空"）
-        let wsBase = "/var/mobile/Documents/Workspace"
-        let docsBase = NSHomeDirectory() + "/Documents"
-        try? FileManager.default.createDirectory(atPath: wsBase, withIntermediateDirectories: true)
-        let pyOutPath = wsBase + "/troll_py_out.txt"
-        let pyDiagPath = wsBase + "/troll_py_diag.txt"
-        let pyStartPath = wsBase + "/troll_py_start.txt"
-        try? FileManager.default.removeItem(atPath: pyOutPath)
-        try? FileManager.default.removeItem(atPath: pyDiagPath)
-        try? FileManager.default.removeItem(atPath: pyStartPath)
-        var env = ["PYTHONIOENCODING": "utf-8",
-                   "TROLL_PY_OUT": pyOutPath,
-                   "TROLL_PY_DIAG": pyDiagPath]
-        for (k, v) in extraEnv { env[k] = v }
-        let res = BuildRunner.shared.run(executable: pythonPath, args: args,
-                                         env: env, timeout: timeout)
-        var out = res.stdout
-        if res.timedOut { out += "\n[python3 执行超时 \(Int(timeout))s 被终止]" }
-        if let serr = res.spawnError, !serr.isEmpty {
-            out += "\n[spawn error: \(serr)]"
-        }
-        // fix3cl/fix3cn: 无条件读回 TROLL_PY_OUT——main.c 把 sys.stdout/stderr 重定向到该文件；
-        // 调试期 os.write(1, "[PY-BIND-FILE]") 使 res.stdout 非空，旧代码 if res.stdout.isEmpty
-        // 跳过文件读回 → print 输出（版本号/结果/异常 traceback）全部丢失（真机实测 code PyRun ok 但
-        // PYVER 不可见）。无条件读：文件不存在时 try? 安全返回 nil；print 内容与 fd1 标记不重复。
-        if let d = try? String(contentsOfFile: pyOutPath, encoding: .utf8), !d.isEmpty {
-            out += d
-        } else if let d = try? String(contentsOfFile: docsBase + "/troll_py_out.txt", encoding: .utf8), !d.isEmpty {
-            out += d
-        }
-        // v6.0.30: 过滤诊断噪音，stdout只留用户print的结果
-        out = out.components(separatedBy: .newlines)
-            .filter { line in
-                let t = line.trimmingCharacters(in: .whitespaces)
-                return !t.hasPrefix("[PY-BIND-FILE]") && !t.hasPrefix("[py-diag]") && !t.hasPrefix("[PYVER")
-            }
-            .joined(separator: "\n")
-        for dpath in [pyDiagPath, docsBase + "/troll_py_diag.txt", "/tmp/troll_py_diag.txt", "troll_py_diag.txt"] {
-            if let d = try? String(contentsOfFile: dpath, encoding: .utf8), !d.isEmpty {
-                out += "\n[py-diag]\n" + d
-                try? FileManager.default.removeItem(atPath: dpath)
-                break
-            }
-        }
-        // fix3cl3: start 标记——main.c 在 main 第一行无条件写，读回区分"main 没跑"vs"绑定失败"
-        if out.isEmpty {
-            for spath in [pyStartPath, docsBase + "/troll_py_start.txt", "/tmp/troll_py_start.txt", "troll_py_start.txt"] {
-                if let d = try? String(contentsOfFile: spath, encoding: .utf8), !d.isEmpty {
-                    out += "\n[py-start]\n" + d
-                    try? FileManager.default.removeItem(atPath: spath)
-                    break
-                }
-            }
-        }
-        // fix3cl6: 构造器标记——dyld 构造器无条件写，区分"dyld 加载成功(main 问题)"vs"dyld 阶段被杀(framework 问题)"
-        if out.isEmpty {
-            for cpath in [wsBase + "/troll_py_ctor.txt", "/tmp/troll_py_ctor.txt"] {
-                if let d = try? String(contentsOfFile: cpath, encoding: .utf8), !d.isEmpty {
-                    out += "\n[py-ctor]\n" + d
-                    try? FileManager.default.removeItem(atPath: cpath)
-                    break
-                }
-            }
-        }
-        try? FileManager.default.removeItem(atPath: pyOutPath)
-        try? FileManager.default.removeItem(atPath: docsBase + "/troll_py_out.txt")
-        return ["command": command, "exit_code": res.exitCode, "stdout": out,
-                "stderr": res.stderr]
-    }
-
-    /// v6.1.5-14bp：原生工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令）
-    /// 不触发解释器执行，改用 FileManager 直读探测：
-    ///   ① App 内置原生 bin/<name>（native-tools）
-    ///   ② Alpine rootfs（Documents/alpine-rootfs）的 usr/bin、bin、usr/local/bin
-    /// 返回"已装/未装 + 如何运行"，绝不执行 Alpine 二进制、绝不自动 apk add。
-    /// 根因背景：git 未装 → 自动 apk add git → iSH x86 模拟高 CPU → iOS watchdog 杀 App（闪退）。
-    // v6.1.5-14bs：可被探测的工具集合（易触发 Alpine 且常被"检查环境"）
-    private static let probeNames: Set<String> = ["git", "vim", "vi", "curl", "wget", "make", "cmake", "gcc", "clang", "tar", "unzip", "zip", "gdb", "jq", "r2", "radare2", "python3", "python", "cd"]
-
-    /// 解析单个命令段是否为"纯探测形态"；是则返回目标工具名，否则返回 nil（= 真实执行，不拦截）
     private static func probeTargetOfSegment(_ seg: String) -> String? {
         let t = seg.trimmingCharacters(in: .whitespaces)
         let word = firstWord(t)
@@ -1318,30 +1223,21 @@ final class ShellExecTool: MCPTool {
         return nil
     }
 
-    /// 单工具探测：python3 走原生执行器；cd 回 cwd；原生命令表/App bin/Alpine rootfs 直读；否则报未装+安装提示。
-    /// 绝不执行 Alpine 二进制、绝不自动 apk add（根因：git 未装 → 自动装 → iSH 高 CPU/装包 240s → 执行中挂起/被杀）。
+    /// 单工具探测：cd 回 cwd；原生命令表/App bin/统一环境 rootfs 直读；否则报未装+安装提示。
+    /// 探测只查询不装包（避免探测触发安装副作用）。
     private static func probeSingleTool(_ target: String, command seg: String) -> [String: Any] {
         let t = seg.trimmingCharacters(in: .whitespaces)
         let word = firstWord(t)
         let body = t.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
-        // python3/python 已有原生执行器（runIOSPython3），仅 --version/-V 走原生（裸 python3 会进 REPL 卡住，不拦截）
-        if target == "python3" || target == "python" {
-            if body == "--version" || body == "-V" {
-                return runIOSPython3(t.hasPrefix("python3") ? t : "python3 " + t.dropFirst(word.count))
-            }
-        }
         // cd 纯状态查询 → 返回当前 cwd（原生，无副作用）
         if target == "cd" && body.isEmpty {
             return ["command": seg, "exit_code": 0, "stdout": "当前工作目录：\(TrollRuntimeEngine.cwd)"]
         }
-        // 原生命令表：curl/wget/python3/ta/base64/strings 等有 Swift 原生实现，直接报已装+可直跑
+        // 原生命令表：plutil/sqlite3（iOS 特有）+ ta（宿主直调）+ bin/ jtool2（Mach-O 专长）
         if iosNativeCommands.contains(target) {
-            var note = "探测结果来自原生命令表（\(target) 有 App 内置 Swift 原生实现，无需 Alpine 无需装包）"
-            if target == "curl" || target == "wget" {
-                note += "\n直接执行：\(target) 参数...（原生直跑，不闪退不挂起）"
-            }
+            var note = "探测结果来自原生命令表（\(target) iOS 特有/宿主直调/App bin 内置）"
             return ["command": seg, "exit_code": 0,
-                    "stdout": "\(target): ✅ 已安装（App 原生命令实现，可直接 \(target) ... 执行）", "note": note]
+                    "stdout": "\(target): ✅ 已安装（\(target) ... 可直接执行）", "note": note]
         }
         // v6.6.0：git 探测（command -v git / which git）——真实可用性：
         // ①统一环境 Alpine rootfs 预装 git（v6.5.2 起）②App 内置 bin/git.py(dulwich) 兜底。
@@ -1394,12 +1290,12 @@ final class ShellExecTool: MCPTool {
         } else {
             out += "\n安装提示：用 tool.install 安装，或统一环境里 apk add \(target)。"
         }
-        return ["command": seg, "exit_code": 1, "stdout": out, "note": "探测结果来自文件系统（未执行命令本体，避免触发模拟器高 CPU 被系统杀）"]
+        return ["command": seg, "exit_code": 1, "stdout": out, "note": "探测结果来自文件系统（未执行命令本体，避免触发解释器高 CPU 被系统杀）"]
     }
 
-    /// v6.1.5-14bp/14br/14bs：原生工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令/
-    /// command -v X / which X / type X）不触发 iSH，改用 FileManager 直读探测：
-    ///   ① App 内置原生 bin/<name>（native-tools）  ② Alpine rootfs  ③ 原生命令表（Swift 实现）
+    /// 工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令/
+    /// command -v X / which X / type X）不触发解释器执行，改用 FileManager 直读探测：
+    ///   ① App 内置原生 bin/（jtool2）  ② 统一环境 rootfs  ③ 原生命令表（plutil/sqlite3/ta）
     /// 支持批量：一条命令探测多个工具（command -v git; command -v curl; python3 --version）逐个合并返回。
     /// 任一段是真实执行（git status / curl 实际请求）→ 整条不拦截，走原路由。
     private static func nativeToolProbe(_ command: String) -> [String: Any]? {

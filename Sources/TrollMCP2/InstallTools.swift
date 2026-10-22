@@ -61,7 +61,7 @@ final class ToolInstallTool: MCPTool {
             let path = which.output.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\n").first.map(String.init) ?? name
             let (ok, note) = smokeTest(name)
             return ["ok": true, "tool": name, "status": ok ? "ready" : "unverified", "source": "alpine", "path": path,
-                    "hint": "Alpine 已有；命令引用 iOS 路径会自动 bind 直读（/ios_workspace、/ios_containers、/ios_system 只读）。" + note]
+                    "hint": "统一环境已有；命令引用 iOS 路径会自动 bind 直读（/ios_workspace、/ios_containers、/ios_system 只读）。" + note]
         }
 
         // 2. Alpine apk 安装：依次尝试候选包名（映射名 / 原名 / py3-xxx）。
@@ -141,7 +141,7 @@ final class ToolInstallTool: MCPTool {
 
         // 5. 兜底指引
         return ["ok": false, "tool": name, "status": "not_found",
-                "hint": "Alpine 无此包（试了 \(apkCandidates(for: name).joined(separator: "/"))）。可尝试：① tool.install profile:re（逆向工具链批装）；② 提供 source 仓库 URL 走 CI 交叉编译（原生 iOS 二进制）；③ shell.exec('apk search \(name)') 找近似包名；④ 自写工具 inject load_dylib"]
+                "hint": "apk 无此包（试了 \(apkCandidates(for: name).joined(separator: "/"))）。可尝试：① tool.install profile:re（逆向工具链批装）；② 提供 source 仓库 URL 走 CI 交叉编译（原生 iOS 二进制）；③ shell.exec('apk search \(name)') 找近似包名；④ 自写工具 inject load_dylib"]
     }
 
     /// Alpine 候选包名：映射名 → 原名 → py3-xxx（Python 包在 Alpine 多为 py3- 前缀）
