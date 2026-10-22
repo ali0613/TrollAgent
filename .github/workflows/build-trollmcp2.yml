@@ -153,7 +153,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ish-stage
-          key: ish-stage-${{ hashFiles('scripts/ish-build/*.sh') }}-v5
+          key: ish-stage-${{ hashFiles('scripts/ish-build/*.sh') }}-v6
 
       - name: Build iSH engine (libish.a + alpine rootfs)
         # v3.0.37：编译 iSH-ARM64 静态库与 Alpine rootfs，供 shell.exec 新引擎使用。

@@ -439,7 +439,8 @@ GUARD_PATCH_PY
             -Dlog_handler=nslog \
             -Dkernel=ish \
             -Dengine=asbestos \
-            -Dguest_arch=arm64
+            -Dguest_arch=arm64 \
+            -Djit=true   # v6.6.0-fix21: Native JIT（Asbestos guest-arm64——iOS 无 exec 区域时自动回退解释器，安全）
     else
         # Reconfigure both options: an existing build-ios/ from before
         # b_ndebug was introduced would otherwise keep asserts enabled.
