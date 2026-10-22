@@ -222,8 +222,9 @@ anchor = "    sqlite3_busy_timeout(fs->db, 5000);"
 assert anchor in s, "anchor not found in fake-db.c"
 init = anchor + """
     // v3.7.2: ensure initial schema exists when meta.db was missing/empty
-    { sqlite3_stmt *t = db_prepare(fs, "select name from sqlite_master where type='table' and name='paths'");
-      int has = (sqlite3_step(t) == SQLITE_ROW); sqlite3_finalize(t);
+    { sqlite3_stmt *t = NULL;
+      sqlite3_prepare_v2(fs->db, "select name from sqlite_master where type='table' and name='paths'", -1, &t, 0);
+      int has = (t && sqlite3_step(t) == SQLITE_ROW); if (t) sqlite3_finalize(t);
       if (!has) {
         char *init = "create table paths (path blob primary key, inode integer);"
                      "create table stats (inode integer primary key, stat blob);"
