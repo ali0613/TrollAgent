@@ -930,8 +930,6 @@ static long sys_getdents64(int fd, void *buf, size_t count) {
         nent++;
         size_t namlen = strlen(de->d_name);
         size_t lreclen = (namlen + 1 + 19 + 7) & ~(size_t)7;
-        fprintf(stderr, "[gdd]   readdir#%d ino=%llu type=%d namlen=%zu name='%s'\n",
-                nent, (unsigned long long)de->d_ino, de->d_type, namlen, de->d_name);
         if (o + (long)lreclen > (long)count) break;
         memset(out + o, 0, lreclen);
         struct linux_dirent64 *ld = (struct linux_dirent64 *)(out + o);
@@ -941,6 +939,9 @@ static long sys_getdents64(int fd, void *buf, size_t count) {
         ld->d_type = de->d_type;
         memcpy(ld->d_name, de->d_name, namlen);
         o += (long)lreclen;
+        if (nent <= 3)
+            fprintf(stderr, "[gdd]   #%d ino=%llu type=%d namlen=%zu name='%s'\n",
+                    nent, (unsigned long long)de->d_ino, de->d_type, namlen, de->d_name);
     }
     if (guard >= 200) fprintf(stderr, "[gdd] GUARD 200 reached fd=%d (possible loop!)\n", fd);
     fprintf(stderr, "[gdd] fd=%d entries=%d errno=%d(%s) -> out %ld bytes\n",
