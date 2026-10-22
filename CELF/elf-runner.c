@@ -2029,13 +2029,18 @@ int elf_runner_main(int argc, char **argv) {
     slot[a++] = (uintptr_t)narg;                  /* argc */
     for (i = 0; i < narg; i++) slot[a++] = argstr[i];   /* argv[] */
     slot[a++] = 0;                                /* argv 终止 */
-    /* v19.18d：guest 环境（PATH/HOME）——printenv/env 可用 */
+    /* v19.18d：guest 环境（PATH/HOME/TZ）——printenv/env 可用；
+       v19.25：musl tzset 对 TZif 文件遍历取第一个 isdst=0 的 ttinfo（不查
+       transition 表）——含 LMT 历史条目的 tzdata（容器/iOS 同）ttinfo[0]=LMT
+       → date 1890。改用 POSIX 格式 TZ（CST-8 = UTC+8 无 DST），不走 TZif
+       解析，date 输出正确。emu 忠实执行 musl，非解释器 bug。 */
     {
         const char *env_def[] = { "PATH=/sbin:/usr/sbin:/bin:/usr/bin",
-                                  "HOME=/var/mobile" };
+                                  "HOME=/var/mobile",
+                                  "TZ=CST-8" };
         uintptr_t envstr[8];
         int ne = 0;
-        for (i = 0; i < 2; i++) {
+        for (i = 0; i < 3; i++) {
             size_t l = strlen(env_def[i]) + 1;
             if ((uintptr_t)(p - l) < (sp_top - 4096)) break;  /* 防溢出字符串区 */
             memcpy(p, env_def[i], l);
@@ -2044,6 +2049,7 @@ int elf_runner_main(int argc, char **argv) {
         }
         slot[a++] = envstr[0];
         slot[a++] = envstr[1];
+        slot[a++] = envstr[2];
         slot[a++] = 0;                            /* envp 终止 */
     }
     /* v19.18j 修复：a 已在 envp NULL（slot[a-1]）写入后自增——slot[a] 就是
