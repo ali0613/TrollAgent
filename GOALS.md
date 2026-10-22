@@ -27,13 +27,13 @@
 ## 分层愿景（终态）
 
 ```
-App 原生系统（AI 全走这里，零感知）
- ├─ 原生命令 36+（Swift）+ bin/ 原生工具（lua/node/jq/r2/cstool/tree/xz/which/llvm 族）
- ├─ CI 重编 Mach-O 扩军（P1）+ 原生 pip（Python 生态）
- ├─ WASM 转译（可选，依赖重无 fork 的工具兜底）
- └─ aarch64 Linux ELF 运行时（P5 终极：ELF 直跑 + syscall 翻译 = "一个环境的 Linux 真系统"）
-      —— iSH 的 syscall 翻译层现成可复用，本质是"iSH 去掉 x86 模拟器换 aarch64 直跑"
-保留后备：iSH/QEMU 类仅作"需要真内核行为"（raw socket/ptrace）的显式应急
+统一环境（AI 感知唯一入口 = TrollRuntime）
+ └─ Asbestos ARM64 解释器 + Alpine 完整 rootfs（apk 任意装包——python3/git/sqlite/jq/binutils/lua/node/radare2…）
+      ├─ 全部命令在统一环境执行（ls/cat/git/python3/ps/df…）
+      ├─ iOS 特有命令（plutil/sysctl/notifyutil/uicache/sbreload/idevice_id/swift）内部自动原生兜底
+      ├─ iOS 注入工具链（ldid/optool/insert_dylib/ct_bypass）原生直跑
+      └─ jtool2（Mach-O 解析专长）App 自带原生
+（v6.6.0 起：无路由、无双环境、无 iSH/QEMU 后备——单一环境）
 ```
 
 ## 路线图状态
@@ -41,9 +41,9 @@ App 原生系统（AI 全走这里，零感知）
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | P0 | 14c1 引擎回退纯 arm64，Alpine 恢复 | ✅ 已交付装机（Alpine sh 实测恢复） |
-| P1 | 原生工具扩军——**只做 iOS 语义对等类**（tree/xz/which ✅、file/zip 🔧14c6、diff/curl/wget 按需）；**不做 busybox 原生版** | 🔧 进行中 |
-| P3 | 原生 pip + CI 编译进包（"装包=更新"） | ⏳ 部分（pip 原生 Python 已内置） |
-| P4 | 路由废除 + Alpine rootfs 不打包 + 统一环境层 | ✅ v6.6.0 完成（runtime 参数废除、ISHEngine→TrollRuntimeEngine、iSH 文案清零） |
+| P1 | ~~原生工具扩军~~ **已并入统一环境**（v6.6.0：Alpine apk 工具链替代全部原生芯片工具——lua/node/r2/cstool/llvm 族全清） | ✅ 并入 v6.6.0 |
+| P3 | ~~原生 pip~~ **统一环境 Alpine python3+pip 完整**（apk 任意装包） | ✅ v6.6.0 |
+| P4 | 路由废除 + 统一环境层 | ✅ v6.6.0 完成（runtime 参数废除、ISHEngine→TrollRuntimeEngine、iSH 文案清零） |
 | P5 | aarch64 ELF 运行时 → **已由 rcarmo/ios-linuxkit Asbestos 接管（v6.5.0 切核心，v6.6.0 统一环境）**——emu.c/CELF 退役 | ✅ v6.5.0-v6.6.0 完成（真机验证：apk 装包/动态库链/git/ps/df/numpy 全通） |
 | ~~P2~~ | ~~原生受限 shell（组合命令原生化）~~ **已并入 P5** | 2026-10-17 用户拍板"组合命令最后弄"：组合命令终极形态=P5 ELF 运行时（Linux shell 语义白送），自写 Swift shell 无必要；且 fork 实测在原生 iOS 挂起（python3 subprocess NO JSON），P2 的进程拉起路线本就要等 P5 |
 
@@ -51,8 +51,8 @@ App 原生系统（AI 全走这里，零感知）
 
 ## 当前状态（2026-10-23，v6.6.0 已 push）
 
-- **v6.6.0 已 push（deab204）**：CELF/elf-runner/静态 busybox/iSH 路由全部退役；统一环境落地（shell.exec 无 runtime——全部命令默认 TrollRuntime=Asbestos+Alpine 完整工具链；iOS 特有命令自动原生兜底）；rootfs 完整化（CI qemu 显式安装+预装补全+bundle 版本校验）
-- **下一步**：v6.6.0 真机验证 → 大范围回归 → vendored（Asbestos 源码入仓）+ iSH→TrollRuntime 重命名收尾；P1 原生工具扩军继续
+- **v6.6.0 系列已 push（fix1-9）**：CELF/elf-runner/静态 busybox/iSH 路由全部退役；统一环境落地（shell.exec 无 runtime——全部命令默认 TrollRuntime=Asbestos+Alpine 完整工具链；iOS 特有命令自动原生兜底）；rootfs 完整化；原生芯片工具全清（lua/node/r2/cstool/llvm 族——Alpine 替代）+ CI 加速 25-45min
+- **下一步**：v6.6.0 真机验证（覆盖安装）→ 大范围回归 → vendored（Asbestos 源码入仓）+ CISH target 重命名收尾
 - 已记录事实：python3 subprocess/os.system 在原生 iOS 下挂起无响应（fork 受限再证实）→ 组合命令并入 P5，不再自写 Swift shell
 
 ## 仓库与发布信息
@@ -99,7 +99,7 @@ App 原生系统（AI 全走这里，零感知）
 ### 项目硬事实（供新 AI 继续）
 - 仓库：github.com/zrrt/trollmcp2；本地 checkout `/home/user/Doubao/chats/38444602897901314/trollmcp2_audit`
 - 可用 PAT 存会话记忆/环境变量（勿写入本文件——Push Protection 拦截）；已失效 PAT 列表存会话记忆
-- 公网跳板 IP（当前）：`121.31.136.34`（旧 121.31.141.66 / 121.31.139.125 已超时；IP 变了必须问用户要新）；SSH root / 密码 `1335612901`
+- 公网跳板 IP（动态）：变必须问用户要新；SSH root / 密码 `1335612901`
 - iPhone 远程终端：`http://192.168.31.108:8790` token `1335612901`；API `POST /api/tool` body `{"name":"shell.exec","params":{"command":"…","runtime":"ios"}}`（经跳板 sftp 写 /tmp/body.json 再 curl）
 - 设备端：bundle `org.python.python`；App `TrollAgent.app`；真机 busybox `/var/mobile/Documents/Workspace/linux/busybox`；日志 `elf_out.log`；崩溃 `crash/sig_*.txt`
 - 用户习惯：每个构建走 commit → CI → release asset+aka → 手动 TrollStore 安装 → 真机验证；留档走 commit 历史 + GOALS.md；不绕路反复试死路。
