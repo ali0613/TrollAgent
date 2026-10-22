@@ -102,7 +102,7 @@ let package = Package(
             linkerSettings: [
                 .linkedLibrary("z"),
                 .linkedFramework("NetworkExtension"),
-                // 14d3: TrollStore JIT URL scheme（apple-magnifier://enable-jit）——LaunchServices API
+                // v6.6.0: CoreServices 保留（LSApplicationWorkspace 等 LaunchServices 调用——HUD/App 管理用）
                 .linkedFramework("CoreServices"),
                 // v4.5.2：桌面悬浮 HUD 单可执行双模式（TrollSpeed 正解）——链接 libHUD.a
                 //（HUD/sources 编出的 ObjC++ 悬浮核心）+ 私有 framework tbd（HUD/libraries）。

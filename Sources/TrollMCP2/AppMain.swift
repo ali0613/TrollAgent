@@ -7,10 +7,7 @@ import SwiftUI
 @_silgen_name("HUDMainStart") func HUDMainStart()
 @_silgen_name("HUDExit") func HUDExit()
 @_silgen_name("HUDCheck") func HUDCheck() -> Int32
-// 14d3: 请求 TrollStore 为本进程开 JIT（CLaunch/jit.c，LaunchServices C API，Swift overlay 不暴露）
-@_silgen_name("troll_request_jit") func troll_request_jit(_ bundleID: UnsafePointer<CChar>) -> Int32
-// 14de: 检测当前进程是否已带 JIT（MAP_JIT 试映射成功=已激活，无需再请求 URL）
-@_silgen_name("have_jit") func have_jit() -> Int32
+// v6.6.0: troll_request_jit/have_jit 已删（CELF/elf-runner 退役——统一环境 Asbestos 无 JIT）
 
 @main
 struct TrollAgentApp {
