@@ -2043,6 +2043,18 @@ int elf_runner_main(int argc, char **argv) {
     const char *elf_path = argv[1];
     fprintf(stderr, "[elf-runner] START argc=%d elf=%s (ELF-RUNNER 2026-10-21 v19.4 clean)\n", argc, elf_path);
 
+    /* v19.28m: iOS App 无终端 stdin——fd 0 无效时重定向 /dev/null，
+       guest read(0) 得 EOF（uniq/sed/wc 等读 stdin 命令不报 I/O error）。
+       fd 有效（API 管道传 stdin）时不覆盖。 */
+    if (fcntl(0, F_GETFL) < 0) {
+        int sfd = open("/dev/null", O_RDONLY);
+        if (sfd >= 0) {
+            if (sfd != 0) dup2(sfd, 0);
+            if (sfd > 2) close(sfd);
+            fprintf(stderr, "[elf-runner] stdin 无效，重定向 /dev/null\n");
+        }
+    }
+
     /* 14e0: 诊断进程实际 csflags（CS_DEBUGGED=0x800）——TrollStore 手动 JIT 启动/URL 激活后
        到底有没有被 attach。csops(CS_OPS_STATUS) 是唯一可靠的运行时查询。 */
     extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
