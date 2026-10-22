@@ -1556,9 +1556,10 @@ static long sys_ioctl(int fd, unsigned long req, long arg) {
    需落到 rootfs/bin/busybox 才能解析。 */
 static const char *guest_path_map(const char *p) {
     static const char *root = NULL;
+    static int rootfs_ok = -1;   /* -1 未检查，0 无 rootfs，1 有 */
     if (!root) {
         const char *lib = getenv("ELF_LIB_PATH");
-        if (lib && *lib && strstr(lib, "/lib")) {
+        if (lib && *lib) {
             /* ELF_LIB_PATH 指向 <root>/lib → root 为其上一级 */
             static char rootbuf[512];
             snprintf(rootbuf, sizeof(rootbuf), "%s", lib);
@@ -1568,8 +1569,12 @@ static const char *guest_path_map(const char *p) {
         } else {
             root = "/var/mobile/Documents/alpine-rootfs/data";
         }
+        static char chk[600];
+        snprintf(chk, sizeof(chk), "%s/bin", root);
+        struct stat st;
+        rootfs_ok = (stat(chk, &st) == 0 && S_ISDIR(st.st_mode)) ? 1 : 0;
     }
-    if (p && p[0] == '/' && strncmp(p, "/var/mobile/", 12) != 0) {
+    if (rootfs_ok == 1 && p && p[0] == '/' && strncmp(p, "/var/mobile/", 12) != 0) {
         static __thread char buf[1024];
         if (strncmp(p, "/lib/", 5) == 0 || strncmp(p, "/bin/", 5) == 0 ||
             strncmp(p, "/usr/", 5) == 0 || strncmp(p, "/etc/", 5) == 0 ||
