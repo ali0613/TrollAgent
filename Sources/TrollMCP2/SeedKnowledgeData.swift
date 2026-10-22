@@ -138,8 +138,8 @@ enum SeedKnowledgeData {
 - 典型坑：Operation not permitted / task_for_pid failed → 没开编辑 Entitlements 或覆盖安装未重应用。
 """),
 
-    ("内置-iSH-Alpine使用指南.md", """
-# iSH Alpine Linux 用户态环境
+    ("内置-Alpine环境使用指南.md", """
+# TrollRuntime Alpine Linux 用户态环境
 
 ## 原理
 - 在 iOS 上跑真实 Alpine Linux 用户态：usermode x86 模拟 + 系统调用翻译，类似 WSL1 / Wine。
@@ -153,12 +153,12 @@ enum SeedKnowledgeData {
 - 缺命令时自己 apk add 对应包即可（Alpine 仓库工具齐全）。
 - 文件可通过「文件 App」挂载点互访；自动 bind mount 指定的 iOS 目录。
 
-## 限制（不要在 iSH 里硬做）
+## 限制（不要在解释器里硬做）
 - 纯软件解释，性能远慢于原生；别编译大工程、别跑重活。
 - 无 JIT（iOS 非 Safari 不允许）；部分 syscall 未实现，无内核模块/设备驱动。
 - Node.js 长期兼容差（未实现的 x86 指令，易崩）；复杂程序可能跑不起来。
 - 不能直接操作其他 App/系统底层（沙盒限制）；它是「脚本/工具运行环境」，不是越狱。
-- 想要原生速度：用 ARM64 分支的 iSH 类项目或云端 Linux，本 App 也可走 SSH 到电脑/云。
+- 想要原生速度：用 ARM64 原生运行时（TrollRuntime）或云端 Linux，本 App 也可走 SSH 到电脑/云。
 """),
 
     ("内置-游戏破解-Unity与IL2CPP.md", """
@@ -251,7 +251,7 @@ enum SeedKnowledgeData {
 
 ## 先判断设备/环境能做什么
 - 手机端（本 App / TrollStore）：侦察、静态提取、砸壳、注入、运行时 Hook、抓包、归档。
-- iSH（Alpine 用户态）：脚本、轻量命令行、apk 装工具；不能编译大工程/无内核能力。
+- TrollRuntime（Alpine 用户态）：脚本、轻量命令行、apk 装工具；不能编译大工程/无内核能力。
 - 电脑/云（Linux/macOS/Windows）：完整重编译、深度反编译、长时跑工具、装任意依赖。
 
 ## 深度分析该去哪
@@ -261,7 +261,7 @@ enum SeedKnowledgeData {
 - 到边界时明确告诉用户「需电脑侧某工具深挖」，不要在手机上硬跑。
 
 ## 缺工具时的正确做法（重点）
-- 命令行工具：先在 iSH 用 apk add；或在电脑/云用包管理器（apt/brew/pip/npm）安装。
+- 命令行工具：先在统一环境（TrollRuntime/Alpine）用 apk add；或在电脑/云用包管理器（apt/brew/pip/npm）安装。
 - 本 App 自身：tool.install 走 GitHub CI 构建/下载工具；env.setup_re 准备逆向环境。
 - 装依赖只在 PC / Linux 类完整环境可行；iOS 沙盒内不能随意装系统级依赖。
 - 装完即继续，不把「请你手动安装」甩给用户；确实无权限才说明。

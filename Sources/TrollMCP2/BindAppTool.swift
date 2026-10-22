@@ -24,7 +24,7 @@ final class BindAppTool: MCPTool {
         guard let bundleId = params["bundle_id"] as? String, !bundleId.isEmpty else {
             throw MCPError.invalidParams("bundle_id required")
         }
-        let r = ISHEngine.bindAppContainer(bundleId: bundleId, readOnly: true)
+        let r = TrollRuntimeEngine.bindAppContainer(bundleId: bundleId, readOnly: true)
         guard r.ok, let m = r.mountPath, let h = r.hostPath else {
             throw MCPError.failed("bind_app: \(r.error ?? "unknown error")")
         }
@@ -52,7 +52,7 @@ final class BindAppWriteTool: MCPTool {
         guard let bundleId = params["bundle_id"] as? String, !bundleId.isEmpty else {
             throw MCPError.invalidParams("bundle_id required")
         }
-        let r = ISHEngine.bindAppContainer(bundleId: bundleId, readOnly: false)
+        let r = TrollRuntimeEngine.bindAppContainer(bundleId: bundleId, readOnly: false)
         guard r.ok, let m = r.mountPath, let h = r.hostPath else {
             throw MCPError.failed("bind_app_write: \(r.error ?? "unknown error")")
         }

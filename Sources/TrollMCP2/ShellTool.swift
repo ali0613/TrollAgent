@@ -4,7 +4,7 @@ import Darwin
 import CommonCrypto
 import SQLite3
 
-/// 终端会话管理 (单例，v3.0.93: 已废弃 - iSH 引擎自己管理 cwd，这个类是死代码）
+/// 终端会话管理 (单例，v3.0.93: 已废弃 - TrollRuntime 自己管理 cwd，这个类是死代码）
 final class ShellSession {
     static let shared = ShellSession()
     private init() {}
@@ -32,20 +32,19 @@ enum ShellDiag {
     }
 }
 
-/// 内置终端工具：执行 shell 命令 (iSH 引擎）
+/// 内置终端工具：执行 shell 命令（TrollRuntime 统一环境）
 final class ShellExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "shell.exec",
-        summary: "Run shell command (terminal/CLI). Params: command(必填), timeout(默认20s/max120), runtime(auto/ios/alpine). 自动路由(auto默认): 装包/解包/工具链/复杂脚本→Alpine; 纯文件/系统/网络→iOS原生. 缺轻量工具(tar/jq/gdb等)自动apk add并重试一次; 重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)禁自动装(防iSH高CPU闪退)——git已rootfs预装可直接用, 其他需tool.install手动装. Use for: file ops, system info, network, text processing.",
+        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux 完整工具链执行（Asbestos 解释器——apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写；python3/python 首词自动走原生 ARM64 CPython（芯片直跑 numpy，性能快）；iOS 特有命令(plutil/sysctl 等)内部自动走 iOS 原生兜底——无需指定环境，结果里看 runtime_actual 字段。缺轻量工具自动 apk add 并重试一次；重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)需 tool.install 手动装. Use for: file ops, system info, network, text processing.",
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",
-            "runtime": "Optional String: force execution environment. 'auto'(默认)=按命令类型自动判断；'ios'=强制iOS原生(FileManager直连整个文件系统)；'alpine'=强制Alpine Linux(完整工具链，iOS 路径自动 bind 为 /ios_* 直读直写). 选择原则: ①读iOS文件/统计缓存/系统信息→ios; ②装包/解包/编译/复杂脚本→alpine; ③不确定就auto，结果里看runtime_actual字段确认实际环境.",
             "reset_cwd": "Optional Bool: reset working dir to default (default false)",
             "limit": "Optional Int: result string truncation cap (default 16000 chars——覆盖多数分析输出；仍不够用 full=true). If diagnostics output is trimmed and the body is invisible, pass limit=20000 或更大；full=true 则不截断返回完整结果",
             "full": "Optional Bool: true=返回完整结果不截断 (慎用，大输出占满上下文)",
             "offset": "Optional Int: skip first N chars of output before showing (default 0), combine with limit to read a middle slice",
-            "env": "已弃用：请用 runtime 参数代替。环境由系统按命令类型自动路由(装包/解包deb/复杂脚本走Alpine，其余默认iOS原生)。python3/python 首词自动走原生 ARM64 CPython(能跑 numpy)；要 Alpine 版 Python 用 runtime='alpine' + sh -c 'python3 ...'。"
+            "env": "已弃用(v6.6.0 统一环境)：环境由系统自动决定——默认 Alpine Linux 完整工具链（iOS 路径自动 bind），python3 首词走原生 CPython，iOS 特有命令自动原生兜底。无需也不接受 runtime 参数。"
         ],
         verified: true
     )
@@ -73,7 +72,7 @@ final class ShellExecTool: MCPTool {
             }
         }
 
-        // v4.4.2：iSH 模拟器段错误防护——import numpy/pandas/matplotlib 会加载 openblas，
+        // v4.4.2：解释器段错误防护——import numpy/pandas/matplotlib 会加载 openblas，
         // OpenMinis arm64 模拟器执行其指令段错误闪退（实测崩溃栈 cpu_run_to_interrupt + task_run_current）。
         // 提前拦截给明确报错，避免 App 直接闪退（体验优于崩溃）。
         // v4.4.4：原生 ARM64 Python 已集成（python3 首词 → 原生路由，能跑 numpy/openblas），
@@ -84,29 +83,23 @@ final class ShellExecTool: MCPTool {
         if !nativePython && (command.contains("import pandas") || command.contains("import numpy")
             || command.contains("import matplotlib")) {
             return [
-                "error": "iSH numpy/pandas 段错误防护",
+                "error": "解释器 numpy/pandas 段错误防护",
                 "command": command,
-                "hint": "iSH 模拟器运行 numpy/openblas 会段错误闪退（实测崩溃栈 cpu_run_to_interrupt），禁止在 iSH 内 import pandas/numpy/matplotlib。数据分析请用原生 python3（App 内置，iPhone 芯片直跑）：python3 -c \"import pandas...\" 走原生路由即可。"
+                "hint": "解释器运行 numpy/openblas 会段错误（实测崩溃栈 cpu_run_to_interrupt 已修复——统一环境 Asbestos 下 python3 走原生 CPython 直跑 numpy/pandas/matplotlib）。数据分析直接用 python3（App 内置，iPhone 芯片直跑）。"
             ]
         }
         
         // 重置工作目录
         if params["reset_cwd"] as? Bool == true {
-            ISHEngine.resetCwd()
+            TrollRuntimeEngine.resetCwd()
         }
         
         // v4.3.13: 默认超时 30→20s（收紧）。iSH(x86 模拟器) CPU 开销极高，后台长命令/死循环
         // 约 13s CPU 即触发系统 watchdog(Elapsed CPU time 超限)→ panic/重启/闪退。收紧默认超时 + ISH kill 兜底。
         let timeout = min(max((params["timeout"] as? Double) ?? 20, 1), 120)
         
-        // v6.0.28: 显式 runtime 参数（auto/ios/alpine），解决自动路由不透明的问题
-        // auto（默认）：按命令类型自动判断；ios：强制原生；alpine：强制 Alpine Linux
-        let runtimeParam = (params["runtime"] as? String)?.lowercased() ?? "auto"
-        let forceAlpine = (runtimeParam == "alpine")
-        let forceNative = (runtimeParam == "ios")
-        
-        // v3.1.32: iOS 原生命令拦截——直接用 iOS FileManager 执行，不经过 Alpine
-        // 这样就能访问整个 iOS 文件系统了！
+        // v6.6.0: 统一环境——移除 runtime 参数（auto/ios/alpine 路由废除）。
+        // 全部命令默认走 Alpine Linux 完整工具链（Asbestos）；iOS 特有命令自动原生兜底（内部）。
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         
         // v3.3.4: Native Offload —— `ta <tool> <key:value...>` 统一路由到全部原生 MCP 工具。
@@ -131,13 +124,14 @@ final class ShellExecTool: MCPTool {
                 "command": command,
                 "exit_code": 0,
                 "stdout": [
-                    "执行环境: iOS 原生 (FileManager 直连)",
+                    "执行环境: 统一环境 (TrollRuntime v6.6.0)",
                     "HOME: \(home)",
                     "Documents: \(docs)",
-                    "cwd: \(ISHEngine.cwd)",
+                    "cwd: \(TrollRuntimeEngine.cwd)",
                     "iOS 系统路径可见(/var/containers): \(iosContainers)",
-                    "Alpine 后端: iSH 引擎 (/workspace 映射 iOS Documents/Workspace)",
-                    "提示: 含 | ; && > 的复合命令走 iOS 原生管道执行器；非 iOS 命令段走 Alpine"
+                    "默认执行: Alpine Linux 完整工具链（Asbestos 解释器——apk/管道/动态 ELF 全支持）",
+                    "iOS 路径自动 bind 为 /ios_* 直读直写；python3 首词走原生 CPython；iOS 特有命令自动原生兜底",
+                    "提示: 无需指定环境——统一执行。含 | ; && > 复合命令在环境内正常组合"
                 ].joined(separator: "\n"),
                 "ios_native": true,
                 "hint": "env probe: diagnose execution environment issues"
@@ -163,10 +157,10 @@ final class ShellExecTool: MCPTool {
         }
 
         // P2 环境自动路由：不再由 agent 手动 env 指定切环境（横跳旋钮拆掉）。
-        // 系统按命令类型自动判定：需 Alpine 工具(装包/解包/脚本/python) → Alpine；
-        // 其余默认走 iOS 原生。agent 传的 env 参数被忽略(仅作弱提示，见 description)。
-        // v6.0.28: 支持显式 runtime 参数强制指定环境（forceAlpine/forceNative）
-        let needsAlpine = forceAlpine || (!forceNative && ShellExecTool.autoRouteNeedsAlpine(trimmed))
+        // v6.6.0: 统一环境——移除 runtime/auto 路由。默认全部命令走 TrollRuntime
+        // （Alpine Linux 完整工具链——Asbestos 解释器）；iOS 特有命令（plutil 等 Alpine 无）
+        // 内部自动原生兜底（不暴露参数，AI 无感）。
+        let needsAlpine = !ShellExecTool.iosOnlyCommand(trimmed)
         if needsAlpine {
             // v3.3.4: ta (Native Offload）是宿主能力，与 Alpine 沙盒无关——
             // 即使判定 Alpine，ta 也走宿主路由，杜绝"环境漂移"。
@@ -176,7 +170,7 @@ final class ShellExecTool: MCPTool {
             // v3.7.7: 自动 bind——Alpine 命令引用 iOS 路径时自动挂载顶层 + 改写路径，
             // 让 Alpine 直接读写 iOS 文件（消灭环境漂移，替代单向字节桥接）。
             // bind 后 iOS 路径不可见的旧约束不再成立。
-            let boundCmd = ISHEngine.autoBind(trimmed)
+            let boundCmd = TrollRuntimeEngine.autoBind(trimmed)
             // v3.6.19l: Alpine 执行前保护护栏——凡命令要进 Alpine 却引用了"桥接不了"的 iOS 文件
             // (>2MB 超限 / 不存在)，Alpine 必然读不到 → 执行前直接拦截并给出明确下一步，
             // 而不是放进去跑出空结果让 AI 反复瞎试（根治 jinx 会话 40 次工具调用绕圈的根因）。
@@ -185,7 +179,7 @@ final class ShellExecTool: MCPTool {
                         "stdout": guardMsg,
                         "hint": "该命令会被路由到 Alpine，但 Alpine 读不到该 iOS 路径（非绑定目录(Workspace/Containers/System/App数据容器)，或文件>2MB）。三种解法：①先 cp 到 Workspace：`cp <file> /var/mobile/Documents/Workspace/`，再走 Alpine /ios_workspace 直读分析；②App 数据容器走 /ios_appdata 下 UUID 路径；③用原生 shell 工具（strings/nm/hexdump 直读大文件）；④对二进制用 binary.symbols / file analyze。"]
             }
-            let (output, exitCode, timedOut) = ISHEngine.exec(boundCmd, timeout: timeout)
+            let (output, exitCode, timedOut) = TrollRuntimeEngine.exec(boundCmd, timeout: timeout)
             // 14c3 P1原生化: Alpine 工具裁剪（幂等）——原生已覆盖命令从 Alpine 移除，AI 只能走原生
             _ = ShellExecTool.shrinkAlpineRootfs()            // P3 按需补给：Alpine 输出显示缺工具(command not found)且命中白名单 → 自动 apk add 并重跑一次，
             // 免 agent 反复探测缺什么、也避免"先探测→再装→再跑"的多轮试探。
@@ -199,7 +193,7 @@ final class ShellExecTool: MCPTool {
                 "command": trimmed,
                 "exit_code": finalExit,
                 "stdout": stdout,
-                "cwd": ISHEngine.cwd,
+                "cwd": TrollRuntimeEngine.cwd,
                 "ios_native": false,
                 "runtime_actual": "alpine",   // v6.0.28: 标明实际运行环境
                 "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Alpine Linux environment (auto-routed: needs full toolchain). 缺工具时系统已自动 apk add 安装并重试一次。"
@@ -300,7 +294,7 @@ final class ShellExecTool: MCPTool {
         
         // 5b. 普通 echo 命令（无重定向）——iOS 原生实现。
         // v6.1.5-14bz：真机实测 echo hello-trollagent 触发 Segmentation fault 11——
-        // 根因：echo 不在 36 个原生分支 → 落 Alpine 兜底 ISHEngine.exec（iSH x86 模拟），
+        // 根因：echo 不在 36 个原生分支 → 落 Alpine 兜底 TrollRuntimeEngine.exec（iSH x86 模拟），
         // iSH 内核执行不稳定导致段错误闪退。echo 是最常用命令之一，必须原生直跑（零 iSH）。
         if trimmed == "echo" || trimmed.hasPrefix("echo ") {
             let result = ShellExecTool.runIOSEcho(iosCmd)
@@ -543,7 +537,7 @@ final class ShellExecTool: MCPTool {
         }
         
         // fix3cj: 内置原生工具链(lua/node/r2/cstool)单段命令也走原生——之前无管道时
-        // 36 个快捷路径不匹配 → 落到 Alpine 兜底 ISHEngine.exec → "node: not found"。
+        // 36 个快捷路径不匹配 → 落到 Alpine 兜底 TrollRuntimeEngine.exec → "node: not found"。
         // 只有含 | ; > 的命令走 runIOSPipeline(938 行)才会命中 case node/r2/lua/cstool。
         // 这里在 Alpine 兜底前补上同样的原生分发，让 `node -e "..."`、`r2 -v`、`lua -v`、`cstool -d` 单段直跑。
         if iosCmd == "lua" || iosCmd.hasPrefix("lua ") ||
@@ -577,7 +571,7 @@ final class ShellExecTool: MCPTool {
         }
         
         // v3.0.41：iSH 为唯一引擎 (ios_system 已删除）。初始化failed直接报错，不再回退。
-        let (output, exitCode, timedOut) = ISHEngine.exec(command, timeout: timeout)
+        let (output, exitCode, timedOut) = TrollRuntimeEngine.exec(command, timeout: timeout)
 
         // v4.3.76：单命令 Alpine 兜底同样享受"缺工具自动装"——objdump/jq/xxd/readelf/rabin2 等
         // 不在 autoRouteNeedsAlpine 标记里的命令，not found 时白名单自动装并重跑一次，与主 Alpine 路由一致。
@@ -594,7 +588,7 @@ final class ShellExecTool: MCPTool {
         }
 
         // 会话目录：iSH guest 路径
-        var newPwd = ISHEngine.cwd
+        var newPwd = TrollRuntimeEngine.cwd
 
         AuditLog.shared.log("shell.exec", detail: String(command.prefix(100)))
 
@@ -623,13 +617,13 @@ final class ShellExecTool: MCPTool {
     /// 非白名单 → 跳过安装并返回明确提示（jtool2 这类非 Alpine 工具名）。
     static func provisionAndRerun(_ body: String, output: String, exitCode: Int32, timedOut: Bool, timeout: TimeInterval) -> (output: String, exitCode: Int32, timedOut: Bool, note: String) {
         var note = ""
-        let prov = ISHEngine.autoProvision(output)
+        let prov = TrollRuntimeEngine.autoProvision(output)
         guard let pkg = prov.pkg else { return (output, exitCode, timedOut, note) }
         if !prov.known {
             // v6.1.5-14bp：区分"白名单外"与"重包禁自动装"（git 等重包 apk add 高 CPU 触发 iOS watchdog 杀 App=闪退）
             let heavy: Set<String> = ["git", "wget", "make", "cmake", "build-base", "clang", "gcc", "openssl", "radare2"]
             if heavy.contains(pkg) {
-                note = "工具 \(pkg) 是重量级包：自动安装会触发 iSH 模拟器高 CPU 被 iOS 系统杀（App 闪退）。已跳过自动安装。请用 tool.install 手动安装（Alpine: apk add \(pkg)），装好后重跑命令即可。"
+                note = "工具 \(pkg) 是重量级包：自动安装会触发解释器高 CPU 被 iOS 系统杀（App 闪退）。已跳过自动安装。请用 tool.install 手动安装（Alpine: apk add \(pkg)），装好后重跑命令即可。"
             } else {
                 note = "工具 \(pkg) 不在自动装包白名单（可能不是 Alpine 包），已跳过自动安装；请确认工具名，或用 tool.install 指定 name/source。"
             }
@@ -639,7 +633,7 @@ final class ShellExecTool: MCPTool {
         let provisionTimeout = min(max(timeout, 60), 90)  // v6.1.5-14bs: 240→90s(用户实测"执行中…"挂起=装包慢无反馈, 收紧等待上限)
         let provisionStart = Date()
         InstallationRegistry.shared.start(key: pkg)
-        let apkResult = ISHEngine.apkAdd([pkg], timeout: provisionTimeout) { line in
+        let apkResult = TrollRuntimeEngine.apkAdd([pkg], timeout: provisionTimeout) { line in
             InstallationRegistry.shared.appendLine(line)
         }
         let elapsed = Int(Date().timeIntervalSince(provisionStart))
@@ -647,11 +641,11 @@ final class ShellExecTool: MCPTool {
             InstallationRegistry.shared.finish(ok: true, summary: "已装 \(pkg)（\(elapsed)s）")
             note = "首次运行已自动安装缺失工具 \(pkg)（耗时 \(elapsed)s）。"
         } else {
-            let diag = ISHEngine.installDiagnose(apkResult.output, timedOut: apkResult.timedOut, exitCode: apkResult.exitCode)
+            let diag = TrollRuntimeEngine.installDiagnose(apkResult.output, timedOut: apkResult.timedOut, exitCode: apkResult.exitCode)
             InstallationRegistry.shared.finish(ok: false, summary: diag)
             note = "自动安装 \(pkg) 失败：\(diag)"
         }
-        let (rout, rexit, rtimed) = ISHEngine.exec(body, timeout: timeout)
+        let (rout, rexit, rtimed) = TrollRuntimeEngine.exec(body, timeout: timeout)
         return (rout, rexit, rtimed, note)
     }
 
@@ -734,6 +728,14 @@ final class ShellExecTool: MCPTool {
     /// agent 不再手动传 env 切环境——凡 iOS 原生工具链缺失的命令
     /// (装包/解包 deb/完整 shell 脚本/需要 python 等) 自动进 Alpine；
     /// 其余(文件操作/系统信息/网络/分析)默认走 iOS 原生。
+    /// v6.6.0: iOS 特有命令检测——Alpine/TrollRuntime 无此命令，内部自动原生兜底
+    /// （不暴露参数、AI 无感）。命中则跳过 TrollRuntime，走 iOS 原生分支执行。
+    static func iosOnlyCommand(_ command: String) -> Bool {
+        let first = command.split(separator: " ").first.map(String.init) ?? ""
+        let iosOnly: Set<String> = ["plutil", "notifyutil", "sbreload", "uicache", "idevice_id", "swift"]
+        return iosOnly.contains(first)
+    }
+
     static func autoRouteNeedsAlpine(_ command: String) -> Bool {
         let c = command.trimmingCharacters(in: .whitespacesAndNewlines)
         // 明确的 Alpine 需求标记：装包/解包/完整工具链/复杂脚本结构
@@ -805,7 +807,7 @@ final class ShellExecTool: MCPTool {
         guard let re = try? NSRegularExpression(pattern: pattern) else { return nil }
         let ns = command as NSString
         let maxBytes = 2 * 1024 * 1024
-        // v6.0.28: autoBind 实际绑定的范围（与 ISHEngine.autoBind 保持一致）
+        // v6.0.28: autoBind 实际绑定的范围（与 TrollRuntimeEngine.autoBind 保持一致）
         let bindableRoots = [
             "/var/mobile/Documents/Workspace",
             "/var/containers",
@@ -981,7 +983,7 @@ final class ShellExecTool: MCPTool {
     ]
     
     /// v4.3.9: 反向路径翻译——iOS 原生命令收到 Alpine 挂载路径时翻译回 iOS 真实路径。
-    /// 正向(iOS→Alpine)已由 ISHEngine.autoBind 完成; 原生侧缺反向, 导致 grep/cat/ls
+    /// 正向(iOS→Alpine)已由 TrollRuntimeEngine.autoBind 完成; 原生侧缺反向, 导致 grep/cat/ls
     /// 收到 /ios_workspace 等挂载路径时找不到文件(AI 被迫手动换"真实 iOS 路径")。
     /// 这里统一反向: /ios_workspace→/var/mobile/Documents/Workspace, /ios_containers→/var/containers,
     /// /ios_system→/System。原生命令处理前调用, 让 AI 任意写挂载路径都能被原生读到。
@@ -1093,40 +1095,8 @@ final class ShellExecTool: MCPTool {
                         let magic = Bundle.main.bundlePath + "/bin/magic.mgc"
                         if FileManager.default.fileExists(atPath: magic) { env["MAGIC"] = magic }
                     }
-                    // 14e1: elf-runner 解释器模式——不再需要 JIT（指令当数据处理，绕开
-                    // iOS16.3+TrollStore 的 MAP_JIT 权限墙，14e0 csflags 实测 debugged=0）。
-                    // 移除懒 JIT 激活：apple-magnifier 闪切 TrollStore 无效且打断 App 后台
-                    // （闪切→远程服务重启→8790 断连，用户已多次抱怨）。
-                    // ELF 的 exit_group 由 siglongjmp 翻译回（14dc），主进程存活。
-                    // 输出：dup2 fd1/2 → Documents/Workspace/linux/elf_out.log。
-                    if word == "elf-runner" {
-                        let exe = Bundle.main.executablePath ?? (Bundle.main.bundlePath + "/TrollAgent")
-                        let docsDir = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first
-                                      ?? (NSHomeDirectory() + "/Documents")
-                        let outLog = docsDir + "/Workspace/linux/elf_out.log"
-                        var cargs: [UnsafeMutablePointer<CChar>?] = [strdup(exe)]
-                        for a in args { cargs.append(strdup(a)) }
-                        cargs.append(nil)
-                        let outFD = open(outLog, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
-                        let saved1 = dup(1)
-                        let saved2 = dup(2)
-                        dup2(outFD, 1)
-                        dup2(outFD, 2)
-                        let code: Int32
-                        if outFD >= 0 {
-                            code = cargs.withUnsafeMutableBufferPointer { buf in
-                                elf_runner_main(Int32(buf.count - 1), buf.baseAddress!)
-                            }
-                            dup2(saved1, 1)
-                            dup2(saved2, 2)
-                            close(outFD); close(saved1); close(saved2)
-                        } else {
-                            code = elf_runner_main(Int32(cargs.count - 1), cargs.withUnsafeMutableBufferPointer { $0.baseAddress! })
-                        }
-                        let out = (try? String(contentsOfFile: outLog, encoding: .utf8)) ?? ""
-                        return ["command": segment, "exit_code": Int(code), "stdout": "",
-                                "stderr": out, "ios_native": true, "inproc": true]
-                    }
+                    // v6.6.0: elf-runner（CELF）退役——统一环境由 TrollRuntime（Asbestos）提供。
+                    // 原解释器模式/dup 重定向逻辑已删除（git 历史保留）。
                     let res = BuildRunner.shared.run(executable: p, args: args,
                                                      env: env, timeout: timeout)
                     var out = res.stdout
@@ -1220,7 +1190,7 @@ final class ShellExecTool: MCPTool {
                             result["ios_native"] = true
                         }
                     } else {
-                        var (output, outputExit, timedOut) = ISHEngine.exec(body, timeout: timeout)
+                        var (output, outputExit, timedOut) = TrollRuntimeEngine.exec(body, timeout: timeout)
                         // P3 按需补给（v4.3.76 统一走公共函数）：白名单已知包自动装+重跑，非白名单给明确提示
                         var provNote = ""
                         (output, outputExit, timedOut, provNote) = ShellExecTool.provisionAndRerun(body, output: output, exitCode: outputExit, timedOut: timedOut, timeout: timeout)
@@ -1231,7 +1201,7 @@ final class ShellExecTool: MCPTool {
                         }
                         result = [
                             "command": body, "exit_code": Int(outputExit), "stdout": out,
-                            "cwd": ISHEngine.cwd,
+                            "cwd": TrollRuntimeEngine.cwd,
                             "hint": provNote + "Alpine Linux environment (non-iOS segment of compound command): full command support; 缺工具已自动 apk add"
                         ]
                         if timedOut { result["timed_out"] = true }
@@ -2433,10 +2403,10 @@ final class ShellExecTool: MCPTool {
         }
         let args = shellSplitArgs(body)
         let pyCmd = "python3 \(gitPy) \(args.joined(separator: " "))".trimmingCharacters(in: .whitespaces)
-        // v6.1.5-14by：TROLL_GIT_CWD 用 iOS 真实存在目录——ISHEngine.cwd 默认 /root（Alpine 概念路径，
+        // v6.1.5-14by：TROLL_GIT_CWD 用 iOS 真实存在目录——TrollRuntimeEngine.cwd 默认 /root（Alpine 概念路径，
         // iOS 沙箱无 /root），chdir 失败 git.py 落回 App 默认 cwd 行为错乱。不存在时回退 Workspace。
         // v6.1.5-14bz：支持 cd X && git 组合——gitCwdOverride 优先（cd 的路径）。
-        var gitCwd = gitCwdOverride ?? ISHEngine.cwd
+        var gitCwd = gitCwdOverride ?? TrollRuntimeEngine.cwd
         if !FileManager.default.fileExists(atPath: gitCwd) {
             gitCwd = "/var/mobile/Documents/Workspace"
         }
@@ -2448,7 +2418,7 @@ final class ShellExecTool: MCPTool {
     }
 
     /// v6.1.5-14bp：原生工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令）
-    /// 不触发 iSH 模拟器执行，改用 FileManager 直读探测：
+    /// 不触发解释器执行，改用 FileManager 直读探测：
     ///   ① App 内置原生 bin/<name>（native-tools）
     ///   ② Alpine rootfs（Documents/alpine-rootfs）的 usr/bin、bin、usr/local/bin
     /// 返回"已装/未装 + 如何运行"，绝不执行 Alpine 二进制、绝不自动 apk add。
@@ -2506,7 +2476,7 @@ final class ShellExecTool: MCPTool {
         }
         // cd 纯状态查询 → 返回当前 cwd（原生，无副作用）
         if target == "cd" && body.isEmpty {
-            return ["command": seg, "exit_code": 0, "stdout": "当前工作目录：\(ISHEngine.cwd)", "ios_native": true]
+            return ["command": seg, "exit_code": 0, "stdout": "当前工作目录：\(TrollRuntimeEngine.cwd)", "ios_native": true]
         }
         // 原生命令表：curl/wget/python3/ta/base64/strings 等有 Swift 原生实现，直接报已装+可直跑
         if iosNativeCommands.contains(target) {
@@ -2556,7 +2526,7 @@ final class ShellExecTool: MCPTool {
                 if fm.isExecutableFile(atPath: p) { foundAt = p; break }
             }
         }
-        let runHint = "Alpine 里运行：runtime=alpine + 'sh -c \"\(target) ...\"'；或原生若已内置直接 \(target) ..."
+        let runHint = "在统一环境（TrollRuntime）里运行：sh -c \"\(target) ...\"；或原生若已内置直接 \(target) ..."
         if let found = foundAt {
             var out = "\(target): ✅ 已安装（\(found.replacingOccurrences(of: NSHomeDirectory(), with: "~"))）"
             if found.hasPrefix(Bundle.main.bundlePath) {
@@ -2569,12 +2539,12 @@ final class ShellExecTool: MCPTool {
         }
         var out = "\(target): ❌ 未安装（iOS 无原生 \(target)）"
         if target == "git" || target == "vim" || target == "curl" || target == "wget" {
-            out += "\n安装提示：自动安装会触发 iSH 模拟器高 CPU 被系统杀（闪退）/装包 240s 挂起。请用 tool.install 手动安装（Alpine: apk add \(target)），或减少同时执行的大命令。"
+            out += "\n安装提示：请用 tool.install 手动安装（统一环境 apk add \(target)——v6.5.2 已 rootfs 预装 ca-certificates/curl/git，缺则 apk add）。"
         } else {
-            out += "\n安装提示：用 tool.install 安装，或 runtime=alpine 下 apk add \(target)。"
+            out += "\n安装提示：用 tool.install 安装，或统一环境里 apk add \(target)。"
         }
         return ["command": seg, "exit_code": 1, "stdout": out,
-                "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发 iSH 高 CPU 被系统杀）"]
+                "ios_native": true, "note": "探测结果来自文件系统（未执行命令本体，避免触发模拟器高 CPU 被系统杀）"]
     }
 
     /// v6.1.5-14bp/14br/14bs：原生工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令/

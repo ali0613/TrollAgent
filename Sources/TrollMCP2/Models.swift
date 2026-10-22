@@ -766,7 +766,7 @@ final class ConversationStore: ObservableObject {
     func cancelCurrent() {
         stopRequested = true          // v3.5.16：设停止标志，runLoop 递归到下一轮即停
         // v4.3.77：立即中断正在跑的 Alpine 命令/安装（否则 apkAdd 会闷头跑到 240s 且占着串行锁）
-        ISHEngine.interruptCurrent()
+        TrollRuntimeEngine.interruptCurrent()
         cancelNetworkRetry()
         currentClient?.cancel()
         currentClient = nil

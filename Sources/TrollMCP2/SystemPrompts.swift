@@ -70,11 +70,13 @@ final class SystemPrompts {
               * app: launch → app launch; restart → app restart; find bundle_id → inject list (query); injection status →
                 inject status
               * device: info → device info; processes → shell.exec("ps aux")
-              * shell.exec 环境选择(v6.0.28):
-                - 读iOS文件/统计缓存/系统信息 → runtime="ios"（原生FileManager直连整个文件系统）
-                - 装包/解包/编译/复杂脚本 → runtime="alpine"（完整Linux工具链；iOS 路径自动 bind 为 /ios_* 直读直写，不再受"绑定目录"限制）
-                - 不确定就 runtime="auto"（默认），结果里看 `runtime_actual` 字段确认实际环境
-                - 结果返回空/0字节时先检查：是不是走了Alpine但路径无法 bind（非 /var/mobile、/var/containers、/System 顶层或 >2MB）？换 runtime="ios" 重试
+              * shell.exec 统一环境(v6.6.0——无需选择环境):
+                - 全部命令默认在 TrollRuntime（Alpine Linux 完整工具链——Asbestos 解释器）执行；
+                  iOS 路径自动 bind 为 /ios_* 直读直写（/var/mobile/Documents/Workspace→/ios_workspace 等）
+                - python3/python 首词自动走原生 ARM64 CPython（芯片直跑 numpy/pandas——快）；要 Alpine 版 Python 用 sh -c 'python3 ...'
+                - iOS 特有命令（plutil 等）内部自动原生兜底——无需指定环境
+                - 结果里看 `runtime_actual` 字段确认实际执行环境（alpine=统一环境 / ios=原生）
+                - 缺轻量工具（tar/jq/gdb 等）自动 apk add 并重试一次；重量级工具用 tool.install 装
               * combos: screenshot+OCR → control screenshot → multimodal vision; web+content → browser navigate → browser text;
                 inject → inject list(find bundle_id) → inject → app launch(verify); tap button → control screenshot
                 (read coords) → control tap
@@ -416,9 +418,9 @@ final class SystemPrompts {
       iPhone chip): ls/cat/find/grep/echo/mkdir/rm/mv/cp/tail/head/sed/pwd/touch/wc/df/free/uname/uptime/hostname/ps/
       top/kill/ifconfig/netstat/nslookup/curl/plutil/sqlite3/unzip/tar/gzip/md5sum/sha256sum/diff/hexdump/base64/
       strings/nm/kfd_diag + python3 + objdump + class-dump.  Pipes/semicolons/redirection/&&/|| supported.
-    - NATIVE PYTHON (v4.4.x): App-bundled ARM64 CPython 3.14 (iPhone chip, NOT iSH/Alpine). python3 -c/script.py/module;
+    - NATIVE PYTHON (v4.4.x): App-bundled ARM64 CPython 3.14 (iPhone chip, NOT 模拟器). python3 -c/script.py/module;
       has numpy/pandas/matplotlib (native C extensions). CANNOT fork/exec subprocess (Errno 45); pandas lacks
-      pyarrow/fsspec (use CSV/JSON). iSH/Alpine python3 has NO numpy/pandas — import there segfaults (guard blocks).
+      pyarrow/fsspec (use CSV/JSON). 统一环境(Alpine) python3 无 numpy/pandas —— import 段错误防护拦截.
       New packages install via Alpine only; native python3 has no pip.
     - NATIVE REVERSE TOOLS (in-process): objdump -d <mach-o> (ARM64 disasm), class-dump <mach-o> (ObjC classes/methods),
       nm, strings — read huge files directly, no 2MB limit.
@@ -429,26 +431,17 @@ final class SystemPrompts {
       再执行; skills 不可用时按报错提示 fallback (如 cstool 用 arm64/armv8, tree 用 find <dir> -maxdepth N)。
     - OUTPUT & TRUNCATION (v4.4.9): shell.exec 默认 limit=16000; 结果出现"输出太长已截断"提示时, 必须先读 <path>
       完整内容再分析, 绝不基于截断片段下结论; 逆向/分析类命令建议 full=true 或 limit=50000。
-    - ENVIRONMENT ROUTING: default is iOS native; auto-routes to Alpine when a command needs apk add/tar/
-      sh -c/full scripts. python3 defaults to native CPython; force Alpine with `sh -c 'python3 ...'`.
-      iOS-only commands (plutil etc) → use runtime="ios"; loops/vim/alpine系统git → use runtime="alpine" (paths use /ios_* prefix).
-      内置纯Python git (python3 bin/git.py) 默认走native，不用alpine。
-      If you see "native pipe not supported / no URL parsed / syntax error unexpected do", first suspect routing mismatch,
-      switch runtime and retry — don't treat it as an environment failure.
-    - NATIVE COVERAGE (v14c3 原生化): 以下命令【原生已覆盖，直接调用即原生，勿绕 Alpine】：
+    - UNIFIED ENVIRONMENT (v6.6.0——路由废除): shell.exec 无 runtime 参数——全部命令默认在统一环境
+      TrollRuntime（Alpine Linux 完整工具链——Asbestos 解释器）执行；iOS 路径自动 bind（/ios_* 直读直写）。
+      python3 首词自动走原生 CPython（芯片直跑）；iOS 特有命令（plutil 等）内部自动原生兜底。
+      结果里看 `runtime_actual`（alpine=统一环境 / ios=原生）。遇 "native pipe not supported" 等错误，
+      先查 auto-bind 路径/命令本身，不要当成环境切换失败——环境是统一的，无需切换。
+    - NATIVE COVERAGE (v14c3 原生化): 以下命令【原生已覆盖，直接调用即原生】：
       ls/cat/echo/pwd/touch/wc/md5sum/sha256sum/diff/hexdump/curl/wget/plutil/sqlite3/unzip/df/free/uname/uptime/
       hostname/ps/top/kill/ifconfig/netstat/nslookup/tar/gzip/gunzip/base64/strings/nm/objdump/class-dump/
       python3/git/chmod/chown/lua/node/r2/cstool/jq/tree/xz/which 及 bin 注入工具(ldid/optool 等)。
-      这些命令在 Alpine 中已被裁剪删除（幂等），进 Alpine 会 not found——原生版功能对等，直接用即可。
-      【保留在 Alpine 的完整版】：sed/awk/grep/find/head/tail/rm/mv/cp/mkdir/ln/sh 等系统命令——
-      复杂文本处理/脚本仍可进 Alpine 用（原生是基础版，复杂 regex/-i 等用 Alpine 完整版）。
-    - LINUX RUNTIME (v14c7 P5, aarch64 ELF 直跑): `elf-runner <Linux ELF路径> [args]` 在 iOS 原生层直跑
-      aarch64 Linux 静态 ELF（用户态运行时：加载器+syscall 翻译）。内置验证对象 busybox **不进 bundle**
-      （Linux ELF 非 Mach-O 无法签名，进包即启动崩——14c7b/14c7e 实证），作为 release 资产提供：
-      首次使用先下载到沙箱：`curl -L -o $HOME/Documents/Workspace/linux/busybox
-      https://github.com/zrrt/trollmcp2/releases/download/latest/busybox-elf`（先 mkdir -p），然后
-      `elf-runner $HOME/Documents/Workspace/linux/busybox echo hello`。
-      elf-runner 目标=终结 iSH/Alpine（"像真 Linux 系统一样"）；syscall 缺口会报 -ENOSYS，反馈给我扩翻译表。
+      【保留在统一环境（Alpine）的完整版】：sed/awk/grep/find/head/tail/rm/mv/cp/mkdir/ln/sh 等系统命令——
+      复杂文本处理/脚本仍走统一环境（原生是基础版，复杂 regex/-i 等用环境完整版）。
     - COMMAND EXISTENCE (v4.5.9, 实测边界): App 视角下 `ls /usr/bin` 目录枚举只显示系统 daemon 子集
       (swift-inspect/sysdiagnose 等)，常用命令(chmod/ls/cp/launchctl)不会出现在目录列表里——但【直接路径访问正常】。
       确认某命令是否存在，用 `command -v <名>` 或 `ls -la /usr/bin/<名>` / `/usr/sbin/<名>`；【不要】用 `ls <目录>` 枚举

@@ -186,7 +186,7 @@ struct AboutAuthorView: View {
             ("🗣️", "DIYgod / cloudflare-edge-tts", "AI TTS relay"),
             ("📝", "RSKGrowingTextView", "chat input"),
             ("📦", "ZIPFoundation", "zip archive"),
-            ("🐧", "iSH (ARM64)", "Linux emulation"),
+            ("🐧", "TrollRuntime (ARM64)", "Linux emulation"),
             ("☁️", "GitHub Actions", "cloud build"),
             ("🙏", L10n.t("about_thanks_all"), "")
         ]

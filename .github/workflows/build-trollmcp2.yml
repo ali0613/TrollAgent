@@ -496,52 +496,8 @@ jobs:
             exit 1
           fi
 
-      # 14c7 P5: elf-runner——aarch64 Linux 静态 ELF 用户态运行时（WSL1 式：加载器 + svc→brk patch + SIGTRAP syscall 翻译）
-      # 第一个验收对象: busybox 静态 ELF 直跑（100+ Linux 工具白送）。源码在 Support/elf-runner.c。
-      - name: Build elf-runner (iOS arm64)
-        if: steps.tools-cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p native-tools-out
-          xcrun -sdk iphoneos clang -arch arm64 -isysroot "$(xcrun --sdk iphoneos --show-sdk-path)" \
-            -mios-version-min=15.0 -O2 -o "$GITHUB_WORKSPACE/native-tools-out/elf-runner" \
-            Support/elf-runner.c 2>&1 | tail -8
-          if [ -f "$GITHUB_WORKSPACE/native-tools-out/elf-runner" ]; then
-            chmod +x "$GITHUB_WORKSPACE/native-tools-out/elf-runner"
-            echo ">>> elf-runner built ($(du -h "$GITHUB_WORKSPACE/native-tools-out/elf-runner" | cut -f1))"
-            file "$GITHUB_WORKSPACE/native-tools-out/elf-runner"
-          else
-            echo "!!! elf-runner build failed" >&2
-            exit 1
-          fi
-
-      # 14c7 P5 + 14c8: 静态 PIE busybox aarch64 ELF（第一个嫁接对象）。
-      # ET_EXEC(固定地址)在 iOS 无法 MAP_FIXED 0x400000 → 非固定加载后绝对地址 SIGBUS。
-      # 改为 musl -static-pie 编译 → ET_DYN 位置无关，elf-runner 可加载到任意地址直跑。
-      - name: Build static-PIE busybox (aarch64, musl -static-pie)
-        # 已移到独立 build-busybox-pie job (ubuntu+apt musl)。此处随 tools-cache 跳过，避免 musl.cc 超时失败。
-        if: steps.tools-cache.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p native-tools-out
-          echo ">>> download musl aarch64 toolchain"
-          curl -sL -o /tmp/musl.tgz "https://musl.cc/aarch64-linux-musl-cross.tgz"
-          tar xzf /tmp/musl.tgz -C /tmp
-          export PATH="/tmp/aarch64-linux-musl-cross/bin:$PATH"
-          aarch64-linux-musl-gcc --version | head -1
-          echo ">>> download busybox source"
-          curl -sL -o /tmp/bb.tar.bz2 "https://busybox.net/downloads/busybox-1.36.1.tar.bz2"
-          tar xjf /tmp/bb.tar.bz2 -C /tmp
-          cd /tmp/busybox-1.36.1
-          make defconfig >/dev/null 2>&1
-          sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
-          grep '^CONFIG_STATIC' .config
-          echo ">>> build (static-pie)"
-          make -j4 CC=aarch64-linux-musl-gcc CROSS_COMPILE=aarch64-linux-musl- EXTRA_LDFLAGS="-static-pie" 2>&1 | tail -15
-          echo ">>> result"
-          file busybox
-          readelf -h busybox | grep -E "Type|Entry|Machine"
-          cp busybox "$GITHUB_WORKSPACE/native-tools-out/busybox-elf"
-          chmod +x "$GITHUB_WORKSPACE/native-tools-out/busybox-elf"
-          echo ">>> busybox-elf bundled ($(du -h "$GITHUB_WORKSPACE/native-tools-out/busybox-elf" | cut -f1))"
+      # v6.6.0: 移除 elf-runner + static-PIE busybox 构建（CELF/静态翻译路线退役——
+      # 统一环境由 TrollRuntime（Asbestos + Alpine rootfs）提供，git 历史保留）。
 
       - name: List native tools
         run: ls -la native-tools-out/
@@ -899,20 +855,11 @@ jobs:
           VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Support/Info.plist 2>/dev/null || echo "unknown")
           echo "version=$VER"
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          # 14c7 fix14: busybox-elf 作为独立资产上传（不进 tipa/bundle——ELF 非 Mach-O 无法签名，
-          #            bundle 内未授权可执行内容导致启动崩，14c7b/14c7e 实证）。
-          #            AI 首次使用 elf-runner 时 curl 下载到 Documents 再跑。
-          if [ -f native-tools-out/busybox-elf ]; then
-            gh release create latest TrollAgent.tipa native-tools-out/busybox-elf \
-              --title "TrollAgent latest (v${VER})" \
-              --notes "滚动构建（main 分支最新）。TrollAgent.tipa=App；busybox-elf=Linux 静态 ELF（elf-runner 下载用，勿装）。下载地址：https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/TrollAgent.tipa" || \
-              { echo "RELEASE PUBLISH FAILED (non-fatal)"; exit 0; }
-          else
-            gh release create latest TrollAgent.tipa \
+          # v6.6.0: 移除 busybox-elf/elf-runner 资产（CELF/静态翻译路线退役——统一环境=Asbestos+Alpine）
+          gh release create latest TrollAgent.tipa \
               --title "TrollAgent latest (v${VER})" \
               --notes "滚动构建（main 分支最新）。供 App 内多源自动更新使用：GitHub 被墙时经镜像前缀或 Releases 直链下载。下载地址：https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/TrollAgent.tipa" || \
               { echo "RELEASE PUBLISH FAILED (non-fatal)"; exit 0; }
-          fi
 
   # v4.4.3：原生 ARM64 Python（iOS 版 CPython，PEP 730 官方构建脚本）。
   # 目的：pandas/numpy 在 iSH 模拟器里 import 必段错误闪退（崩溃栈 cpu_run_to_interrupt，
@@ -1446,54 +1393,3 @@ jobs:
           name: native-llvm
           path: llvm-out/*
           if-no-files-found: warn
-
-  # 14c8: 独立编 static-PIE busybox (ubuntu + apt musl)。musl.cc 走代理超时，apt 源稳定快。
-  # 产出 ET_DYN(位置无关) busybox，供 elf-runner 非固定加载直跑。
-  build-busybox-pie:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install musl cross toolchain (GitHub mirror)
-        run: |
-          # musl 的 -static -pie 才能出 ET_DYN static-pie；glibc 需 -static-pie(gcc 选项)，busybox CONFIG_PIE 给 -pie -static 不出 PIE。
-          # musl.cc 主站慢/超时，改走 GitHub release 镜像(melsiir/musl-cross-toolchains, GitHub CDN 快)
-          for i in 1 2 3; do
-            curl -sL --max-time 300 -o /tmp/musl.tgz "https://github.com/melsiir/musl-cross-toolchains/releases/download/v1.0.0/aarch64-linux-musl-cross.tgz" && break
-            echo ">>> musl download retry $i"; sleep 5
-          done
-          tar xzf /tmp/musl.tgz -C /tmp
-          export PATH="/tmp/aarch64-linux-musl-cross/bin:$PATH"
-          aarch64-linux-musl-gcc --version | head -1
-      - name: Fetch busybox source
-        run: |
-          curl -sL -o /tmp/bb.tar.bz2 "https://busybox.net/downloads/busybox-1.36.1.tar.bz2"
-          tar xjf /tmp/bb.tar.bz2 -C /tmp
-      - name: Build static-PIE busybox
-        run: |
-          export PATH="/tmp/aarch64-linux-musl-cross/bin:$PATH"
-          cd /tmp/busybox-1.36.1
-          make defconfig
-          sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
-          # busybox 自带 CONFIG_PIE：musl 下 -pie -static 出 ET_DYN static-pie(glibc 需 -static-pie 故之前 ET_EXEC)
-          sed -i 's/^# CONFIG_PIE is not set$/CONFIG_PIE=y/' .config
-          sed -i 's/^CONFIG_PIE=n$/CONFIG_PIE=y/' .config
-          # tc(traffic control) applet 与新版 linux 内核头不兼容(CBQ/TCA_CBQ_* 被移除)，编译报错→禁用
-          sed -i 's/^CONFIG_TC=y$/CONFIG_TC=n/' .config
-          sed -i 's/^CONFIG_TC=y/CONFIG_TC=n/' .config
-          grep -E '^CONFIG_(STATIC|PIE|TC)' .config
-          make -j$(nproc) CC=aarch64-linux-musl-gcc CROSS_COMPILE=aarch64-linux-musl- 2>&1 | tee /tmp/bb.log
-          rc=${PIPESTATUS[0]}
-          if [ $rc -ne 0 ] || [ ! -f busybox ]; then
-            echo "### BUILD FAILED (rc=$rc) ###"
-            grep -iE "error:|undefined reference|No such file|\*\*\* |collect2|ld: |cannot find" /tmp/bb.log | head -40
-            exit 1
-          fi
-          echo ">>> result"
-          file busybox
-          readelf -h busybox | grep -E "Type|Entry|Machine"
-      - name: Upload busybox-pie
-        uses: actions/upload-artifact@v4
-        with:
-          name: busybox-pie
-          path: /tmp/busybox-1.36.1/busybox
-          if-no-files-found: error

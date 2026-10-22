@@ -56,7 +56,7 @@ final class ToolInstallTool: MCPTool {
             return ["ok": true, "tool": name, "status": "ready", "source": "builtin_native", "path": bundled,
                     "hint": "App 内置原生 iOS 二进制；" + note]
         }
-        let which = ISHEngine.exec("which \(name) 2>/dev/null", timeout: 30)
+        let which = TrollRuntimeEngine.exec("which \(name) 2>/dev/null", timeout: 30)
         if which.exitCode == 0 {
             let path = which.output.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\n").first.map(String.init) ?? name
             let (ok, note) = smokeTest(name)
@@ -65,13 +65,13 @@ final class ToolInstallTool: MCPTool {
         }
 
         // 2. Alpine apk 安装：依次尝试候选包名（映射名 / 原名 / py3-xxx）。
-        //    v4.3.69：统一走 ISHEngine.apkAdd（自动切国内镜像源 + 补 ca-certificates，修官方源
+        //    v4.3.69：统一走 TrollRuntimeEngine.apkAdd（自动切国内镜像源 + 补 ca-certificates，修官方源
         //    在手机网络被断导致索引拉不下→误报 no such package；大包 240s 超时，避免 20s 被掐）
         var lastApkErr = ""
         for pkg in apkCandidates(for: name) {
             // v4.3.75：进度条 + 失败结构化诊断
             InstallationRegistry.shared.start(key: pkg)
-            let apk = ISHEngine.apkAdd([pkg], timeout: 240) { line in
+            let apk = TrollRuntimeEngine.apkAdd([pkg], timeout: 240) { line in
                 InstallationRegistry.shared.appendLine(line)
             }
             if apk.exitCode == 0 {
@@ -81,7 +81,7 @@ final class ToolInstallTool: MCPTool {
                 return ["ok": true, "tool": name, "status": ok ? "installed" : "installed_unverified", "source": "alpine_apk", "package": pkg,
                         "hint": "已 apk add \(pkg)（" + note + "）。直接调用 `\(name) <参数>` 即可——shell.exec 会自动路由 Alpine 并 bind 直读 iOS 路径（如 \(name) /var/mobile/xxx 自动改 /ios_mobile/xxx）；缺依赖时首次调用会自动补齐。若冒烟异常：先 `\(name) --help` 看用法；仍无输出用文件重定向验证（`\(name) ... > /tmp/x; cat /tmp/x`）"]
             }
-            InstallationRegistry.shared.finish(ok: false, summary: ISHEngine.installDiagnose(apk.output, timedOut: apk.timedOut, exitCode: apk.exitCode))
+            InstallationRegistry.shared.finish(ok: false, summary: TrollRuntimeEngine.installDiagnose(apk.output, timedOut: apk.timedOut, exitCode: apk.exitCode))
             lastApkErr = apk.output
             // 「找不到包」才继续试下一个候选；网络/磁盘等错误也继续，最终由兜底提示
         }
@@ -90,11 +90,11 @@ final class ToolInstallTool: MCPTool {
         // 3. Python 包回退：确保 python3 + pip，再 pip install
         if Self.pythonHints.contains(name) || name.hasPrefix("py-") {
             InstallationRegistry.shared.start(key: "python3 py3-pip")
-            let apkPy = ISHEngine.apkAdd(["python3", "py3-pip"], timeout: 240) { line in
+            let apkPy = TrollRuntimeEngine.apkAdd(["python3", "py3-pip"], timeout: 240) { line in
                 InstallationRegistry.shared.appendLine(line)
             }
             if apkPy.exitCode != 0 {
-                let diag = ISHEngine.installDiagnose(apkPy.output, timedOut: apkPy.timedOut, exitCode: apkPy.exitCode)
+                let diag = TrollRuntimeEngine.installDiagnose(apkPy.output, timedOut: apkPy.timedOut, exitCode: apkPy.exitCode)
                 InstallationRegistry.shared.finish(ok: false, summary: diag)
                 return ["ok": false, "tool": name, "status": "failed", "source": "alpine_apk",
                         "error": "python3/pip 安装失败", "hint": diag]
@@ -102,16 +102,16 @@ final class ToolInstallTool: MCPTool {
             let pipName = name.hasPrefix("py-") ? String(name.dropFirst(3)) : name
             InstallationRegistry.shared.start(key: "pip install \(pipName)")
             // v4.4.9-fix3ca: pip 换清华镜像(国内快/稳，官方源慢断)+内部超时——Alpine pip 装包不再卡
-            let pip = ISHEngine.exec("pip install --break-system-packages --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --timeout 60 \(pipName)", timeout: 480) { line in
+            let pip = TrollRuntimeEngine.exec("pip install --break-system-packages --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple --timeout 60 \(pipName)", timeout: 480) { line in
                 InstallationRegistry.shared.appendLine(line)
             }
             if pip.exitCode == 0 {
                 InstallationRegistry.shared.finish(ok: true, summary: "pip 已装 \(pipName)")
                 let (ok, note) = smokeTest(pipName, importMode: true)
                 return ["ok": true, "tool": name, "status": ok ? "installed" : "installed_unverified", "source": "pip",
-                        "hint": "已 pip install \(pipName)（" + note + "）。调用必须 `sh -c 'python3 -c ...'` 强制 Alpine（命令名 python3 走原生看不到 Alpine 包）；iSH 上含 C 扩展的包较慢，优先用 apk 的 py3- 预编译版"]
+                        "hint": "已 pip install \(pipName)（" + note + "）。调用必须 `sh -c 'python3 -c ...'` 强制 Alpine（命令名 python3 走原生看不到 Alpine 包）；解释器上含 C 扩展的包较慢，优先用 apk 的 py3- 预编译版"]
             }
-            InstallationRegistry.shared.finish(ok: false, summary: ISHEngine.installDiagnose(pip.output, timedOut: pip.timedOut, exitCode: pip.exitCode))
+            InstallationRegistry.shared.finish(ok: false, summary: TrollRuntimeEngine.installDiagnose(pip.output, timedOut: pip.timedOut, exitCode: pip.exitCode))
             lastApkErr = pip.output
         }
 
@@ -161,7 +161,7 @@ final class ToolInstallTool: MCPTool {
                     return (true, "Alpine python 冒烟 `import \(safe)` OK（" + String(out.prefix(60)) + "）——注意：调用必须用 `sh -c 'python3 ...'` 强制 Alpine（命令名 python3 走原生看不到 Alpine 包）")
                 }
                 let errNote = out.isEmpty ? "无输出" : String(out.prefix(80))
-                return (false, "Alpine python `import \(safe)` 失败（exit \(exit)：" + errNote + "）——包可能没装进 Alpine python，或 C 扩展在 iSH 段错误（numpy/pandas 用原生 python，已内置）")
+                return (false, "Alpine python `import \(safe)` 失败（exit \(exit)：" + errNote + "）——包可能没装进 Alpine python，或 C 扩展在解释器段错误（numpy/pandas 用原生 python，已内置）")
             } catch {
                 return (false, "Alpine python `import \(safe)` 冒烟异常：\(error)")
             }
@@ -203,13 +203,13 @@ final class ToolInstallTool: MCPTool {
             if ConversationStore.shared.stopRequested { break }
             // v4.3.77：批量安装也走进度条（每包独立进度），不再静默
             InstallationRegistry.shared.start(key: pkg)
-            let r = ISHEngine.apkAdd([pkg], timeout: 240) { line in
+            let r = TrollRuntimeEngine.apkAdd([pkg], timeout: 240) { line in
                 InstallationRegistry.shared.appendLine(line)
             }
             let ok = r.exitCode == 0
             if ok { okCount += 1 }
             InstallationRegistry.shared.finish(ok: ok,
-                summary: ok ? "已装 \(pkg)" : ISHEngine.installDiagnose(r.output, timedOut: r.timedOut, exitCode: r.exitCode))
+                summary: ok ? "已装 \(pkg)" : TrollRuntimeEngine.installDiagnose(r.output, timedOut: r.timedOut, exitCode: r.exitCode))
             let detail = r.output.trimmingCharacters(in: .whitespacesAndNewlines)
                 .split(separator: "\n").suffix(2).joined(separator: "\n")
             results.append(["package": pkg, "ok": ok, "detail": detail])

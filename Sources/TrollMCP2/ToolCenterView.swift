@@ -21,8 +21,7 @@ enum ToolLayer: String, CaseIterable {
     /// 按工具名前缀/白名单映射到层（可跨层：shell.exec 含 iOS 原生命令 + Alpine 命令两个分支）
     static func layers(for def: ToolDefinition) -> [ToolLayer] {
         let n = def.name
-        // 跨层命令工具：shell.exec runtime=auto 路由——纯文件/系统/网络→iOS 原生命令；
-        // 装包/解包/编译/复杂脚本→Alpine。两层的命令工具都列出来。
+        // v6.6.0: shell.exec 统一环境（TrollRuntime/Alpine 完整工具链 + iOS 原生兜底）——不再有 runtime 路由。
         if n == "shell.exec" {
             return [.native, .alpine]
         }

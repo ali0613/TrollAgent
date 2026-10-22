@@ -97,8 +97,8 @@ final class FailureKnowledgeBase {
         ("0xdead10cc", "崩溃", "系统判定 App 占用/挂死（多为后台锁/IO 卡死）", "排查主线程阻塞、全量序列化大文件，检查是否有死循环"),
         ("candidate should have a different linkedit", "Mach-O", "静态注入改 __LINKEDIT 时与原签名冲突", "注入后必须 ldid 重签；优先使用注入器自带的签名流程"),
         ("Unsupported iOS version", "巨魔", "TrollStore 在该系统不被支持（17.0.1+/16.7 已修补）", "核对支持版本表；不支持版本改用越狱或其他签名方案"),
-        ("apk: command not found", "iSH", "iSH 内 apk 索引未更新或环境异常", "先 apk update；确认在 iSH Alpine 内执行，不是目标 App 环境"),
-        ("Illegal instruction", "iSH", "iSH 解释器未实现该 x86 指令（Node.js 等常见）", "换轻量/旧版本软件，或改用 SSH 到电脑/云端运行，别在 iSH 硬跑"),
+        ("apk: command not found", "TrollRuntime", "环境内 apk 索引未更新或异常", "先 apk update；确认在统一环境（TrollRuntime/Alpine）内执行，不是目标 App 环境"),
+        ("Illegal instruction", "TrollRuntime", "解释器未实现该指令（Node.js 等常见）", "换轻量/旧版本软件，或改用 SSH 到电脑/云端运行"),
         ("address already in use", "网络", "本地服务端口被占用", "server.status 看占用，换端口或先 stop 旧实例"),
     ]
 

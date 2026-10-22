@@ -7,9 +7,6 @@ import SwiftUI
 @_silgen_name("HUDMainStart") func HUDMainStart()
 @_silgen_name("HUDExit") func HUDExit()
 @_silgen_name("HUDCheck") func HUDCheck() -> Int32
-// 14c8: elf-runner 编进主二进制（CELF target）——Swift @main 走 --elf-runner 模式调 elf_runner_main。
-// 绕开 TrollStore 不替换 bin/ + iOS 拒绝 spawn Documents 独立二进制：主二进制覆盖安装即替换 + 被信任。
-@_silgen_name("elf_runner_main") func elf_runner_main(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
 // 14d3: 请求 TrollStore 为本进程开 JIT（CLaunch/jit.c，LaunchServices C API，Swift overlay 不暴露）
 @_silgen_name("troll_request_jit") func troll_request_jit(_ bundleID: UnsafePointer<CChar>) -> Int32
 // 14de: 检测当前进程是否已带 JIT（MAP_JIT 试映射成功=已激活，无需再请求 URL）
@@ -19,7 +16,6 @@ import SwiftUI
 struct TrollAgentApp {
     static func main() {
         let args = CommandLine.arguments
-        // 14c8 diag: 确认 spawn 后是否进入主入口(区分"主二进制启动卡死" vs "elf-runner 逻辑卡死")
         fputs("[appmain] entry args=\(args)\n", stderr)
         if args.contains("-hud") {
             HUDMainStart()        // 进悬浮模式（内部 runloop，不返回）
@@ -27,29 +23,8 @@ struct TrollAgentApp {
             HUDExit()             // 关闭悬浮（读 pid 杀）
         } else if args.contains("-check") {
             exit(HUDCheck())      // 查悬浮存活（EXIT_FAILURE=存活 / EXIT_SUCCESS=未跑）
-        } else if args.count >= 3, args[1] == "--elf-runner" {
-            fputs("[appmain] elf-runner mode\n", stderr)
-            // 14d3: iOS 禁止 App 自 attach（EPERM 实证）与父子 attach（子进程 fork 后 SIGBUS 被杀实证）。
-            // 走 TrollStore 官方 JIT 通道: apple-magnifier://enable-jit（RootHelper 以 root 权限
-            // ptrace attach 本进程开 JIT；JIT 状态随 csflags 继承给后续 fork 子进程）。
-            // 前提: get-task-allow（已加）+ TrollStore v2.0.12+ + TrollStore 设置开 URL scheme
-            //      + iOS16 Developer Mode（用户已开）。CLaunch 包装 LSOpenCFURLRef，不依赖 UIApplicationMain。
-            let bundleID = Bundle.main.bundleIdentifier ?? "org.python.python"
-            let os = bundleID.withCString { troll_request_jit($0) }
-            fputs("[appmain] TrollStore JIT request sent (LSOpen err=\(os))——等待切回\n", stderr)
-            Thread.sleep(forTimeInterval: 3.0)
-            fputs("[appmain] JIT round-trip wait done\n", stderr)
-            // 命令名 elf-runner → spawn 主二进制 --elf-runner <linux-elf> [args...]
-            // 编进主二进制，避开 bin/（TrollStore 不替换）与 Documents（AMFI 拒绝 spawn）死结。
-            // argv 去掉 "--elf-runner"：elf_runner_main 期待 argv[0]=exe, argv[1]=elf路径, argv[2..]=参数。
-            var cargs: [UnsafeMutablePointer<CChar>?] = [strdup(args[0])]
-            for i in 2..<args.count { cargs.append(strdup(args[i])) }
-            cargs.append(nil)
-            let code = cargs.withUnsafeMutableBufferPointer { buf -> Int32 in
-                elf_runner_main(Int32(buf.count - 1), buf.baseAddress!)
-            }
-            exit(code)
         } else {
+            // v6.6.0: 移除 --elf-runner 分支（CELF 退役——统一环境由 CISH/Asbestos 提供）
             UIApplicationMain(
                 CommandLine.argc,
                 CommandLine.unsafeArgv,
@@ -123,7 +98,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         RemoteAgent.shared.reportPendingCrashes()
 
         // 14de: 去掉启动自动 JIT 请求（App 切后台被杀→回前台重启→重复闪切 TrollStore 烦人）。
-        // 改为懒激活：ShellTool 执行 elf-runner 时先 have_jit() 检测，无 JIT 才请求一次（同进程内仅一次）。
+        // v6.6.0: elf-runner 退役后无 JIT 需求（统一环境 Asbestos 纯解释），此路径保留仅作诊断。
 
         window = UIWindow(frame: UIScreen.main.bounds)
         window?.rootViewController = UIHostingController(rootView: RootView())

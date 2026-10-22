@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - v3.6.12 P5 高层跨环境工具 (v3.7.7: 复用 ISHEngine 自动 bind——Alpine 直接读写 iOS 文件)
+// MARK: - v3.6.12 P5 高层跨环境工具 (v3.7.7: 复用 TrollRuntimeEngine 自动 bind——Alpine 直接读写 iOS 文件)
 
 /// 高层文件检查/分析工具。inspect 走原生读元信息；analyze 走 Alpine (自动 bind 直读 iOS 文件) 跑 file+strings。
 final class FileExecTool: MCPTool {
@@ -43,9 +43,9 @@ final class FileExecTool: MCPTool {
             guard fm.fileExists(atPath: norm) else { throw MCPError.failed("file: no such file \(norm)") }
             // v3.7.7: 先 autoBind 改写为 Alpine 可见路径(/ios_*)，再 base64 传路径。
             // （直接用明文 iOS 路径会被 autoBind 改写；base64 保护仍防 shell 元字符注入，但改写须先发生）
-            let boundPath = ISHEngine.autoBind(norm)
+            let boundPath = TrollRuntimeEngine.autoBind(norm)
             let pb = Data(boundPath.utf8).base64EncodedString()
-            let out = ISHEngine.exec("P=$(echo '\(pb)' | base64 -d); file \"$P\"; echo '--- strings (first 80) ---'; strings -a \"$P\" 2>/dev/null | head -80", timeout: 60)
+            let out = TrollRuntimeEngine.exec("P=$(echo '\(pb)' | base64 -d); file \"$P\"; echo '--- strings (first 80) ---'; strings -a \"$P\" 2>/dev/null | head -80", timeout: 60)
             return ["env": "alpine", "exit_code": Int(out.exitCode), "output": out.output]
         default:
             throw MCPError.invalidParams("Unknown command: \(command). Available: inspect / analyze")
@@ -154,10 +154,10 @@ final class DbExecTool: MCPTool {
         guard fm.fileExists(atPath: norm) else { throw MCPError.failed("db: no such file \(norm)") }
         switch command {
         case "list":
-            let out = ISHEngine.exec("sqlite3 '\(norm)' \".tables\"", timeout: 60)
+            let out = TrollRuntimeEngine.exec("sqlite3 '\(norm)' \".tables\"", timeout: 60)
             return ["env": "alpine", "exit_code": Int(out.exitCode), "output": out.output]
         case "schema":
-            let out = ISHEngine.exec("sqlite3 '\(norm)' \".schema\"", timeout: 60)
+            let out = TrollRuntimeEngine.exec("sqlite3 '\(norm)' \".schema\"", timeout: 60)
             return ["env": "alpine", "exit_code": Int(out.exitCode), "output": out.output]
         case "query":
             guard let sql = params["sql"] as? String, !sql.isEmpty else {
@@ -167,7 +167,7 @@ final class DbExecTool: MCPTool {
             // 在双引号上下文反破引号平衡，含 ;/$/` 等元字符的 SQL 可执行任意命令。改为 base64 编码 SQL
             // (仅 [A-Za-z0-9+/=] 安全字符)，Alpine 侧解码写临时文件，sqlite3 从 stdin 读，彻底绕开 shell 解析。
             let b64 = Data(sql.utf8).base64EncodedString()
-            let out = ISHEngine.exec("echo '\(b64)' | base64 -d > /tmp/_db_q.sql; sqlite3 -header -column '\(norm)' < /tmp/_db_q.sql", timeout: 90)
+            let out = TrollRuntimeEngine.exec("echo '\(b64)' | base64 -d > /tmp/_db_q.sql; sqlite3 -header -column '\(norm)' < /tmp/_db_q.sql", timeout: 90)
             return ["env": "alpine", "exit_code": Int(out.exitCode), "output": out.output]
         default:
             throw MCPError.invalidParams("Unknown command: \(command). Available: list / schema / query")

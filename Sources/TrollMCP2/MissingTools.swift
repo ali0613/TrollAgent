@@ -575,7 +575,7 @@ final class KnowledgeStore {
         if saved != currentSeedVersion {
             // v4.3.66：前缀列表扩展，覆盖第二批种子；只删固定前缀，保留用户自建
             for prefix in ["内置-逆向分析", "内置-插件安全", "内置-iOS逆向", "内置-iOS系统",
-                           "内置-巨魔", "内置-iSH", "内置-游戏破解", "内置-逆向"] {
+                           "内置-巨魔", "内置-运行时", "内置-游戏破解", "内置-逆向"] {
                 if let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
                     for f in files where f.lastPathComponent.hasPrefix(prefix) {
                         try? fm.removeItem(at: f)

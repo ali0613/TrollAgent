@@ -8,7 +8,7 @@ import CommonCrypto
 /// - exec：每次调用在 guest 内 fork 独立 /bin/sh -c，串行执行（全局锁）
 /// - 超时：cish_killpg 回收 guest 进程组，靠 exit_hook 通知管道收尾
 /// - 会话 cwd：命令前缀 `cd '<cwd>' &&`；纯 cd 命令额外跑 pwd 更新会话目录
-enum ISHEngine {
+enum TrollRuntimeEngine {
     enum BootState {
         case idle, booting, booted, failed(String)
     }
@@ -411,7 +411,7 @@ enum ISHEngine {
     /// v4.3.75：安装失败结构化诊断——AI 可直接转述给用户，替代一坨 apk 日志。
     static func installDiagnose(_ output: String, timedOut: Bool, exitCode: Int32) -> String {
         if timedOut {
-            return "安装超时（iSH 模拟器装大包/网络慢），可稍后重试或拆分安装"
+            return "安装超时（解释器装大包/网络慢），可稍后重试或拆分安装"
         }
         let o = output
         if o.contains("unable to select package") || o.contains("No such package") {

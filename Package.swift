@@ -64,20 +64,8 @@ let package = Package(
                 .linkedLibrary("objc")
             ]
         ),
-        // 14c8: CELF——elf-runner 编进主二进制（Swift @main --elf-runner 模式调 elf_runner_main）。
-        //   绕开 TrollStore 不替换 bin/ + iOS 拒绝 spawn Documents 独立二进制两个死结：
-        //   主二进制覆盖安装即替换 + 自带 App 特权 entitlement（platform-application/no-sandbox）被信任。
-        .target(
-            name: "CELF",
-            path: "CELF",
-            publicHeadersPath: "include",
-            cSettings: [
-                // 14c8: g_base 声明为 uint8_t*（指针），但 load_elf 段拷贝/patch 按整数地址运算
-                //（dst=g_base+偏移、dst-g_base 求 rel_off）。语义正确（指针算术结果=地址），
-                // bin 直编(无 -Werror)不报错；SwiftPM C 编译默认 -Werror 告警转错 → 这里抑制。
-                .unsafeFlags(["-Wno-int-conversion", "-Wno-incompatible-pointer-types"])
-            ]
-        ),
+        // v6.6.0: CELF（emu.c+elf-runner）退役——被 rcarmo Asbestos 统一环境取代（GOALS P5）。
+        //   历史参考 git log（14c8 引入）；文件保留于 git 历史。
         // fix3cy16 (P1)：CHev——hev-socks5-tunnel 桥接层（iOS 真机 slice 手动链接，
         //   避开 SwiftPM binaryTarget 平台选择问题）。依赖 scripts/build-ipa.sh 下载解压的
         //   hev-stage/lib/libhev-socks5-tunnel.a（ios-arm64 slice，Tun2SocksKit 5.16.0 release）
@@ -107,8 +95,7 @@ let package = Package(
                 "CISH",
                 "MitmCore",
                 "CMitm",
-                "CLaunch",
-                "CELF"
+                "CLaunch"   // v6.6.0: 移除 CELF（退役）
             ],
             path: "Sources/TrollMCP2",
             exclude: ["Resources"],

@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 /// v4.3.75：安装进度注册表。
-/// ISHEngine 串行执行（lock 串行化），同一时刻最多一个活动安装任务——所以全局只挂一个进度。
+/// TrollRuntimeEngine 串行执行（lock 串行化），同一时刻最多一个活动安装任务——所以全局只挂一个进度。
 /// apkAdd/exec 后台读线程逐行回调 → appendLine 解析 apk 输出（阶段 + (N/M) 包数 + 最近行）；
 /// SwiftUI 侧 @ObservedObject 观察本单例，在"执行中"气泡实时渲染进度条，不再只有"执行中…"。
 final class InstallationRegistry: ObservableObject {
