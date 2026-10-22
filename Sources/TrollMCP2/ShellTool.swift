@@ -628,24 +628,11 @@ final class ShellExecTool: MCPTool {
     
     /// iOS 原生命令集合 (36 个，与上方拦截清单一致）
     private static let iosNativeCommands: Set<String> = [
-        "ls", "cat", "find", "grep", "echo", "mkdir", "rm", "mv", "cp",
-        "tail", "head", "sed", "pwd", "cd", "touch", "wc", "md5sum",
-        "sha256sum", "diff", "hexdump", "curl", "wget", "plutil", "sqlite3",
-        "unzip", "df", "free", "uname", "uptime", "hostname", "ps", "top",
-        "kill", "ifconfig", "netstat", "nslookup", "tar", "gzip", "gunzip",
-        "ta", "base64", "strings", "nm", "kfd_diag", "python3", "objdump", "class-dump",
-        // 14c2 P1原生化: chmod（Swift 原生，POSIX chmod；bin 有 chown 缺 chmod，AI 高频 chmod +x）
-        "chmod",
-        // fix3q: 内置原生工具链（native-tools 交叉编译进 App bin/）——AI 直接调用走原生 ARM64
-        "lua", "node", "r2", "cstool", "jq",
-        // 14c2 P1原生化: 新增原生工具（native-tools-v16）——目录树/压缩/查找可执行
-        "tree", "xz", "which",
-        // fix3v: nmap（native-nmap job 交叉编译，进 App bin/nmap）——原生直跑，无需 Alpine
-        // fix3ac: nmap 源码 iOS 编不过, 已降级为 bin/nscan.py(Python 扫描, 无需原生命令声明)
-        // fix3w: LLVM 工具链 + jtool2（native-llvm job）——llvm-objdump 等原生直跑
-        "llvm-objdump", "llvm-nm", "llvm-readelf", "llvm-size", "llvm-strings", "jtool2",
-        // v6.1.5-14bp5: 崩溃取证——读系统 CrashReporter 里 TrollAgent 最新崩溃日志关键行
-        "crash.tail"
+        // v6.6.0: 精简——仅真实原生实现（plutil/sqlite3/ta/python3）+ bin/ 内置二进制。
+        // 其余命令统一环境（Alpine）执行——probe 不再误报"原生已覆盖"。
+        "plutil", "sqlite3", "ta", "python3",
+        // bin/ 内置（native-tools/LLVM 交叉编译进 App bin/）——原生直跑
+        "llvm-objdump", "llvm-nm", "llvm-readelf", "llvm-size", "llvm-strings", "jtool2"
     ]
     
     /// v4.3.9: 反向路径翻译——iOS 原生命令收到 Alpine 挂载路径时翻译回 iOS 真实路径。
@@ -1326,39 +1313,6 @@ final class ShellExecTool: MCPTool {
                 "stderr": res.stderr, "ios_native": true]
     }
 
-    /// v6.1.5-14bx: 原生 git——App/bin/git.py（dulwich porcelain wrapper，纯 Python）。
-    /// iOS 沙箱拦 fork()，真 git 跑不了；rootfs 预装 git 曾因 CI provision 失败降级未进包——
-    /// 因此 git 命令一律路由到 git.py：原生 ARM64 跑，不走 Alpine 不装包不闪退。
-    /// cwd 经 TROLL_GIT_CWD 注入（python3 原生子进程无 tty 且 spawn 不带 cwd，git 依赖进程目录）。
-    private static func runIOSGitPy(_ command: String, gitCwdOverride: String? = nil) -> [String: Any] {
-        let gitPy = Bundle.main.bundlePath + "/bin/git.py"
-        guard FileManager.default.fileExists(atPath: gitPy) else {
-            return ["command": command, "exit_code": 1,
-                    "stdout": "git: 原生 git.py 缺失（此构建未打包 App/bin/git.py）— 无法提供 git",
-                    "ios_native": true]
-        }
-        let body = command.dropFirst("git".count).trimmingCharacters(in: .whitespaces)
-        if body == "--version" || body == "-v" || body == "-V" || body.isEmpty {
-            return ["command": command, "exit_code": 0,
-                    "stdout": "git (TrollAgent 内置纯 Python git.py / dulwich porcelain)\n能力：clone/init/add/commit/push/log/status；原生 ARM64 直跑，不走 Alpine 不装包不闪退\n用法：git clone <url> [dir] ｜ git add <path> ｜ git commit -m <msg> ｜ git push ｜ git log ｜ git status",
-                    "ios_native": true, "runtime_actual": "ios"]
-        }
-        let args = shellSplitArgs(body)
-        let pyCmd = "python3 \(gitPy) \(args.joined(separator: " "))".trimmingCharacters(in: .whitespaces)
-        // v6.1.5-14by：TROLL_GIT_CWD 用 iOS 真实存在目录——TrollRuntimeEngine.cwd 默认 /root（Alpine 概念路径，
-        // iOS 沙箱无 /root），chdir 失败 git.py 落回 App 默认 cwd 行为错乱。不存在时回退 Workspace。
-        // v6.1.5-14bz：支持 cd X && git 组合——gitCwdOverride 优先（cd 的路径）。
-        var gitCwd = gitCwdOverride ?? TrollRuntimeEngine.cwd
-        if !FileManager.default.fileExists(atPath: gitCwd) {
-            gitCwd = "/var/mobile/Documents/Workspace"
-        }
-        var r = runIOSPython3(pyCmd, extraEnv: ["TROLL_GIT_CWD": gitCwd])
-        r["cwd"] = gitCwd
-        r["runtime_actual"] = "ios"
-        r["hint"] = "git 走原生 Python git.py（dulwich）——iOS 沙箱拦 fork 真 git，纯 Python 原生直跑，不 Alpine 不装包不闪退"
-        return r
-    }
-
     /// v6.1.5-14bp：原生工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令）
     /// 不触发解释器执行，改用 FileManager 直读探测：
     ///   ① App 内置原生 bin/<name>（native-tools）
@@ -1374,10 +1328,9 @@ final class ShellExecTool: MCPTool {
         let word = firstWord(t)
         guard !word.isEmpty else { return nil }
         let body = t.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
-        // v6.1.5-14bu/14bx：重包检测命令放行真实执行——git/vim/curl/wget/make/cmake/gcc/clang/openssl/r2/radare2
-        // 已在 heavyPackages 禁自动装（走 Alpine 未装也只报错不装包→不闪退）；git 走原生 git.py(dulwich)，
-        // curl/wget 走原生下载器，rootfs 无预装依赖。版本/裸命令形态直接放行，恢复真实执行；
-        // 只有 command -v/which/type 仍走探测（原生无此命令）。
+        // v6.6.0：重包检测命令放行真实执行——git/vim/curl/wget/make/cmake/gcc/clang/openssl/r2/radare2
+        // 已在 heavyPackages 禁自动装（走统一环境 Alpine 未装也只报错不装包）；git/curl/wget 已 rootfs 预装。
+        // 版本/裸命令形态直接放行真实执行；只有 command -v/which/type 仍走探测。
         let passthrough: Set<String> = ["git", "vim", "vi", "curl", "wget", "make", "cmake", "gcc", "clang", "openssl", "r2", "radare2"]
         if probeNames.contains(word) {
             // 工具名 + 版本/无参数 = 探测；工具名 + 其他参数 = 真实执行（git status 等不得吞）
@@ -1430,10 +1383,9 @@ final class ShellExecTool: MCPTool {
                     "stdout": "\(target): ✅ 已安装（App 原生命令实现，可直接 \(target) ... 执行）",
                     "ios_native": true, "note": note]
         }
-        // v6.1.5-14bt/14bu：git 探测（command -v git / which git 形态）——查真实可用性：
-        // v6.1.5-14bx：git 探测——真实可用性：①App 内置纯 Python git(bin/git.py，dulwich，原生直跑)
-        // ②Alpine rootfs 预装 git(CI provision 曾失败降级未进包，若未来修好则 Alpine git 也可用)。
-        // git 命令本身已原生路由 runIOSGitPy（见 probeTargetOfSegment passthrough + invoke git 分支）。
+        // v6.6.0：git 探测（command -v git / which git）——真实可用性：
+        // ①统一环境 Alpine rootfs 预装 git（v6.5.2 起）②App 内置 bin/git.py(dulwich) 兜底。
+        // git 命令本体统一走 Alpine（rootfs 预装）；git.py 仅作 rootfs 缺失时的备用路径。
         if target == "git" {
             let fm = FileManager.default
             let gitPy = Bundle.main.bundlePath + "/bin/git.py"
@@ -1762,39 +1714,6 @@ final class ShellExecTool: MCPTool {
     
     
     
-    
-    /// v3.6.10: iOS 原生 base64 命令——编码/解码文件。
-    ///   base64 <file>    → 输出 base64（单行，方便喂给 Alpine）
-    ///   base64 -d <file> → 从 base64 解码还原，写 <file>.decoded
-    /// 管道过滤器场景(cat x | base64)由 applySwiftFilter 的 case "base64" 处理。
-    private static func runIOSBase64(_ command: String) -> [String: Any] {
-        let fm = FileManager.default
-        let parts = command.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
-        guard parts.count >= 2 else {
-            return ["command": command, "exit_code": 1, "stdout": "Usage: base64 [-d] <file>", "ios_native": true]
-        }
-        let decode = parts.contains("-d")
-        let noOpts = parts.filter { !$0.hasPrefix("-") }
-        let filePath = ShellExecTool.normalizePath(((noOpts.last ?? "") as NSString).expandingTildeInPath)
-        guard fm.fileExists(atPath: filePath) else {
-            return ["command": command, "exit_code": 1, "stdout": "base64: \(filePath): No such file or directory", "ios_native": true]
-        }
-        do {
-            let data = try Data(contentsOf: URL(fileURLWithPath: filePath))
-            if decode {
-                guard let decoded = Data(base64Encoded: data, options: .ignoreUnknownCharacters) else {
-                    return ["command": command, "exit_code": 1, "stdout": "base64: invalid input", "ios_native": true]
-                }
-                let outPath = filePath + ".decoded"
-                try decoded.write(to: URL(fileURLWithPath: outPath))
-                return ["command": command, "exit_code": 0, "stdout": "decoded \(data.count) b64 → \(outPath) (\(decoded.count) bytes)", "ios_native": true]
-            } else {
-                return ["command": command, "exit_code": 0, "stdout": data.base64EncodedString(), "ios_native": true]
-            }
-        } catch {
-            return ["command": command, "exit_code": 1, "stdout": "base64 failed: \(error.localizedDescription)", "ios_native": true]
-        }
-    }
 
     
     

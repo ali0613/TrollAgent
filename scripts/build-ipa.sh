@@ -133,7 +133,7 @@ if [ -d "Resources/bin" ]; then
         fi
     done
     # v4.4.9-fix3cn: git 替代——iOS 拦 fork() 真 git 跑不了；dulwich 纯 Python 在 site-packages,
-    # 此封装脚本(porcelain API, 绕开 dulwich CLI 的 add bug)进 bin/, AI 调用 python3 <app>/bin/git.py ...
+    # 此封装脚本(porcelain API, 绕开 dulwich CLI 的 add bug)进 bin/——v6.6.0 起 git 统一走 Alpine(rootfs 预装), git.py 仅作 rootfs 缺失兜底
     if [ -f "scripts/git.py" ]; then
         cp "scripts/git.py" "$APP/bin/git.py"
         chmod +x "$APP/bin/git.py"
