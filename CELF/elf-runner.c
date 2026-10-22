@@ -917,6 +917,8 @@ static long vproc_close(int fd) {
     return 0;
 }
 static long sys_getdents64(int fd, void *buf, size_t count) {
+    fprintf(stderr, "[gd] sys_getdents64 ENTER fd=%d buf=%p count=%zu\n", fd, buf, count);
+    fflush(stderr);
 #ifdef __APPLE__
     /* v19.28d: 真机 fdopendir(fd) 挂起卡死 App（[gdd] 探针在 fdopendir 后
        打不出 = 卡在 fdopendir 本身；v19.25 偶发通过但不可靠）。改用
@@ -1391,6 +1393,8 @@ long translate_syscall(uint64_t nr,
     case SYS_newfstatat:
         r = sys_newfstatat((int)a0, guest_path_map((const char*)(uintptr_t)a1), (struct linux_stat*)(uintptr_t)a2, (int)a3);        break;
     case SYS_getdents64:
+        fprintf(stderr, "[gd] case61 enter fd=%d VPROC_BASE=%d\n", (int)a0, VPROC_BASE);
+        fflush(stderr);
         if ((int)a0 >= VPROC_BASE) r = vproc_getdents((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
         else r = sys_getdents64((int)a0, (void*)(uintptr_t)a1, (size_t)a2);
         break;
