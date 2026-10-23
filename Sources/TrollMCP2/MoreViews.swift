@@ -60,6 +60,7 @@ struct AuditLogView: View {
                 Button(L10n.t("btn_clear")) {
                     if tab == 0 { log.clear() }
                     else if tab == 2 { loadFileLog() }
+                    else if tab == 3 { CrashCatcher.clear(); crashPaths = CrashCatcher.list() }
                 }
             }
         }

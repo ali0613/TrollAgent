@@ -156,6 +156,14 @@ enum CrashCatcher {
         return out
     }
 
+    // v7.0.4: 清空全部崩溃日志（审计页"清空"按钮·崩溃tab）
+    static func clear() {
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: crashDir, includingPropertiesForKeys: nil) else { return }
+        for u in entries where u.pathExtension == "txt" {
+            try? FileManager.default.removeItem(at: u)
+        }
+    }
+
     // MARK: - 崩溃日志列表（设置页入口）
 
     static func list() -> [String] {
