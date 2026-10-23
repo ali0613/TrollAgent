@@ -50,19 +50,6 @@ App 内远程终端服务页会显示 `http://<手机IP>:8790` 和 token。API�
 ### Q10：TrollRuntime 是模拟器吗？
 不是。它不是 iSH 模拟器，是**统一环境**：Alpine Linux rootfs + Asbestos 翻译器（guest ARM64 → 原生/解释执行）。支持完整 shell 组合（管道 / `&&` / `;` / 循环 / 重定向），缺工具自动 `apk add`。
 
-### Q11：能装 Claude Code / OpenCode / Codex 吗？
-| CLI | Alpine（musl）支持 | 结论 |
-|---|---|---|
-| Claude Code | ✅ 官方 musl 二进制（需 node ≥22） | `apk add nodejs npm && npm i -g @anthropic-ai/claude-code` |
-| OpenCode | ✅ 官方 musl 二进制（Go 单文件） | `npm i -g opencode-ai` 或 curl 安装脚本 |
-| Codex | ❌ 只有 glibc 版 | 暂无 musl 版；`apk add gcompat` 可试，不稳；或源码编译 musl |
-
-### Q12：什么是 musl？为什么有的 CLI 装不了？
-musl 是 Alpine Linux 的 C 库（libc），主流发行版用 glibc，两者不兼容——glibc 编译的二进制在 musl 系统跑不了。CLI 为覆盖 Alpine 用户会额外发 musl 变体（包名如 `linux-arm64-musl`）。**musl 是平台标签，不是版本号**。
-
-### Q13：opencode 有免费模型吗？
-opencode 不内置免费模型（官方 Console 要充值）。免费跑靠：OpenRouter 免费模型（`free:true`）、Gemini 免费 key、或已有中转站 API（支持自定义 baseURL）。
-
 ## 四、安装 / 更新
 
 ### Q14：怎么安装？
