@@ -21,7 +21,7 @@ jobs:
     needs: [native-python, native-wheels, native-nmap, native-llvm, native-node]
     runs-on: macos-latest
     env:
-      RELEASE_VERSION: 7.0.0   # v7.0.0: 版本号重整（用户定——不再 fix 乱跳）；对齐 rcarmo pty stdio 集成
+      RELEASE_VERSION: 7.0.1   # v7.0.1: 关 JIT（fix21 开 JIT 后 fiber 路径回退模式触发 cpu_run_to_interrupt Bus error——回到纯解释器）
     steps:
       - uses: actions/checkout@v4
 
