@@ -1695,7 +1695,7 @@ final class ConversationStore: ObservableObject {
                     }
                 }
             }
-            var summaryParts: [String] = ["Earliest \(dropped) history messages omitted"]
+            var summaryParts: [String] = ["earliest \(dropped) history messages omitted"]
             if !topics.isEmpty {
                 summaryParts.append("Topics: " + topics.prefix(6).joined(separator: " / "))
             }
