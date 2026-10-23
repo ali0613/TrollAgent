@@ -21,7 +21,7 @@ jobs:
     needs: [native-python, native-wheels, native-nmap, native-llvm, native-node]
     runs-on: macos-latest
     env:
-      RELEASE_VERSION: 6.0.25
+      RELEASE_VERSION: 6.6.0   # v6.6.0-fix31: 版本号对齐（之前一直是旧的 6.0.25）
     steps:
       - uses: actions/checkout@v4
 
