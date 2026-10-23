@@ -55,10 +55,13 @@ struct SettingsView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
-                        // v2.9.241：全屏设置页左上角"完成"=关闭设置回聊天
+                        // v2.9.241：全屏设置页左上角返回按钮（v7.0.4：'完成'→'返回'箭头样式，语义更清晰）
                         Button(action: { presentationMode.wrappedValue.dismiss() }) {
-                            Text(L10n.t("done"))
-                                .font(.system(size: 17, weight: .semibold))
+                            HStack(spacing: 2) {
+                                Image(systemName: "chevron.left")
+                                Text(L10n.t("back"))
+                            }
+                            .font(.system(size: 17, weight: .semibold))
                         }
                     }
                     // v2.9.245：移除右上角卡片/列表切换按钮——卡片模式在部分机型(iPhone XS等小屏)渲染不稳定(图标/文字显示不全/内容裁剪),统一为列表模式
