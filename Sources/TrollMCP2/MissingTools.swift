@@ -91,7 +91,6 @@ final class DeviceSnapshotTool: MCPTool {
         ]
     }
 }
-}
 
 final class WebSearchTool: MCPTool {
     let definition = ToolDefinition(name: "web.search",

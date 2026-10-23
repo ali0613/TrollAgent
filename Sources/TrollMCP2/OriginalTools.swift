@@ -230,7 +230,6 @@ final class ModelAuthenticationTool: MCPTool {
         ]
     }
 }
-}
 
 final class ModelSelectedProfileIDTool: MCPTool {
     let definition = ToolDefinition(name: "model.selectedProfileID", summary: "Get or switch the current AI model. Use for: change which LLM model you're using. Don't use for: list all models (use model.config), edit model settings (use model.update). Example: user says 'switch model to deepseek' → switch model.",
