@@ -335,7 +335,7 @@ final class TaskTemplateRunner {
             // 2. 杀进程
             let _ = InjectionManager.shared.spawnRoot("/bin/kill", args: ["-9", "\(findPid(by: bundleId))"])
             Thread.sleep(forTimeInterval: 1)
-            steps.append(["step": "停止目标App", "success": true])
+            steps.append(["step": "Stop target app", "success": true])
 
             // 3. 注入
             do {
@@ -359,7 +359,7 @@ final class TaskTemplateRunner {
                         // 5. 检查 dylib 加载
                         let inspect = InjectionManager.shared.inspect(bundleId)
                         let loaded = inspect["injected"] as? Bool ?? false
-                        steps.append(["step": "dylib加载检查", "success": loaded])
+                        steps.append(["step": "dylib load check", "success": loaded])
                         success = loaded
                         summary = loaded ? "Injection OK and verified, app runs normally" : "Injection OK but dylib not loaded"
                     } else {
@@ -396,7 +396,7 @@ final class TaskTemplateRunner {
             // 1. 停止 App
             let pid = findPid(by: bundleId)
             if pid > 0 { let _ = InjectionManager.shared.spawnRoot("/bin/kill", args: ["-9", "\(pid)"]) }
-            steps.append(["step": "停止App", "success": true])
+            steps.append(["step": "Stop app", "success": true])
 
             // 2. Collect logs
             let logTool = LogCollectTool()
@@ -409,7 +409,7 @@ final class TaskTemplateRunner {
             if let crashResult = try? crashTool.invoke(["bundle_id": bundleId]) {
                 let analyses = crashResult["analyses"] as? [[String: Any]] ?? []
                 if let first = analyses.first {
-                    let cause = first["root_cause"] as? String ?? "未知"
+                    let cause = first["root_cause"] as? String ?? "unknown"
                     let fix = first["fix"] as? String ?? ""
                     steps.append(["step": "crash analysis", "success": true, "detail": cause])
                     summary = "Crash cause: \(cause)\nFix suggestion: \(fix)"
@@ -434,7 +434,7 @@ final class TaskTemplateRunner {
                 let ipaTool = IPAInspectTool()
                 if let result = try? ipaTool.invoke(["path": target.path, "detail": "basic"]) {
                     let feasibility = result["inject_feasibility"] as? [String] ?? []
-                    steps.append(["step": "IPA解析", "success": true])
+                    steps.append(["step": "IPA parse", "success": true])
                     summary = feasibility.joined(separator: "\n")
                     success = !feasibility.contains(where: { $0.contains("⚠️") })
                 }
@@ -446,7 +446,7 @@ final class TaskTemplateRunner {
             Thread.sleep(forTimeInterval: 3)
             let statsTool = AppStatsTool()
             if let result = try? statsTool.invoke(["bundle_id": bundleId, "duration": 30]) {
-                steps.append(["step": "性能采样30秒", "success": true])
+                steps.append(["step": "Performance sampling 30s", "success": true])
                 if let cpu = result["cpu"] as? [String: String],
                    let mem = result["memory"] as? [String: Any] {
                     summary = "CPU avg \(cpu["avg"] ?? "")%, peak \(cpu["max"] ?? "")%\nMemory peak \(mem["max_kb"] ?? "") KB, \(mem["leak_suspect"] ?? "")"
@@ -460,7 +460,7 @@ final class TaskTemplateRunner {
             if let scanResult = try? scanTool.invoke([:]) {
                 let injected = scanResult["injected_apps"] as? [[String: Any]] ?? []
                 let backups = scanResult["backups"] as? [[String: Any]] ?? []
-                steps.append(["step": "扫描注入状态", "success": true,
+                steps.append(["step": "Scan injection state", "success": true,
                               "detail": "injected \(injected.count), backups \(backups.count)"])
             }
             // 2. 恢复全部备份
@@ -468,7 +468,7 @@ final class TaskTemplateRunner {
             if let recoverResult = try? recoverTool.invoke([:]) {
                 let restored = recoverResult["restored_count"] as? Int ?? 0
                 let failed = recoverResult["failed_count"] as? Int ?? 0
-                steps.append(["step": "恢复全部备份", "success": failed == 0,
+                steps.append(["step": "Restore all backups", "success": failed == 0,
                               "detail": "restored \(restored), failed \(failed)"])
                 success = failed == 0
             }
@@ -498,7 +498,7 @@ final class TaskTemplateRunner {
             steps.append(["step": "NetworkTweak ready", "success": true])
             // 3. 开始抓包
             let startResult = try? capTool.invoke(["action": "start", "bundle_id": bundleId])
-            steps.append(["step": "开始抓包", "success": startResult != nil])
+            steps.append(["step": "Start capture", "success": startResult != nil])
             // 4. 打开 App 并等待采集
             let _ = InjectionManager.shared.spawnRoot("/usr/bin/open", args: [bundleId])
             let waitSec = (options["duration"] as? Int) ?? 8
@@ -526,7 +526,7 @@ final class TaskTemplateRunner {
             var startedOK = false
             if let sr = try? startupTool.invoke(["bundle_id": bundleId]) {
                 startedOK = (sr["started"] as? Bool) ?? false
-                steps.append(["step": "启动诊断", "success": startedOK,
+                steps.append(["step": "Startup diagnosis", "success": startedOK,
                               "detail": startedOK ? "launches normally" : "launch failed/crashed"])
             }
             // 2. 崩溃分析
@@ -534,7 +534,7 @@ final class TaskTemplateRunner {
             if let cr = try? crashTool.invoke(["bundle_id": bundleId]) {
                 let analyses = cr["analyses"] as? [[String: Any]] ?? []
                 if let first = analyses.first {
-                    let cause = first["root_cause"] as? String ?? "未知"
+                    let cause = first["root_cause"] as? String ?? "unknown"
                     let fix = first["fix"] as? String ?? ""
                     steps.append(["step": "crash analysis", "success": true, "detail": cause])
                     summary = "Cause: \(cause)\nFix suggestion: \(fix)"

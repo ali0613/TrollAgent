@@ -69,19 +69,19 @@ final class InjectionVerifyTool: MCPTool {
         if recentCrash != nil {
             verdict = "crashed"
             reason = "recent crash detected: \(recentCrash?["summary"] as? String ?? "")"
-            nextStep = "先 injection.disable 或 injection.restore 恢复备份，再检查 dylib 与目标兼容性 (架构/依赖/构造函数)；也可 rescue.recover_all 紧急恢复"
+            nextStep = "First restore with injection.disable or injection.restore, then check dylib-target compatibility (arch/dependencies/constructor); or rescue.recover_all for emergency recovery"
         } else if hasMarker && pid > 0 {
             verdict = "healthy"
-            reason = "dylib 加载命令存在 + 目标进程存活 + 无最近崩溃"
-            nextStep = "可以继续 network_capture / probe 等控制；如需确认 hook 实际触发，注入的 dylib 应写日志到工作区 logs/ 供 log.collect 读取"
+            reason = "dylib load command exists + target process alive + no recent crash"
+            nextStep = "Can continue with network_capture / probe etc.; to confirm the hook actually fired, the injected dylib should log to workspace logs/ for log.collect"
         } else if hasMarker && pid == 0 {
             verdict = "injected_but_dead"
-            reason = "dylib 已写入加载命令，但目标进程未运行 (可能启动后被反注入检测杀掉，或从not running)"
-            nextStep = "用 app.start 启动后立刻再 verify；若仍 dead，参考 app.diagnose 查崩溃原因"
+            reason = "dylib load command written, but the target process isn't running (possibly killed by anti-injection detection after launch, or from not running)"
+            nextStep = "Launch with app.start then verify immediately; if still dead, check the crash cause with app.diagnose"
         } else {
             verdict = "not_injected"
-            reason = "主二进制/注入资产中未发现injected dylib"
-            nextStep = "先用 injection.enable 注入"
+            reason = "No injected dylib found in the main binary/injection assets"
+            nextStep = "Inject first with injection.enable"
         }
 
         let result: [String: Any] = [
@@ -174,23 +174,23 @@ final class AppDiagnoseTool: MCPTool {
         var problems: [String] = []
         var nextSteps: [String] = []
         if injected {
-            problems.append("存在注入残留，App 可能因注入崩溃")
-            nextSteps.append("先 injection.disable 或 injection.restore 恢复，再启动测试")
+            problems.append("Injection residue present, the app may be crashing due to injection")
+            nextSteps.append("Restore first with injection.disable or injection.restore, then launch and test")
         }
         if encrypted == true {
-            problems.append("主二进制加密 (App Store 正版)，无法注入/解析结构")
-            nextSteps.append("用 app.decrypt 砸壳后重新安装解密版")
+            problems.append("Main binary encrypted (App Store original), can't inject/parse structure")
+            nextSteps.append("Decrypt with app.decrypt, then reinstall the decrypted version")
         }
         if signed == false {
-            problems.append("无签名信息 (未重签名或 ldid 解析failed)")
-            nextSteps.append("用 ldid 重新签名或确认 TrollStore 安装状态")
+            problems.append("No signing info (not re-signed or ldid parse failed)")
+            nextSteps.append("Re-sign with ldid or confirm the TrollStore install state")
         }
         if let cs = crashSummary {
-            problems.append("最近崩溃：\(cs)")
-            nextSteps.append("崩溃现场见 CrashReporter；若是注入导致则先恢复再重注")
+            problems.append("Recent crash: \(cs)")
+            nextSteps.append("Crash scene in CrashReporter; if injection-related, restore first, then re-inject")
         }
         if problems.isEmpty {
-            nextSteps.append("若仍not running，检查 dylib 兼容性 (架构 arm64/arm64e、依赖库缺失、构造函数崩溃)")
+            nextSteps.append("If still not running, check dylib compatibility (arch arm64/arm64e, missing dependency libs, constructor crash)")
         }
 
         return ["ok": problems.isEmpty, "bundle_id": bundleId, "checks": checks,
@@ -202,7 +202,7 @@ final class AppDiagnoseTool: MCPTool {
 
 func extractCrashSummary(_ path: String) -> String {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe),
-          let text = String(data: data, encoding: .utf8) else { return "无法读取" }
+          let text = String(data: data, encoding: .utf8) else { return "unreadable" }
     var out: [String] = []
     for line in text.components(separatedBy: .newlines).prefix(60) {
         let l = line.trimmingCharacters(in: .whitespaces)

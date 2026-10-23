@@ -449,7 +449,7 @@ public final class ToolRegistry: ObservableObject {
         // v2.9.26：@Published 递增 + objectWillChange 双保险，确保 UI 立即刷新
         policyRevision += 1
         objectWillChange.send()
-        AuditLog.shared.log("policy", detail: "\(name) \(enabled ? "启用" : "禁用")")
+        AuditLog.shared.log("policy", detail: "\(name) \(enabled ? "enabled" : "disabled")")
     }
 
     public var enabledDefinitions: [ToolDefinition] {
@@ -801,7 +801,7 @@ public final class ToolRegistry: ObservableObject {
                 var timedOut = false
                 let timeoutWorkItem = DispatchWorkItem {
                     timedOut = true
-                    WorkflowManager.shared.updateStep(tool: originalName, detail: "⏱ 超时 (15s)", success: false)
+                    WorkflowManager.shared.updateStep(tool: originalName, detail: "⏱ timeout (15s)", success: false)
                 }
                 DispatchQueue.global().asyncAfter(deadline: .now() + 15, execute: timeoutWorkItem)
 
@@ -814,7 +814,7 @@ public final class ToolRegistry: ObservableObject {
                     let errStr = "\(error)"
                     if FailureKind.retryable(errStr) && callCount == 1 {
                         // 自动重试一次
-                        WorkflowManager.shared.updateStep(tool: originalName, detail: "🔄 自动重试...", success: false)
+                        WorkflowManager.shared.updateStep(tool: originalName, detail: "🔄 auto-retrying...", success: false)
                         Thread.sleep(forTimeInterval: 1.0)  // 等 1 秒再重试
                         result = try t.invoke(params)
                     } else {
@@ -838,7 +838,7 @@ public final class ToolRegistry: ObservableObject {
                     let info = FailureKind.classify(errMsg)
                     // v3.1.5: 返回式错误也自动重试一次
                     if FailureKind.retryable(errMsg) && callCount == 1 {
-                        WorkflowManager.shared.updateStep(tool: originalName, detail: "🔄 自动重试...", success: false)
+                        WorkflowManager.shared.updateStep(tool: originalName, detail: "🔄 auto-retrying...", success: false)
                         Thread.sleep(forTimeInterval: 1.0)  // 等 1 秒再重试
                         do {
                             result = try t.invoke(params)
@@ -1045,16 +1045,16 @@ public final class ToolRegistry: ObservableObject {
     static func extractReturnedError(_ result: [String: Any]) -> String? {
         // ① 显式 ok:false
         if result["ok"] as? Bool == false {
-            return Self.errorMessage(from: result["error"], fallback: "工具返回 ok=false")
+            return Self.errorMessage(from: result["error"], fallback: "Tool returned ok=false")
         }
         // ② error 键 (String 或 [String:Any] 字典）
         // v3.1.8：nil error 不应该被当成错误——只有 error 有值时才算
         if let errBox = result["error"], !(errBox is NSNull) {
-            return Self.errorMessage(from: errBox, fallback: "工具返回错误 (未提供原因)")
+            return Self.errorMessage(from: errBox, fallback: "Tool returned an error (no reason given)")
         }
         // ③ status failed态
         if let st = result["status"] as? String, ["failed", "error", "failure"].contains(st.lowercased()) {
-            return Self.errorMessage(from: result["reason"] ?? result["error"], fallback: "工具返回failed状态 \(st)")
+            return Self.errorMessage(from: result["reason"] ?? result["error"], fallback: "Tool returned failed status \(st)")
         }
         return nil
     }
@@ -1324,7 +1324,7 @@ public final class ToolRegistry: ObservableObject {
         register(GitHubExecTool())
         // v3.7.7c: 移除 ish.bind 注册——bind mount 已由 autoBind 全自动（命令引用 iOS 路径自动挂载+改写），
         // 手动 bind 工具对 AI 是误导（会以为要手动挂载）。类定义保留供开发者调试/真机验证。
-        AuditLog.shared.log("core", detail: "已注册 \(definitions.count) 个工具")
+        AuditLog.shared.log("core", detail: "Registered \(definitions.count) tools")
     }
 }
 

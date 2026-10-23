@@ -204,7 +204,7 @@ final class InjectionEnableTool: MCPTool {
             }
         }
         let result = try InjectionManager.shared.enable(bundleId: bid, dylibName: loadName, dylibSourcePath: source, weakReference: weakRef, injectStrategy: strategy, smartFallback: (params["smart_fallback"] as? Bool) ?? true)
-        AuditLog.shared.log("injection.enable", detail: "\(bid) → \(dylibPath ?? "内置agent")")
+        AuditLog.shared.log("injection.enable", detail: "\(bid) → \(dylibPath ?? "bundled agent")")
         // v2.9.68：截断冗长日志，只保留 exit code + 关键错误行，避免上下文爆炸
         var slim = result
         for key in ["ct_bypass_output", "ldid_output", "insert_output", "rpath_output"] {
@@ -227,8 +227,8 @@ final class InjectionEnableTool: MCPTool {
         if let injected = result["injected"] as? Bool {
             let alive = (result["selfcheck"] as? [String: Any])?["app_alive"] as? Bool ?? false
             slim["message"] = injected
-                ? "注入OK (injected=true, app存活=\(alive ? "是" : "否")\(slim["risk_warning"] != nil ? ", 敏感App已护栏" : ""))"
-                : "注入未生效 (injected=false)"
+                ? "Injection OK (injected=true, app alive=\(alive ? "yes" : "no")\(slim["risk_warning"] != nil ? ", sensitive-app guardrail on" : ""))"
+                : "Injection didn't take effect (injected=false)"
         }
         return slim
     }

@@ -232,8 +232,8 @@ final class BuildEnvironmentTool: MCPTool {
             "size_bytes": sizeBytes,
             "ready": ready,
             "hint": ready
-                ? "环境ready：可通过 shell.exec 手动编译 projects/ 下的 theos 或 clang 工程 (toolchain 参数传 \(tcRel))"
-                : "缺少组件：toolchain=\(tcRel)。规范布局需 bin/clang+make+perl、theos/、sdk/iPhoneOS*.sdk；越狱机可用 toolchain=system 直接指向系统工具链 (Nyxian)。获取方式参考 DeviceBuild/toolchain/README.md (a-Shell LLVM-on-iOS / Nyxian theos)"
+                ? "Environment ready: compile theos or clang projects under projects/ via shell.exec manually (toolchain param: \(tcRel))"
+                : "Missing components: toolchain=\(tcRel). Standard layout needs bin/clang+make+perl, theos/, sdk/iPhoneOS*.sdk; on jailbroken devices use toolchain=system 直接指向系统工具链 (Nyxian)。获取方式参考 DeviceBuild/toolchain/README.md (a-Shell LLVM-on-iOS / Nyxian theos)"
         ]
     }
 

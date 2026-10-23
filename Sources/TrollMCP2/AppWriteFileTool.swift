@@ -13,8 +13,8 @@ final class AppWriteFileTool: MCPTool {
         summary: "Native direct write to a file inside an app's data container (iOS write channel, not limited by bind's read-only mount). Params: bundle_id + rel_path (container-relative path, e.g. Library/Preferences/x.plist) + content_b64 (base64 full file content). Auto-backup to Workspace/backups/ before writing. Use for modifying IAP/settings/receipt data in place; read via bind_app, actually-writable file changes via this tool.",
         parameters: [
             "bundle_id": "App bundle ID (required)",
-            "rel_path": "容器内相对路径, 如 Library/Preferences/x.plist (required, 禁止绝对路径/../)",
-            "content_b64": "写入文件的完整内容, base64 编码 (required)"
+            "rel_path": "Container-relative path, e.g. Library/Preferences/x.plist (required, no absolute paths or ../)",
+            "content_b64": "Full file content to write, base64-encoded (required)"
         ], verified: true, category: "filesystem")
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
@@ -29,11 +29,11 @@ final class AppWriteFileTool: MCPTool {
         }
         // 路径安全校验：相对路径，禁止绝对路径与父目录逃逸
         if relPath.hasPrefix("/") {
-            throw MCPError.invalidParams("rel_path 必须是容器内相对路径, 不以 / 开头")
+            throw MCPError.invalidParams("rel_path must be a container-relative path, not starting with /")
         }
         let parts = relPath.split(separator: "/").map(String.init)
         if parts.contains("..") || parts.contains(".") {
-            throw MCPError.invalidParams("rel_path 禁止包含 .. / . 段")
+            throw MCPError.invalidParams("rel_path must not contain .. / . segments")
         }
         // 解析 App 数据容器
         guard let app = AppCatalog.list().first(where: { $0.bundleId == bundleId }),
@@ -47,7 +47,7 @@ final class AppWriteFileTool: MCPTool {
         let host = (cp as NSString).appendingPathComponent(relPath)
         // base64 解码
         guard let data = Data(base64Encoded: contentB64) else {
-            throw MCPError.invalidParams("content_b64 不是合法 base64")
+            throw MCPError.invalidParams("content_b64 isn't valid base64")
         }
         // 写前备份目标文件
         let backupPath = backupFile(host, app: app.bundleId)
@@ -69,7 +69,7 @@ final class AppWriteFileTool: MCPTool {
             "host_path": host,
             "backup_path": backupPath ?? "",
             "bytes_written": sz,
-            "warning": "已原生写入(非 Alpine 挂载)。备份在 \(backupPath ?? "(无)")，改坏了从备份还原。",
+            "warning": "Written natively (not an Alpine mount). Backup at \(backupPath ?? "(none)"), restore from backup if broken.",
         ]
     }
 

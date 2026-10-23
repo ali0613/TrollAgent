@@ -51,7 +51,7 @@ final class AppStartTool: MCPTool {
                 return ["bundle_id": bundleId, "started": true, "pid": pid, "method_used": "ls_workspace_open",
                         "launch_ms": Int(Date().timeIntervalSince(start) * 1000)]
             }
-            errors.append(["step": "ls_workspace_open", "exit": 0, "stderr": "openApplicationWithBundleID 未拉起"])
+            errors.append(["step": "ls_workspace_open", "exit": 0, "stderr": "openApplicationWithBundleID didn't launch"])
         }
 
         // 方法 2：注册表路径 → 直接执行主二进制 (绕过 open 依赖）

@@ -55,8 +55,8 @@ final class DiagnoseStartupTool: MCPTool {
             diagnosis["arch_note"] = "parse failed (maybe encrypted or special Mach-O), does not mean unlaunchable/uninjectable; judge with cryptid"
         }
         if isOtherArch {
-            causes.append("非 arm64 架构")
-            fixes.append("确认 IPA 是 arm64 构建")
+            causes.append("Not arm64 arch")
+            fixes.append("Confirm the IPA is an arm64 build")
         }
 
         // 4. 检查签名
@@ -65,8 +65,8 @@ final class DiagnoseStartupTool: MCPTool {
             let (_, entOutput) = InjectionManager.shared.spawnRoot(ldidPath, args: ["-e", binaryPath])
             diagnosis["signed"] = !entOutput.isEmpty
             if entOutput.isEmpty {
-                causes.append("二进制未签名")
-                fixes.append("用 ldid 重新签名或用 TrollStore 重装")
+                causes.append("Binary not signed")
+                fixes.append("Re-sign with ldid or reinstall via TrollStore")
             }
         }
 
@@ -91,7 +91,7 @@ final class DiagnoseStartupTool: MCPTool {
                     let lines = content.components(separatedBy: .newlines)
                     for line in lines.prefix(30) {
                         if line.contains("Exception Type") || line.contains("Termination Reason") || line.contains("dyld") || line.contains("code signature") {
-                            causes.append("崩溃: \(line.trimmingCharacters(in: .whitespaces))")
+                            causes.append("Crash: \(line.trimmingCharacters(in: .whitespaces))")
                         }
                     }
                 }
@@ -105,8 +105,8 @@ final class DiagnoseStartupTool: MCPTool {
         diagnosis["launch_pid"] = pid
         diagnosis["launched"] = pid > 0
         if pid == 0 {
-            causes.append("启动后 3 秒内进程消失 (闪退)")
-            fixes.append("检查崩溃日志中的 dyld 错误，通常是注入的 dylib 依赖缺失")
+            causes.append("Process gone within 3s of launch (crash)")
+            fixes.append("Check dyld errors in the crash log — usually a missing dependency of the injected dylib")
         }
 
         // 8. 自动修复
@@ -114,17 +114,17 @@ final class DiagnoseStartupTool: MCPTool {
             // 如果有备份且注入了 dylib，尝试恢复备份
             if FileManager.default.fileExists(atPath: backupPath) {
                 let _ = InjectionManager.shared.spawnRoot("/bin/cp", args: [backupPath, binaryPath])
-                fixes.append("已恢复主二进制备份")
+                fixes.append("Main binary backup restored")
             }
         }
 
         diagnosis["causes"] = causes
         diagnosis["fixes"] = fixes
-        diagnosis["verdict"] = causes.isEmpty ? "✅ 启动正常" : "❌ 发现 \(causes.count) 个问题"
+        diagnosis["verdict"] = causes.isEmpty ? "✅ Startup OK" : "❌ Found \(causes.count) issues"
         // v2.9.125：CLI 式一句话结论
         diagnosis["message"] = causes.isEmpty
-            ? "未发现启动问题 (arch=\(diagnosis["arch"] ?? "unknown"))"
-            : "发现 \(causes.count) 个问题：\(causes.prefix(3).joined(separator: "；"))"
+            ? "No startup issues found (arch=\(diagnosis["arch"] ?? "unknown"))"
+            : "Found \(causes.count) issues: \(causes.prefix(3).joined(separator: "; "))"
 
         return diagnosis
     }

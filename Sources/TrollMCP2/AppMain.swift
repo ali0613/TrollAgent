@@ -258,7 +258,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             guard !baseURL.isEmpty, !model.isEmpty else { return false }
             let name = value("name") ?? model
             let auth = value("auth") ?? "Bearer"
-            let group = value("group") ?? "默认"
+            let group = value("group") ?? "default"
             let temp = value("temperature").flatMap(Double.init) ?? 0.7
             let maxTokens = value("maxTokens").flatMap(Int.init) ?? 2048
             let context = value("contextTokens").flatMap(Int.init) ?? 16000
@@ -278,7 +278,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                 maxTokens: maxTokens,
                 compatLevel: 0,
                 contextTokens: context,
-                group: group.isEmpty ? "默认" : group
+                group: group.isEmpty ? "default" : group
             )
             PendingImport.shared.stage(config)
             return true

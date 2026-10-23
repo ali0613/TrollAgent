@@ -95,11 +95,11 @@ final class DeviceProbe: ObservableObject {
             if spawnIsRoot { parts.append("persona spawn uid=0") }
             entDetail = parts.joined(separator: "\n")
         } else {
-            var parts: [String] = ["未检测到 no-sandbox (沙盒未解除)"]
+            var parts: [String] = ["no-sandbox not detected (sandbox still active)"]
             parts.append(ent.summary)
             if bundleWriteOK { parts.append("Bundle write verified") }
             if spawnIsRoot { parts.append("persona spawn uid=0") }
-            parts.append("注入功能需要在 TrollStore 设置中开启「编辑 Entitlements」，然后卸载重装本 App (覆盖安装不会重新应用权限)。")
+            parts.append("Injection needs 'Edit Entitlements' enabled in TrollStore settings, then uninstall/reinstall this app (over-install won't reapply permissions).")
             entDetail = parts.joined(separator: "\n")
         }
         let entitlementsOK = ent.noSandbox || bundleWriteOK || spawnIsRoot  // 内部记录用，不影响 ready 和 UI 显示
@@ -108,20 +108,20 @@ final class DeviceProbe: ObservableObject {
         // v3.0.2: 去掉 TrollStore 已安装 / Entitlements 权限 / TrollFools 已安装 三个检测 (包已是 tipa，检测无意义）
         let tfpDetail: String
         if taskForPid {
-            tfpDetail = "实测可获取其他进程端口，进程级操作可用"
+            tfpDetail = "Measured: can get other processes' ports, process-level operations work"
         } else if ent.taskForPidAllow {
             // v2.9.156：签名已授予 task_for_pid-allow → 绿勾；实测被拦是 TrollStore
             // 非越狱常态 (不影响静态注入），如实写进说明
-            tfpDetail = "签名含 task_for_pid-allow；TrollStore 非越狱环境实测进程端口获取被系统拦截，不影响静态注入，进程级内存操作受限"
+            tfpDetail = "Signed with task_for_pid-allow; on TrollStore non-jailbroken env, fetching process ports is blocked by the system — static injection unaffected, process-level memory ops limited"
         } else {
-            tfpDetail = "无 task_for_pid-allow，进程级操作受限"
+            tfpDetail = "No task_for_pid-allow, process-level ops limited"
         }
-        checks.append(Check(label: "task_for_pid 权限", passed: ent.taskForPidAllow || taskForPid, detail: tfpDetail, infoOnly: false))
-        checks.append(Check(label: "App 容器任意读写", passed: containerWrite, detail: containerWrite ? "AppDataContainers 权限生效，可写任意 App 沙盒" : "无法写入其他 App 容器 (缺 entitlement)", infoOnly: false))
+        checks.append(Check(label: "task_for_pid permission", passed: ent.taskForPidAllow || taskForPid, detail: tfpDetail, infoOnly: false))
+        checks.append(Check(label: "App container arbitrary read/write", passed: containerWrite, detail: containerWrite ? "AppDataContainers 权限生效，可写任意 App 沙盒" : "无法写入其他 App 容器 (缺 entitlement)", infoOnly: false))
         for (name, ok) in injectionBinaries.sorted(by: { $0.key < $1.key }) {
-            checks.append(Check(label: "注入二进制 \(name)", passed: ok, detail: ok ? "已捆绑且可执行" : "缺失或不可执行", infoOnly: false))
+            checks.append(Check(label: "Injection binary \(name)", passed: ok, detail: ok ? "Bundled and executable" : "Missing or not executable", infoOnly: false))
         }
-        checks.append(Check(label: "amfid 绕过 (推断)", passed: amfidBypassInferred, detail: amfidBypassInferred ? "ct_bypass 重签名 + 注入工具 + 容器读写 均ready，dylib 注入链路可工作" : "条件不足，unsigned dylib 可能无法加载", infoOnly: false))
+        checks.append(Check(label: "amfid bypass (inferred)", passed: amfidBypassInferred, detail: amfidBypassInferred ? "ct_bypass 重签名 + 注入工具 + 容器读写 均ready，dylib 注入链路可工作" : "条件不足，unsigned dylib 可能无法加载", infoOnly: false))
 
         // v2.9.156：ready 不再依赖 taskForPid——静态injected (insert_dylib+ct_bypass 重签名）
         // 与进程端口无关；TrollStore 非越狱拿不到其他进程端口是常态，不应导致"环境异常"
@@ -259,7 +259,7 @@ final class DeviceProbe: ObservableObject {
         let tf = readOwnEntitlement("task_for_pid-allow")
         let gt = readOwnEntitlement("get-task-allow")
         var parts: [String] = []
-        parts.append("no-sandbox: \(ns ? "有" : "无")")
+        parts.append("no-sandbox: \(ns ? "yes" : "no")")
         parts.append("platform-app: \(pa ? "有" : "无")")
         parts.append("task_for_pid: \(tf ? "有" : "无")")
         parts.append("get-task-allow: \(gt ? "有" : "无")")

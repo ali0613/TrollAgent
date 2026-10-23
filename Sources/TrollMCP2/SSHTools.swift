@@ -41,7 +41,7 @@ final class SSHTool: MCPTool {
             return [
                 "error": "ssh client not bundled",
                 "hint": "iOS has no /usr/bin/ssh and this version does not bundle the ssh binary. Use ssh.scp to transfer files for now, or wait for a later version with built-in SSH client; key auth also needs built-in ssh.",
-                "ssh_path": Bundle.main.path(forResource: "ssh", ofType: nil, inDirectory: "bin") ?? "(未打包)"
+                "ssh_path": Bundle.main.path(forResource: "ssh", ofType: nil, inDirectory: "bin") ?? "(not bundled)"
             ]
         }
 

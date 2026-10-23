@@ -27,7 +27,7 @@ final class WorkflowManager: ObservableObject {
 
     func startRun(_ name: String) {
         DispatchQueue.main.async {
-            self.steps = [Step(name: name, tool: "session", status: .running, detail: "开始执行")]
+            self.steps = [Step(name: name, tool: "session", status: .running, detail: "Starting")]
             self.isActive = true
             self.currentRunId = UUID().uuidString
         }

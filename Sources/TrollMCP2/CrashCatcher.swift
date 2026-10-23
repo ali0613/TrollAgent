@@ -147,7 +147,7 @@ enum CrashCatcher {
 
     /// v2.9.152：导出全部崩溃日志为一份文本（供分享/保存，用户反馈"不能分享保存"）
     static func exportAll() -> String {
-        var out = "TrollAgent 崩溃日志导出\n导出时间: \(Date())\n\n"
+        var out = "TrollAgent crash log export\nExported: \(Date())\n\n"
         for p in list() {
             out += "===== \(URL(fileURLWithPath: p).lastPathComponent) =====\n"
             out += content(p)
@@ -173,15 +173,15 @@ enum CrashCatcher {
     }
 
     static func content(_ path: String) -> String {
-        (try? String(contentsOfFile: path, encoding: .utf8)) ?? "(读取失败)"
+        (try? String(contentsOfFile: path, encoding: .utf8)) ?? "(read failed)"
     }
 
     /// v2.9.177：分段读取预览——列表页不再全量读全文（大文件多次全读会卡死/内存抖），
     /// 详情页也限制最大字符数，避免超大 sig_ 文本把 Text 渲染拖崩。
     static func preview(_ path: String, maxChars: Int) -> String {
-        guard let s = try? String(contentsOfFile: path, encoding: .utf8) else { return "(读取失败)" }
+        guard let s = try? String(contentsOfFile: path, encoding: .utf8) else { return "(read failed)" }
         if s.count > maxChars {
-            return String(s.prefix(maxChars)) + "\n…(截断，完整内容见文件)"
+            return String(s.prefix(maxChars)) + "\n…(truncated, full content in the file)"
         }
         return s
     }
@@ -285,7 +285,7 @@ struct CrashLogView: View {
                                 .foregroundColor(.secondary)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if detailContent == "(读取失败)" {
+                    } else if detailContent == "(read failed)" {
                         VStack(spacing: 10) {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 36))

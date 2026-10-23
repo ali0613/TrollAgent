@@ -53,7 +53,7 @@ final class ControlSession: ObservableObject {
         targetApp = target
         targetBundleId = bundleId
         steps = plan.map { ControlStep(title: $0) }
-        logs = [ControlLog(kind: .info, text: "控制开始 · 目标: \(target)\(bundleId.isEmpty ? "" : " (\(bundleId))") · 计划 \(plan.count) 步")]
+        logs = [ControlLog(kind: .info, text: "Control started · target: \(target)\(bundleId.isEmpty ? "" : " (\(bundleId))") · 计划 \(plan.count) 步")]
         finalResult = nil
         lastScreenshotPath = nil
         isActive = true
@@ -65,7 +65,7 @@ final class ControlSession: ObservableObject {
         guard index >= 0 && index < steps.count else { return }
         steps[index].status = status
         steps[index].detail = detail
-        addLog(.info, "步骤\(index + 1) \(status.rawValue): \(steps[index].title)\(detail.isEmpty ? "" : " · \(detail)")")
+        addLog(.info, "Step \(index + 1) \(status.rawValue): \(steps[index].title)\(detail.isEmpty ? "" : " · \(detail)")")
     }
 
     /// AI 判断理由（思考流，来自工具调用的 reason 参数）
@@ -91,7 +91,7 @@ final class ControlSession: ObservableObject {
 
     func finish(result: String) {
         finalResult = result
-        addLog(.info, "控制结束: \(result)")
+        addLog(.info, "Control ended: \(result)")
         isActive = false
     }
 

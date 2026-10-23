@@ -33,19 +33,19 @@ final class CleanupScanner {
                                      bytes: cacheBytes, risk: .safe, affected: "no impact, regenerated on next launch"))
         } else {
             items.append(CleanupItem(id: "cache", label: "clean caches and temp files",
-                                     detail: "当前无可清理缓存 (0 B)",
+                                     detail: "No cache to clean (0 B)",
                                      bytes: 0, risk: .safe, affected: "无影响"))
         }
 
         // 2. 钥匙串 (警告——清登录态）
-        items.append(CleanupItem(id: "keychain", label: "清钥匙串 (登录态/令牌)",
-                                 detail: "按 keychain-access-groups 删除该 App 的密码/令牌/密钥",
-                                 bytes: 0, risk: .warn, affected: "清空该 App 登录态，需重新登录"))
+        items.append(CleanupItem(id: "keychain", label: "Clear keychain (login state/tokens)",
+                                 detail: "Delete this app's passwords/tokens/keys by keychain-access-groups",
+                                 bytes: 0, risk: .warn, affected: "Clears the app's login state, needs re-login"))
 
         // 3. 广告标识符 (警告——IDFA）
-        items.append(CleanupItem(id: "adid", label: "刷新广告标识符 (IDFA)",
-                                 detail: "调用私有 API 尝试重置；iOS 14+ 受系统限制时仅提示",
-                                 bytes: 0, risk: .warn, affected: "广告符变化，游戏拉新/广告追踪可能重置"))
+        items.append(CleanupItem(id: "adid", label: "Reset advertising identifier (IDFA)",
+                                 detail: "Tries to reset via a private API; on iOS 14+ only hints when restricted by the system",
+                                 bytes: 0, risk: .warn, affected: "Ad identifier changes, game user-acquisition/ad tracking may reset"))
 
         // 4. 数据容器 (危险——整体重置，可恢复）
         items.append(CleanupItem(id: "container", label: "刷新数据容器 (重置 App 数据，可恢复)",

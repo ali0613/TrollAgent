@@ -145,7 +145,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
             Thread.sleep(forTimeInterval: 0.3)
         }
         let elapsed = Date().timeIntervalSince(start)
-        NSLog("ensureWebView failed after 6 tries (%.1fs) — 主线程疑似忙/WebView 创建被卡, 真机 inspect logs 定位", elapsed)
+        NSLog("ensureWebView failed after 6 tries (%.1fs) — main thread likely busy/WebView creation stuck, locate via on-device inspect logs", elapsed)
         return false
     }
 
@@ -238,7 +238,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
             }
         }
         return ["ok": true, "adblock_enabled": adblockEnabled,
-                "hint": "拦截已知第三方广告/追踪域；抓包需要完整流量时请 browser adblock off"]
+                "hint": "Blocks known third-party ad/tracking domains; for capture with full traffic use browser adblock off"]
     }
 
     /// v4.3.65：清理浏览数据（对应 reynard-browser 的存储/隐私控制）
@@ -262,7 +262,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
             types.insert(WKWebsiteDataTypeWebSQLDatabases)
             types.insert(WKWebsiteDataTypeSessionStorage)
         }
-        guard !types.isEmpty else { return ["ok": false, "error": "kinds 需包含 cache/cookies/storage 之一或 all"] }
+        guard !types.isEmpty else { return ["ok": false, "error": "kinds must include cache/cookies/storage or all"] }
         var done = false
         let sem = DispatchSemaphore(value: 0)
         // v4.3.66：completionHandler 为 () -> Void，不能写 { _ in }（原代码闭包参数数量错误）
@@ -271,12 +271,12 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
             sem.signal()
         }
         _ = sem.wait(timeout: .now() + 15)
-        return ["ok": done, "cleared": Array(types).sorted(), "hint": "清理完成，刷新页面后生效"]
+        return ["ok": done, "cleared": Array(types).sorted(), "hint": "Cleared; takes effect after page refresh"]
     }
 
     // v2.9.251: ensureWebView 超时/失败的统一错误返回（String 返回型工具）
     private func errInit() -> String {
-        return "ERR: 浏览器 WebView 初始化超时（主线程忙或系统限制），请重试"
+        return "ERR: browser WebView initialization timeout (main thread busy or system limit), please retry"
     }
 
     // MARK: - 操作进度（AI 工具调用时设置，悬浮窗底部显示）
@@ -304,7 +304,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
         // v2.9.39：AI 打开网页时自动浮现悬浮窗，用户实时看到操作
         FloatingBrowser.shared.show()
         var u = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        if u.isEmpty { return "ERR: 空 URL" }
+        if u.isEmpty { return "ERR: empty URL" }
         // v2.9.98：智能 URL 解析
         // 1) 已带协议 → 原样
         // 2) 纯 IP / localhost（含端口）→ http（内网服务一般不响应 https）
@@ -330,10 +330,10 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
            host.split(separator: ".").count == 1 {
             u = u.replacingOccurrences(of: "https://\(host)", with: "https://www.\(host)")
         }
-        guard let url = URL(string: u) else { return "ERR: 无效 URL" }
-        guard let wv = webView else { return "ERR: 浏览器未初始化" }
+        guard let url = URL(string: u) else { return "ERR: invalid URL" }
+        guard let wv = webView else { return "ERR: browser not initialized" }
         hasLoadedAny = true
-        beginAction("正在打开 \(url.host ?? urlString)")
+        beginAction("Opening \(url.host ?? urlString)")
         DispatchQueue.main.async {
             self.isLoading = true
             self.lastError = ""
@@ -344,36 +344,36 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
         }
         currentURL = url.absoluteString
         AuditLog.shared.log("browser.open", detail: "\(urlString) → \(url.absoluteString)")
-        return "已开始加载 \(url.absoluteString)"
+        return "Started loading \(url.absoluteString)"
     }
 
     func goBack() -> String {
         guard ensureWebView() else { return errInit() }
         FloatingBrowser.shared.show()
         hasLoadedAny = true
-        beginAction("后退")
+        beginAction("Back")
         DispatchQueue.main.async {
             if self.webView?.canGoBack == true { self.webView?.goBack() }
         }
-        return "后退"
+        return "Back"
     }
 
     func goForward() -> String {
         guard ensureWebView() else { return errInit() }
         FloatingBrowser.shared.show()
         hasLoadedAny = true
-        beginAction("前进")
+        beginAction("Forward")
         DispatchQueue.main.async {
             if self.webView?.canGoForward == true { self.webView?.goForward() }
         }
-        return "前进"
+        return "Forward"
     }
 
     func reload() -> String {
         guard ensureWebView() else { return errInit() }
         FloatingBrowser.shared.show()
         hasLoadedAny = true
-        beginAction("刷新页面")
+        beginAction("Reload")
         DispatchQueue.main.async {
             self.isLoading = true
             self.lastError = ""
@@ -386,7 +386,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
 
     /// 等待页面加载完成（最多 timeout 秒）。open 后必须 wait，否则 snapshot 拿不到元素。
     func wait(timeout: Int = 15) -> [String: Any] {
-        guard ensureWebView() else { return ["ok": false, "error": "浏览器初始化超时"] }
+        guard ensureWebView() else { return ["ok": false, "error": "Browser initialization timeout"] }
         FloatingBrowser.shared.show()
         beginAction("等待页面加载…")
         let deadline = Date().addingTimeInterval(TimeInterval(timeout))
@@ -447,7 +447,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
         if lastLen == 0 {
             // 空页诊断——输出 readyState/脚本数/JS 错误/URL，帮助判断是"没渲染完"还是"JS 报错"
             let diag = evalSync("(function(){var e=[];e.push('readyState='+document.readyState);e.push('scripts='+document.scripts.length);e.push('url='+location.href);if(window.__trollJsErrors)e.push('jsErrors='+window.__trollJsErrors.slice(-3).join('|'));return e.join('\\n');})()", timeout: 5)
-            if !diag.hasPrefix("ERR") { text = "[页面空内容诊断] " + diag }
+            if !diag.hasPrefix("ERR") { text = "[Empty-page diagnosis] " + diag }
         }
         let js = """
         (function(){
@@ -464,7 +464,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
                 let hi = text.index(range.upperBound, offsetBy: min(400, text.distance(from: range.upperBound, to: text.endIndex)), limitedBy: text.endIndex) ?? text.endIndex
                 text = "…\(text[lo..<hi])…"
             } else {
-                text = "未找到关键词「\(q)」上下文，返回开头：\n" + String(text.prefix(800))
+                text = "Keyword «\(q)» context not found, returning the beginning:\n" + String(text.prefix(800))
             }
         } else {
             text = String(text.prefix(maxChars))
@@ -520,7 +520,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
 
     /// 扫描页面全部表单字段（不限 snapshot 30 条），返回 name/placeholder/label/type/xpath
     func formFields() -> [String: Any] {
-        guard ensureWebView() else { return ["ok": false, "error": "浏览器初始化超时"] }
+        guard ensureWebView() else { return ["ok": false, "error": "Browser initialization timeout"] }
         FloatingBrowser.shared.show()
         beginAction("扫描表单字段…")
         let js = """
@@ -561,14 +561,14 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
             fields = arr
         }
         return ["ok": true, "count": fields.count, "fields": fields,
-                "hint": "用 browser.fill_form 传 {\"字段名或占位符或标签\":\"值\"}，如 {\"用户名\":\"me\",\"密码\":\"xx\"}；下拉框传选项文字；勾选框传 true/false；需要精确时传 {\"__xpath\":\"//*[@id='x'\",\"__value\":\"v\"}"]
+                "hint": "Use browser.fill_form with {\"field name or placeholder or label\":\"value\"}, e.g. {\"username\":\"me\",\"password\":\"xx\"}; dropdowns take the option text; checkboxes true/false; for precision use {\"__xpath\":\"//*[@id='x'\",\"__value\":\"v\"}"]
     }
 
     /// 整表自动填充：values 键匹配 name/placeholder/label，填完可选提交表单
     /// v2.9.130：React/Vue 受控组件用 native value setter + input/change 事件（同 Playwright fill）；
     /// select 按选项文字/值匹配；checkbox/radio 按 true/false 点击；支持 __xpath 精确指定
     func fillForm(values: [String: String], submit: Bool) -> [String: Any] {
-        guard ensureWebView() else { return ["ok": false, "error": "浏览器初始化超时"] }
+        guard ensureWebView() else { return ["ok": false, "error": "Browser initialization timeout"] }
         FloatingBrowser.shared.show()
         beginAction("自动填充表单…")
         var js = """
@@ -663,7 +663,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
 
     /// 等待元素出现（selector 或正文文本），用于 open 后等搜索结果/登录态
     func waitFor(text: String? = nil, selector: String? = nil, timeout: Int = 15) -> [String: Any] {
-        guard ensureWebView() else { return ["ok": false, "error": "浏览器初始化超时"] }
+        guard ensureWebView() else { return ["ok": false, "error": "Browser initialization timeout"] }
         FloatingBrowser.shared.show()
         beginAction("等待目标出现…")
         if let s = selector, !s.isEmpty {
@@ -690,7 +690,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
             return ["ok": true, "found": found, "text": t, "waited_seconds": timeout]
         }
         endAction()
-        return ["ok": false, "error": "需要 selector 或 text 参数"]
+        return ["ok": false, "error": "selector or text param required"]
     }
 
     private func mapString(_ d: [String: String]) -> String {
@@ -705,7 +705,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     /// 在后台线程同步等待 evaluateJavaScript 结果（主线程执行，避免死锁）
     func evalSync(_ js: String, timeout: TimeInterval = 15) -> String {
         guard ensureWebView() else { return errInit() }
-        guard let wv = webView else { return "ERR: 浏览器未初始化" }
+        guard let wv = webView else { return "ERR: browser not initialized" }
         // v2.9.44：主线程调用会死锁（main.async 排队 + semaphore.wait 阻塞主线程），安全返回
         if Thread.isMainThread {
             return "ERR: evalSync 不能在主线程调用（会阻塞 UI），请用异步 evaluateJavaScript"
@@ -779,7 +779,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     /// v2.9.44：支持 query 关键字过滤（按文本/标签/占位符/name/href 模糊匹配），长页面不爆 token
     /// v2.9.80：元素带 x/y/w/h 坐标
     func snapshot(query: String? = nil) -> [String: Any] {
-        guard ensureWebView() else { return ["ok": false, "error": "浏览器初始化超时"] }
+        guard ensureWebView() else { return ["ok": false, "error": "Browser initialization timeout"] }
         FloatingBrowser.shared.show()
         beginAction("扫描页面可交互元素…")
         let json = evalSync(Self.highlightScript)
@@ -874,14 +874,14 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
 
     /// 当前状态
     func status() -> [String: Any] {
-        guard ensureWebView() else { return ["ok": false, "error": "浏览器初始化超时"] }
+        guard ensureWebView() else { return ["ok": false, "error": "Browser initialization timeout"] }
         var r: [String: Any] = [
             "url": currentURL,
             "title": pageTitle,
             "highlighted": highlighted,
             "elementCount": elementCount,
             "loading": isLoading,
-            "hint": "先用 browser.snapshot 获取可交互元素（蓝框编号），再按 idx 用 browser.click / browser.type 操作"
+            "hint": "First use browser.snapshot to get interactive elements (blue-box indices), then use browser.click / browser.type by idx"
         ]
         if let wv = webView {
             r["canGoBack"] = wv.canGoBack
@@ -889,7 +889,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
         }
         // v4.3.65：暴露拦截状态与缓存提示（对应 reynard-browser 的内容拦截/存储控制）
         r["adblock_enabled"] = adblockEnabled
-        r["clear_hint"] = "browser clear kinds:cache,cookies,storage 清理浏览数据"
+        r["clear_hint"] = "browser clear kinds:cache,cookies,storage clears browsing data"
         return r
     }
 
@@ -930,7 +930,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
         DispatchQueue.main.async {
             self.isLoading = false
             self.currentAction = ""
-            self.lastError = "加载失败：\((error as NSError).localizedDescription.prefix(60))"
+            self.lastError = "Load failed: \((error as NSError).localizedDescription.prefix(60))"
         }
     }
 
@@ -940,7 +940,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
         DispatchQueue.main.async {
             self.isLoading = false
             self.currentAction = ""
-            self.lastError = "无法访问：\((error as NSError).localizedDescription.prefix(60))"
+            self.lastError = "Cannot access: \((error as NSError).localizedDescription.prefix(60))"
         }
     }
 }

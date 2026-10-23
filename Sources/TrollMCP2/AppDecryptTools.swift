@@ -317,8 +317,8 @@ final class AppEncryptInfoTool: MCPTool {
                 "app_name": target.name,
                 "bundle_path": target.path,
                 "binary_path": binaryPath,
-                "version": plist?["CFBundleShortVersionString"] as? String ?? "未知",
-                "build": plist?["CFBundleVersion"] as? String ?? "未知",
+                "version": plist?["CFBundleShortVersionString"] as? String ?? "unknown",
+                "build": plist?["CFBundleVersion"] as? String ?? "unknown",
                 "signature_status": signInfo,
                 "process_info": processInfo,
                 "static_info": staticInfo,
@@ -394,8 +394,8 @@ final class AppInjectPackageTool: MCPTool {
             "dylib_path": "Absolute path of the dylib to inject (required)",
             "new_bundle_id": "New bundle id (required, e.g. com.trollagent.jinx)",
             "new_name": "Display name (optional)",
-            "auto_install": "是否 TrollStore 安装 (默认 true)"
-        ], verified: true, category: "app_control", prerequisites: ["ipa 与 dylib 路径已存在(先 shell.exec ls 确认)", "new_bundle_id 不要与已装 App 冲突", "TrollStore 已安装(trollstorehelper 可用)"])
+            "auto_install": "Whether to install via TrollStore (default true)"
+        ], verified: true, category: "app_control", prerequisites: ["ipa and dylib paths must exist (confirm with shell.exec ls first)", "new_bundle_id 不要与已装 App 冲突", "TrollStore 已安装(trollstorehelper 可用)"])
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
         guard let ipaPath = params["ipa_path"] as? String, !ipaPath.isEmpty else { throw MCPError.invalidParams("ipa_path required") }

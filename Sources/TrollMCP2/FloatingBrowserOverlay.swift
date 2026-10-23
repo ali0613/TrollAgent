@@ -38,7 +38,7 @@ struct FloatingBrowserOverlay: View {
                     Image(systemName: "safari.fill")
                         .font(.system(size: 13))
                         .foregroundColor(.white)
-                    Text(bm.pageTitle.isEmpty ? "内置浏览器" : bm.pageTitle)
+                    Text(bm.pageTitle.isEmpty ? "Built-in Browser" : bm.pageTitle)
                         .font(.footnote.weight(.medium))
                         .foregroundColor(.white)
                         .lineLimit(1)
@@ -84,7 +84,7 @@ struct FloatingBrowserOverlay: View {
             // URL 栏（v2.9.80：回车直接打开；v2.9.81：统一 submitURL，错误上屏）
             HStack(spacing: 8) {
                 HStack(spacing: 0) {
-                    TextField("输入网址，如 github.com", text: $urlText, onCommit: submitURL)
+                    TextField("Enter URL, e.g. github.com", text: $urlText, onCommit: submitURL)
                         .font(.footnote)
                         .autocapitalization(.none)
                         .keyboardType(.URL)
@@ -172,7 +172,7 @@ struct FloatingBrowserOverlay: View {
                         .foregroundColor(.orange)
                         .lineLimit(1)
                     Spacer()
-                    Button("重试") { _ = bm.reload() }
+                    Button("Retry") { _ = bm.reload() }
                         .font(.caption2.weight(.semibold))
                         .foregroundColor(.blue)
                 }

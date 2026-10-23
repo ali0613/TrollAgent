@@ -337,7 +337,7 @@ enum TrollRuntimeEngine {
                 // 重解压失败——回滚备份
                 try? fm.removeItem(atPath: dataPath)
                 try? fm.moveItem(atPath: backup, toPath: dataPath)
-                NSLog("[ish] rootfs 重解压失败，已回滚旧 rootfs: \(error.localizedDescription)")
+                NSLog("[ish] rootfs re-extract failed, rolled back to the old rootfs: \(error.localizedDescription)")
             }
         }
 
@@ -636,7 +636,7 @@ enum TrollRuntimeEngine {
         // P5b v3.6.11: Alpine 命令向 /tmp 写了文件 → 附带 iOS 映射提示，agent 知道去哪取
         if bridged.range(of: "[>]+\\s*/tmp/", options: .regularExpression) != nil {
             if !stdout.isEmpty && !stdout.hasSuffix("\n") { stdout += "\n" }
-            stdout += "[bridge] Alpine 写出的 /tmp/* 已同步回 iOS: Documents/alpine-rootfs/data/tmp/*"
+            stdout += "[bridge] Alpine-written /tmp/* synced back to iOS: Documents/alpine-rootfs/data/tmp/*"
         }
 
         ShellDiag.log("ISH exec end elapsed=\(Int(Date().timeIntervalSince(tStart) * 1000))ms exit=\(exitCode) timedOut=\(timedOut) out=\(stdout.prefix(80))")

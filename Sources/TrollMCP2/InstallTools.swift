@@ -17,7 +17,7 @@ final class ToolInstallTool: MCPTool {
         summary: "Unified tool installation entry. Params: name(tool name) / profile(re=reverse-eng, dev=development, network=batch) / source(native iOS binary GitHub repo URL, triggers CI build-tool.yml). Install chain: Alpine apk (install-and-use, auto-bind reads iOS files) → pip → CI. Use for: one-click install when AI lacks a tool. Tweaks via github.trigger_build; dylibs via inject.",
         parameters: [
             "name": "Tool name to install (e.g. jq / jtool2 / class-dump)",
-            "profile": "Optional curated batch: re(逆向工具链) / dev(开发环境) / network(网络工具)",
+            "profile": "Optional curated batch: re(reverse-eng toolchain) / dev(dev environment) / network(networking tools)",
             "source": "Optional GitHub repo URL for native iOS CI build (e.g. https://github.com/Neurotycho/jtool2)"
         ],
         verified: true, category: "build")
@@ -54,14 +54,14 @@ final class ToolInstallTool: MCPTool {
         if let bundled = bundledBinPath(name) {
             let (ok, note) = smokeTest(name)
             return ["ok": true, "tool": name, "status": "ready", "source": "builtin_native", "path": bundled,
-                    "hint": "App 内置原生 iOS 二进制；" + note]
+                    "hint": "App-bundled native iOS binary; " + note]
         }
         let which = TrollRuntimeEngine.exec("which \(name) 2>/dev/null", timeout: 30)
         if which.exitCode == 0 {
             let path = which.output.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\n").first.map(String.init) ?? name
             let (ok, note) = smokeTest(name)
             return ["ok": true, "tool": name, "status": ok ? "ready" : "unverified", "source": "alpine", "path": path,
-                    "hint": "统一环境已有；命令引用 iOS 路径会自动 bind 直读（/ios_workspace、/ios_containers、/ios_system 只读）。" + note]
+                    "hint": "Already present in the unified env; commands referencing iOS paths auto-bind for direct read (/ios_workspace, /ios_containers, /ios_system read-only). " + note]
         }
 
         // 2. Alpine apk 安装：依次尝试候选包名（映射名 / 原名 / py3-xxx）。
@@ -79,7 +79,7 @@ final class ToolInstallTool: MCPTool {
                 let isPy = pkg.hasPrefix("py3-") || Self.pythonHints.contains(name)
                 let (ok, note) = smokeTest(name, importMode: isPy)
                 return ["ok": true, "tool": name, "status": ok ? "installed" : "installed_unverified", "source": "alpine_apk", "package": pkg,
-                        "hint": "已 apk add \(pkg)（" + note + "）。直接调用 `\(name) <参数>` 即可——统一环境（TrollRuntime）内执行并自动 bind 直读 iOS 路径（如 \(name) /var/mobile/xxx 自动改 /ios_mobile/xxx）；缺依赖时首次调用会自动补齐。若冒烟异常：先 `\(name) --help` 看用法；仍无输出用文件重定向验证（`\(name) ... > /tmp/x; cat /tmp/x`）"]
+                        "hint": "apk add \(pkg) done (" + note + "). Just call `\(name) <args>` — runs in the unified env (TrollRuntime) with auto-bind direct read of iOS paths (e.g. \(name) /var/mobile/xxx 自动改 /ios_mobile/xxx）；缺依赖时首次调用会自动补齐。若冒烟异常：先 `\(name) --help` 看用法；仍无输出用文件重定向验证（`\(name) ... > /tmp/x; cat /tmp/x`）"]
             }
             InstallationRegistry.shared.finish(ok: false, summary: TrollRuntimeEngine.installDiagnose(apk.output, timedOut: apk.timedOut, exitCode: apk.exitCode))
             lastApkErr = apk.output
@@ -97,7 +97,7 @@ final class ToolInstallTool: MCPTool {
                 let diag = TrollRuntimeEngine.installDiagnose(apkPy.output, timedOut: apkPy.timedOut, exitCode: apkPy.exitCode)
                 InstallationRegistry.shared.finish(ok: false, summary: diag)
                 return ["ok": false, "tool": name, "status": "failed", "source": "alpine_apk",
-                        "error": "python3/pip 安装失败", "hint": diag]
+                        "error": "python3/pip install failed", "hint": diag]
             }
             let pipName = name.hasPrefix("py-") ? String(name.dropFirst(3)) : name
             InstallationRegistry.shared.start(key: "pip install \(pipName)")
@@ -109,7 +109,7 @@ final class ToolInstallTool: MCPTool {
                 InstallationRegistry.shared.finish(ok: true, summary: "pip installed \(pipName)")
                 let (ok, note) = smokeTest(pipName, importMode: true)
                 return ["ok": true, "tool": name, "status": ok ? "installed" : "installed_unverified", "source": "pip",
-                        "hint": "已 pip install \(pipName)（" + note + "）。统一环境 python3（Alpine）——apk/pip 装包直接可见可用；含 C 扩展的包优先 apk 的 py3- 预编译版（性能好）"]
+                        "hint": "pip install \(pipName) done (" + note + "). Unified-env python3 (Alpine) — apk/pip packages directly visible and usable; for C-extension packages prefer apk's py3- prebuilt (better performance)"]
             }
             InstallationRegistry.shared.finish(ok: false, summary: TrollRuntimeEngine.installDiagnose(pip.output, timedOut: pip.timedOut, exitCode: pip.exitCode))
             lastApkErr = pip.output
@@ -121,8 +121,8 @@ final class ToolInstallTool: MCPTool {
             if let src = source, !src.isEmpty {
                 guard let token = GHConfig.activeToken else {
                     return ["ok": false, "tool": name, "status": "ci_blocked",
-                            "error": "Alpine 无此包且未登录 GitHub（无法触发 CI 交叉编译）",
-                            "hint": "原生 iOS 二进制只能走三条通道：内置 bin / CI 交叉编译(github.trigger_build) / 自写 dylib(inject load_dylib)。请先在 设置-GitHub 账号 登录后重试"]
+                            "error": "Not an Alpine package and not logged into GitHub (can't trigger CI cross-compile)",
+                            "hint": "Native iOS binaries only come through three channels: bundled bin / CI cross-compile (github.trigger_build) / custom dylib (inject load_dylib). Log in under Settings-GitHub account first, then retry"]
                 }
                 var body: [String: Any] = ["ref": GHConfig.branch]
                 body["inputs"] = ["name": name, "source": src]
@@ -131,8 +131,8 @@ final class ToolInstallTool: MCPTool {
                     token: token, body: body)
                 if code == 204 {
                     return ["ok": true, "tool": name, "status": "ci_triggered", "workflow": "build-tool.yml", "source": src,
-                            "next": "几十秒后 github.fetch_runs 查进度；成功后 github.download_artifact 取产物（解压在 Workspace/downloads/run_<id>/）",
-                            "note": "best-effort：Makefile 类工程可直接交叉编译；若 artifact 为空请用 PC 交叉编译或改走自写 dylib"]
+                            "next": "Check progress with github.fetch_runs after tens of seconds; on success fetch the artifact with github.download_artifact (unpacked at Workspace/downloads/run_<id>/）",
+                            "note": "best-effort: Makefile-type projects can be cross-compiled directly; if artifact is empty, cross-compile on a PC or write a custom dylib"]
                 }
                 return ["ok": false, "tool": name, "status": "ci_failed", "http_status": code,
                         "message": (json?["message"] as? String) ?? "trigger failed"]
@@ -141,7 +141,7 @@ final class ToolInstallTool: MCPTool {
 
         // 5. 兜底指引
         return ["ok": false, "tool": name, "status": "not_found",
-                "hint": "apk 无此包（试了 \(apkCandidates(for: name).joined(separator: "/"))）。可尝试：① tool.install profile:re（逆向工具链批装）；② 提供 source 仓库 URL 走 CI 交叉编译（原生 iOS 二进制）；③ shell.exec('apk search \(name)') 找近似包名；④ 自写工具 inject load_dylib"]
+                "hint": "Not an apk package (tried \(apkCandidates(for: name).joined(separator: "/"))). Options: ① tool.install profile:re (reverse-eng toolchain batch); ② provide a source repo URL 走 CI 交叉编译（原生 iOS 二进制）；③ shell.exec('apk search \(name)') 找近似包名；④ 自写工具 inject load_dylib"]
     }
 
     /// Alpine 候选包名：映射名 → 原名 → py3-xxx（Python 包在 Alpine 多为 py3- 前缀）
@@ -158,12 +158,12 @@ final class ToolInstallTool: MCPTool {
                 let out = (r["stdout"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 let exit = r["exit_code"] as? Int ?? 1
                 if exit == 0 && out.contains("IMPORT_OK") {
-                    return (true, "Alpine python 冒烟 `import \(safe)` OK（" + String(out.prefix(60)) + "）——统一环境 python3（Alpine）——apk 包直接可见可用")
+                    return (true, "Alpine python smoke `import \(safe)` OK (" + String(out.prefix(60)) + ") — unified-env python3 (Alpine）——apk 包直接可见可用")
                 }
-                let errNote = out.isEmpty ? "无输出" : String(out.prefix(80))
-                return (false, "Alpine python `import \(safe)` 失败（exit \(exit)：" + errNote + "）——包可能没装进统一环境 python3，或 C 扩展在解释器跑不动——重计算用显式 py3-native（原生 numpy/pandas 已内置），轻量装包用 apk py3-xxx")
+                let errNote = out.isEmpty ? "no output" : String(out.prefix(80))
+                return (false, "Alpine python `import \(safe)` failed (exit \(exit): " + errNote + ") — the package may not be installed into unified-env python3, 或 C 扩展在解释器跑不动——重计算用显式 py3-native（原生 numpy/pandas 已内置），轻量装包用 apk py3-xxx")
             } catch {
-                return (false, "Alpine python `import \(safe)` 冒烟异常：\(error)")
+                return (false, "Alpine python `import \(safe)` smoke-test error: \(error)")
             }
         }
         for flag in ["--version", "-v", "--help", "-h"] {
@@ -173,14 +173,14 @@ final class ToolInstallTool: MCPTool {
                 let exit = r["exit_code"] as? Int ?? 1
                 if exit == 0 && !out.isEmpty {
                     let first = out.split(separator: "\n").first.map(String.init) ?? ""
-                    return (true, "冒烟验证 `\(name) \(flag)` OK（" + String(first.prefix(90)) + "）")
+                    return (true, "Smoke `\(name) \(flag)` OK (" + String(first.prefix(90)) + ")")
                 }
                 if exit == 0 && out.isEmpty {
-                    return (false, "冒烟 `\(name) \(flag)` exit 0 但无输出——stdout 缓冲/捕获问题，工具可能「装了但结果不可见」；调用后若空输出请用 `> /tmp/x; cat /tmp/x` 重定向验证")
+                    return (false, "Smoke `\(name) \(flag)` exited 0 but no output — stdout buffering/capture issue, the tool may be installed but results invisible; if output is empty after the call, verify with `> /tmp/x; cat /tmp/x` redirection")
                 }
             } catch { }
         }
-        return (false, "冒烟 `\(name) --version/-v/--help/-h` 全部失败——工具可能装了但不可调用，或该工具无版本/帮助参数；先用 `\(name) --help` 看真实用法")
+        return (false, "Smoke `\(name) --version/-v/--help/-h` all failed — the tool may be installed but not invocable, or has no version/help flag; first try `\(name) --help` 看真实用法")
     }
 
     private func apkCandidates(for name: String) -> [String] {
@@ -216,7 +216,7 @@ final class ToolInstallTool: MCPTool {
         }
         return ["ok": okCount == pkgs.count, "profile": profile,
                 "installed": okCount, "total": pkgs.count, "results": results,
-                "hint": "装的是 Alpine(Linux) 工具：可 bind 直读 iOS 文件，但无法编译/注入原生 iOS 二进制（那类走 tool.install name:jtool2 触发 CI）"]
+                "hint": "Installed an Alpine (Linux) tool: can bind-read iOS files, but can't compile/inject native iOS binaries (those go through tool.install name:jtool2 triggering CI)"]
     }
 
     // MARK: - 查找内置原生 bin
@@ -291,11 +291,11 @@ final class ToolInstallTool: MCPTool {
     /// 原生 iOS 二进制注册表（Alpine 没有，走 CI 交叉编译；note 说明真实可行性）
     private static let nativeRegistry: [String: (source: String, note: String)] = [
         "jtool2": ("https://github.com/Neurotycho/jtool2",
-                   "Makefile 工程，best-effort 交叉编译；输出 jtool（Mach-O 深度分析），iOS 逆向标配"),
+                   "Makefile project, best-effort cross-compile; outputs jtool (deep Mach-O analysis), standard iOS reverse tool"),
         "class-dump": ("https://github.com/stevemacarthur/class-dump",
-                       "macOS Makefile，iOS 交叉编译需改 SDK 目标；若 artifact 为空请 PC 编译后自写 dylib 包装"),
+                       "macOS Makefile, iOS cross-compile needs SDK target changes; if artifact is empty, compile on a PC then wrap with a custom dylib"),
         "frida-server": ("https://github.com/frida/frida",
-                         "需要越狱/内核信任，TrollStore 下通常不可用；不建议，仅列出说明边界")
+                         "Needs jailbreak/kernel trust, usually unavailable under TrollStore; not recommended, listed only to state the boundary")
     ]
 }
 

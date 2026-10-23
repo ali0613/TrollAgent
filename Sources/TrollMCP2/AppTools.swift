@@ -71,8 +71,8 @@ final class AppDepsTool: MCPTool {
         out["inject_boot_candidates"] = bootCandidates
         out["inject_lazy_candidates"] = lazyCandidates
         out["recommendation"] = bootCandidates.isEmpty
-            ? "主二进制直接依赖里没有可注入的 App 内 framework；需 app.decrypt 砸壳后注入主二进制，或改用 HID/ui.* 界面自动化"
-            : "优先注入: \(bootCandidates)"
+            ? "No injectable in-app framework among the main binary's direct dependencies; decrypt with app.decrypt and inject the main binary, or use HID/ui.* UI automation instead"
+            : "Injection priority: \(bootCandidates)"
         return out
     }
 }

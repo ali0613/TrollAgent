@@ -48,10 +48,10 @@ enum TrustEnabler {
     /// 注入状态的中文描述（UI / MCP 直接展示）
     static var injectStateText: String {
         switch injectState {
-        case .notInjected: return "未注入"
-        case .injecting:   return "注入中…"
-        case .injected:    return "已注入（本次运行有效）"
-        case .failed(let why): return "注入失败：\(why)"
+        case .notInjected: return "Not injected"
+        case .injecting:   return "Injecting…"
+        case .injected:    return "Injected (valid for this run)"
+        case .failed(let why): return "Injection failed: \(why)"
         }
     }
 
@@ -67,21 +67,21 @@ enum TrustEnabler {
         switch resolvePath() {
         case .jailbreak:
             guard let appex = vpnTunnelBinaryPath() else {
-                completion(false, "找不到 VpnTunnel.appex"); return
+                completion(false, "VpnTunnel.appex not found"); return
             }
             let ok = trustFileViaJailbreakd(appex)
-            injectState = ok ? .injected : .failed("jailbreakd trust 返回非 0")
-            completion(ok, ok ? "已通过 jailbreakd 注入信任" : "jailbreakd 注入失败（看系统日志）")
+            injectState = ok ? .injected : .failed("jailbreakd trust returned non-zero")
+            completion(ok, ok ? "Trust injected via jailbreakd" : "jailbreakd injection failed (see system log)")
 
         case .kfdInject:
             guard let helper = kfdHelperPath() else {
-                completion(false, "找不到 kfd_helper 二进制（bin/ 目录缺失）"); return
+                completion(false, "kfd_helper binary not found (bin/ dir missing)"); return
             }
             guard let appex = vpnTunnelBinaryPath() else {
-                completion(false, "找不到 VpnTunnel.appex（PlugIns/ 缺失）"); return
+                completion(false, "VpnTunnel.appex not found (PlugIns/ missing)"); return
             }
             if isInjected {
-                completion(true, "已在本次运行中注入过（trust cache 内存态有效）"); return
+                completion(true, "Already injected this run (trust cache in-memory state valid)"); return
             }
             injectState = .injecting
             DispatchQueue.global(qos: .userInitiated).async {
@@ -103,16 +103,16 @@ enum TrustEnabler {
                 let detail: String
                 if ok {
                     injectState = .injected
-                    detail = "注入成功（耗时 \(cost)s）——现在可以连接 VPN 了"
+                    detail = "Injection OK (\(cost)s) — you can connect the VPN now"
                 } else {
-                    injectState = .failed("exit 非 0（耗时 \(cost)s）")
-                    detail = "注入失败（耗时 \(cost)s）——详情看 /var/mobile/Documents/kfd_helper.log；保持手机空闲 30s 后再试一次"
+                    injectState = .failed("exit non-zero (took \(cost)s)")
+                    detail = "Injection failed (\(cost)s) — see /var/mobile/Documents/kfd_helper.log; keep the phone idle 30s then retry"
                 }
                 DispatchQueue.main.async { completion(ok, detail) }
             }
 
         case .fallback:
-            completion(false, "当前系统不支持 kfd 注入（iOS \(UIDevice.current.systemVersion)）——直接用本地代理抓包")
+            completion(false, "kfd injection not supported on this system (iOS \(UIDevice.current.systemVersion)) — use the local proxy for capture directly")
         }
     }
 

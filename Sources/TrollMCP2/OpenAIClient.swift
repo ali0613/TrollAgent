@@ -89,14 +89,14 @@ final class OpenAIClient {
         if corrected != c.apiProtocol {
             // 协议变了, 旧的 compatLevel 记忆(尤其 L5=Responses)基于旧协议不再适用 → 重置到 L0 重新试探
             c.compatLevel = 0
-            NetworkLog.shared.log("\(c.name): 协议自动纠正 \(c.apiProtocol)→\(corrected) (模型=\(c.model)), 兼容级别已重置")
+            NetworkLog.shared.log("\(c.name): protocol auto-corrected \(c.apiProtocol)→\(corrected) (model=\(c.model)), compat level reset")
             c.apiProtocol = corrected
         }
         // v4.4.17：OpenAI 格式端点自动补 /v1 (用户已填 v1/含版本路径则不补)
         if c.apiProtocol == "OpenAI Chat Completions" || c.apiProtocol == "OpenAI Responses" {
             let nb = ModelConfig.normalizeBaseURL(c.baseURL)
             if nb != c.baseURL {
-                NetworkLog.shared.log("\(c.name): Base URL 自动补 /v1: \(c.baseURL)→\(nb)")
+                NetworkLog.shared.log("\(c.name): Base URL auto-appended /v1: \(c.baseURL)→\(nb)")
                 c.baseURL = nb
             }
         }
@@ -123,9 +123,9 @@ final class OpenAIClient {
         let conversation = compactSource.map { m -> String in
             let roleLabel: String
             switch m.role {
-            case "user": roleLabel = "用户"
-            case "assistant": roleLabel = "助手"
-            case "tool": roleLabel = "工具结果(\(m.toolName ?? "tool"))"
+            case "user": roleLabel = "User"
+            case "assistant": roleLabel = "Assistant"
+            case "tool": roleLabel = "Tool result (\(m.toolName ?? "tool"))"
             default: roleLabel = m.role
             }
             return "【\(roleLabel)】\n\(m.content)"
@@ -172,8 +172,8 @@ final class OpenAIClient {
                 }
                 var msgs = messages
                 if let s = summary, !s.isEmpty,
-                   let idx = msgs.firstIndex(where: { $0.role == "system" && $0.content.hasPrefix("[系统] 已省略") }) {
-                    msgs[idx] = ChatMessage(role: "system", content: "【长会话摘要·模型生成】\n" + s)
+                   let idx = msgs.firstIndex(where: { $0.role == "system" && $0.content.hasPrefix("[System] 已省略") }) {
+                    msgs[idx] = ChatMessage(role: "system", content: "[Long-conversation summary, model-generated]\n" + s)
                 }
                 self.sendInner(messages: msgs, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: completion)
             }
@@ -195,9 +195,9 @@ final class OpenAIClient {
         usedHalfOpenPermit = gate.usedHalfOpenPermit
         if !gate.allowed {
             let el = Int(Date().timeIntervalSince(requestStart) * 1000)
-            NetworkLog.shared.log("\(config.name) 已熔断，请求被拒绝 (\(el)ms)")
+            NetworkLog.shared.log("\(config.name) circuit-broken, request rejected (\(el)ms)")
             completion(.failure(NSError(domain: "OpenAIClient", code: -503,
-                userInfo: [NSLocalizedDescriptionKey: "供应商「\(config.name)」已熔断 (连续failed过多，已暂停请求以免卡死)。可在模型管理页点击该模型重置，或约 60 秒后自动恢复探测。"])))
+                userInfo: [NSLocalizedDescriptionKey: "Provider «\(config.name)» circuit-broken (too many consecutive failures, requests paused to avoid hanging). Reset it on the model-management page, 或约 60 秒后自动恢复探测。"])))
             return
         }
         UsageRecorder.shared.begin(messages: messages)
@@ -209,7 +209,7 @@ final class OpenAIClient {
         // 历史被记忆为"纯对话"(L3/L4) 的旧配置，给一次恢复工具调用的机会：
         // 先试 L5 (Responses API + 工具），failed自动回落 L3。
         if start == 3 || start == 4 {
-            NetworkLog.shared.log("\(config.name): 当前记忆级别为纯对话，先尝试 Responses API 恢复工具调用…")
+            NetworkLog.shared.log("\(config.name): current memory level is pure chat, trying Responses API to restore tool calls first…")
             start = 5
         }
         // v3.5.11：带工具请求优先走 L5 (Responses API = Codex 同款端点)——对齐 Codex/Claude Code
@@ -222,7 +222,7 @@ final class OpenAIClient {
         // v4.4.16：L5(Responses) 强制试用只对推理系列(走 Responses 的 gpt-5/o系列)触发；
         // 此前对所有带工具请求无差别试 L5, 把 deepseek 也拉去 responses 端点(慢/支持差)并记住 L5
         if hasTools, config.apiProtocol != "OpenAI Responses", config.compatLevel == 0, config.isReasoningModel {
-            NetworkLog.shared.log("\(config.name): 带工具请求，优先尝试 L5 Responses API (Codex 同款端点)…")
+            NetworkLog.shared.log("\(config.name): tool-enabled request, preferring L5 Responses API (Codex-style endpoint)…")
             start = 5
         }
         if start > 0 {
@@ -325,7 +325,7 @@ final class OpenAIClient {
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
         // 记录发送的载荷摘要 (不含 apiKey），便于排查
-        NetworkLog.shared.log("\(config.name) L\(level) \(levelName(level)) → POST \(endpoint)，字段: \(body.keys.sorted().joined(separator: ","))")
+        NetworkLog.shared.log("\(config.name) L\(level) \(levelName(level)) → POST \(endpoint), fields: \(body.keys.sorted().joined(separator: ","))")
         if isFirst {
             onStatus?("正在等待模型响应…")
         } else {
@@ -344,7 +344,7 @@ final class OpenAIClient {
                 // 也可能是中转对完整载荷处理太慢/卡死，降级到轻量载荷很可能OK。
                 let isTimeout = (err.code == NSURLErrorTimedOut
                     || err.domain == NSURLErrorDomain && err.code == -1001
-                    || error.localizedDescription.contains("超时")
+                    || error.localizedDescription.contains("timeout")
                     || error.localizedDescription.localizedLowercase.contains("timed out"))
                 if isTimeout {
                     let next = self.nextLevel(after: level, hasTools: tools != nil && !(tools?.isEmpty ?? true), avoidL5: avoidL5)
@@ -358,7 +358,7 @@ final class OpenAIClient {
                 }
                 // 其它网络错误 (断网等）降级无意义
                 let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
-                NetworkLog.shared.log("\(self.config.name) L\(level) 网络错误 (\(el)ms): \(error.localizedDescription)")
+                NetworkLog.shared.log("\(self.config.name) L\(level) network error (\(el)ms): \(error.localizedDescription)")
                 completion(.failure(error))
                 return
             }
@@ -446,9 +446,9 @@ final class OpenAIClient {
                     return
                 }
             }
-            let hint = errorPayload != nil ? "" : "\n提示: 响应非标准 OpenAI 格式，请检查 baseURL 是否指向 /v1 兼容端点。"
+            let hint = errorPayload != nil ? "" : "\nHint: response isn't standard OpenAI format, check that baseURL points to a /v1-compatible endpoint."
             completion(.failure(NSError(domain: "OpenAIClient", code: status,
-                userInfo: [NSLocalizedDescriptionKey: "请求被拒绝 (HTTP \(status)，已尝试到级别 \(level)·\(self.levelName(level)))\n\(String(failMsg.prefix(300)))\(hint)"])))
+                userInfo: [NSLocalizedDescriptionKey: "Request rejected (HTTP \(status), tried up to level \(level)·\(self.levelName(level)))\n\(String(failMsg.prefix(300)))\(hint)"])))
         }
         activeTask = task
         task.resume()
@@ -711,7 +711,7 @@ final class OpenAIClient {
             applyParamAliases(into: &body)
             request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-            NetworkLog.shared.log("\(config.name) L5 Responses API+工具 → POST /responses，字段: \(body.keys.sorted().joined(separator: ","))")
+            NetworkLog.shared.log("\(config.name) L5 Responses API+tools → POST /responses, fields: \(body.keys.sorted().joined(separator: ","))")
             if attempt > 0 {
                 onStatus?("正在重试 Responses API (第 \(attempt + 1)/3 次)…")
             } else {
@@ -747,13 +747,13 @@ final class OpenAIClient {
                     if let err = json["error"] as? [String: Any],
                        let msg = err["message"] as? String {
                         let nsErr = NSError(domain: "OpenAIClient", code: status,
-                            userInfo: [NSLocalizedDescriptionKey: "Responses API 错误: \(msg)"])
+                            userInfo: [NSLocalizedDescriptionKey: "Responses API error: \(msg)"])
                         if attempt < 2 && shouldRetry(nsErr, status) {
                             DispatchQueue.global().asyncAfter(deadline: .now() + Double(1 << attempt)) { fire(attempt: attempt + 1) }
                             return
                         }
                         let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
-                        NetworkLog.shared.log("\(self.config.name) L5 failed (HTTP \(status)，耗时 \(el)ms): \(msg)")
+                        NetworkLog.shared.log("\(self.config.name) L5 failed (HTTP \(status), took \(el)ms): \(msg)")
                         completion(.failure(nsErr))
                         return
                     }
@@ -1077,7 +1077,7 @@ final class OpenAIClient {
             if let err = json["error"] as? [String: Any],
                let msg = err["message"] as? String {
                 completion(.failure(NSError(domain: "OpenAIClient", code: 2,
-                    userInfo: [NSLocalizedDescriptionKey: "Anthropic 错误: \(msg)"])))
+                    userInfo: [NSLocalizedDescriptionKey: "Anthropic error: \(msg)"])))
                 return
             }
             guard let content = json["content"] as? [[String: Any]],

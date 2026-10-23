@@ -86,7 +86,7 @@ final class PackageTool: MCPTool {
             let contentStart = offset + 60
             // v3.6.16: 防御——ar size 异常(0/超界)时跳过该成员并前移, 避免 subdata 越界
             guard size > 0, contentStart <= data.count else {
-                ShellDiag.log("package inspectDeb: member '\(name)' size=\(size) 异常 → 跳过 (offset=\(offset), total=\(data.count))")
+                ShellDiag.log("package inspectDeb: member '\(name)' size=\(size) abnormal → skipped (offset=\(offset), total=\(data.count))")
                 offset = contentStart
                 continue
             }
@@ -105,8 +105,8 @@ final class PackageTool: MCPTool {
                     dataTarName = name
                     // v3.6.19g: xz container 无法解析(Apple LZMA 仅 .lzma-alone)，标注提示，避免 data_file_count=0 误导
                     if content.count >= 6 && content[0..<6].elementsEqual([0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00]) {
-                        dataCompressionNote = "data.tar 为 xz container —— iOS Apple LZMA 仅支持 .lzma-alone，无法解析文件列表；请在电脑端用 7-Zip/bsdtar 解包"
-                        ShellDiag.log("package inspectDeb: data.tar=\(name) xz container — 无法解析，提示用户电脑端处理")
+                        dataCompressionNote = "data.tar is an xz container — iOS Apple LZMA only supports .lzma-alone, can't parse the file list; use 7-Zip/bsdtar 解包"
+                        ShellDiag.log("package inspectDeb: data.tar=\(name) xz container — can't parse, tell the user to handle it on a PC")
                     } else {
                         dataFileList = tarFileList(content) ?? []
                         ShellDiag.log("package inspectDeb data.tar=\(name) files=\(dataFileList.count)")

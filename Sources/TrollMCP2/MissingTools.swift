@@ -445,7 +445,7 @@ final class WebFetchTool: MCPTool {
         // v3.1.21: web.fetch failed自动 fallback 到内置浏览器
         // AI 根本不需要知道这个逻辑，直接调用 web.fetch 就能得到结果
         if html == nil {
-            AuditLog.shared.log("web.fetch", detail: "直接 fetch failed，fallback 到内置浏览器: \(urlString)")
+            AuditLog.shared.log("web.fetch", detail: "Direct fetch failed, falling back to the built-in browser: \(urlString)")
             do {
                 // 1. 用内置浏览器打开网页
                 if let navTool = ToolRegistry.shared.tool(named: "browser.navigate") {
@@ -468,7 +468,7 @@ final class WebFetchTool: MCPTool {
                     }
                 }
             } catch {
-                AuditLog.shared.log("web.fetch", detail: "fallback 也failed: \(error.localizedDescription)")
+                AuditLog.shared.log("web.fetch", detail: "Fallback also failed: \(error.localizedDescription)")
             }
         }
         
@@ -654,7 +654,7 @@ final class KnowledgeStore {
         for name in names {
             try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
         }
-        AuditLog.shared.log("knowledge.clear", detail: "清空 \(names.count) 个知识条目")
+        AuditLog.shared.log("knowledge.clear", detail: "Cleared \(names.count) knowledge entries")
         return names.count
     }
 
@@ -806,7 +806,7 @@ final class KnowledgeSearchTool: MCPTool {
         // 主路径：BM25 加权检索
         let scored = KnowledgeStore.shared.bm25Search(query: query, limit: limit)
         if !scored.isEmpty {
-            AuditLog.shared.log("knowledge.search", detail: "\(query) → BM25 \(scored.count) 条")
+            AuditLog.shared.log("knowledge.search", detail: "\(query) → BM25 \(scored.count) hits")
             return ["query": query, "engine": "bm25", "count": scored.count,
                     "hits": scored.map { ["file": $0.file, "line": $0.line, "snippet": $0.snippet, "score": Double(round($0.score * 1000) / 1000)] }]
         }
@@ -821,7 +821,7 @@ final class KnowledgeSearchTool: MCPTool {
                 if hits.count >= limit { break }
             }
         }
-        AuditLog.shared.log("knowledge.search", detail: "\(query) → contains \(hits.count) 条")
+        AuditLog.shared.log("knowledge.search", detail: "\(query) → contains \(hits.count) hits")
         return ["query": query, "engine": "contains", "count": hits.count, "hits": hits]
     }
 }

@@ -25,7 +25,7 @@ struct ModelConfig: Codable, Identifiable, Hashable {
     /// 0=完整载荷 1=互换token参数名 2=去掉tool_choice 3=去掉tools纯对话 4=最小载荷
     var compatLevel: Int = 0
     /// v2.9.107：分组名 (供应商分组管理，对齐 cc-switch provider groups）
-    var group: String = "默认"
+    var group: String = "default"
     /// v3.5.13：可配置的参数名别名映射（标准键 → 该供应商认的键），如
     /// {"max_tokens":"max_completion_tokens", "reasoning_effort":"reasoning"}。
     /// 覆盖"不同中转对同一参数名接受度不同"的场景，不只内置 max_tokens 互换。
@@ -50,7 +50,7 @@ struct ModelConfig: Codable, Identifiable, Hashable {
     init(id: UUID = UUID(), name: String, provider: String, apiProtocol: String = "OpenAI Chat Completions",
          baseURL: String, apiKey: String, model: String, authMethod: String = "Bearer",
          isDefault: Bool = false, temperature: Double = 0.2, maxTokens: Int = 16384, compatLevel: Int = 0,
-         contextTokens: Int = 16000, group: String = "默认", paramAliases: [String: String] = [:]) {
+         contextTokens: Int = 16000, group: String = "default", paramAliases: [String: String] = [:]) {
         self.id = id
         self.name = name
         self.provider = provider
@@ -86,7 +86,7 @@ struct ModelConfig: Codable, Identifiable, Hashable {
         maxTokens = (try? c.decode(Int.self, forKey: .maxTokens)) ?? 16384
         contextTokens = (try? c.decode(Int.self, forKey: .contextTokens)) ?? 16000
         compatLevel = (try? c.decode(Int.self, forKey: .compatLevel)) ?? 0
-        group = (try? c.decode(String.self, forKey: .group)) ?? "默认"
+        group = (try? c.decode(String.self, forKey: .group)) ?? "default"
         paramAliases = (try? c.decode([String: String].self, forKey: .paramAliases)) ?? [:]
     }
 }
@@ -350,7 +350,7 @@ final class ModelAPIClient {
     func fetchModelList(config: ModelConfig, completion: @escaping (ModelListResult) -> Void) {
         let base = config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + "/models") else {
-            completion(.failure("无效的 Base URL"))
+            completion(.failure("Invalid Base URL"))
             return
         }
         var request = URLRequest(url: url, timeoutInterval: 30)
@@ -386,7 +386,7 @@ final class ModelAPIClient {
             endpoint = "/chat/completions"
         }
         guard let url = URL(string: base + endpoint) else {
-            completion(.failure(NSError(domain: "ModelAPIClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "无效的 Base URL"])))
+            completion(.failure(NSError(domain: "ModelAPIClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid Base URL"])))
             return
         }
         var request = URLRequest(url: url, timeoutInterval: 30)
@@ -426,14 +426,14 @@ final class ModelAPIClient {
                 }
                 if let http = response as? HTTPURLResponse {
                     if (200...299).contains(http.statusCode) {
-                        completion(.success("连接OK (HTTP \(http.statusCode))"))
+                        completion(.success("Connection OK (HTTP \(http.statusCode))"))
                     } else {
                         let raw = String(data: data ?? Data(), encoding: .utf8) ?? ""
                         completion(.failure(NSError(domain: "ModelAPIClient", code: http.statusCode,
                             userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode): \(raw.prefix(200))"])))
                     }
                 } else {
-                    completion(.success("已收到响应"))
+                    completion(.success("Response received"))
                 }
             }
         }.resume()
@@ -456,7 +456,7 @@ final class ModelAPIClient {
         }
         guard let url = URL(string: base + endpoint) else {
             completion(.failure(NSError(domain: "ModelAPIClient", code: 0,
-                                        userInfo: [NSLocalizedDescriptionKey: "无效的 Base URL"])))
+                                        userInfo: [NSLocalizedDescriptionKey: "Invalid Base URL"])))
             return
         }
         var request = URLRequest(url: url, timeoutInterval: timeout)
@@ -489,7 +489,7 @@ final class ModelAPIClient {
                 }
                 guard let data = data else {
                     completion(.failure(NSError(domain: "ModelAPIClient", code: 0,
-                                                userInfo: [NSLocalizedDescriptionKey: "no response数据"])))
+                                                userInfo: [NSLocalizedDescriptionKey: "no response data"])))
                     return
                 }
                 var text = ""
@@ -712,7 +712,7 @@ final class ConversationStore: ObservableObject {
         isLoading && selectedIndex == activeConvIndex
     }
 
-    func newConversation(title: String = "新会话") {
+    func newConversation(title: String = "New Chat") {
         let conv = ChatConversation(title: title, createdAt: Date(), updatedAt: Date(), messages: [])
         conversations.insert(conv, at: 0)
         selectedId = conv.id
@@ -782,7 +782,7 @@ final class ConversationStore: ObservableObject {
         guard let idx = selectedIndex else { return }
         var conv = conversations[idx]
         conv.messages.removeAll()
-        conv.title = "新会话"
+        conv.title = "New Chat"
         conv.updatedAt = Date()
         conversations[idx] = conv
         sortAndSave()
@@ -913,7 +913,7 @@ final class ConversationStore: ObservableObject {
                 }
                 // 思考去重：实时流已产生 think 步骤则不重复插入
                 if let th = thinking, !th.isEmpty, !trail.contains(where: { $0.kind == .think }) {
-                    trail.insert(TrailStep.done(.think, "已思考", detail: String(th.prefix(300))), at: 0)
+                    trail.insert(TrailStep.done(.think, "Thought", detail: String(th.prefix(300))), at: 0)
                 }
                 self.conversations[idx].messages[mi].trail = trail
                 self.save()
@@ -1084,10 +1084,10 @@ final class ConversationStore: ObservableObject {
                             tools: Array(Set(usedTools)).sorted().suffix(8))
                     }
                     // v2.9.127：轨迹——回复done，附到消息持久化
-                    self.trailStep(.done(.note, "AI 回复done", detail: String(text.prefix(80))))
+                    self.trailStep(.done(.note, "AI reply done", detail: String(text.prefix(80))))
                     // v2.9.82：done通知 (后台时）
                     TaskNotify.shared.endBackground()
-                    TaskNotify.shared.notifyIfBackground(title: "✅ AI 已回复", body: String(text.prefix(60)))
+                    TaskNotify.shared.notifyIfBackground(title: "✅ AI replied", body: String(text.prefix(60)))
                     if let sid = self.streamingMessageId {
                         // 流式已显示，更新最终文本 + thinking
                         self.updateMessageContent(id: sid, content: text)
@@ -1140,7 +1140,7 @@ final class ConversationStore: ObservableObject {
                     if trimmedFinal.isEmpty && lastMsgIsTool && self.emptyReplyCorrectionCount < 2 {
                         self.emptyReplyCorrectionCount += 1
                         self.pendingEmptyReplyCorrection = "你刚刚执行了工具但回复正文是空的。请基于已返回的工具结果，用一两句话向用户给出明确结论（或说明下一步该做什么），不要只回复空白或「Done」。"
-                        self.trailStep(.done(.note, "空回复纠正", detail: "模型空文本回复，注入纠正重跑", ok: false))
+                        self.trailStep(.done(.note, "Empty-reply correction", detail: "Model returned empty text, injected a correction and reran", ok: false))
                         // 清掉刚渲染的空 assistant 消息，避免界面残留空白气泡
                         if let sid = self.streamingMessageId {
                             self.removeMessage(id: sid)
@@ -1287,14 +1287,14 @@ final class ConversationStore: ObservableObject {
                     }
                     // v2.9.82：failed通知 (后台时）
                     TaskNotify.shared.endBackground()
-                    TaskNotify.shared.notifyIfBackground(title: "⚠️ 任务出错", body: String(error.localizedDescription.prefix(60)))
+                    TaskNotify.shared.notifyIfBackground(title: "⚠️ Task error", body: String(error.localizedDescription.prefix(60)))
                     // 流式failed时保留已输出的部分文本，追加错误提示
                     if self.streamingMessageId != nil {
                         self.streamingMessageId = nil
                     }
                     let errMsg = ChatMessage(role: "assistant", content: "⚠️ \(error.localizedDescription)", isError: true)
                     self.appendToCurrent(errMsg)
-                    self.trailStep(.done(.note, "请求failed", detail: String(error.localizedDescription.prefix(200)), ok: false))
+                    self.trailStep(.done(.note, "Request failed", detail: String(error.localizedDescription.prefix(200)), ok: false))
                     self.attachTrail(to: errMsg.id)
                     // v3.1.70：请求链结束——解除活动会话绑定
                     self.activeConvId = nil
@@ -1417,7 +1417,7 @@ final class ConversationStore: ObservableObject {
             if !missing.isEmpty && self.paramCorrectionCount < 2 {
                 self.paramCorrectionCount += 1
                 self.pendingParamCorrection = "你要调用的工具 \(call.name) 缺少必填参数: \(missing.joined(separator: "、"))。请补齐这些参数后再调用该工具，不要用同样方式反复重试同一个缺参调用。"
-                self.trailStep(.done(.note, "工具参数缺失被拦", detail: "\(call.name) 缺: \(missing.joined(separator: "、"))", ok: false))
+                self.trailStep(.done(.note, "Missing tool params blocked", detail: "\(call.name) missing: \(missing.joined(separator: ", "))", ok: false))
                 // v3.5.6 审计修正：纠正重跑前，必须先清掉刚挂上但未执行的 toolCalls——
                 // 否则会话里留下"assistant 带 toolCalls 却无 tool 结果"的非法历史序列，
                 // OpenAI/Anthropic 会拒绝（tool_call 必须紧跟 tool message），纠正重跑会失败。
@@ -1621,7 +1621,7 @@ final class ConversationStore: ObservableObject {
         parts.append("工作区: \(Workspace.root.path)")
         if let idx = ConversationStore.shared.selectedIndex,
            idx < ConversationStore.shared.conversations.count {
-            parts.append("当前会话: \(ConversationStore.shared.conversations[idx].title)")
+            parts.append("Current conversation: \(ConversationStore.shared.conversations[idx].title)")
         }
         // v3.1.5: 自动提取的关键信息 (App 名、bundle id、文件路径等）
         if let hint = AutoContextExtractor.shared.contextHint() {
@@ -1844,7 +1844,7 @@ final class ConversationStore: ObservableObject {
                 convs[ci].messages[mi].isError = true
                 let c = convs[ci].messages[mi].content
                 if c.isEmpty || c == "…" {
-                    convs[ci].messages[mi].content = "⚠️ 执行中断：App 在工具运行期间被系统终止（闪退）。请重发该命令；git/vim/curl 等版本检查已改走原生探测不会再触发闪退。"
+                    convs[ci].messages[mi].content = "⚠️ Execution interrupted: the app was terminated by the system (crash) while a tool was running. Please resend the command; version checks for git/vim/curl now use native probing and won't trigger crashes."
                 }
                 cleaned = true
             }

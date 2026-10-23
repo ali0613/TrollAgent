@@ -133,7 +133,7 @@ enum DecryptEngine {
             Thread.sleep(forTimeInterval: TimeInterval(waitSeconds))
             var pid0 = find()
             if pid0 > 0 { return (pid0, errors) }
-            errors.append(["step": "ls_workspace_open", "exit": 0, "stderr": "openApplicationWithBundleID 未拉起 (系统限制或 App 不可启动)"])
+            errors.append(["step": "ls_workspace_open", "exit": 0, "stderr": "openApplicationWithBundleID didn't launch (system restriction or app not startable)"])
         }
 
         // 方法 1：open -b
@@ -379,7 +379,7 @@ enum DecryptEngine {
         // —— 参数检查 ——
         guard !bundleId.isEmpty else {
             return DecryptResult(ok: false, errorCode: "param", errorReason: "bundle_id empty",
-                                 nextStep: "传入目标 App 的 Bundle ID")
+                                 nextStep: "Pass the target app's Bundle ID")
         }
         guard let app = AppCatalog.list().first(where: { $0.bundleId == bundleId }) else {
             return DecryptResult(ok: false, errorCode: "target", errorReason: "app not found: \(bundleId)",
@@ -411,8 +411,8 @@ enum DecryptEngine {
         }
         guard pid > 0 else {
             return DecryptResult(ok: false, errorCode: "target",
-                                 errorReason: "目标 App 启动failed (open -b + launchd SubmitAndStart 均无效)",
-                                 nextStep: "手动打开目标 App 后再执行砸壳；或在 TrollStore 里确认该 App launches normally",
+                                 errorReason: "Target app launch failed (open -b + launchd SubmitAndStart both ineffective)",
+                                 nextStep: "Manually open the target app, then decrypt; or confirm in TrollStore that the app launches normally",
                                  pid: 0, launchErrors: launchErrors)
         }
         // v2.9.217：launchd 复制 bundle 的初始化窗口；open -b 前台启动也等 5 秒让 dyld 完整初始化。
@@ -426,7 +426,7 @@ enum DecryptEngine {
             let viaCA = decryptViaControlAgent(app: app, bundleId: bundleId, pid: pid, launchErrors: launchErrors)
             if viaCA.ok { return viaCA }
             return DecryptResult(ok: false, errorCode: "env",
-                                 errorReason: "注入式砸壳不可用: \(viaCA.errorReason)",
+                                 errorReason: "Injection-based decrypt unavailable: \(viaCA.errorReason)",
                                  nextStep: viaCA.nextStep, pid: pid, launchErrors: launchErrors)
         }
 
@@ -439,7 +439,7 @@ enum DecryptEngine {
             let viaCA = decryptViaControlAgent(app: app, bundleId: bundleId, pid: pid, launchErrors: launchErrors)
             if viaCA.ok { return viaCA }
             return DecryptResult(ok: false, errorCode: "env",
-                                 errorReason: "task_for_pid failed (kern_return=\(Int(kr)))且注入式砸壳降级不可用: \(viaCA.errorReason)",
+                                 errorReason: "task_for_pid failed (kern_return=\(Int(kr))) and injection-decrypt fallback unavailable: \(viaCA.errorReason)",
                                  nextStep: viaCA.nextStep, pid: pid, launchErrors: launchErrors)
         }
         defer { DeviceProbe.shared.tm_mach_port_deallocate(DeviceProbe.shared.tm_mach_task_self(), task) }
@@ -492,8 +492,8 @@ enum DecryptEngine {
             try FileManager.default.copyItem(atPath: app.path, toPath: destApp)
         } catch {
             return DecryptResult(ok: false, errorCode: "tool",
-                                 errorReason: "复制 App Bundle failed: \(error.localizedDescription)",
-                                 nextStep: "确认 device_probe 的 App 容器任意读写为 ✔；空间不足则清理工作区",
+                                 errorReason: "Copying app Bundle failed: \(error.localizedDescription)",
+                                 nextStep: "Confirm device_probe shows app-container read/write ✔; if low on space, clean the workspace",
                                  pid: pid, launchErrors: launchErrors)
         }
 
@@ -539,15 +539,15 @@ enum DecryptEngine {
         try? FileManager.default.removeItem(atPath: ipaPath)
         guard ZipStorer.createZip(at: ipaPath, fromDirectory: workingRoot) else {
             return DecryptResult(ok: false, errorCode: "tool",
-                                 errorReason: "打包 IPA failed (zip 写入错误)",
-                                 nextStep: "工作区临时文件保留在 \(workingRoot)，可手动打包",
+                                 errorReason: "IPA packaging failed (zip write error)",
+                                 nextStep: "Workspace temp files kept at \(workingRoot), can package manually",
                                  pid: pid, launchErrors: launchErrors)
         }
         // v2.9.270：打包后验证 EOCD——createZip 可能"返回OK但 zip 坏" (进程中断/系统zip未生效）
         if !ZipStorer.zipHasEOCD(ipaPath) {
             return DecryptResult(ok: false, errorCode: "tool",
-                                 errorReason: "打包 IPA 无 EOCD (打包中断或系统 zip 未生效)，见 Workspace/zip_diag.log",
-                                 nextStep: "工作区临时文件保留在 \(workingRoot)，可手动打包",
+                                 errorReason: "IPA packaging has no EOCD (interrupted or system zip didn't take effect), see Workspace/zip_diag.log",
+                                 nextStep: "Workspace temp files kept at \(workingRoot), can package manually",
                                  pid: pid, launchErrors: launchErrors)
         }
         try? FileManager.default.removeItem(atPath: workingRoot)
@@ -570,7 +570,7 @@ enum DecryptEngine {
     static func decryptMainBinaryToFile(bundleId: String, outputPath: String) -> DecryptResult {
         guard !bundleId.isEmpty else {
             return DecryptResult(ok: false, errorCode: "param", errorReason: "bundle_id empty",
-                                 nextStep: "传入目标 App 的 Bundle ID")
+                                 nextStep: "Pass the target app's Bundle ID")
         }
         guard let app = AppCatalog.list().first(where: { $0.bundleId == bundleId }) else {
             return DecryptResult(ok: false, errorCode: "target", errorReason: "app not found: \(bundleId)",
@@ -594,7 +594,7 @@ enum DecryptEngine {
         }
         guard pid > 0 else {
             return DecryptResult(ok: false, errorCode: "target",
-                                 errorReason: "目标 App 启动failed (open -b + launchd SubmitAndStart 均无效)",
+                                 errorReason: "Target app launch failed (open -b + launchd SubmitAndStart both ineffective)",
                                  nextStep: "手动打开目标 App 后再执行砸壳", pid: 0, launchErrors: launchErrors)
         }
         Thread.sleep(forTimeInterval: 5.0)
@@ -604,7 +604,7 @@ enum DecryptEngine {
         guard kr == 0, task != 0 else {
             return DecryptResult(ok: false, errorCode: "env",
                                  errorReason: "task_for_pid failed (kern_return=\(Int(kr)))",
-                                 nextStep: "用 ControlAgent 注入式砸壳 (4789 在线时自动走)", pid: pid, launchErrors: launchErrors)
+                                 nextStep: "Use ControlAgent injection-based decrypt (auto when 4789 is online)", pid: pid, launchErrors: launchErrors)
         }
         defer { DeviceProbe.shared.tm_mach_port_deallocate(DeviceProbe.shared.tm_mach_task_self(), task) }
 
@@ -626,8 +626,8 @@ enum DecryptEngine {
                                    cryptInfo: ["main": ["cryptid": 0, "decrypted": false, "reason": "not encrypted"]])
         case .failed(let k, let msg):
             result = DecryptResult(ok: false, errorCode: "tool",
-                                   errorReason: "解密主二进制failed: \(msg)",
-                                   nextStep: "目标 App 需保持运行且未崩溃", pid: pid, launchErrors: launchErrors)
+                                   errorReason: "Decrypting main binary failed: \(msg)",
+                                   nextStep: "The target app must stay running and not crash", pid: pid, launchErrors: launchErrors)
         }
         if !launchErrors.isEmpty {
             _ = InjectionManager.shared.spawnRoot("/bin/kill", args: ["-9", "\(pid)"])
@@ -657,8 +657,8 @@ enum DecryptEngine {
             try FileManager.default.copyItem(atPath: app.path, toPath: destApp)
         } catch {
             return DecryptResult(ok: false, errorCode: "tool",
-                                 errorReason: "复制 App Bundle failed: \(error.localizedDescription)",
-                                 nextStep: "确认 device_probe 的 App 容器任意读写为 ✔；空间不足则清理工作区",
+                                 errorReason: "Copying app Bundle failed: \(error.localizedDescription)",
+                                 nextStep: "Confirm device_probe shows app-container read/write ✔; if low on space, clean the workspace",
                                  pid: pid, launchErrors: launchErrors)
         }
 
@@ -670,7 +670,7 @@ enum DecryptEngine {
             if let err = inj["error"] as? String {
                 return DecryptResult(ok: false, errorCode: "tool",
                                      errorReason: "injected ControlAgent failed: \(err)",
-                                     nextStep: "手动用 control.inject 注入后再试",
+                                     nextStep: "Manually inject with control.inject, then retry",
                                      pid: pid, launchErrors: launchErrors)
             }
             _ = launchApp(bundleId: bundleId) // 重启目标 App 加载 dylib
@@ -678,8 +678,8 @@ enum DecryptEngine {
         }
         guard connected else {
             return DecryptResult(ok: false, errorCode: "env",
-                                 errorReason: "注入后 ControlAgent(4789) not ready，注入式砸壳不可用",
-                                 nextStep: "确认目标 App 能正常启动 (可先手动打开一次)；注入后需重启目标 App",
+                                 errorReason: "ControlAgent (4789) not ready after injection, injection-based decrypt unavailable",
+                                 nextStep: "Confirm the target app launches normally (open it manually once); restart the app after injection",
                                  pid: pid, launchErrors: launchErrors)
         }
 
@@ -687,7 +687,7 @@ enum DecryptEngine {
         let dec = tools.decrypt()
         guard (dec["connected"] as? Bool) == true else {
             return DecryptResult(ok: false, errorCode: "tool",
-                                 errorReason: "/decrypt 无响应: \(dec["error"] ?? "")",
+                                 errorReason: "/decrypt no response: \(dec["error"] ?? "")",
                                  nextStep: "检查 ControlAgent 版本 (需 ≥ v2.9.186 的 /decrypt 端点)",
                                  pid: pid, launchErrors: launchErrors)
         }
@@ -737,8 +737,8 @@ enum DecryptEngine {
         try? FileManager.default.removeItem(atPath: ipaPath)
         guard ZipStorer.createZip(at: ipaPath, fromDirectory: workingRoot) else {
             return DecryptResult(ok: false, errorCode: "tool",
-                                 errorReason: "打包 IPA failed (zip 写入错误)",
-                                 nextStep: "工作区临时文件保留在 \(workingRoot)，可手动打包",
+                                 errorReason: "IPA packaging failed (zip write error)",
+                                 nextStep: "Workspace temp files kept at \(workingRoot), can package manually",
                                  pid: pid, launchErrors: launchErrors)
         }
         try? FileManager.default.removeItem(atPath: workingRoot)

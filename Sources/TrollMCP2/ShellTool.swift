@@ -106,14 +106,14 @@ final class ShellExecTool: MCPTool {
                 "command": command,
                 "exit_code": 0,
                 "stdout": [
-                    "执行环境: 统一环境 (TrollRuntime v6.6.0)",
+                    "Execution env: unified env (TrollRuntime)",
                     "HOME: \(home)",
                     "Documents: \(docs)",
                     "cwd: \(TrollRuntimeEngine.cwd)",
-                    "iOS 系统路径可见(/var/containers): \(iosContainers)",
-                    "默认执行: Alpine Linux aarch64 完整工具链（原生 ARM64——apk/管道/动态 ELF 全支持）",
-                    "iOS 路径自动 bind 为 /ios_* 直读直写（仅 Workspace/Containers/System 三个；无 iOS 原生兜底）",
-                    "提示: 无需指定环境——统一执行。含 | ; && > 复合命令在环境内正常组合；缺工具显式 apk add"
+                    "iOS system paths visible (/var/containers): \(iosContainers)",
+                    "Default: full Alpine Linux aarch64 toolchain (native ARM64 — apk/pipes/dynamic ELF fully supported)",
+                    "iOS paths auto-bind to /ios_* for direct read/write (only Workspace/Containers/System; no iOS-native fallback)",
+                    "Note: no env selection needed — unified. Compound commands (| ; && >) compose normally; missing tools need explicit apk add"
                 ].joined(separator: "\n"),
                 "hint": "env probe: diagnose execution environment issues"
             ]
@@ -167,7 +167,7 @@ final class ShellExecTool: MCPTool {
             if let guardMsg = ShellExecTool.alpineIOSPathGuard(boundCmd) {
                 return ["command": trimmed, "exit_code": 1,
                         "stdout": guardMsg,
-                        "hint": "该命令在统一环境（TrollRuntime）执行，但读不到该 iOS 路径（仅绑定 Workspace/Containers/System 三个目录，文件无 2MB 限制）。解法：①先 cp 到 Workspace：`cp <file> /var/mobile/Documents/Workspace/`，再走 Alpine /ios_workspace 直读分析；②读 App 数据容器用 bind_app bundle_id:<id>（只读）→ /ios_data_<app>；③对二进制用 file analyze / binary.symbols。"]
+                        "hint": "This command runs in the unified env (TrollRuntime) but the iOS path isn't readable (only Workspace/Containers/System three dirs are bound, files have no 2MB limit). Fix: ① copy to Workspace first: `cp <file> /var/mobile/Documents/Workspace/`，再走 Alpine /ios_workspace 直读分析；②读 App 数据容器用 bind_app bundle_id:<id>（只读）→ /ios_data_<app>；③对二进制用 file analyze / binary.symbols。"]
             }
             let (output, exitCode, timedOut) = TrollRuntimeEngine.exec(boundCmd, timeout: timeout)
             // v6.6.0: Alpine 工具裁剪（幂等）——统一后原生覆盖极少，不影响主环境工具链
@@ -177,14 +177,14 @@ final class ShellExecTool: MCPTool {
             var stdout = ShellExecTool.filterNoise(finalOut)
             if outLimit > 0 && stdout.count > outLimit {
                 let spillPath = ToolRegistry.spillLarge("runtime", stdout)
-                stdout = String(stdout.prefix(outLimit / 2)) + "\n…[输出太长total \(stdout.count) 字符，已截断；完整输出: \(spillPath)]…\n" + String(stdout.suffix(outLimit / 2))
+                stdout = String(stdout.prefix(outLimit / 2)) + "\n…[output too long: \(stdout.count) chars, truncated; full output: \(spillPath)]…\n" + String(stdout.suffix(outLimit / 2))
             }
             var result: [String: Any] = [
                 "command": trimmed,
                 "exit_code": finalExit,
                 "stdout": stdout,
                 "cwd": TrollRuntimeEngine.cwd,
-                "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Unified environment (Alpine Linux — TrollRuntime). 缺工具时系统已自动 apk add 安装并重试一次。"
+                "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Unified environment (Alpine Linux — TrollRuntime). Missing tools are auto-installed via apk add and retried一次。"
             ]
             if finalTimed { result["timed_out"] = true }
             AuditLog.shared.log("shell.exec (alpine auto)", detail: String(trimmed.prefix(100)))
@@ -295,7 +295,7 @@ final class ShellExecTool: MCPTool {
         var stdout = ShellExecTool.filterNoise(rOut)
         if outLimit > 0 && stdout.count > outLimit {
             let spillPath = ToolRegistry.spillLarge("shell", stdout)
-            stdout = String(stdout.prefix(outLimit / 2)) + "\n…[输出太长total \(stdout.count) 字符，已截断；完整输出: \(spillPath)]…\n" + String(stdout.suffix(outLimit / 2))
+            stdout = String(stdout.prefix(outLimit / 2)) + "\n…[output too long: \(stdout.count) chars, truncated; full output: \(spillPath)]…\n" + String(stdout.suffix(outLimit / 2))
         }
 
         // 会话目录：TrollRuntime 路径
@@ -308,7 +308,7 @@ final class ShellExecTool: MCPTool {
             "exit_code": rExit,
             "stdout": stdout,
             "cwd": newPwd,
-            "hint": provNote + "Alpine Linux environment: full command set (ls/cat/grep/find/tar/curl/python...), apk add to install packages. iOS 路径自动 bind 直读。cd remembers directory."
+            "hint": provNote + "Alpine Linux environment: full command set (ls/cat/grep/find/tar/curl/python...), apk add to install packages." iOS 路径自动 bind 直读。cd remembers directory."
         ]
         if rTimed {
             result["timed_out"] = true
@@ -334,9 +334,9 @@ final class ShellExecTool: MCPTool {
             // v6.1.5-14bp：区分"白名单外"与"重包禁自动装"（git 等重包 apk add 高 CPU 触发 iOS watchdog 杀 App=闪退）
             let heavy: Set<String> = ["git", "wget", "make", "cmake", "build-base", "clang", "gcc", "openssl", "radare2"]
             if heavy.contains(pkg) {
-                note = "工具 \(pkg) 是重量级包：自动安装会触发解释器高 CPU 被 iOS 系统杀（App 闪退）。已跳过自动安装。请用 tool.install 手动安装（Alpine: apk add \(pkg)），装好后重跑命令即可。"
+                note = "Tool \(pkg) is a heavy package: auto-install could trigger high interpreter CPU and get killed by iOS (app crash). Skipped auto-install. Use tool.install to install manually (Alpine: apk add \(pkg)), then re-run the command."
             } else {
-                note = "工具 \(pkg) 不在自动装包白名单（可能不是 Alpine 包），已跳过自动安装；请确认工具名，或用 tool.install 指定 name/source。"
+                note = "Tool \(pkg) isn't on the auto-install whitelist (may not be an Alpine package); skipped auto-install; confirm the tool name, or use tool.install with name/source."
             }
             return (output, exitCode, timedOut, note)
         }
@@ -350,11 +350,11 @@ final class ShellExecTool: MCPTool {
         let elapsed = Int(Date().timeIntervalSince(provisionStart))
         if apkResult.exitCode == 0 {
             InstallationRegistry.shared.finish(ok: true, summary: "Installed \(pkg) (\(elapsed)s)")
-            note = "首次运行已自动安装缺失工具 \(pkg)（耗时 \(elapsed)s）。"
+            note = "Missing tool \(pkg) auto-installed on first run (\(elapsed)s)."
         } else {
             let diag = TrollRuntimeEngine.installDiagnose(apkResult.output, timedOut: apkResult.timedOut, exitCode: apkResult.exitCode)
             InstallationRegistry.shared.finish(ok: false, summary: diag)
-            note = "自动安装 \(pkg) 失败：\(diag)"
+            note = "Auto-install \(pkg) failed: \(diag)"
         }
         let (rout, rexit, rtimed) = TrollRuntimeEngine.exec(body, timeout: timeout)
         return (rout, rexit, rtimed, note)
@@ -425,7 +425,7 @@ final class ShellExecTool: MCPTool {
         }
         try? fm.createDirectory(atPath: rootfs, withIntermediateDirectories: true)
         fm.createFile(atPath: mark, contents: nil)
-        return removed > 0 ? "Alpine 已裁剪 \(removed) 个原生重复工具（系统命令/busybox 保留）" : ""
+        return removed > 0 ? "Alpine pruned \(removed) duplicate native tools (system commands/busybox kept)" : ""
     }
 
     /// v6.6.0 统一环境辅助：判定命令是否需要 TrollRuntime 工具链（Alpine 完整版）。
@@ -473,7 +473,7 @@ final class ShellExecTool: MCPTool {
             if norm.hasPrefix("/tmp/_bridge_") { continue }
             // v6.0.28: 先检查路径在 iOS 里存不存在
             guard fm.fileExists(atPath: norm) else {
-                blocked.append("\(norm) 不存在"); continue
+                blocked.append("\(norm) doesn't exist"); continue
             }
             // v6.0.28: 关键检查——这个路径是不是在 autoBind 范围内？
             var isBindable = false
@@ -484,7 +484,7 @@ final class ShellExecTool: MCPTool {
                 }
             }
             if !isBindable {
-                blocked.append("\(norm) 不在 Alpine 自动绑定范围内（Alpine 读不到，会返回空/假零）")
+                blocked.append("\(norm) not in Alpine's auto-bind scope (Alpine can't read it, returns empty/false zero)")
                 continue
             }
             guard (try? fm.attributesOfItem(atPath: norm)[.type]) as? FileAttributeType == .typeRegular else {
@@ -695,7 +695,7 @@ final class ShellExecTool: MCPTool {
             return [
                 "command": segment,
                 "exit_code": 1,
-                "stdout": "统一环境不支持该命令: \(word)（请用环境内可用命令或 tool.install 装包）"
+                "stdout": "Command not supported in the unified env: \(word) (use an available command or tool.install to install)"
             ]
         }
     }
@@ -783,7 +783,7 @@ final class ShellExecTool: MCPTool {
                         result = [
                             "command": body, "exit_code": Int(outputExit), "stdout": out,
                             "cwd": TrollRuntimeEngine.cwd,
-                            "hint": provNote + "Alpine Linux environment (non-iOS segment of compound command): full command support; 缺工具已自动 apk add"
+                            "hint": provNote + "Alpine Linux environment (non-iOS segment of compound command): full command support; missing tools auto apk add"
                         ]
                         if timedOut { result["timed_out"] = true }
                     }
@@ -819,7 +819,7 @@ final class ShellExecTool: MCPTool {
             "command": command,
             "exit_code": lastExit,
             "stdout": finalOut,
-            "hint": "复合命令（统一环境）：管道/分号/重定向已正确解析"
+            "hint": "Compound command (unified env): pipes/semicolons/redirection parsed correctly"
         ]
     }
     
@@ -1204,7 +1204,7 @@ final class ShellExecTool: MCPTool {
         let pythonPath = Bundle.main.bundlePath + "/bin/python3"
         guard FileManager.default.isExecutableFile(atPath: pythonPath) else {
             return ["command": "py3-native " + args, "exit_code": 1,
-                    "stdout": "py3-native: 原生 Python 未内置（此构建未集成 Python.xcframework）——请用 python3（统一环境 Alpine，apk 装 py3-numpy）"]
+                    "stdout": "py3-native: native Python not bundled (this build lacks Python.xcframework) — use python3 (unified env Alpine, apk install py3-numpy)"]
         }
         let split = shellSplitArgs(args)
         var env = ["PYTHONIOENCODING": "utf-8"]
@@ -1219,7 +1219,7 @@ final class ShellExecTool: MCPTool {
         try? FileManager.default.removeItem(atPath: pyOutPath)
         if res.timedOut { out += "\n[py3-native 执行超时被终止]" }
         return ["command": "py3-native " + args, "exit_code": res.exitCode, "stdout": out,
-                "hint": "py3-native：原生 Python（iPhone 芯片直跑 numpy/pandas 深度运算）。日常/装包/生态用 python3（统一环境 Alpine）"]
+                "hint": "py3-native: native Python (runs numpy/pandas heavy compute directly on the iPhone chip). Daily use/packages/ecosystem: python3 (unified env Alpine)"]
     }
 
     /// v6.6.0-fix15: node-native 执行器——原生 node（App bin/node，V8 芯片直跑重负载）。
@@ -1228,7 +1228,7 @@ final class ShellExecTool: MCPTool {
         let nodePath = Bundle.main.bundlePath + "/bin/node"
         guard FileManager.default.isExecutableFile(atPath: nodePath) else {
             return ["command": "node-native " + args, "exit_code": 1,
-                    "stdout": "node-native: 原生 node 未内置（此构建未集成 nodejs-mobile）——请用 node（统一环境 Alpine nodejs）"]
+                    "stdout": "node-native: native node not bundled (this build lacks nodejs-mobile) — use node (unified env Alpine nodejs)"]
         }
         let split = shellSplitArgs(args)
         let res = BuildRunner.shared.run(executable: nodePath, args: split, env: ["PATH": Bundle.main.bundlePath + "/bin"], timeout: 120)
@@ -1236,7 +1236,7 @@ final class ShellExecTool: MCPTool {
         if !res.stderr.isEmpty { out += (out.isEmpty ? "" : "\n") + res.stderr }
         if res.timedOut { out += "\n[node-native 执行超时被终止]" }
         return ["command": "node-native " + args, "exit_code": res.exitCode, "stdout": out,
-                "hint": "node-native：原生 node（V8 芯片直跑——重 node 任务/构建工具）。轻量 JS/日常用 node（统一环境 Alpine nodejs）"]
+                "hint": "node-native: native node (V8 runs directly on the chip — heavy node tasks/build tools). Light JS/daily use: node (unified env Alpine nodejs)"]
     }
 
     /// 工具探测集合（command -v/which/type 判定用）——统一环境（Alpine）已有工具。
@@ -1289,7 +1289,7 @@ final class ShellExecTool: MCPTool {
         }
         // 原生命令表：plutil/sqlite3（iOS 特有）+ ta（宿主直调）+ bin/ jtool2（Mach-O 专长）
         if iosNativeCommands.contains(target) {
-            var note = "探测结果来自原生命令表（\(target) iOS 特有/宿主直调/App bin 内置）"
+            var note = "Probe result from the native command table (\(target) iOS-specific/host-direct/app-bin builtin)"
             return ["command": seg, "exit_code": 0,
                     "stdout": "\(target): ✅ installed (\(target) ... directly runnable)", "note": note]
         }
@@ -1554,7 +1554,7 @@ final class ShellExecTool: MCPTool {
             "command": command,
             "exit_code": 0,
             "stdout": out,
-            "hint": "iOS native grep: -i/-r/-l/-c/-n/-v 同标准；默认按字面字节匹配(可搜二进制如 cdhash/CodeDirectory)，-E 启用正则；-a 自动(二进制可打印化)。不再因二进制 UTF-8 解码失败而静默输出空。"
+            "hint": "iOS native grep: -i/-r/-l/-c/-n/-v as standard; default matches literal bytes (can search binaries like cdhash/CodeDirectory), -E enables regex; -a automatic (binary printable). No longer silently fails on binary UTF-8 decode输出空。"
         ]
     }
     

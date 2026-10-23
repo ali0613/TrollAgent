@@ -124,7 +124,7 @@ public final class RemoteAgent: ObservableObject {
 
     private func executeAndReport(cmdID: Int, tool: String, params: [String: Any]) {
         guard Self.safeTools.contains(tool) else {
-            reportResult(cmdID: cmdID, ok: false, result: "[\"remote_denied\":\"工具不在远程只读白名单，禁止远程执行\"]")
+            reportResult(cmdID: cmdID, ok: false, result: "[\"remote_denied\":\"tool not on the remote read-only whitelist, remote execution forbidden\"]")
             return
         }
         var ok = true

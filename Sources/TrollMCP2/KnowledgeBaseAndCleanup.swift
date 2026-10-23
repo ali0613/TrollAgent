@@ -68,28 +68,28 @@ final class FailureKnowledgeBase {
 
     // v1 种子（15 条，仅空库时插入）
     private let v1Patterns: [(String, String, String, String)] = [
-        ("Operation not permitted", "权限", "TrollStore 未开启「编辑 Entitlements」，侧载 App 没有 root 写入权限", "在 TrollStore 开启「编辑 Entitlements」后卸载重装 (覆盖安装不会重新应用)"),
-        ("bin-setuid=0", "权限", "注入工具没有 setuid root 位", "确认 TrollStore 已给 bin/ 工具打 setuid，卸载重装 App"),
-        ("Failed to parse plist", "签名", "ldid 解析 entitlements plist failed", "检查 entitlements 文件格式，或用 ct_bypass 重新签名"),
-        ("link edit information does not fill", "Mach-O", "install_name_tool 无法处理 __LINKEDIT 段", "非阻断错误，ct_bypass 已done签名，注入仍可OK"),
-        ("Library not loaded", "依赖", "dylib 依赖的动态库不存在", "用 otool -L 检查依赖，确认所有依赖在目标设备上"),
-        ("code signature invalid", "签名", "代码签名失效", "用 ldid -S 重新签名，或用 TrollStore 重装"),
-        ("dyld: Symbol not found", "依赖", "dylib 引用了不存在的符号", "检查 dylib 编译时的 SDK 版本，确保与目标 iOS 兼容"),
-        ("task_for_pid failed", "权限", "没有 task_for_pid-allow entitlement", "TrollStore 开启「编辑 Entitlements」后卸载重装"),
-        ("cannot create regular file", "权限", "无法写入目标 App Bundle 目录", "确认目标 App 已关闭，root 权限生效"),
-        ("Killed: 9", "崩溃", "App 被系统杀死 (通常是签名或内存问题)", "检查崩溃日志，用 diagnose.crash 分析"),
-        ("SSL/TLS connection failed", "网络", "GitHub 连接超时", "重试或配置代理，网络问题非 App bug"),
-        ("unable to type-check", "编译", "Swift 表达式太复杂导致编译器超时", "拆分复杂字典/表达式为独立变量"),
-        ("is inaccessible due to private", "编译", "访问了 private 成员", "将目标方法/属性改为 public 或 internal"),
-        ("cannot find in scope", "编译", "符号未定义 (通常缺少 import)", "添加缺失的 import 或检查拼写"),
+        ("Operation not permitted", "Permission", "TrollStore 'Edit Entitlements' not enabled; sideloaded apps lack root write permission", "Enable 'Edit Entitlements' in TrollStore, then uninstall/reinstall (over-盖安装不会重新应用)"),
+        ("bin-setuid=0", "Permission", "Injection tools lack the setuid root bit", "Confirm TrollStore applied setuid to bin/ tools, uninstall/reinstall the app"),
+        ("Failed to parse plist", "Signing", "ldid failed to parse the entitlements plist", "Check the entitlements file format, or re-sign with ct_bypass"),
+        ("link edit information does not fill", "Mach-O", "install_name_tool can't handle the __LINKEDIT segment", "Non-blocking error, ct_bypass 已done签名，注入仍可OK"),
+        ("Library not loaded", "Dependency", "A dylib dependency's dynamic library doesn't exist", "Check deps with otool -L, confirm all dependencies exist on the target device"),
+        ("code signature invalid", "Signing", "Code signature invalid", "Re-sign with ldid -S, or reinstall via TrollStore"),
+        ("dyld: Symbol not found", "Dependency", "The dylib references a symbol that doesn't exist", "Check the SDK version the dylib was built with, ensure iOS compatibility"),
+        ("task_for_pid failed", "Permission", "Missing task_for_pid-allow entitlement", "Enable 'Edit Entitlements' in TrollStore, then uninstall/reinstall"),
+        ("cannot create regular file", "Permission", "Can't write to the target app's Bundle directory", "Confirm the target app is closed and root permission is active"),
+        ("Killed: 9", "Crash", "App killed by the system (usually signing or memory issues)", "Check crash logs, analyze with diagnose.crash"),
+        ("SSL/TLS connection failed", "Network", "GitHub connection timeout", "Retry or configure a proxy; network issue, not an app bug"),
+        ("unable to type-check", "Compile", "Swift expression too complex, compiler timeout", "Split complex dictionaries/expressions into standalone variables"),
+        ("is inaccessible due to private", "Compile", "Accessed a private member", "Change the target method/property to public or internal"),
+        ("cannot find in scope", "Compile", "Symbol undefined (usually a missing import)", "Add the missing import or check spelling"),
     ]
 
     // v2 种子（v4.3.66 追加，覆盖游戏/注入/系统崩溃/环境）
     private let v2Patterns: [(String, String, String, String)] = [
-        ("Image not found", "依赖", "dylib 的 @rpath/@executable_path 路径不对或文件未随包", "用 otool -L 看实际加载路径，确认 dylib 已在目标 App 内且路径正确"),
-        ("EXC_BAD_ACCESS", "崩溃", "访问已释放/空指针/非法内存（含 Hook 改错）", "检查 Hook 偏移与函数签名，确认补丁/指针未被 PAC 保护，用 diagnose 定位"),
+        ("Image not found", "Dependency", "dylib @rpath/@executable_path wrong or file not bundled", "Use otool -L to see actual load paths, confirm dylib 已在目标 App 内且路径正确"),
+        ("EXC_BAD_ACCESS", "Crash", "Accessing freed/null/invalid memory (incl. wrong hook edits)", "Check hook offsets and function signatures, confirm patches/pointers aren't PAC-protected, locate with diagnose"),
         ("Segmentation fault", "崩溃", "非法内存访问（多为注入 dylib 或静态补丁错误）", "核对 RVA/偏移与目标版本是否一致，回滚 .bak_macho 重试"),
-        ("Permission denied", "权限", "目标路径只读或未以 root 运行", "确认 TrollStore 已开编辑 Entitlements、setuid 已打；Bundle 目录需 root 写入"),
+        ("Permission denied", "Permission", "Target path read-only or not running as root", "Confirm TrollStore 'Edit Entitlements' is on and setuid is applied; Bundle dir needs root write"),
         ("No space left on device", "存储", "沙盒空间已满", "用 workspace.cleanup 清旧文件/日志，或在系统设置清理 App 存储"),
         ("Connection refused", "网络", "目标端口无服务/代理未起", "确认 server 已 start、端口正确；本地代理/抓包工具要先启动"),
         ("Could not inspect the application package", "安装", "IPA 包结构不完整或非有效 App 包", "用 package.unpack 检查包结构，确认 Info.plist 与主二进制齐全"),
@@ -98,7 +98,7 @@ final class FailureKnowledgeBase {
         ("candidate should have a different linkedit", "Mach-O", "静态注入改 __LINKEDIT 时与原签名冲突", "注入后必须 ldid 重签；优先使用注入器自带的签名流程"),
         ("Unsupported iOS version", "巨魔", "TrollStore 在该系统不被支持（17.0.1+/16.7 已修补）", "核对支持版本表；不支持版本改用越狱或其他签名方案"),
         ("apk: command not found", "TrollRuntime", "环境内 apk 索引未更新或异常", "先 apk update；确认在统一环境（TrollRuntime/Alpine）内执行，不是目标 App 环境"),
-        ("Illegal instruction", "TrollRuntime", "解释器未实现该指令（Node.js 等常见）", "换轻量/旧版本软件，或改用 SSH 到电脑/云端运行"),
+        ("Illegal instruction", "TrollRuntime", "Interpreter doesn't implement this instruction (common with Node.js etc.)", "Use a lighter/older build, or run via SSH to a PC/cloud"),
         ("address already in use", "网络", "本地服务端口被占用", "server.status 看占用，换端口或先 stop 旧实例"),
     ]
 

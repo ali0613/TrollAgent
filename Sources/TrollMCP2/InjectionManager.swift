@@ -342,7 +342,7 @@ final class InjectionManager {
         // OK路径 = teamid 提目标 App Team ID + ldid -S 伪签 + ct_bypass CoreTrust (CVE-2023-41991 多签名者）。
         let signSteps: [(String, [String], String)] = [
             ("ctchain", [dylib], "ldid -S + ct_bypass CoreTrust"),
-            ("ldid", ["-S", dylib], "ldid -S 空签"),
+            ("ldid", ["-S", dylib], "ldid -S empty sign"),
             ("ldid", ["-S" + entPath, dylib], "ldid -S platform+no-sandbox"),
             ("codesign", ["-f", "-s", "-", dylib], "/usr/bin/codesign adhoc"),
         ]
@@ -406,25 +406,25 @@ final class InjectionManager {
         var reason = "未知"
         var advice = ""
         if diag.contains("team=(空)") {
-            reason = "目标 App 无 Team ID (Apple 系统 App 常见)"
-            advice = "系统 App 签名里没有 Team ID 字段，ct_bypass 无法匹配。这类 App 暂不支持内存注入。"
+            reason = "Target app has no Team ID (common for Apple system apps)"
+            advice = "System app signatures have no Team ID field, ct_bypass can't match. Memory injection isn't supported for these apps."
         } else if diag.contains("Failed to read process memory") || diag.contains("__LINKEDIT not found") {
-            reason = "opainject 读不到目标进程内存"
-            advice = "目标 App 有安全 SDK 防护 (字节/腾讯/阿里系常见)，或进程处于冻结/挂起态。试试：先手动打开目标 App 到前台，再注入。"
+            reason = "opainject can't read the target process memory"
+            advice = "The target app has security-SDK protection (common with ByteDance/Tencent/Alibaba), or the process is frozen/suspended. Try: manually open the target app to the foreground, then inject."
         } else if diag.contains("Failed to find main thread") || diag.contains("task port") {
-            reason = "opainject 获取 task port failed"
-            advice = "目标 App 有反调试/反注入保护 (如聚安全/安全 SDK)，或进程已崩溃。换无防护 App 测试。"
+            reason = "opainject failed to get the task port"
+            advice = "The target app has anti-debug/anti-injection protection (e.g. Jusafe/security SDK), or the process crashed. Test with an unprotected app."
         } else if diag.contains("EBADARCH") || diag.contains("spawnRoot failed (85)") {
-            reason = "opainject 架构不兼容"
-            advice = "opainject 二进制与 TrollAgent 主二进制架构不匹配。检查 Resources/bin/opainject 架构。"
+            reason = "opainject arch incompatible"
+            advice = "opainject binary arch doesn't match TrollAgent's main binary. Check Resources/bin/opainject arch."
         } else if diag.contains("spawnRoot failed (2)") {
-            reason = "/usr/bin/codesign 不存在 (预期)"
-            advice = "TrollStore 环境没有 codesign，正常。ct_bypass 应该能替代。"
+            reason = "/usr/bin/codesign doesn't exist (expected)"
+            advice = "TrollStore env has no codesign, that's normal. ct_bypass should substitute."
         } else if diag.contains("ldid") || diag.contains("ct_bypass") {
-            reason = "签名工具failed"
-            advice = "ldid 或 ct_bypass 执行failed，检查 bin/ 目录下二进制完整性。"
+            reason = "Signing tool failed"
+            advice = "ldid or ct_bypass execution failed; check the binaries under bin/ for integrity."
         }
-        diag += "\n【智能归因】failed原因：\(reason)\n【建议】\(advice)\n"
+        diag += "\n[Smart attribution] failed reason: \(reason)\n[Advice] \(advice)\n"
         return (1, diag)
     }
 
@@ -979,10 +979,10 @@ final class InjectionManager {
             .map { ($0 as NSString).lastPathComponent })
         let intersected = candidates.filter { mainDylibNames.contains(($0 as NSString).lastPathComponent) }
         if !intersected.isEmpty {
-            AuditLog.shared.log("injection.intersection", detail: "\(intersected.count)/\(candidates.count) 主二进制直接链接")
+            AuditLog.shared.log("injection.intersection", detail: "\(intersected.count)/\(candidates.count) main binary directly linked")
             candidates = intersected
         } else {
-            AuditLog.shared.log("injection.intersection_empty", detail: "主二进制无直接链接framework,fallback全部\(candidates.count)")
+            AuditLog.shared.log("injection.intersection_empty", detail: "Main binary has no directly linked frameworks, falling back to all \(candidates.count)")
         }
 
         // 注入策略排序 (对齐 TrollFools Strategy：lexicographic 默认 / fast 大小升序 / preorder / postorder）
@@ -1253,13 +1253,13 @@ final class InjectionManager {
                 return (-1000, ["encrypted (cryptid!=0)"])
             }
             if depNames.contains(where: { $0 == name || $0.hasPrefix(name) || name.hasPrefix($0) }) {
-                score += 50; reasons.append("主二进制直接链接")
+                score += 50; reasons.append("Directly linked to main binary")
             }
             if ownPrefixes.contains(where: { lower.hasPrefix($0) }) {
-                score += 30; reasons.append("自家framework")
+                score += 30; reasons.append("Own framework")
             }
             if let size = try? FileManager.default.attributesOfItem(atPath: path)[.size] as? Int, size > 10_000_000 {
-                score += 10; reasons.append("大文件(\(size/1024/1024)MB)")
+                score += 10; reasons.append("Large file (\(size/1024/1024)MB)")
             }
             if lazySDK.contains(where: { lower.contains($0) }) {
                 score -= 50; reasons.append("第三方SDK(懒加载)")
@@ -1272,22 +1272,22 @@ final class InjectionManager {
             .sorted { $0.1.0 > $1.1.0 }
         // v2.9.316：保存排序列表，selfcheck failed时返回 retry 建议 (第二层自动重试）
         let scoredNames = scored.map { ($0.0 as NSString).lastPathComponent }
-        AuditLog.shared.log("injection.score", detail: "\(bundleId) 打分: \(scored.map { "\(($0.0 as NSString).lastPathComponent)=\($0.1.0)" }.joined(separator: ","))")
+        AuditLog.shared.log("injection.score", detail: "\(bundleId) scoring: \(scored.map { "\(($0.0 as NSString).lastPathComponent)=\($0.1.0)" }.joined(separator: ","))")
 
         var targetMachO: String?
         if let pref = preferredTarget, !pref.isEmpty,
            let hit = scored.first(where: { $0.0.localizedCaseInsensitiveContains(pref) }) {
             targetMachO = hit.0
-            AuditLog.shared.log("injection.pick_pref", detail: "\(bundleId) 指定: \((hit.0 as NSString).lastPathComponent)")
+            AuditLog.shared.log("injection.pick_pref", detail: "\(bundleId) chosen: \((hit.0 as NSString).lastPathComponent)")
         } else if let best = scored.first {
             targetMachO = best.0
-            AuditLog.shared.log("injection.pick_best", detail: "\(bundleId) 最高分: \((best.0 as NSString).lastPathComponent) score=\(best.1.score) reasons=\(best.1.reasons)")
+            AuditLog.shared.log("injection.pick_best", detail: "\(bundleId) best score: \((best.0 as NSString).lastPathComponent) score=\(best.1.score) reasons=\(best.1.reasons)")
         }
         if targetMachO == nil {
             let mainInfo = MachOAnalyzer.analyze(executablePath(app))
             if (mainInfo?.cryptID ?? 1) == 0 {
                 targetMachO = executablePath(app)
-                AuditLog.shared.log("injection.fallback_main", detail: "\(bundleId) 无framework候选，用主二进制 cryptid=0")
+                AuditLog.shared.log("injection.fallback_main", detail: "\(bundleId) no framework candidates, using main binary cryptid=0")
             }
         }
         guard let targetMachO else {
@@ -1506,7 +1506,7 @@ final class InjectionManager {
                 rollbackLog["asset_removed"] = (dst as NSString).lastPathComponent
             }
             let wrapped = NSError(domain: "InjectionManager", code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "\(error.localizedDescription) (已Auto rollback)"])
+                userInfo: [NSLocalizedDescriptionKey: "\(error.localizedDescription) (auto-rolled back)"])
             AuditLog.shared.log("injection.enable.rollback", detail: "\(bundleId) \(wrapped.localizedDescription)")
             throw wrapped
         }
@@ -1532,7 +1532,7 @@ final class InjectionManager {
                     selfcheckNote = "selfcheck: 25s内未探测到进程 (疑似闪退)→ 已Auto rollback注入。建议：换 target=\(nextTargets.joined(separator: "/"))；若全failed，app.decrypt 砸壳主二进制"
                     AuditLog.shared.log("injection.auto_rollback", detail: "\(bundleId) → \(targetMachO): \(selfcheckNote)")
                 } catch {
-                    selfcheckNote = "selfcheck: 25s内未探测到进程 (疑似闪退)，Auto rollbackfailed：\(error.localizedDescription)。建议：手动 injection.disable"
+                    selfcheckNote = "selfcheck: no process detected within 25s (suspected crash), auto-rollback failed: \(error.localizedDescription). Suggestion: manual injection.disable"
                     AuditLog.shared.log("injection.selfcheck_warn", detail: "\(bundleId) → \(targetMachO): \(selfcheckNote)")
                 }
             }

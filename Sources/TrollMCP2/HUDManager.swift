@@ -81,7 +81,7 @@ final class HUDManager {
               let mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 else { return }
         let last = UserDefaults.standard.double(forKey: hudBinMtimeKey)
         if last > 0 && abs(mtime - last) > 1 {
-            appendLog("HUD 二进制已更新（mtime \(last) → \(mtime)），旧进程在跑，强制重启换新")
+            appendLog("HUD binary updated (mtime \(last) → \(mtime)); old process still running, force-restarting to swap")
             _ = forceStop()
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 guard let self = self else { return }
@@ -204,7 +204,7 @@ final class HUDManager {
         // （stop 可能因 kill root 权限/pid 文件陈旧而没杀干净，这里兜底强制清理）
         if isRunning { _ = forceStop() }
         guard let bin = hudBinaryPath else {
-            lastStartError = "主可执行缺失：\(bundlePath)"
+            lastStartError = "Main executable missing: \(bundlePath)"
             appendLog("start FAIL: main executable not found at \(bundlePath)")
             return false
         }
@@ -220,11 +220,11 @@ final class HUDManager {
                     appendLog("start OK via launchctl load (\(lctl))")
                     return true
                 }
-                appendLog("launchctl load errno=\(code) out=\(out) (\(lctl))——回退 posix_spawn")
+                appendLog("launchctl load errno=\(code) out=\(out) (\(lctl)) — falling back to posix_spawn")
             }
         } else {
-            lastStartError = "launchctl 二进制未找到（/usr/bin /usr/sbin /bin /sbin 均无）"
-            appendLog("start: launchctl not found in standard paths——直接 posix_spawn")
+            lastStartError = "launchctl binary not found (none in /usr/bin /usr/sbin /bin /sbin)"
+            appendLog("start: launchctl not found in standard paths — using posix_spawn directly")
         }
 
         // 方案 B(TheBall)：不提权 posix_spawn detach 拉起 HUD（mobile 身份，常驻不 timeout）
@@ -240,12 +240,12 @@ final class HUDManager {
         let charRaw = UserDefaults.standard.string(forKey: "trollmcp2.girl_character")
         let charArg = GirlCharacter.stored(rawValue: charRaw).iconPrefix
         if !spawnDetached(bin, args: ["-hud", "-char", charArg, "-size", "\(sizeArg)"]) {
-            lastStartError = "拉起失败 (posix_spawn detach)"
+            lastStartError = "Launch failed (posix_spawn detach)"
             appendLog("start FAIL: spawnDetached")
             return false
         }
         lastStartError = nil
-        appendLog("start OK (posix_spawn detach 不提权, 常驻, size=\(sizeArg), char=\(charArg))")
+        appendLog("start OK (posix_spawn detach, no privilege escalation, persistent, size=\(sizeArg), char=\(charArg))")
         if let attrs = try? FileManager.default.attributesOfItem(atPath: bin),
            let mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 {
             UserDefaults.standard.set(mtime, forKey: hudBinMtimeKey)

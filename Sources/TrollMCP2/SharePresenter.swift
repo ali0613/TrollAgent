@@ -58,7 +58,7 @@ enum SharePresenter {
 
             AuditLog.shared.log("share.all_invalid", detail: "items=\(items.count)")
             completion?(false, NSError(domain: "SharePresenter", code: -2,
-                                       userInfo: [NSLocalizedDescriptionKey: "分享内容无效"]))
+                                       userInfo: [NSLocalizedDescriptionKey: "Invalid share content"]))
         }
     }
 }
@@ -74,7 +74,7 @@ extension SharePresenter {
 
     /// 上下文菜单里的"分享"项（文件 URL）→ 自建分享菜单
     static func menuShare(url: URL,
-                          label: String = "分享",
+                          label: String = "Share",
                           systemImage: String = "square.and.arrow.up") -> some View {
         Button {
             ShareCenter.shared.presentShareMenuFile(url)
@@ -85,7 +85,7 @@ extension SharePresenter {
 
     /// 上下文菜单里的"分享"项（文本）→ 自建分享菜单
     static func menuShare(text: String,
-                          label: String = "分享",
+                          label: String = "Share",
                           systemImage: String = "square.and.arrow.up") -> some View {
         Button {
             ShareCenter.shared.presentShareMenuText(text)

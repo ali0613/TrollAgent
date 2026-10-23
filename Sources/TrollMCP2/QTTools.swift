@@ -86,9 +86,9 @@ final class IPAInspectTool: MCPTool {
                 "path": binaryPath,
                 "arch": macho?.arch ?? "unknown",
                 "cryptid": macho.map { Int($0.cryptID) } ?? -1,
-                "arch_parse_error": macho == nil ? "Mach-O 解析failed (可能加密/特殊头)，不能据此判定不可注入" : "",
-                "arch_note": macho?.cryptID ?? 0 > 0 ? "已加密 (cryptid>0)，符号/类结构需run app.decrypt 砸壳" : "",
-                "entitlements": detail == "full" ? String(entOutput.prefix(3000)) : "已签名 (用 detail=full 查看全文)",
+                "arch_parse_error": macho == nil ? "Mach-O parse failed (may be encrypted/special header), can't judge injectability from this" : "",
+                "arch_note": macho?.cryptID ?? 0 > 0 ? "Encrypted (cryptid>0), symbol/class structure needs app.decrypt first" : "",
+                "entitlements": detail == "full" ? String(entOutput.prefix(3000)) : "Signed (use detail=full for the full text)",
                 "has_entitlements": !entOutput.isEmpty
             ]
 
@@ -99,7 +99,7 @@ final class IPAInspectTool: MCPTool {
                 let libs = libOutput.components(separatedBy: .newlines)
                     .filter { $0.contains("dylib") || $0.contains("framework") }
                     .map { $0.trimmingCharacters(in: .whitespaces) }
-                result["dependencies"] = detail == "full" ? Array(libs.prefix(30)) : "\(libs.count) 个依赖库 (用 detail=full 查看列表)"
+                result["dependencies"] = detail == "full" ? Array(libs.prefix(30)) : "\(libs.count) dependency libraries (use detail=full for the list)"
             }
 
             // 检查加密段
@@ -123,16 +123,16 @@ final class IPAInspectTool: MCPTool {
             // v2.9.132：arch=unknown 是"解析failed" (可能加密/特殊头），不是"非 arm64"——
             // 不再误判不可injected (旧版 unknown 也触发此警告）
             if arch == "unknown" {
-                injectNotes.append("⚠️ Mach-O 解析failed (可能加密/混淆)，先用 app.encrypt_info 判断加密，需砸壳后重新 inspect")
+                injectNotes.append("⚠️ Mach-O parse failed (may be encrypted/obfuscated); check encryption with app.encrypt_info first, re-inspect after decrypting")
             } else if arch != "arm64" {
-                injectNotes.append("⚠️ 架构 \(arch)，当前 dylib 可能不兼容")
+                injectNotes.append("⚠️ Arch \(arch), current dylib may be incompatible")
             }
         }
         if let encrypted = result["encrypted"] as? Bool, encrypted {
-            injectNotes.append("⚠️ App 已加密 (App Store 下载)，注入前需砸壳")
+            injectNotes.append("⚠️ App is encrypted (App Store download), decrypt before injection")
         }
         if injectNotes.isEmpty {
-            injectNotes.append("✅ 架构和签名正常，可尝试注入")
+            injectNotes.append("✅ Arch and signature OK, can try injection")
         }
         result["inject_feasibility"] = injectNotes
 
@@ -190,12 +190,12 @@ final class DylibInspectTool: MCPTool {
         // 兼容性检查
         var issues: [String] = []
         if result["arch"] as? String != "arm64" {
-            issues.append("非 arm64 架构")
+            issues.append("Not arm64 arch")
         }
         if result["signed"] as? Bool == false {
-            issues.append("未签名 (TrollStore 环境下 ct_bypass 可绕过)")
+            issues.append("Unsigned (ct_bypass can bypass under TrollStore)")
         }
-        result["compatibility"] = issues.isEmpty ? "✅ 可用于注入" : "⚠️ \(issues.joined(separator: "；"))"
+        result["compatibility"] = issues.isEmpty ? "✅ Suitable for injection" : "⚠️ \(issues.joined(separator: "; "))"
 
         return result
     }
@@ -269,8 +269,8 @@ final class InjectionDiagnoseTool: MCPTool {
         let probe = DeviceProbe.shared.run()
         diagnosis["root_ready"] = probe.ready
         if !probe.ready {
-            issues.append("root 注入环境not ready")
-            fixes.append("在 TrollStore 开启「编辑 Entitlements」后卸载重装")
+            issues.append("Root injection env not ready")
+            fixes.append("In TrollStore, enable 'Edit Entitlements' then uninstall/reinstall")
         }
 
         // v2.9.88：2b. Bundle 目录真实可写性 (cp EPERM 的直接判据）——
@@ -284,10 +284,10 @@ final class InjectionDiagnoseTool: MCPTool {
             _ = InjectionManager.shared.runAsRoot("rm", args: ["-rf", probeDir])
         }
         diagnosis["bundle_write_test"] = bundleWritable
-        diagnosis["bundle_write_detail"] = bundleWritable ? "root 身份可写目标 App Bundle 目录" : "root 身份写入failed(\(tCode)): \(String(tOut.prefix(120)))"
+        diagnosis["bundle_write_detail"] = bundleWritable ? "root can write the target app's Bundle directory" : "root write failed(\(tCode)): \(String(tOut.prefix(120)))"
         if !bundleWritable {
-            issues.append("目标 App Bundle 目录不可写 (injected cp 将报 Operation not permitted)")
-            fixes.append("在 TrollStore 中开启「编辑 Entitlements」后卸载重装本 App (覆盖安装不会重新应用权限)；或检查该 App 是否系统级受保护")
+            issues.append("Target app Bundle dir not writable (injected cp will report Operation not permitted)")
+            fixes.append("In TrollStore, enable 'Edit Entitlements' then uninstall/reinstall this app (over-install won't reapply permissions); or check whether the app is system-protected")
         }
 
         // 3. 检查目标进程是否在运行
@@ -295,8 +295,8 @@ final class InjectionDiagnoseTool: MCPTool {
         diagnosis["target_pid"] = pid
         diagnosis["process_running"] = pid > 0
         if pid == 0 {
-            issues.append("目标 App not running (注入后需重启 App 才能加载 dylib)")
-            fixes.append("先打开目标 App，再Run injection")
+            issues.append("Target app not running (restart the app after injection to load the dylib)")
+            fixes.append("Open the target app first, then run injection")
         }
 
         // 4. 检查 dylib
@@ -379,7 +379,7 @@ final class InjectionDiagnoseTool: MCPTool {
             fixes.append("App Store 加密 App 无法直接注入；用 app.decrypt 解密后再试，或换用支持的目标 App")
         }
         if protectedCount > 0 {
-            diagnosis["note"] = "⚠️ \(protectedCount) Mach-O have encrypted segments (cryptid=1), injection would break them, auto-skipped; injection targets the unencrypted \(injectable.first.map { ($0 as NSString).lastPathComponent } ?? "无")"
+            diagnosis["note"] = "⚠️ \(protectedCount) Mach-O files have encrypted segments (cryptid=1), injection would break them, auto-skipped; injection targets the unencrypted \(injectable.first.map { ($0 as NSString).lastPathComponent } ?? "无")"
         }
 
         // 7. 检查注入工具链
@@ -397,7 +397,7 @@ final class InjectionDiagnoseTool: MCPTool {
         // 总结
         diagnosis["issues"] = issues
         diagnosis["fixes"] = fixes
-        diagnosis["verdict"] = issues.isEmpty ? "✅ 注入条件正常，如仍failed请检查 dylib 依赖" : "❌ 发现 \(issues.count) 个问题"
+        diagnosis["verdict"] = issues.isEmpty ? "✅ Injection prerequisites OK; if still failing, check dylib dependencies" : "❌ Found \(issues.count) issues"
 
         return diagnosis
     }

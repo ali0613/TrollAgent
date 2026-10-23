@@ -156,7 +156,7 @@ final class ShareCenter: ObservableObject {
         let prefix = String(trimmed.prefix(12))
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: ":", with: "_")
-        let name = "分享_\(prefix.isEmpty ? "文本" : prefix)_\(Int(Date().timeIntervalSince1970)).txt"
+        let name = "Share_\(prefix.isEmpty ? "text" : prefix)_\(Int(Date().timeIntervalSince1970)).txt"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         do {
             try trimmed.data(using: .utf8)?.write(to: url)

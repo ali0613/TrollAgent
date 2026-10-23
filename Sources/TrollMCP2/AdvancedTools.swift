@@ -969,7 +969,7 @@ final class ProbeInspectTool: MCPTool {
             "limit": "Max classes to return (default 30, max 100)",
             "cleanup": "Remove ProbeAgent after query (default false)"
         ],
-        prerequisites: ["【密文 App(cryptid=1)此工具无效】——报 TARGET_INCOMPATIBLE / 'encrypted (cryptid=1)' 时不重试, 先 app command=decrypt 砸壳 + replace_decrypted 后再分析", "必须先 inject enable ProbeAgent 注入探针(前置): 对加密 App 无法注入(见 inject prerequisites)"]
+        prerequisites: ["[This tool is ineffective on encrypted apps (cryptid=1)] — on TARGET_INCOMPATIBLE / 'encrypted (cryptid=1)' don't retry, first app command=decrypt 砸壳 + replace_decrypted 后再分析", "必须先 inject enable ProbeAgent 注入探针(前置): 对加密 App 无法注入(见 inject prerequisites)"]
     )
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
@@ -1141,7 +1141,7 @@ final class HookApplyTool: MCPTool {
             let exe = ProcessHelper.executableName(for: app)
             _ = InjectionManager.shared.runAsRoot("killall", args: ["killall", "-9", exe])
             _ = ProcessHelper.launchApp(bundleId: bundleId)
-            relaunchNote = "已重启 App 使配置生效"
+            relaunchNote = "App restarted, config is in effect"
         } else {
             relaunchNote = "Not restarted; takes effect on next app launch"
         }
@@ -1279,7 +1279,7 @@ final class DeviceRestoreTool: MCPTool {
                 let r = try InjectionManager.shared.disable(bundleId: bundleId)
                 injectionRemoved = ((r["status"] as? String) == "reverted") || !((r["restored_from_backup"] as? [String]) ?? []).isEmpty
                 if !injectionRemoved {
-                    restoreError = "disable 未确认还原 (见 injection.disable 输出)"
+                    restoreError = "disable didn't confirm restore (see injection.disable output)"
                 }
             } catch {
                 restoreError = "Restore failed: \(error.localizedDescription)"
@@ -1332,7 +1332,7 @@ final class AppEntitlementsTool: MCPTool {
         if c != 0 {
             var out: [String: Any] = ["error": "ldid -e failed (\(c))", "output": String(o.prefix(500)), "bundle_id": bundleId]
             out["parse_error"] = cryptID > 0 ? "target App is encrypted (cryptid=\(cryptID)); entitlements masked by encryption, not 'no permission'" : "Mach-O parse failed (possible obfuscation/special header), not 'no permission'"
-            out["next_step"] = cryptID > 0 ? "先executed app.decrypt 砸壳后重试" : "用 shell.exec 查看主二进制头部确认格式"
+            out["next_step"] = cryptID > 0 ? "Run app.decrypt first, then retry" : "Use shell.exec to inspect the main binary header and confirm the format"
             return out
         }
         var dict: [String: Any] = [:]

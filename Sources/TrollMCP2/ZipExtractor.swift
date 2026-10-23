@@ -164,7 +164,7 @@ enum ZipExtractor {
         guard localOffset + 30 <= bytes.count,
               bytes[localOffset] == 0x50, bytes[localOffset+1] == 0x4b,
               bytes[localOffset+2] == 0x03, bytes[localOffset+3] == 0x04 else {
-            throw ZipError.corrupt("本地文件头签名错误 @\(localOffset)")
+            throw ZipError.corrupt("Local file header signature error @\(localOffset)")
         }
         let nameLen = u16(bytes, localOffset + 26)
         let extraLen = u16(bytes, localOffset + 28)
@@ -206,7 +206,7 @@ enum ZipExtractor {
             for (idx, b) in input.enumerated() { withHeader[idx + 2] = b }
             written = decode(withHeader)
         }
-        guard written > 0 else { throw ZipError.corrupt("DEFLATE 解压失败") }
+        guard written > 0 else { throw ZipError.corrupt("DEFLATE decompression failed") }
         return Array(output[0..<written])
     }
 
