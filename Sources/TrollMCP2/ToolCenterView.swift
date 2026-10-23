@@ -50,7 +50,7 @@ struct ToolCenterView: View {
     @ObservedObject private var registry = ToolRegistry.shared
     @Environment(\.presentationMode) private var presentationMode
     @State private var searchText = ""
-    @State private var showOnlyReal = false
+    @State private var showOnlyReal = true   // v6.6.0-fix32: 默认只显示真实实现（占位工具隐藏——减少混乱）
 
     // v6.1.5-14bo：真实实现清单（并入原权限页）——区分"有真实实现" vs "占位/文档"
     private let realTools: Set<String> = [
@@ -84,7 +84,9 @@ struct ToolCenterView: View {
                 guard passesFilter(def) else { continue }
                 var branch: String? = nil
                 if def.name == "shell.exec" {
-                    branch = (layer == .native) ? "iOS 原生命令" : "Alpine Linux 命令"
+                    // v6.6.0-fix32: 去重——shell.exec 只在 native 层显示一次（统一环境执行）
+                    if layer == .alpine { continue }
+                    branch = "统一环境执行（iOS 原生命令 + Alpine 工具链）"
                 }
                 rows.append(ToolRowItem(def: def, branch: branch))
             }
@@ -162,7 +164,7 @@ struct ToolCenterView: View {
                             }
                         }
                     }
-                    Toggle("仅显示真实实现", isOn: $showOnlyReal)
+                    Toggle("仅显示真实实现（默认开——隐藏占位）", isOn: $showOnlyReal)
                         .accentColor(.tmCyan)
                 }
 
