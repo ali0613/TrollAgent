@@ -61,7 +61,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // probe（mmap MAP_JIT）实测不可靠（mmap 成功≠执行放行）已废弃。
         let pidStr = String(ProcessInfo.processInfo.processIdentifier)
         if let helperPath = Bundle.main.url(forResource: "jit_helper", withExtension: nil, subdirectory: "bin")?.path {
+            logJIT("[JIT] helperPath=\(helperPath) pid=\(pidStr)\n")
             let spawnResult = InjectionManager.shared.spawnRootDetailed(helperPath, args: [pidStr], timeout: 10)
+            logJIT("[JIT] jit_helper rc=\(spawnResult.code) timedOut=\(spawnResult.timedOut) signaled=\(spawnResult.signaled) stderr=\(spawnResult.stderr.prefix(200))\n")
             if spawnResult.code == 0 {
                 ("[appmain] JIT enabled via jit_helper (attach pid \(pidStr), rc=0) — no URL needed\n" as NSString).utf8String.map { fputs($0, stderr) }
             } else {
@@ -69,6 +71,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
                 scheduleTrollStoreJITURL()
             }
         } else {
+            logJIT("[JIT] WARN jit_helper not found in bundle\n")
             fputs("[appmain] WARN: jit_helper not found in bundle — falling back to TrollStore URL\n", stderr)
             scheduleTrollStoreJITURL()
         }
@@ -149,16 +152,32 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
     // v7.0.4.5: TrollStore URL 兜底（jit_helper 失败时）——外部 root attach，已验证可靠路径
     private func scheduleTrollStoreJITURL() {
+        logJIT("[scheduleTrollStoreJITURL] entering\n")
         DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
             let bid = Bundle.main.bundleIdentifier ?? "com.trollagent.app"
             if let url = URL(string: "apple-magnifier://enable-jit?bundle-id=\(bid)"),
                UIApplication.shared.canOpenURL(url) {
+                logJIT("[scheduleTrollStoreJITURL] canOpenURL=true, opening \(url.absoluteString)\n")
                 fputs("[appmain] opening TrollStore JIT URL (fallback)\n", stderr)
                 UIApplication.shared.open(url)
                 Thread.sleep(forTimeInterval: 2.5)  // 等 TrollStore RootHelper 完成 attach（JIT 授权持续进程生命周期）
+                logJIT("[scheduleTrollStoreJITURL] after 2.5s sleep (URL opened)\n")
             } else {
+                logJIT("[scheduleTrollStoreJITURL] WARN canOpenURL=false (no TrollStore? bid=\(bid))\n")
                 fputs("[appmain] WARN: TrollStore URL unavailable (no TrollStore?)\n", stderr)
             }
+        }
+    }
+
+    // v7.0.4.5: JIT 诊断日志落盘（Documents/jit_log.txt）——确认走了哪条路（helper/URL），远程 /api/file 可拉
+    private func logJIT(_ msg: String) {
+        let path = NSHomeDirectory() + "/Documents/jit_log.txt"
+        if let h = FileHandle(forWritingAtPath: path) {
+            h.seekToEndOfFile()
+            h.write(msg.data(using: .utf8) ?? Data())
+            h.closeFile()
+        } else {
+            FileManager.default.createFile(atPath: path, contents: msg.data(using: .utf8), attributes: nil)
         }
     }
 
