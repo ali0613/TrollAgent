@@ -38,8 +38,10 @@ extern void (*exit_hook)(struct task *task, int code);
 
 static atomic_int g_booted = 0;
 
-// v7.0.4: ptrace 自开 JIT——TrollStore 的 JIT 开关本质是 ptrace(PT_ATTACHEXC)+detach 让内核
-// 放行可执行映射（持续进程生命周期）。App 内直接对主进程 attach/detach，等同手动开 JIT 且免闪切。
+// v7.0.4: ptrace 自开 JIT——TrollStore 的 JIT 开关本质是 ptrace(PT_ATTACHEXC) 让内核
+// 放行可执行映射（持续进程生命周期）。App 内直接对主进程 attach，等同手动开 JIT 且免闪切。
+// fix7.0.4.1: **不 detach**——实证 detach 后 JIT 授权失效：cpu_run_to_interrupt 执行 JIT 块
+// 触发 SIGBUS(10)。TrollStore 手动开 JIT（v7.0.3 真机 29/29 全通）即保持 attach 状态。
 // 注意：iOS ptrace 无权限时返回 EPERM——Swift 侧检测负值后 fallback apple-magnifier URL。
 extern int ptrace(int request, pid_t pid, void *addr, int data);
 int troll_self_enable_jit(void) {
@@ -48,7 +50,7 @@ int troll_self_enable_jit(void) {
     int r = ptrace(16 /* PT_ATTACHEXC */, pid, 0, 0);  // 16 = PT_ATTACHEXC（Darwin）
     if (r != 0) return -1;
     usleep(100 * 1000);  // 100ms——TrollStore jit.m 同款等待 attach 生效
-    ptrace(17 /* PT_DETACH */, pid, 0, 0);
+    // 关键：保持 attach（不 detach）——JIT 授权随 attach 会话持续到进程结束
     return 0;
 #else
     return -1;
