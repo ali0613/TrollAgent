@@ -137,7 +137,7 @@ enum L10n {
             "ob_cap3": ["zh": "读取界面树、点击输入，控制任意 App", "en": "Read UI tree, tap & type to drive any app"],
             "ob_cap4": ["zh": "内置浏览器、审计、自动化与知识库", "en": "Built-in browser, audit, automation & KB"],
             "ob_start_title": ["zh": "开始使用", "en": "Get Started"],
-            "ob_start_sub": ["zh": "先到「设置 → 模型 API」添加你的中转站配置，然后回来试试下方的快捷卡片。", "en": "Add your relay API config under Settings → Model API, then try the quick cards below."],
+            "ob_start_sub": ["zh": "选择下方快捷卡片立即体验；模型 API 随时可在「设置 → 模型 API」中配置。", "en": "Tap a quick card to start right away; model API can be configured anytime under Settings → Model API."],
 
             // ===== 抽屉 =====
             "drawer_title": ["zh": "对话", "en": "Chats"],
