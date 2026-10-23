@@ -57,6 +57,24 @@ int troll_self_enable_jit(void) {
 #endif
 }
 
+// v7.0.4.3: JIT 有效性探测——mmap(MAP_JIT) 实测内核是否已放行可执行内存。
+// self-attach 可能返回 0 但内核未放行（Husk 文档：进程不能同步调试自己）。
+// 探测准确反映真实授权：无授权时 MAP_JIT mmap 返回 EINVAL/EPERM → probe=0 → Swift 调 TrollStore URL。
+// 探测成功（probe=1）→ 无需 URL，免每次启动闪切。
+int troll_jit_probe(void) {
+#ifdef __APPLE__
+    void *p = mmap(NULL, 4096, PROT_READ | PROT_WRITE | PROT_EXEC,
+                   MAP_PRIVATE | MAP_ANON | MAP_JIT, -1, 0);
+    if (p == MAP_FAILED) return 0;
+    ((volatile uint8_t *)p)[0] = 0xC3;  // 写一字节验证可写（JIT 授权下才允许）
+    __builtin___clear_cache((char *)p, (char *)p + 4096);
+    munmap(p, 4096);
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 // 通知管道写端（串行：一次只有一个在跑的命令会收到退出通知）
 static pthread_mutex_t g_notify_mtx = PTHREAD_MUTEX_INITIALIZER;
 static int g_notify_fd = -1;

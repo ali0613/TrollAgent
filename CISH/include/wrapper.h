@@ -19,6 +19,10 @@ int cish_is_booted(void);
 /// 成功返回 0；失败（EPERM 等）返回负值——Swift 侧 fallback 到 apple-magnifier URL。
 int troll_self_enable_jit(void);
 
+/// v7.0.4.3: JIT 有效性探测——mmap(MAP_JIT) 实测内核是否已放行可执行内存。
+/// 返回 1 = JIT 可用（无需 TrollStore URL，免闪切）；0 = 未放行（需 URL 兜底）。
+int troll_jit_probe(void);
+
 /// 把 iOS 真实目录 bind-mount 进 Alpine（fakefs_bind_mount 包装）。
 /// 挂载后 Alpine 通过 linux_path 直接读写 host_path（iOS 真实文件，双向直通）。
 /// @param linux_path Alpine 侧挂载点（如 "/ios_documents"）
