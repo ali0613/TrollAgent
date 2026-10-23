@@ -103,7 +103,9 @@ jobs:
           mkdir -p Resources/bin
           xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=14.0 \
             tools/jit_helper.c -o Resources/bin/jit_helper || { echo "JIT_HELPER FAILED"; exit 1; }
-          if ldid -S "Support/bin-entitlements.plist" "Resources/bin/jit_helper" 2>/tmp/jit_sign.err; then
+          # root 辅助二进制：签完整 entitlements（platform-application/no-sandbox/persona-mgmt/get-task-allow）
+          # 注意：ldid -S 后必须紧跟 entitlements 文件（无空格）——写成 `-S "plist" "binary"` 会把 plist 当 binary（Unknown header magic）
+          if ldid "-SSupport/bin-entitlements.plist" "Resources/bin/jit_helper" 2>/tmp/jit_sign.err; then
             echo ">>> jit_helper ldid signed (full entitlements)"
           else
             echo "WARN: jit_helper ldid sign failed: $(cat /tmp/jit_sign.err)"

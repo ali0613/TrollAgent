@@ -91,21 +91,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         DispatchQueue.global(qos: .utility).async {
             VpnManager.cleanupStaleConfig()
         }
-
-    // v7.0.4.5: TrollStore URL 兜底（jit_helper 失败时）——外部 root attach，已验证可靠路径
-    private func scheduleTrollStoreJITURL() {
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
-            let bid = Bundle.main.bundleIdentifier ?? "com.trollagent.app"
-            if let url = URL(string: "apple-magnifier://enable-jit?bundle-id=\(bid)"),
-               UIApplication.shared.canOpenURL(url) {
-                fputs("[appmain] opening TrollStore JIT URL (fallback)\n", stderr)
-                UIApplication.shared.open(url)
-                Thread.sleep(forTimeInterval: 2.5)  // 等 TrollStore RootHelper 完成 attach（JIT 授权持续进程生命周期）
-            } else {
-                fputs("[appmain] WARN: TrollStore URL unavailable (no TrollStore?)\n", stderr)
-            }
-        }
-    }
         // v6.0.x：可爱助手开启则启动自动拉起桌面悬浮 HUD。
         // 直接读 UserDefaults（不经 GirlCompanion.shared 时序），延迟 2s 确保 UI/进程就绪再拉起。
         // v6.1.5-5：覆盖安装后旧 HUD 进程仍在跑（launchd KeepAlive 不换新二进制），
@@ -160,6 +145,21 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         BackgroundKeepAlive.registerBGTask()
 
         return true
+    }
+
+    // v7.0.4.5: TrollStore URL 兜底（jit_helper 失败时）——外部 root attach，已验证可靠路径
+    private func scheduleTrollStoreJITURL() {
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
+            let bid = Bundle.main.bundleIdentifier ?? "com.trollagent.app"
+            if let url = URL(string: "apple-magnifier://enable-jit?bundle-id=\(bid)"),
+               UIApplication.shared.canOpenURL(url) {
+                fputs("[appmain] opening TrollStore JIT URL (fallback)\n", stderr)
+                UIApplication.shared.open(url)
+                Thread.sleep(forTimeInterval: 2.5)  // 等 TrollStore RootHelper 完成 attach（JIT 授权持续进程生命周期）
+            } else {
+                fputs("[appmain] WARN: TrollStore URL unavailable (no TrollStore?)\n", stderr)
+            }
+        }
     }
 
     // v2.9.10：进后台时申请后台任务，让正在进行的请求有保活窗口（最多 3 分钟）
