@@ -29,6 +29,7 @@
 
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdio.h>      // snprintf（v7.0.0 pty stdio）
 #include <sys/stat.h>   // S_IFCHR/S_IFDIR/S_IFREG（host 宏，值与 Linux guest 一致）
 #include <fcntl.h>      // O_RDONLY
 #include <unistd.h>     // dup/open
@@ -42,6 +43,35 @@ static atomic_int g_booted = 0;
 static pthread_mutex_t g_notify_mtx = PTHREAD_MUTEX_INITIALIZER;
 static int g_notify_fd = -1;
 static pid_t_ g_notify_pid = -1;
+
+// ============ v7.0.0: pty stdio（对齐 rcarmo 集成——Terminal.m createPseudoTerminal/create_stdio）============
+// 此前用 realfs 管道（adhoc_fd + host fd dup）——Asbestos 未验证路径，guest 执行早期访存崩（cpu_run_to_interrupt Bus error）。
+// rcarmo 的 App 用 pty（/dev/pts/N——tty 驱动）做 stdio——对齐之。
+static int g_tty_out_fd = -1;   // guest stdout/stderr（tty 输出）→ App 输出管道
+static int g_tty_in_fd = -1;    // App 输入管道 → tty_input（guest stdin）
+
+static int our_tty_write(struct tty *tty, const void *buf, size_t len, bool blocking) {
+    if (g_tty_out_fd >= 0) { (void)write(g_tty_out_fd, buf, len); }
+    return (int)len;
+}
+static struct tty_driver_ops our_tty_ops = { .write = our_tty_write, };
+static struct tty_driver our_pty_driver = { .ops = &our_tty_ops, };
+
+static void *tty_input_thread(void *arg) {
+    // App 输入管道 → tty_input（guest 读 stdin 时收到）；EOF/出错退出
+    struct tty *tty = (struct tty *)arg;
+    char buf[4096];
+    for (;;) {
+        ssize_t n = read(g_tty_in_fd, buf, sizeof(buf));
+        if (n > 0) {
+            tty_input(tty, buf, (size_t)n, 0);
+        } else {
+            break;  // EOF 或错误
+        }
+    }
+    return NULL;
+}
+// ================================================================================
 
 // 只通知 spawn 的主进程退出（防 guest 内子进程先退导致通知错序/提前 close）
 static void cish_exit_hook(struct task *task, int code) {
@@ -146,32 +176,58 @@ long cish_spawn(const char *path, const char *argv_buf, const char *envp_buf,
     }
     struct task *task = current;
 
-    // stdio 管道接线（OpenMinis 同款：adhoc fd 包 host fd）
-    if (stdin_fd >= 0) {
-        struct fd *f = adhoc_fd_create(&realfs_fdops);
-        if (f != NULL) {
-            int real = dup(stdin_fd);
-            if (real >= 0) { f->real_fd = real; task->files->files[0] = f; }
+    // —— v7.0.0: pty stdio（对齐 rcarmo 集成——Terminal.m createPseudoTerminal + create_stdio /dev/pts/N）
+    // 旧：realfs 管道（adhoc_fd + host fd dup）——Asbestos 未验证路径，guest 早期访存崩。改为 tty 驱动。
+    g_tty_out_fd = out_fd >= 0 ? dup(out_fd) : -1;
+    g_tty_in_fd = stdin_fd >= 0 ? dup(stdin_fd) : -1;
+    struct tty *tty = pty_open_fake(&our_pty_driver);
+    if (!IS_ERR(tty)) {
+        char pts_path[32];
+        snprintf(pts_path, sizeof(pts_path), "/dev/pts/%d", tty->num);
+        generic_mknodat(AT_PWD, pts_path, S_IFCHR | 0666, dev_make(TTY_PSEUDO_SLAVE_MAJOR, tty->num));
+        int err2 = create_stdio(pts_path, TTY_PSEUDO_SLAVE_MAJOR, tty->num);
+        if (err2 < 0) {
+            // pty stdio 失败——回退 realfs 管道（保底，原逻辑）
+            struct fd *f0 = adhoc_fd_create(&realfs_fdops);
+            if (f0 != NULL) {
+                int real = g_tty_in_fd >= 0 ? dup(g_tty_in_fd) : open("/dev/null", O_RDONLY);
+                if (real >= 0) { f0->real_fd = real; task->files->files[0] = f0; }
+            }
+            struct fd *f1 = adhoc_fd_create(&realfs_fdops);
+            if (f1 != NULL) {
+                int real = g_tty_out_fd >= 0 ? dup(g_tty_out_fd) : -1;
+                if (real >= 0) { f1->real_fd = real; task->files->files[1] = f1; }
+            }
+            struct fd *f2 = adhoc_fd_create(&realfs_fdops);
+            if (f2 != NULL) {
+                int real = g_tty_out_fd >= 0 ? dup(g_tty_out_fd) : -1;
+                if (real >= 0) { f2->real_fd = real; task->files->files[2] = f2; }
+            }
+        } else {
+            // pty 输入线程（App stdin → tty_input）
+            if (g_tty_in_fd >= 0) {
+                pthread_t in_th;
+                if (pthread_create(&in_th, NULL, tty_input_thread, tty) == 0) {
+                    pthread_detach(in_th);
+                }
+            }
         }
     } else {
-        struct fd *f = adhoc_fd_create(&realfs_fdops);
-        if (f != NULL) {
-            int real = open("/dev/null", O_RDONLY);
-            if (real >= 0) { f->real_fd = real; task->files->files[0] = f; }
+        // pty_open_fake 失败——回退 realfs 管道（原逻辑）
+        struct fd *f0 = adhoc_fd_create(&realfs_fdops);
+        if (f0 != NULL) {
+            int real = g_tty_in_fd >= 0 ? dup(g_tty_in_fd) : open("/dev/null", O_RDONLY);
+            if (real >= 0) { f0->real_fd = real; task->files->files[0] = f0; }
         }
-    }
-    if (out_fd >= 0) {
-        struct fd *f = adhoc_fd_create(&realfs_fdops);
-        if (f != NULL) {
-            int real = dup(out_fd);
-            if (real >= 0) { f->real_fd = real; task->files->files[1] = f; }
+        struct fd *f1 = adhoc_fd_create(&realfs_fdops);
+        if (f1 != NULL) {
+            int real = g_tty_out_fd >= 0 ? dup(g_tty_out_fd) : -1;
+            if (real >= 0) { f1->real_fd = real; task->files->files[1] = f1; }
         }
-    }
-    if (err_fd >= 0) {
-        struct fd *f = adhoc_fd_create(&realfs_fdops);
-        if (f != NULL) {
-            int real = dup(err_fd);
-            if (real >= 0) { f->real_fd = real; task->files->files[2] = f; }
+        struct fd *f2 = adhoc_fd_create(&realfs_fdops);
+        if (f2 != NULL) {
+            int real = g_tty_out_fd >= 0 ? dup(g_tty_out_fd) : -1;
+            if (real >= 0) { f2->real_fd = real; task->files->files[2] = f2; }
         }
     }
 
