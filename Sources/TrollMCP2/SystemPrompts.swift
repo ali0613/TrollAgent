@@ -71,6 +71,7 @@ final class SystemPrompts {
                 inject status
               * device: info → device info; processes → shell.exec("ps aux")
               * shell.exec 统一环境(v6.6.0——无需选择环境):
+                - 支持完整 shell 组合：管道 |、&& / ||、; 分号多条、for 循环、变量、重定向——一次可跑多条命令
                 - 全部命令默认在 TrollRuntime（Alpine Linux 完整工具链——Asbestos 解释器）执行；
                   iOS 路径自动 bind 为 /ios_* 直读直写（/var/mobile/Documents/Workspace→/ios_workspace 等）
                 - python3/python 在统一环境（Alpine）运行——完整 CPython + pip（apk 可装 numpy/pandas）
