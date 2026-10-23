@@ -54,20 +54,27 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // 导致输入框高度过大；全局清零后 TextEditor 高度紧贴文字。
         UITextView.appearance().textContainerInset = .zero
 
-        // v7.0.4: 自动 JIT——ptrace 自开（同步，100ms 无感）；失败 fallback TrollStore URL（闪切一次）。
-        // 时序关键：cish_boot 是懒初始化（首次 shell.exec 才 boot）——这里先开 JIT，boot 时 map_dual 成功进真 JIT。
-        if troll_self_enable_jit() != 0 {
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 1.5) {
-                let bid = Bundle.main.bundleIdentifier ?? "com.trollagent.app"
-                if let url = URL(string: "apple-magnifier://enable-jit?bundle-id=\(bid)"),
-                   UIApplication.shared.canOpenURL(url) {
-                    fputs("[appmain] ptrace JIT failed, fallback URL\n", stderr)
-                    UIApplication.shared.open(url)
-                    Thread.sleep(forTimeInterval: 2.5)  // 等 TrollStore 完成 attach/detach
-                }
-            }
+        // v7.0.4.2: 自动 JIT 双保险——ptrace self-attach（无感）+ 无条件 TrollStore URL（外部 root attach，实证有效）。
+        // fix7.0.4.2 根因：self-attach 可能返回 0 但内核 JIT 标志未生效（沙箱权限/devmode），
+        // 仅"失败才 fallback"会漏掉这种情况 → cish_boot 后执行 JIT 块 SIGBUS(10) 崩 cpu_run_to_interrupt。
+        // TrollStore 官方（RootHelper root attach + devmode）是已验证路径（v7.0.3 手动开 29/29 全通）。
+        let jitPtraceRC = troll_self_enable_jit()
+        if jitPtraceRC != 0 {
+            ("[appmain] ptrace JIT rc=\(jitPtraceRC) (failed, rely on URL)\n" as NSString).utf8String.map { fputs($0, stderr) }
         } else {
-            fputs("[appmain] ptrace JIT enabled\n", stderr)
+            ("[appmain] ptrace JIT rc=0 (self-attach ok; URL also scheduled as double-insurance)\n" as NSString).utf8String.map { fputs($0, stderr) }
+        }
+        // 无条件调 TrollStore URL（幂等——重复 enable JIT 无副作用）：无论 self-attach 结果都走一次外部 root attach。
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
+            let bid = Bundle.main.bundleIdentifier ?? "com.trollagent.app"
+            if let url = URL(string: "apple-magnifier://enable-jit?bundle-id=\(bid)"),
+               UIApplication.shared.canOpenURL(url) {
+                fputs("[appmain] scheduling TrollStore JIT URL\n", stderr)
+                UIApplication.shared.open(url)
+                Thread.sleep(forTimeInterval: 2.5)  // 等 TrollStore RootHelper 完成 attach/detach（JIT 授权持续进程生命周期）
+            } else {
+                fputs("[appmain] WARN: TrollStore URL unavailable (no TrollStore?)\n", stderr)
+            }
         }
 
         CrashCatcher.install()  // v2.9.145c：最先注册崩溃捕获，闪退自动落盘 crash/ 可查

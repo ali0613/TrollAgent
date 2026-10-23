@@ -16,6 +16,9 @@ enum TrollRuntimeEngine {
     private static let lock = NSLock()
     private static var state: BootState = .idle
 
+    /// v7.0.4.2: 首次 shell.exec 前等待自动 JIT 就绪（TrollStore URL 处理完成），只等一次。
+    private static var jitReadyWaitDone = false
+
     /// v4.0.4: 内核已根治污染——build_ish.sh 在编译期删掉 fakefs_bind_mount 写 meta.db 权限的两段
     /// （symlink+bind 表已足够映射，meta.db 写入冗余有害），bind 不再污染后续 spawn（rc=-13 消失）。
     /// 故恢复自动 bind（autoBindEnabled=true）重新启用 bind 大文件直读；autoBridge 仍作兜底处理未 bind 的 iOS 路径。
@@ -438,6 +441,14 @@ enum TrollRuntimeEngine {
         lock.lock()
         defer { lock.unlock() }
         guard case .booted = state else { return ("[ish] kernel not ready", -1, false) }
+
+        // v7.0.4.2: 首次执行前等 JIT 就绪（双保险——AppMain 已计划 0.5s 后调 TrollStore URL + 2.5s 处理）。
+        // fix7.0.4.2：若远程/终端在 URL 完成前就执行 shell.exec，JIT 授权未生效 → SIGBUS(10) 崩 cpu_run_to_interrupt。
+        // 只等首次（后续命令 JIT 已生效），锁内执行保证原子。
+        if !jitReadyWaitDone {
+            Thread.sleep(forTimeInterval: 3.0)
+            jitReadyWaitDone = true
+        }
 
         // v3.7.7: 自动 bind——命令引用 iOS 主流目录(/var/mobile、/var/containers、/System)时
         // 自动挂载顶层并改写路径(/var/mobile/X → /ios_mobile/X)，Alpine 直接读写 iOS 文件。
