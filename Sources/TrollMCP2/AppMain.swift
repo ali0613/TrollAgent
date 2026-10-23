@@ -55,25 +55,21 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // 导致输入框高度过大；全局清零后 TextEditor 高度紧贴文字。
         UITextView.appearance().textContainerInset = .zero
 
-        // v7.0.4.3: 自动 JIT——ptrace self-attach + JIT 探测，生效则免 TrollStore URL（零闪切）。
-        // 探测（mmap MAP_JIT 实测）准确反映内核授权：self-attach 可能 rc=0 但未放行（进程不能同步调试自己）。
-        // 探测失败才调 TrollStore URL（外部 root attach，已验证可靠）——只在不生效时才闪切一次。
+        // v7.0.4.4: 无条件 TrollStore URL（外部 root attach，v7.0.3 手动验证 29/29 可靠）+ self-attach 兜底。
+        // 实测结论：probe（mmap MAP_JIT 写一字节）不可靠——mmap 成功不代表内核放行可执行（APRR 执行时拦截），
+        // v7.0.4.3 probe=1 误判 → 不调 URL → 执行 JIT 仍 SIGBUS。URL 才是已验证可靠路径，无条件调用（幂等无害）。
+        // ISHManager 首次 exec 前仍等待 3s 确保 URL 生效（b751278 引入，保留）。
         let jitPtraceRC = troll_self_enable_jit()
-        let jitReady = troll_jit_probe() != 0
-        if jitReady {
-            ("[appmain] JIT ready after self-attach (rc=\(jitPtraceRC), probe=1) — no URL needed\n" as NSString).utf8String.map { fputs($0, stderr) }
-        } else {
-            ("[appmain] JIT NOT ready (self-attach rc=\(jitPtraceRC), probe=0) — scheduling TrollStore URL\n" as NSString).utf8String.map { fputs($0, stderr) }
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
-                let bid = Bundle.main.bundleIdentifier ?? "com.trollagent.app"
-                if let url = URL(string: "apple-magnifier://enable-jit?bundle-id=\(bid)"),
-                   UIApplication.shared.canOpenURL(url) {
-                    fputs("[appmain] opening TrollStore JIT URL\n", stderr)
-                    UIApplication.shared.open(url)
-                    Thread.sleep(forTimeInterval: 2.5)  // 等 TrollStore RootHelper 完成 attach（JIT 授权持续进程生命周期）
-                } else {
-                    fputs("[appmain] WARN: TrollStore URL unavailable (no TrollStore?)\n", stderr)
-                }
+        ("[appmain] JIT: self-attach rc=\(jitPtraceRC) (result unreliable per Husk docs); scheduling TrollStore URL (proven path)\n" as NSString).utf8String.map { fputs($0, stderr) }
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.5) {
+            let bid = Bundle.main.bundleIdentifier ?? "com.trollagent.app"
+            if let url = URL(string: "apple-magnifier://enable-jit?bundle-id=\(bid)"),
+               UIApplication.shared.canOpenURL(url) {
+                fputs("[appmain] opening TrollStore JIT URL\n", stderr)
+                UIApplication.shared.open(url)
+                Thread.sleep(forTimeInterval: 2.5)  // 等 TrollStore RootHelper 完成 attach（JIT 授权持续进程生命周期）
+            } else {
+                fputs("[appmain] WARN: TrollStore URL unavailable (no TrollStore?)\n", stderr)
             }
         }
 
