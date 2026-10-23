@@ -151,7 +151,7 @@ final class ProjectContext: ObservableObject {
 final class ProjectTool: MCPTool {
     let definition = ToolDefinition(
         name: "project",
-        summary: "Manage project context via action. Actions: current/list/create/select/delete/history/generate_tweak. Params: action, name/bundle_id/app_name/dylib_path(create), project_id(select/delete/history). Use for switch between projects(不同 target app/dylib), save project state, generate tweak template.",
+        summary: "Manage project context via action. Actions: current/list/create/select/delete/history/generate_tweak. Params: action, name/bundle_id/app_name/dylib_path(create), project_id(select/delete/history). Use for switch between projects (different target app/dylib), save project state, generate tweak template.",
         parameters: [
             "action": "current | list | create | select | delete | history | generate_tweak",
             "name": "Project name (for create/select/generate_tweak)",
@@ -273,9 +273,9 @@ final class TaskTemplateRunner {
             ["id": "inject_verify", "name": "injection verify loop", "desc": "inject -> launch -> check load -> verify hook -> auto rollback on failure"],
             ["id": "ipa_health", "name": "IPA health check", "desc": "parse arch/signature/dependencies/encryption, output injection feasibility report"],
             ["id": "perf_regression", "name": "performance regression test", "desc": "launch -> sample 30s -> compare history -> output regression verdict"],
-            ["id": "emergency_recover", "name": "紧急恢复", "desc": "扫描注入状态→恢复全部备份→Verify launch (App 打不开时的保命流程)"],
-            ["id": "network_probe", "name": "抓包分析", "desc": "injected NetworkTweak→打开App采集→stop→Request list→Statistical analysis"],
-            ["id": "crash_triage", "name": "闪退诊断", "desc": "启动诊断→崩溃分析→Log collection→给出原因与修复建议"]
+            ["id": "emergency_recover", "name": "Emergency Recovery", "desc": "Scan injection state → restore all backups → verify launch (life-saver flow when the app won't open)"],
+            ["id": "network_probe", "name": "Packet Capture Analysis", "desc": "inject NetworkTweak → open the app and collect → stop → request list → statistical analysis"],
+            ["id": "crash_triage", "name": "Crash Triage", "desc": "Startup diagnosis → crash analysis → log collection → cause + fix suggestions"]
         ]
     }
 
@@ -305,20 +305,20 @@ final class TaskTemplateRunner {
                     if let kbResult = try? kb.invoke(["error": issues.joined(separator: " ")]) {
                         let matches = kbResult["matches"] as? [[String: String]] ?? []
                         if !matches.isEmpty {
-                            summary = "发现 \(issues.count) 个问题：\n" + matches.map { "\($0["keyword"] ?? "")：\($0["fix"] ?? "")" }.joined(separator: "\n")
+                            summary = "Found \(issues.count) issues:\n" + matches.map { "\($0["keyword"] ?? ""): \($0["fix"] ?? "")" }.joined(separator: "\n")
                         } else {
-                            summary = "发现 \(issues.count) 个问题，知识库未匹配到已知方案：\n" + issues.joined(separator: "\n")
+                            summary = "Found \(issues.count) issues, no known fix in the knowledge base:\n" + issues.joined(separator: "\n")
                         }
                     }
                 } else {
-                    summary = "注入环境正常，未发现问题"
+                    summary = "Injection environment OK, no issues found"
                     success = true
                 }
             }
 
         case .injectVerify:
             guard let dylib = dylibPath else {
-                return TemplateResult(success: false, summary: "需要 dylib_path", steps: [], reportPath: nil, durationMs: Int(Date().timeIntervalSince(start) * 1000))
+                return TemplateResult(success: false, summary: "dylib_path required", steps: [], reportPath: nil, durationMs: Int(Date().timeIntervalSince(start) * 1000))
             }
 
             // 1. 预检
@@ -327,7 +327,7 @@ final class TaskTemplateRunner {
                 let compatible = (dylibResult["compatibility"] as? String)?.contains("✅") ?? false
                 steps.append(["step": "dylib precheck", "success": compatible, "detail": dylibResult["compatibility"] as? String ?? ""])
                 if !compatible {
-                    summary = "dylib 不兼容：\(dylibResult["compatibility"] ?? "")"
+                    summary = "dylib incompatible: \(dylibResult["compatibility"] ?? "")"
                     break
                 }
             }
@@ -361,7 +361,7 @@ final class TaskTemplateRunner {
                         let loaded = inspect["injected"] as? Bool ?? false
                         steps.append(["step": "dylib加载检查", "success": loaded])
                         success = loaded
-                        summary = loaded ? "注入OK并验证通过，App 运行正常" : "注入OK但 dylib 未加载"
+                        summary = loaded ? "Injection OK and verified, app runs normally" : "Injection OK but dylib not loaded"
                     } else {
                         // 启动failed，Auto rollback
                         let apps = AppCatalog.list()
@@ -378,17 +378,17 @@ final class TaskTemplateRunner {
                         if let crashResult = try? crashTool.invoke(["bundle_id": bundleId]) {
                             let analyses = crashResult["analyses"] as? [[String: Any]] ?? []
                             if let first = analyses.first, let cause = first["root_cause"] as? String {
-                                summary = "注入后启动崩溃，已Auto rollback。原因：\(cause)"
+                                summary = "Crash on launch after injection, auto-rolled back. Cause: \(cause)"
                             } else {
-                                summary = "注入后启动崩溃，已Auto rollback"
+                                summary = "Crash on launch after injection, auto-rolled back"
                             }
                         }
                     }
                 } else {
-                    summary = "注入failed"
+                    summary = "Injection failed"
                 }
             } catch {
-                summary = "注入异常：\(error.localizedDescription)"
+                summary = "Injection error: \(error.localizedDescription)"
                 steps.append(["step": "Run injection", "success": false, "detail": error.localizedDescription])
             }
 
@@ -412,7 +412,7 @@ final class TaskTemplateRunner {
                     let cause = first["root_cause"] as? String ?? "未知"
                     let fix = first["fix"] as? String ?? ""
                     steps.append(["step": "crash analysis", "success": true, "detail": cause])
-                    summary = "崩溃原因：\(cause)\n修复建议：\(fix)"
+                    summary = "Crash cause: \(cause)\nFix suggestion: \(fix)"
                     success = true
 
                     // 4. 生成复现模板
@@ -449,7 +449,7 @@ final class TaskTemplateRunner {
                 steps.append(["step": "性能采样30秒", "success": true])
                 if let cpu = result["cpu"] as? [String: String],
                    let mem = result["memory"] as? [String: Any] {
-                    summary = "CPU 平均 \(cpu["avg"] ?? "")%，峰值 \(cpu["max"] ?? "")%\n内存峰值 \(mem["max_kb"] ?? "") KB，\(mem["leak_suspect"] ?? "")"
+                    summary = "CPU avg \(cpu["avg"] ?? "")%, peak \(cpu["max"] ?? "")%\nMemory peak \(mem["max_kb"] ?? "") KB, \(mem["leak_suspect"] ?? "")"
                     success = true
                 }
             }
@@ -477,7 +477,7 @@ final class TaskTemplateRunner {
             Thread.sleep(forTimeInterval: 4)
             let pid = findPid(by: bundleId)
             steps.append(["step": "Verify launch", "success": pid > 0, "detail": pid > 0 ? "PID=\(pid)" : "not running"])
-            summary = success ? "已恢复全部注入备份，目标 App launches normally" : "恢复done但有failed项，请查看报告"
+            summary = success ? "All injection backups restored, target app launches normally" : "Restore done but some items failed, see the report"
 
         case .networkProbe:
             // 1. 停旧抓包
@@ -488,11 +488,11 @@ final class TaskTemplateRunner {
             if !injected {
                 let dylib = ProcessHelper.tweakPath("NetworkTweak.dylib") ?? ""
                 if dylib.isEmpty {
-                    return TemplateResult(success: false, summary: "内置 NetworkTweak.dylib 不存在", steps: [], reportPath: nil, durationMs: 0)
+                    return TemplateResult(success: false, summary: "Built-in NetworkTweak.dylib not found", steps: [], reportPath: nil, durationMs: 0)
                 }
                 let r = try? InjectionManager.shared.enable(bundleId: bundleId, dylibSourcePath: dylib)
                 if (r?["status"] as? String) != "injected" {
-                    return TemplateResult(success: false, summary: "NetworkTweak 注入failed", steps: [], reportPath: nil, durationMs: 0)
+                    return TemplateResult(success: false, summary: "NetworkTweak injection failed", steps: [], reportPath: nil, durationMs: 0)
                 }
             }
             steps.append(["step": "NetworkTweak ready", "success": true])
@@ -516,7 +516,7 @@ final class TaskTemplateRunner {
             // 7. Statistical analysis
             if let anaResult = try? capTool.invoke(["action": "analyze"]) {
                 steps.append(["step": "Statistical analysis", "success": true, "detail": "done"])
-                summary = "抓包done：\(reqCount) entries请求。\n" + ((anaResult["summary"] as? String) ?? "")
+                summary = "Capture done: \(reqCount) request entries.\n" + ((anaResult["summary"] as? String) ?? "")
                 success = reqCount > 0
             }
 
@@ -537,11 +537,11 @@ final class TaskTemplateRunner {
                     let cause = first["root_cause"] as? String ?? "未知"
                     let fix = first["fix"] as? String ?? ""
                     steps.append(["step": "crash analysis", "success": true, "detail": cause])
-                    summary = "原因：\(cause)\n修复建议：\(fix)"
+                    summary = "Cause: \(cause)\nFix suggestion: \(fix)"
                     success = !startedOK
                 } else {
                     steps.append(["step": "crash analysis", "success": false, "detail": "no crash log found"])
-                    summary = startedOK ? "App 启动正常，无崩溃记录" : "启动failed但no crash log found (可能是注入导致，试 emergency_recover)"
+                    summary = startedOK ? "App launched normally, no crash records" : "Launch failed but no crash log found (may be injection-related, try emergency_recover)"
                     success = startedOK
                 }
             }
@@ -629,8 +629,8 @@ final class TaskTool: MCPTool {
 
         return [
             "message": result.success
-                ? "任务「\(type.rawValue)」done (\(result.steps.count) 步，\(result.durationMs)ms)：\(result.summary)"
-                : "任务「\(type.rawValue)」failed：\(result.summary)",
+                ? "Task «\(type.rawValue)» done (\(result.steps.count) steps, \(result.durationMs)ms): \(result.summary)"
+                : "Task «\(type.rawValue)» failed: \(result.summary)",
             "template": type.rawValue,
             "bundle_id": bundleId,
             "success": result.success,

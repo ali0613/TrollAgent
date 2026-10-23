@@ -14,7 +14,7 @@ import Foundation
 final class ToolInstallTool: MCPTool {
     let definition = ToolDefinition(
         name: "tool.install",
-        summary: "统一工具安装入口. Params: name(工具名) / profile(re逆向/dev开发/network网络 批量) / source(原生iOS二进制GitHub repo URL, 触发CI build-tool.yml). 安装链: Alpine apk(即装即用,auto-bind直读iOS文件) → pip → CI. Use for: AI 缺工具时一键装. 装tweak走github.trigger_build; 注dylib走inject.",
+        summary: "Unified tool installation entry. Params: name(tool name) / profile(re=reverse-eng, dev=development, network=batch) / source(native iOS binary GitHub repo URL, triggers CI build-tool.yml). Install chain: Alpine apk (install-and-use, auto-bind reads iOS files) → pip → CI. Use for: one-click install when AI lacks a tool. Tweaks via github.trigger_build; dylibs via inject.",
         parameters: [
             "name": "Tool name to install (e.g. jq / jtool2 / class-dump)",
             "profile": "Optional curated batch: re(逆向工具链) / dev(开发环境) / network(网络工具)",
@@ -75,7 +75,7 @@ final class ToolInstallTool: MCPTool {
                 InstallationRegistry.shared.appendLine(line)
             }
             if apk.exitCode == 0 {
-                InstallationRegistry.shared.finish(ok: true, summary: "已装 \(pkg)")
+                InstallationRegistry.shared.finish(ok: true, summary: "Installed \(pkg)")
                 let isPy = pkg.hasPrefix("py3-") || Self.pythonHints.contains(name)
                 let (ok, note) = smokeTest(name, importMode: isPy)
                 return ["ok": true, "tool": name, "status": ok ? "installed" : "installed_unverified", "source": "alpine_apk", "package": pkg,
@@ -106,7 +106,7 @@ final class ToolInstallTool: MCPTool {
                 InstallationRegistry.shared.appendLine(line)
             }
             if pip.exitCode == 0 {
-                InstallationRegistry.shared.finish(ok: true, summary: "pip 已装 \(pipName)")
+                InstallationRegistry.shared.finish(ok: true, summary: "pip installed \(pipName)")
                 let (ok, note) = smokeTest(pipName, importMode: true)
                 return ["ok": true, "tool": name, "status": ok ? "installed" : "installed_unverified", "source": "pip",
                         "hint": "已 pip install \(pipName)（" + note + "）。统一环境 python3（Alpine）——apk/pip 装包直接可见可用；含 C 扩展的包优先 apk 的 py3- 预编译版（性能好）"]
@@ -209,7 +209,7 @@ final class ToolInstallTool: MCPTool {
             let ok = r.exitCode == 0
             if ok { okCount += 1 }
             InstallationRegistry.shared.finish(ok: ok,
-                summary: ok ? "已装 \(pkg)" : TrollRuntimeEngine.installDiagnose(r.output, timedOut: r.timedOut, exitCode: r.exitCode))
+                summary: ok ? "Installed \(pkg)" : TrollRuntimeEngine.installDiagnose(r.output, timedOut: r.timedOut, exitCode: r.exitCode))
             let detail = r.output.trimmingCharacters(in: .whitespacesAndNewlines)
                 .split(separator: "\n").suffix(2).joined(separator: "\n")
             results.append(["package": pkg, "ok": ok, "detail": detail])

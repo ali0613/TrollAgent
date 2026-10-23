@@ -36,13 +36,13 @@ enum ShellDiag {
 final class ShellExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "shell.exec",
-        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux aarch64 完整工具链执行（原生 ARM64，apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写（仅 /ios_workspace、/ios_containers、/ios_system 三个——/ios_appdata 等不存在，无 iOS 原生 shell 兜底，plutil/jtool2 不可用，ps 只见容器进程）。python3/node 在统一环境原生执行；原生入口（shell.exec 路由前缀）：py3-native/node-native（芯片直跑，未内置自动降级）、plutil（plist 读/转换）、sqlite3（直查 SQLite）——均勿在统一环境 command -v。缺工具需显式 apk add（不会自动装；git/wget/curl 已预装；make/cmake/gcc/clang/openssl/radare2 均可用 apk 装）。Use for: file ops, system info, network, text processing.",
+        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(required), timeout(default 20s/max 120). Unified env: all commands run in the full Alpine Linux aarch64 toolchain (native ARM64; apk/pipes/symlinks/dynamic ELF fully supported); iOS paths auto-bind to /ios_* for direct read/write (only /ios_workspace, /ios_containers, /ios_system exist — /ios_appdata etc. don't; no iOS-native shell fallback, plutil/jtool2 unavailable, ps only sees container processes). python3/node run natively in the unified env; native entries (shell.exec routed prefixes): py3-native/node-native (run on the chip, no auto-fallback bundled), plutil (plist read/convert), sqlite3 (direct SQLite query) — don't `command -v` them inside the unified env. Missing tools need explicit apk add (no auto-install; git/wget/curl preinstalled; make/cmake/gcc/clang/openssl/radare2 all installable via apk).Use for: file ops, system info, network, text processing.",
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",
             "reset_cwd": "Optional Bool: reset working dir to default (default false)",
-            "limit": "Optional Int: result string truncation cap (default 16000 chars——覆盖多数分析输出；仍不够用 full=true). If diagnostics output is trimmed and the body is invisible, pass limit=20000 或更大；full=true 则不截断返回完整结果",
-            "full": "Optional Bool: true=返回完整结果不截断 (慎用，大输出占满上下文)",
+            "limit": "Optional Int: result string truncation cap (default 16000 chars, covers most analysis output; if not enough use full=true). If diagnostics output is trimmed and the body is invisible, pass limit=20000 or higher; full=true returns the complete untruncated result",
+            "full": "Optional Bool: true=return the complete untruncated result (use with care — large output fills the context)",
             "offset": "Optional Int: skip first N chars of output before showing (default 0), combine with limit to read a middle slice",
         ],
         verified: true
@@ -349,7 +349,7 @@ final class ShellExecTool: MCPTool {
         }
         let elapsed = Int(Date().timeIntervalSince(provisionStart))
         if apkResult.exitCode == 0 {
-            InstallationRegistry.shared.finish(ok: true, summary: "已装 \(pkg)（\(elapsed)s）")
+            InstallationRegistry.shared.finish(ok: true, summary: "Installed \(pkg) (\(elapsed)s)")
             note = "首次运行已自动安装缺失工具 \(pkg)（耗时 \(elapsed)s）。"
         } else {
             let diag = TrollRuntimeEngine.installDiagnose(apkResult.output, timedOut: apkResult.timedOut, exitCode: apkResult.exitCode)
@@ -706,7 +706,7 @@ final class ShellExecTool: MCPTool {
     static func runIOSPipeline(_ command: String, limit: Int = 16000, offset: Int = 0, timeout: TimeInterval = 30) -> [String: Any] {
         let segments = splitShellSegments(command)
         guard !segments.isEmpty else {
-            return ["command": command, "exit_code": 1, "stdout": "空命令"]
+            return ["command": command, "exit_code": 1, "stdout": "empty command"]
         }
         
         // 切链：[(链内段列表, 本链进入前的分隔符)]
@@ -1285,13 +1285,13 @@ final class ShellExecTool: MCPTool {
         let body = t.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
         // cd 纯状态查询 → 返回当前 cwd（原生，无副作用）
         if target == "cd" && body.isEmpty {
-            return ["command": seg, "exit_code": 0, "stdout": "当前工作目录：\(TrollRuntimeEngine.cwd)"]
+            return ["command": seg, "exit_code": 0, "stdout": "Current working directory: \(TrollRuntimeEngine.cwd)"]
         }
         // 原生命令表：plutil/sqlite3（iOS 特有）+ ta（宿主直调）+ bin/ jtool2（Mach-O 专长）
         if iosNativeCommands.contains(target) {
             var note = "探测结果来自原生命令表（\(target) iOS 特有/宿主直调/App bin 内置）"
             return ["command": seg, "exit_code": 0,
-                    "stdout": "\(target): ✅ 已安装（\(target) ... 可直接执行）", "note": note]
+                    "stdout": "\(target): ✅ installed (\(target) ... directly runnable)", "note": note]
         }
         // v6.6.0：git 探测（command -v git / which git）——真实可用性：
         // ①统一环境 Alpine rootfs 预装 git（v6.5.2 起）②App 内置 bin/git.py(dulwich) 兜底。
@@ -1304,16 +1304,16 @@ final class ShellExecTool: MCPTool {
                 let p = rootfs + sub + "git"
                 if fm.isExecutableFile(atPath: p) {
                     return ["command": seg, "exit_code": 0,
-                            "stdout": "git: ✅ 已安装（统一环境 rootfs 预装，直接 git ... 执行）\n用法：git clone/add/commit/push/log/status ...（统一环境内，rootfs 自带无需 apk）", "note": "探测结果来自统一环境 rootfs 预装 git"]
+                            "stdout": "git: ✅ installed (preinstalled in the unified env rootfs, run git ... directly)\nUsage: git clone/add/commit/push/log/status ... (in the unified env, bundled with rootfs, no apk needed)", "note": "Probe result from the unified env rootfs preinstalled git"]
                 }
             }
             let gitPy = Bundle.main.bundlePath + "/bin/git.py"
             if fm.fileExists(atPath: gitPy) {
                 return ["command": seg, "exit_code": 0,
-                        "stdout": "git: ✅ 已安装（App 内置纯 Python git 兜底：git.py/dulwich）\n用法：git clone/add/commit/push/log/status ...（兜底路径；优先统一环境 rootfs git）", "note": "探测结果来自 bin/git.py（rootfs git 缺失时兜底）"]
+                        "stdout": "git: ✅ installed (app-bundled pure-Python git fallback: git.py/dulwich)\nUsage: git clone/add/commit/push/log/status ... (fallback path; prefer unified-env rootfs git)", "note": "Probe result from bin/git.py (fallback when rootfs git is missing)"]
             }
             return ["command": seg, "exit_code": 1,
-                    "stdout": "git: ❌ 不可用（无 rootfs git 也无 bin/git.py）\n说明：统一环境 rootfs 应预装 git；git.py 为兜底，若均缺失请反馈构建打包问题", "note": "探测结果来自文件系统（未执行命令本体）"]
+                    "stdout": "git: ❌ unavailable (no rootfs git, no bin/git.py)\nNote: the unified-env rootfs should ship git; git.py is the fallback — if both are missing, report a packaging issue", "note": "Probe result from the filesystem (command body not executed)"]
         }
         let fm = FileManager.default
         // 1) App 原生 bin
@@ -1336,7 +1336,7 @@ final class ShellExecTool: MCPTool {
             } else {
                 out += "\n运行方式：\(runHint)"
             }
-            return ["command": seg, "exit_code": 0, "stdout": out, "note": "探测结果来自文件系统（未执行命令本体，避免触发解释器高 CPU 被系统杀）"]
+            return ["command": seg, "exit_code": 0, "stdout": out, "note": "Probe result from the filesystem (command body not executed, avoiding interpreter high-CPU kills by the system）"]
         }
         var out = "\(target): ❌ 未安装（iOS 无原生 \(target)）"
         if target == "git" || target == "vim" || target == "curl" || target == "wget" {
@@ -1344,7 +1344,7 @@ final class ShellExecTool: MCPTool {
         } else {
             out += "\n安装提示：用 tool.install 安装，或统一环境里 apk add \(target)。"
         }
-        return ["command": seg, "exit_code": 1, "stdout": out, "note": "探测结果来自文件系统（未执行命令本体，避免触发解释器高 CPU 被系统杀）"]
+        return ["command": seg, "exit_code": 1, "stdout": out, "note": "Probe result from the filesystem (command body not executed, avoiding interpreter high-CPU kills by the system）"]
     }
 
     /// 工具探测——版本/存在性查询类命令（git/vim/curl/wget 等 --version/-v/-V/纯命令/
@@ -1391,7 +1391,7 @@ final class ShellExecTool: MCPTool {
                 if (r["exit_code"] as? Int ?? 0) != 0 { exitCode = 1 }
             }
             return ["command": trimmed, "exit_code": exitCode, "stdout": stdout,
-                    "note": "批量探测结果来自文件系统/原生命令表（未执行命令本体，避免触发解释器高 CPU 被系统杀）"]
+                    "note": "Batch probe results from filesystem/native command table (command body not executed, avoiding interpreter high-CPU kills by the system)"]
         }
         guard let target = probeTargetOfSegment(trimmed) else { return nil }
         return probeSingleTool(target, command: trimmed)
@@ -1656,7 +1656,7 @@ final class ShellExecTool: MCPTool {
         let parts = command.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
         
         guard parts.count >= 2 else {
-            return ["command": command, "exit_code": 1, "stdout": "Usage: plutil -p <file.plist>  或  plutil -convert xml1 [-o out.xml] <file.plist>"]
+            return ["command": command, "exit_code": 1, "stdout": "Usage: plutil -p <file.plist>  or  plutil -convert xml1 [-o out.xml] <file.plist>"]
         }
         
         // 解析参数：-convert xml1 / -o <out> / -p；文件路径=首个非 - 参数
@@ -1911,15 +1911,15 @@ final class ShellExecTool: MCPTool {
         var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0]
         var size = 0
         guard sysctl(&mib, u_int(mib.count), nil, &size, nil, 0) == 0, size > 0 else {
-            return ["command": command, "exit_code": 1, "stdout": "ps: 无法读取进程列表 (sysctl size)"]
+            return ["command": command, "exit_code": 1, "stdout": "ps: cannot read process list (sysctl size)"]
         }
         let count = size / MemoryLayout<kinfo_proc>.size
         guard count > 0, count < 2000 else {
-            return ["command": command, "exit_code": 1, "stdout": "ps: 进程数异常 (\(count))"]
+            return ["command": command, "exit_code": 1, "stdout": "ps: abnormal process count (\(count))"]
         }
         var procList = [kinfo_proc](repeating: kinfo_proc(), count: count)
         guard sysctl(&mib, u_int(mib.count), &procList, &size, nil, 0) == 0 else {
-            return ["command": command, "exit_code": 1, "stdout": "ps: 无法读取进程列表 (sysctl read)"]
+            return ["command": command, "exit_code": 1, "stdout": "ps: cannot read process list (sysctl read)"]
         }
         
         var lines = ["PID   PPID  NAME"]

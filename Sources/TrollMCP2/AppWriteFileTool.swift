@@ -10,7 +10,7 @@ import Foundation
 final class AppWriteFileTool: MCPTool {
     let definition = ToolDefinition(
         name: "app_write_file",
-        summary: "原生直写指定 App 数据容器内文件（iOS 写通道——不依赖 bind 挂载只读限制）。参数 bundle_id + rel_path(容器内相对路径, 如 Library/Preferences/x.plist) + content_b64(base64 完整文件内容)。写前自动备份到 Workspace/backups/。用于就地改 App 内购/设置/票据数据; 读用 bind_app, 真正可写改文件用本工具。",
+        summary: "Native direct write to a file inside an app's data container (iOS write channel, not limited by bind's read-only mount). Params: bundle_id + rel_path (container-relative path, e.g. Library/Preferences/x.plist) + content_b64 (base64 full file content). Auto-backup to Workspace/backups/ before writing. Use for modifying IAP/settings/receipt data in place; read via bind_app, actually-writable file changes via this tool.",
         parameters: [
             "bundle_id": "App bundle ID (required)",
             "rel_path": "容器内相对路径, 如 Library/Preferences/x.plist (required, 禁止绝对路径/../)",

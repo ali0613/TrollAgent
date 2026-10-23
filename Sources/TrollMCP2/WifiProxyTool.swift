@@ -12,7 +12,7 @@ import CFNetwork
 final class WifiProxyExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "wifi",
-        summary: "WiFi 系统代理查询/应急开关. command: status(读 runtime + plist 配置,主用) / set(应急手改plist, port默认18180, 127.0.0.1) / clear. iOS 无官方API改WiFi代理, configd可能覆盖set/clear仅应急; 抓包请走 vpn.capture. plist: /var/preferences/SystemConfiguration/preferences.plist.",
+        summary: "WiFi system proxy query / emergency toggle. command: status(read runtime + plist config, primary) / set(emergency plist edit, port default 18180, 127.0.0.1) / clear. iOS has no official API to change the WiFi proxy; configd may override, set/clear are emergency-only; for packet capture use vpn.capture. plist: /var/preferences/SystemConfiguration/preferences.plist.",
         parameters: [
             "command": "Subcommand (required): set / clear / status",
             "port": "Proxy port for set (default 18180)"

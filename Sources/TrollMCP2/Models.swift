@@ -1703,15 +1703,15 @@ final class ConversationStore: ObservableObject {
                     }
                 }
             }
-            var summaryParts: [String] = ["已省略最早 \(dropped) 条历史消息"]
+            var summaryParts: [String] = ["Earliest \(dropped) history messages omitted"]
             if !topics.isEmpty {
-                summaryParts.append("话题: " + topics.prefix(6).joined(separator: " / "))
+                summaryParts.append("Topics: " + topics.prefix(6).joined(separator: " / "))
             }
             if !toolNames.isEmpty {
-                summaryParts.append("涉及工具: " + toolNames.sorted().prefix(10).joined(separator: "、"))
+                summaryParts.append("Tools involved: " + toolNames.sorted().prefix(10).joined(separator: ", "))
             }
-            summaryParts.append("如需旧细节，请直接提问，AI 会重新执行相关工具获取。")
-            let hint = ChatMessage(role: "system", content: "[系统] " + summaryParts.joined(separator: "。"))
+            summaryParts.append("For old details, just ask — AI will re-run the relevant tools to get them.")
+            let hint = ChatMessage(role: "system", content: "[System] " + summaryParts.joined(separator: ". "))
             result.insert(hint, at: 0)
         }
         return (result, compactSource)

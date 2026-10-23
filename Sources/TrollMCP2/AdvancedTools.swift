@@ -256,7 +256,7 @@ final class BinarySymbolsTool: MCPTool {
             "related_symbols_total": related.count,
             "key_strings": Array(hits.prefix(150)),
             "key_strings_total": hits.count,
-            "note": "定向骨架已精简(相关类/方法+关键字符串), AI 可全量读取并推导内购/校验原理"
+            "note": "Targeted skeleton slimmed (relevant classes/methods + key strings); AI can read it fully and derive IAP/validation logic"
         ]
     }
 
@@ -1143,7 +1143,7 @@ final class HookApplyTool: MCPTool {
             _ = ProcessHelper.launchApp(bundleId: bundleId)
             relaunchNote = "已重启 App 使配置生效"
         } else {
-            relaunchNote = "未重启；下次 App 启动时配置生效"
+            relaunchNote = "Not restarted; takes effect on next app launch"
         }
         AuditLog.shared.log("hook.apply", detail: "\(bundleId) keys=\(config.keys)")
         return [
@@ -1249,8 +1249,8 @@ final class DeviceFakeTool: MCPTool {
             "exit": exit,
             "output": output,
             "note": ok
-                ? "内存注入OK：设备伪装(ConfigHook)已在进程内生效，未改动任何文件；App 重启后自动还原真实设备"
-                : "opainject failed (见 output)。App 文件未被动过，无需恢复"
+                ? "Memory injection OK: device spoofing (ConfigHook) active in-process, no files changed; reverts to the real device on app restart"
+                : "opainject failed (see output). App files untouched, no restore needed"
         ]
     }
 }
@@ -1282,7 +1282,7 @@ final class DeviceRestoreTool: MCPTool {
                     restoreError = "disable 未确认还原 (见 injection.disable 输出)"
                 }
             } catch {
-                restoreError = "恢复failed：\(error.localizedDescription)"
+                restoreError = "Restore failed: \(error.localizedDescription)"
                 AuditLog.shared.log("device.restore.error", detail: "\(bundleId) \(restoreError)")
             }
         }
@@ -1302,8 +1302,8 @@ final class DeviceRestoreTool: MCPTool {
             "injection_removed": injectionRemoved,
             "mode": injected ? "file" : "memory",
             "note": injected
-                ? "已删除 fake_device.json、卸载旧文件注入并重启 App"
-                : "已删除 fake_device.json 并重启 App (内存注入随进程结束自动消失，零残留)"
+                ? "Deleted fake_device.json, removed old file injection and restarted the app"
+                : "Deleted fake_device.json and restarted the app (memory injection disappears with the process, zero residue)"
         ]
     }
 }
@@ -1331,7 +1331,7 @@ final class AppEntitlementsTool: MCPTool {
         let (c, o) = InjectionManager.shared.runAsRoot("ldid", args: ["-e", main])
         if c != 0 {
             var out: [String: Any] = ["error": "ldid -e failed (\(c))", "output": String(o.prefix(500)), "bundle_id": bundleId]
-            out["parse_error"] = cryptID > 0 ? "target App is encrypted (cryptid=\(cryptID))，entitlements 被加密掩盖，非“没有权限”" : "Mach-O 解析failed (可能混淆/特殊头)，非“没有权限”"
+            out["parse_error"] = cryptID > 0 ? "target App is encrypted (cryptid=\(cryptID)); entitlements masked by encryption, not 'no permission'" : "Mach-O parse failed (possible obfuscation/special header), not 'no permission'"
             out["next_step"] = cryptID > 0 ? "先executed app.decrypt 砸壳后重试" : "用 shell.exec 查看主二进制头部确认格式"
             return out
         }
@@ -1343,7 +1343,7 @@ final class AppEntitlementsTool: MCPTool {
            let d = try? PropertyListSerialization.propertyList(from: raw, options: [], format: nil) as? [String: Any] {
             dict = d
         } else {
-            parseError = cryptID > 0 ? "加密 App (cryptid=\(cryptID))entitlements 无法解析，先砸壳" : "ldid 输出非 plist，解析failed"
+            parseError = cryptID > 0 ? "Encrypted app (cryptid=\(cryptID)) entitlements can't be parsed, decrypt first" : "ldid output isn't plist, parse failed"
         }
         var out: [String: Any] = [
             "bundle_id": bundleId,
@@ -1435,7 +1435,7 @@ final class KeychainWipeTool: MCPTool {
             "failed_count": failed,
             "errors": errors,
             "hint": failed > 0
-                ? "部分条目需要系统级 keychain 权限 (本 App 未声明该组)。"
+                ? "Some entries need system-level keychain permission (this app hasn't declared that group)."
                 : "已清理目标 App 钥匙串条目 (登录态将被重置)"
         ]
     }

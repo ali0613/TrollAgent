@@ -700,7 +700,7 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
 final class InjectionExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "inject",
-        summary: "Manage dylib injection & reverse engineering. Params: command, bundle_id, path(IPA/dylib/binary), dylib_path, query. 二进制分析首选 binary_symbols(提取Mach-O符号/类), 别用 shell 跑 nm/strings. Use for: 注入/移除dylib, 查状态, inspect IPA/dylib/binary, hook, wipe keychain. 启动App走app.*, UI操作走control.*. Subcommands: enable / disable / static / enable_persisted / status / inspect / list / remove / restore / mem / diagnose / verify / ipa_inspect / dylib_inspect / binary_symbols / hook_apply / probe_inspect / plugin_list / keychain_wipe / load_dylib.",
+        summary: "Manage dylib injection & reverse engineering. Params: command, bundle_id, path(IPA/dylib/binary), dylib_path, query. For binary analysis prefer binary_symbols (extract Mach-O symbols/classes) — don't run nm/strings via shell. Use for: inject/remove dylibs, check status, inspect IPA/dylib/binary, hook, wipe keychain. Launch apps via app.*, UI operations via control.*. Subcommands: enable / disable / static / enable_persisted / status / inspect / list / remove / restore / mem / diagnose / verify / ipa_inspect / dylib_inspect / binary_symbols / hook_apply / probe_inspect / plugin_list / keychain_wipe / load_dylib.",
         parameters: [
             "command": "Subcommand: enable / disable / static / enable_persisted / status / inspect / list / remove / restore / mem / diagnose / verify / ipa_inspect / dylib_inspect / binary_symbols / hook_apply / probe_inspect / plugin_list / keychain_wipe / load_dylib",
             "bundle_id": "App bundle ID",
@@ -708,7 +708,7 @@ final class InjectionExecTool: MCPTool {
             "dylib_path": "Dylib path (for enable)",
             "query": "Search query (for list)"
         ],
-        verified: true, category: "injection", prerequisites: ["enable/static/enable_persisted 前确认 App 已安装且 bundle_id 有效 (先 app status 确认)", "iOS 17+ 注入依赖 ct_bypass 可能失效 (先用 inject diagnose 确认环境)", "【密文 App(cryptid=1)无法注入 hook】——报 spawnRoot failed 85 / sandbox blocked mmap 时不重试: 必须先 app command=decrypt 砸壳 → app command=replace_decrypted 就地替换(自动完整重签) → App 能启动后再注入。注入失败时看 message 里的归因(diag)决定方向, 连续失败2次换方法。", "hook 完整链路: project action=generate_tweak name=<tweak> bundle_id=<app> → 写 tweaks/<name>/Tweak.x → github command=trigger_build workflow=build-tweak.yml tweak=<name> → github command=download_artifact 取 dylib → dylib 传目标 App 数据容器 Documents(工作区会被 sandbox 挡 mmap) → inject command=enable bundle_id=<app> dylib_path=<App容器内dylib路径> → app restart 验证"])
+        verified: true, category: "injection", prerequisites: ["before enable/static/enable_persisted confirm App 已安装且 bundle_id 有效 (先 app status 确认)", "iOS 17+ 注入依赖 ct_bypass 可能失效 (先用 inject diagnose 确认环境)", "【密文 App(cryptid=1)无法注入 hook】——报 spawnRoot failed 85 / sandbox blocked mmap 时不重试: 必须先 app command=decrypt 砸壳 → app command=replace_decrypted 就地替换(自动完整重签) → App 能启动后再注入。注入失败时看 message 里的归因(diag)决定方向, 连续失败2次换方法。", "hook 完整链路: project action=generate_tweak name=<tweak> bundle_id=<app> → 写 tweaks/<name>/Tweak.x → github command=trigger_build workflow=build-tweak.yml tweak=<name> → github command=download_artifact 取 dylib → dylib 传目标 App 数据容器 Documents(工作区会被 sandbox 挡 mmap) → inject command=enable bundle_id=<app> dylib_path=<App容器内dylib路径> → app restart 验证"])
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
         guard let command = params["command"] as? String else {
@@ -870,7 +870,7 @@ final class InjectionExecTool: MCPTool {
 final class AutomationExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "automation",
-        summary: "Manage automation/scheduled tasks. Params: command, name(任务名/ID), enabled. Use for: 定时任务的创建/启停/手动触发/cron 触发. 一次性提醒走 reminder.*. Subcommands: run / list / jobs / stop / status / history / set_enabled / cron_fire.",
+        summary: "Manage automation/scheduled tasks. Params: command, name(task name/ID), enabled. Use for: creating/starting/stopping/manually triggering/cron-triggering scheduled tasks. One-shot reminders go through reminder.*. Subcommands: run / list / jobs / stop / status / history / set_enabled / cron_fire.",
         parameters: [
             "command": "Subcommand: run / list / jobs / stop / status / history / set_enabled / cron_fire",
             "name": "Task name or ID",
@@ -927,7 +927,7 @@ final class AutomationExecTool: MCPTool {
 final class AuditTool: MCPTool {
     let definition = ToolDefinition(
         name: "tools.audit",
-        summary: "Audit tool registry consistency: 找出 descriptions/prerequisites 里引用了未注册的幽灵工具, 报告工具总数及 verified/jailbreak/trollStore 分布. Use for: 增删改工具后、AI 对可用工具困惑时、长会话前. 列工具走 system.overview.",
+        summary: "Audit tool registry consistency: find ghost tools referenced in descriptions/prerequisites that aren't registered; report tool totals and verified/jailbreak/trollStore distribution. Use for: after adding/removing tools, when AI is confused about available tools, before long sessions. Listing tools goes through system.overview.",
         parameters: [:],
         returns: ["total_tools": "registered tool count", "verified_count": "tools marked verified:true", "ghost_ref_count": "total references to unregistered tools", "ghost_refs": "map of tool → unregistered tool names it references (empty = docs consistent with registry)"],
         verified: true, category: "system")

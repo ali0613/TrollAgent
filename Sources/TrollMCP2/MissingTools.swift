@@ -94,7 +94,7 @@ final class DeviceSnapshotTool: MCPTool {
 
 final class WebSearchTool: MCPTool {
     let definition = ToolDefinition(name: "web.search",
-        summary: "Search the web with multi-engine fallback (Bing → DuckDuckGo → Baidu) and multi-query support. Use for: find information online, look up facts, search tutorials/docs. Don't use for: open a specific website (use browser.open), search saved knowledge (use knowledge.search). v4.3.65: queries:[...] 并行拆词检索并自动去重合并；sort=true 官方/媒体优先；save=true 自动沉淀知识库。Example: user says 'when was iPhone 16 released' → search web.",
+        summary: "Search the web with multi-engine fallback (Bing → DuckDuckGo → Baidu) and multi-query support. Use for: find information online, look up facts, search tutorials/docs. Don't use for: open a specific website (use browser.open), search saved knowledge (use knowledge.search). queries:[...] runs split keywords in parallel, auto-dedupes and merges; sort=true ranks official/media sources first; save=true auto-saves to the knowledge base.Example: user says 'when was iPhone 16 released' → search web.",
         parameters: ["query": "Search keywords (e.g. 'iOS 17 jailbreak guide')",
                      "queries": "Array of search terms to run in parallel & merge (optional, preferred for complex topics)",
                      "limit": "Max results per query (default 8)",

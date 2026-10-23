@@ -489,7 +489,7 @@ public final class ToolRegistry: ObservableObject {
             // v3.2.0：description 追加前置条件——AI 看到工具定义即知依赖顺序，不用撞错误才知道
             var desc = def.summary
             if !def.prerequisites.isEmpty {
-                desc += " 前置条件: " + def.prerequisites.joined(separator: "; ") + "。不满足时先执行前置步骤再调用本工具，不要直接调用。"
+                desc += " Prerequisites: " + def.prerequisites.joined(separator: "; ") + ". Run the prerequisite steps first, then call this tool — don't call it directly."
             }
             result.append([
                 "type": "function",

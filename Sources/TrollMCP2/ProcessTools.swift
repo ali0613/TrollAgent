@@ -549,7 +549,7 @@ func findPidByPsName(_ execName: String) -> Int32 {
 final class AppExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "app",
-        summary: "Manage apps & analyze app internals (launch/stop/install/uninstall/diagnose/decrypt/entitlements). Subcommands: launch / stop / restart / status / stats / cache_inspect / cache_clear / open_and_input / deps / install / uninstall / duplicate / diagnose / encrypt_info / entitlements / decrypt / replace_decrypted / restore_binary / launch_options / inject_package. 加密App(cryptid=1)先砸壳: decrypt → replace_decrypted → restore_binary(失败可恢复); App Store原装就地替换无效→inject_package 改包名重装.",
+        summary: "Manage apps & analyze app internals (launch/stop/install/uninstall/diagnose/decrypt/entitlements). Subcommands: launch / stop / restart / status / stats / cache_inspect / cache_clear / open_and_input / deps / install / uninstall / duplicate / diagnose / encrypt_info / entitlements / decrypt / replace_decrypted / restore_binary / launch_options / inject_package. Encrypted apps (cryptid=1) must be decrypted first: decrypt → replace_decrypted → restore_binary (recoverable on failure); App Store originals can't be replaced in place → inject_package with a renamed bundle.",
         parameters: [
             "command": "Subcommand: launch / stop / restart / status / stats / cache_inspect / cache_clear / open_and_input / deps / install / uninstall / duplicate / diagnose / encrypt_info / entitlements / decrypt / replace_decrypted / restore_binary / launch_options / inject_package",
             "bundle_id": "App bundle ID (e.g. com.xingin.discover)",
@@ -559,7 +559,7 @@ final class AppExecTool: MCPTool {
             "duration": "Duration seconds (for stats)",
             "text": "Text to input (for open_and_input)"
         ],
-        verified: true, category: "app_control", prerequisites: ["analyze/hook 加密 App(cryptid=1)必须先砸壳: decrypt → replace_decrypted → restore_binary 恢复(流程见 summary)", "install/uninstall 需 TrollStore entitlements; 失败看 diagnose"])
+        verified: true, category: "app_control", prerequisites: ["analyze/hook encrypted apps (cryptid=1) must be decrypted first: decrypt → replace_decrypted → restore_binary to recover (see summary)", "install/uninstall needs TrollStore entitlements; on failure see diagnose"])
     
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
         guard let command = params["command"] as? String else {

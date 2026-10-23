@@ -68,7 +68,7 @@ final class AppInstallTool: MCPTool {
         let cOut = out.trimmingCharacters(in: .whitespacesAndNewlines)
         return ["ok": msg.ok, "method": msg.ok ? "trollstore://" : "trollstorehelper_failed",
                 "output": cOut.isEmpty ? "(spawn exit code \(c), helper=\(helper) exist=\(helperExist))" : cOut,
-                "message": "trollstorehelper failed (exit=\(c))。\(msg.message)"]
+                "message": "trollstorehelper failed (exit=\(c)). \(msg.message)"]
     }
 
     private func installViaScheme(_ path: String) -> (ok: Bool, message: String) {

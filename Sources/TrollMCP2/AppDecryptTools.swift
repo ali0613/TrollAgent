@@ -330,19 +330,19 @@ final class AppEncryptInfoTool: MCPTool {
     private func conclusion(processInfo: [String: Any], staticInfo: [String: Any]) -> String {
         if let pid = processInfo["pid"] as? Int32, pid > 0 {
             if let enc = processInfo["encrypted"] as? Bool {
-                return enc ? "运行中进程检测到加密 (cryptid=1)，可用 app.decrypt 砸壳" : "运行中进程确认未加密 (cryptid=0)，无需砸壳"
+                return enc ? "Running process detected as encrypted (cryptid=1), use app.decrypt to decrypt" : "Running process confirmed unencrypted (cryptid=0), no decryption needed"
             }
             if let _ = processInfo["parse_error"] {
-                return "进程解析failed (可能是加密+反调试拦截)，静态结果见 static_info"
+                return "Process parsing failed (may be encrypted + anti-debug interception), static result in static_info"
             }
         }
         if let enc = staticInfo["encrypted"] as? Bool {
-            return enc ? "静态检测为已加密 (cryptid=1)，请启动目标 App 后用 app.decrypt 砸壳" : "静态检测为未加密 (已砸壳或侧载)"
+            return enc ? "Static check: encrypted (cryptid=1), launch the target app and use app.decrypt" : "Static check: unencrypted (already decrypted or sideloaded)"
         }
         if let _ = staticInfo["parse_error"] {
-            return "静态解析异常 (可能是加密二进制或特殊 Mach-O)，启动 App 后用 app.decrypt 尝试进程内砸壳"
+            return "Static parsing error (may be an encrypted binary or special Mach-O), launch the app and try app.decrypt in-process"
         }
-        return "otool 不可用，无法静态判断；启动 App 后用 app.encrypt_info 复查 (进程内解析)"
+        return "otool unavailable, can't judge statically; recheck with app.encrypt_info after launching the app (in-process parsing)"
     }
 
     private func extractInt(_ line: String, _ key: String) -> Int32 {
@@ -388,12 +388,12 @@ final class AppEncryptInfoTool: MCPTool {
 final class AppInjectPackageTool: MCPTool {
     let definition = ToolDefinition(
         name: "app.inject_package",
-        summary: "改包名+注入 dylib+打包+TrollStore 静默安装成独立新 App(不碰原 App)。用于 App Store 原装 App(就地替换无效)。流程: 解压砸壳 ipa → 改 CFBundleIdentifier→new_bundle_id → insert_dylib 给主二进制加 dylib load command → 拷 dylib → 打包 ipa → trollstorehelper 安装。参数: ipa_path(源砸壳 ipa), dylib_path(你的 dylib 绝对路径, 如 MyHook.dylib), new_bundle_id(新包名, 如 com.trollagent.mypatched), new_name(显示名, 可选), auto_install(默认 true)。Example: app inject_package ipa_path:/var/mobile/Documents/Workspace/decrypted/xxx.ipa dylib_path:/var/mobile/Documents/Workspace/MyHook.dylib new_bundle_id:com.trollagent.mypatched",
+        summary: "Rename bundle + inject dylib + repack + silent TrollStore install into a separate new app (doesn't touch the original). For App Store original apps (in-place replacement won't work). Flow: unpack decrypted ipa → change CFBundleIdentifier→new_bundle_id → insert_dylib adds a dylib load command to the main binary → copy dylib → repack ipa → trollstorehelper install. Params: ipa_path(source decrypted ipa), dylib_path (your dylib's absolute path, e.g. MyHook.dylib), new_bundle_id (new bundle id, e.g. com.trollagent.mypatched), new_name (display name, optional), auto_install (default true).Example: app inject_package ipa_path:/var/mobile/Documents/Workspace/decrypted/xxx.ipa dylib_path:/var/mobile/Documents/Workspace/MyHook.dylib new_bundle_id:com.trollagent.mypatched",
         parameters: [
-            "ipa_path": "源砸壳 ipa 绝对路径 (required)",
-            "dylib_path": "要注入的 dylib 绝对路径 (required)",
-            "new_bundle_id": "新包名 (required, 如 com.trollagent.jinx)",
-            "new_name": "显示名 (可选)",
+            "ipa_path": "Absolute path of the source decrypted ipa (required)",
+            "dylib_path": "Absolute path of the dylib to inject (required)",
+            "new_bundle_id": "New bundle id (required, e.g. com.trollagent.jinx)",
+            "new_name": "Display name (optional)",
             "auto_install": "是否 TrollStore 安装 (默认 true)"
         ], verified: true, category: "app_control", prerequisites: ["ipa 与 dylib 路径已存在(先 shell.exec ls 确认)", "new_bundle_id 不要与已装 App 冲突", "TrollStore 已安装(trollstorehelper 可用)"])
 

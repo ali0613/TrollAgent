@@ -6,7 +6,7 @@ import Foundation
 final class FileExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "file",
-        summary: "High-level file inspection (auto-bind: unified env reads iOS files directly). Subcommands: inspect / analyze. inspect=native metadata: size, magic type (sqlite/zip/macho/elf/text); Mach-O 额外给 fat/thin、arch(arm64/x86_64)、filetype(executable/dylib). analyze=环境内 `file`+`strings`(前80行). REQUIRED: path(iOS绝对路径). Use for: 识别文件类型/从砸壳二进制或db提取字符串; 编辑文件走shell.",
+        summary: "High-level file inspection (auto-bind: unified env reads iOS files directly). Subcommands: inspect / analyze. inspect=native metadata: size, magic type (sqlite/zip/macho/elf/text); Mach-O additionally gives fat/thin, arch(arm64/x86_64), filetype(executable/dylib). analyze=in-env `file`+`strings` (first 80 lines). REQUIRED: path (iOS absolute path). Use for: identify file type / extract strings from a decrypted binary or db; for editing files use shell.",
         parameters: [
             "command": "Subcommand (required): inspect / analyze",
             "path": "iOS absolute file path (required)"
@@ -135,7 +135,7 @@ final class FileExecTool: MCPTool {
 final class DbExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "db",
-        summary: "SQLite 分析 (auto-bind iOS .db 进统一环境跑 sqlite3). Subcommands: list / schema / query. list=表名; schema=CREATE语句; query=跑SQL SELECT. REQUIRED: path; query 需 sql. Use for: 查看/查询 iOS 上的 .db(微信/支付宝等); 改 schema/data 别用本工具.",
+        summary: "SQLite analysis (auto-bind iOS .db into the unified env and run sqlite3). Subcommands: list / schema / query. list=table names; schema=CREATE statements; query=run SQL SELECT. REQUIRED: path; query needs sql. Use for: inspect/query .db files on iOS (WeChat/Alipay etc.); don't use this tool to alter schema/data.",
         parameters: [
             "command": "Subcommand (required): list / schema / query",
             "path": "iOS absolute db path (required, auto-bind Alpine reads directly)",

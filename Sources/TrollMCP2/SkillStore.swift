@@ -8,7 +8,7 @@ import Foundation
 struct SkillItem: Identifiable, Equatable {
     var id = UUID()
     let name: String
-    let summary: String      // 摘要：AI 判断何时使用该技能的依据
+    let summary: String      // summary: what the AI uses to decide when to use this skill
     let instruction: String  // 完整指令：AI 按此执行
 
     var dict: [String: String] { ["name": name, "summary": summary, "instruction": instruction] }
@@ -115,7 +115,7 @@ final class SkillStore {
             // v4.4.11(P0): 环境提示词瘦身——SHELL 段"实测边界知识"拆到此技能, 遇到时 skills.read 按需加载
             [
                 "name": L10n.t("i18n_888"),
-                "summary": "统一环境（TrollRuntime）实测边界结论(按需查询): cstool 架构模式名、tree/git/python3 限制、nscan/llvm 用法、installer/provision/auto-bind。Use for: 遇到 shell 工具报错或环境边界限制时查询结论。",
+                "summary": "Unified env (TrollRuntime) measured edge-case conclusions (query on demand): cstool arch mode names, tree/git/python3 limits, nscan/llvm usage, installer/provision/auto-bind. Use for: querying conclusions when shell tools error out or hit env boundary limits.",
                 "instruction": "遇到 shell/环境边界问题先查这里(由环境提示词按需加载)：\n## 工具边界\n- 非 ARM 架构反汇编用统一环境 objdump -m mach-o --arch=x86_64 -d 或 r2 兜底\n- tree 在统一环境（Alpine GNU tree）支持 -L/-d 等参数; 轻量列目录树也可用 find <dir> -maxdepth N\n- Mach-O 分析用统一环境 objdump -m mach-o / llvm-objdump（Alpine apk add llvm）\n- shell.exec 默认 limit=16000; 结果出现\"输出太长已截断\"提示时, 必须先读 <path> 完整内容再分析, 绝不基于截断片段下结论; 逆向/分析类命令建议 full=true 或 limit=50000\n## 统一环境（v6.6.0——无路由）\n- shell.exec 无 runtime 参数：全部命令默认在 TrollRuntime（Alpine 完整工具链）执行；iOS 路径自动 bind 为 /ios_* 直读直写\n- python3 在统一环境（Alpine）运行——完整 CPython + pip（apk add python3 py3-numpy 等任意装包）；重包若异常闪退=解释器限制, 用 PC 侧跑\n- python3 子进程/脚本全支持（Alpine 完整 shell）\n- 装完先冒烟验证(工具名 --version 或 --help, 确认 exit 0 且有输出); exit 0 空输出=缓冲问题, 用文件重定向确认\n## git\n- 统一环境（Alpine）直接使用——rootfs 预装 git 2.x, clone/pull/push/log/status 全支持\n## 网络/安装\n- 端口扫描用 python3 <app>/bin/nscan.py <host> 1-1000 或 -p 22,80 <host>（iOS 网络受限，nmap 不作为主路径）\n- tool.install name:<pkg> 走 apk→pip→CI; 大包(pandas/numpy等) 1-3min 属正常, 别手工 apk add(默认20s超时被杀)\n- apk 自动切中国镜像+装证书; 安装失败读结构化诊断, 重试一次或说明真因, 不盲重试\n- iOS 构建工具链(Theos+clang)不可装, 用 PC 交叉编译 / GitHub Actions\n## 统一环境 bind\n- iOS↔Alpine 自动 bind: /var/mobile/Documents/Workspace→/ios_workspace, /var/containers→/ios_containers, /System→/ios_system(只读), ; 仅此三个——/ios_appdata、/ios_appgroups 不存在; 环境内直读, 无 2MB 限制\n- /var/mobile 整棵【不】自动绑定(自引用→内核污染→崩溃); 读 App 数据容器用 bind_app bundle_id:<id> 返回 /ios_data_<app>, 写用 bind_app_write(先自动备份)\n- auto-bind 只改命令行不改脚本内路径: sh/heredoc/python3 脚本里直接用 /ios_* 路径\n## 禁止\n- 未确认就 which 是浪费, 缺工具显式 apk add; 旧 env 前缀/runtime 参数已不存在, 写了会报错\n- 未确认命令可用前不要重复试错, 先 skills.read 本参考",
             ],
         ]

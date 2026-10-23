@@ -22,7 +22,7 @@ final class DeviceInfoTool: MCPTool {
 final class DeviceProbeTool: MCPTool {
     let definition = ToolDefinition(
         name: "device.probe",
-        summary: "Probe/check device environment: TrollStore installed, can we inject, what permissions available. Use for: check if device supports injection, see what capabilities are available. Don't use for: get device specs (use device.info), check battery/memory (use device snapshot 子命令). Example: user says 'can my phone inject, how is the environment' → probe device.",
+        summary: "Probe/check device environment: TrollStore installed, can we inject, what permissions available. Use for: check if device supports injection, see what capabilities are available. Don't use for: get device specs (use device.info), check battery/memory (use device snapshot subcommand). Example: user says 'can my phone inject, how is the environment' → probe device.",
         verified: true, category: "device")
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
@@ -66,7 +66,7 @@ final class MemoryTweakTool: MCPTool {
         name: "memory",
         summary: "Game memory modification (GameGuardian/H5GG style). Actions: attach / search / refine / write / freeze / unfreeze / status / frozen / results. Params: value (search/refine/write/freeze), type (int/int64/float/double/byte/short), address (0x hex, required for write/freeze/unfreeze). Requires MemoryTweak.dylib injected into target game.",
         parameters: [
-            "action": "attach (确认已注入并连接，injected dylib 后服务即已 attach，等价 status) / search (first scan) / refine (filter results) / write (set new value) / freeze (lock value) / unfreeze / status / frozen (list locked values)",
+            "action": "attach (confirms injected and connected; after dylib injection the service is attached, equivalent to status) / search (first scan) / refine (filter results) / write (set new value) / freeze (lock value) / unfreeze / status / frozen (list locked values)",
             "value": "Value to search/write/freeze. e.g. 1000 coins, 50 HP",
             "type": "Data type: int (integer, default) / int64 / float (decimal) / double / byte / short",
             "address": "Memory address (0x hex format, required for write/freeze)"

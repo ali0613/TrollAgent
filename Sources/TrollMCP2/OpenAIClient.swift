@@ -119,7 +119,7 @@ final class OpenAIClient {
         guard !compactSource.isEmpty else { completion(nil); return }
         let base = config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + "/chat/completions") else { completion(nil); return }
-        let summarySystem = "你是会话压缩引擎。下面是一段 AI 助手与用户的旧会话（含用户提问、助手回复、工具调用与结果）。请把它压缩成一份结构化 Markdown 摘要，供助手在后续轮次无缝续接。必须包含：\n1. 任务概览：用户核心诉求、成功标准、约束；\n2. 当前状态：已完成事项、改动/生成的文件或产物（带路径）；\n3. 关键发现：技术约束、重要决策、已解决的报错、失败过的方案；\n4. 下一步：待办事项、阻塞点、优先级；\n5. 需保留的上下文：用户偏好、专业细节、承诺。\n只输出摘要正文，不要寒暄，不要复述对话原文。"
+        let summarySystem = "You are a conversation compression engine. Below is an old conversation between an AI assistant and the user (user questions, assistant replies, tool calls and results). Compress it into a structured Markdown summary so the assistant can seamlessly continue in later turns. MUST include:\n1. Task overview: user's core request, success criteria, constraints;\n2. Current state: what's done, changed/generated files or artifacts (with paths);\n3. Key findings: technical constraints, important decisions, resolved errors, failed approaches;\n4. Next steps: todos, blockers, priorities;\n5. Context to keep: user preferences, domain details, commitments.\nOutput only the summary body — no pleasantries, no restating the original conversation."
         let conversation = compactSource.map { m -> String in
             let roleLabel: String
             switch m.role {
@@ -970,7 +970,7 @@ final class OpenAIClient {
                         content.append(["type": "input_image", "image_url": u])
                     }
                 } else {
-                    content = [["type": "input_text", "text": m.content + "\n[图片已省略：历史图片过多，仅保留最近 2 条]"]]
+                    content = [["type": "input_text", "text": m.content + "\n[Images omitted: too many in history, keeping only the last 2]"]]
                 }
                 imgBudget -= 1
                 items.append(["role": m.role, "content": content])

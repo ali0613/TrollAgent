@@ -6,7 +6,7 @@ import Foundation
 final class VpnTool: MCPTool {
     let definition = ToolDefinition(
         name: "vpn.capture",
-        summary: "MITM packet capture (system-level HTTPS plaintext of ANY app, 含protobuf/自定义socket; 覆盖面>network.capture). Commands: status / start / stop / cert / local_start / local_stop / logs. start=VPN模式(自动路由); local_start=本地代理(手动设WiFi代理127.0.0.1:18180); 首用先 cert 装根CA+Full Trust 否则TLS失败. Logs: Workspace/network_capture/mitm/*.txt. 局限: QUIC/HTTP3不解密; TLS-pinned失败.",
+        summary: "MITM packet capture (system-level HTTPS plaintext of ANY app, incl. protobuf/custom sockets; coverage > network.capture). Commands: status / start / stop / cert / local_start / local_stop / logs. start=VPN mode (auto-routing); local_start=local proxy (manually set WiFi proxy 127.0.0.1:18180); first use: `cert` to install the root CA + Full Trust, otherwise TLS fails. Logs: Workspace/network_capture/mitm/*.txt. Limits: QUIC/HTTP3 not decrypted; TLS-pinned fails.",
         parameters: [
             "command": "status / start / stop / cert / local_start / local_stop / logs"
         ],

@@ -89,7 +89,7 @@ private func openURLSync(_ url: URL) -> Bool {
 final class AppCacheInspectTool: MCPTool {
     let definition = ToolDefinition(
         name: "apps.cache_inspect",
-        summary: "Check how much cache space each app uses. Use for: see which apps take up the most cache, find big cache users. Don't use for: actually clearing cache (use rescue.cleanup), check free disk space (use device snapshot 子命令). Example: user says 'which app has the biggest cache' → inspect cache sizes.",
+        summary: "Check how much cache space each app uses. Use for: see which apps take up the most cache, find big cache users. Don't use for: actually clearing cache (use rescue.cleanup), check free disk space (use device snapshot subcommand). Example: user says 'which app has the biggest cache' → inspect cache sizes.",
         verified: true, category: "app_control")
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {

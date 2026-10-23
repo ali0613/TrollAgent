@@ -15,7 +15,7 @@ import Foundation
 final class BindAppTool: MCPTool {
     let definition = ToolDefinition(
         name: "bind_app",
-        summary: "只读绑定指定 App 数据容器 → /ios_data_<app>。参数 bundle_id。让 python3/sqlite3/strings 在统一环境只读该 App Documents/Library(内购票据/购买状态/导出文件); 读得到写不进去, 永不写坏目标 App。要就地改数据用 bind_app_write(可写+先备份); 读 App Bundle 用 /ios_containers。",
+        summary: "Read-only bind of an app's data container → /ios_data_<app>. Param: bundle_id. Lets python3/sqlite3/strings read the app's Documents/Library (IAP receipts/purchase state/exported files) in the unified env; readable but not writable, can never corrupt the target app. To modify data in place use bind_app_write (writable + auto-backup); to read the app Bundle use /ios_containers.",
         parameters: [
             "bundle_id": "App bundle ID (required)"
         ], verified: true, category: "filesystem")
@@ -43,7 +43,7 @@ final class BindAppTool: MCPTool {
 final class BindAppWriteTool: MCPTool {
     let definition = ToolDefinition(
         name: "bind_app_write",
-        summary: "可写按需绑定指定 App 的数据容器 → /ios_data_<app>，用于【就地修改】该 App 的数据(改内购状态/数值/设置/票据)。绑定前先把该 App 的 Documents+Library 自动备份到工作区 backups/，改坏了可从备份还原。风险：写坏该 App 数据容器→该 App 可能无法启动(仅影响目标App, 不影响AI环境)。绝【不】绑自身容器与整棵 /var/mobile(自引用崩溃源)。分析只读用 bind_app。Example: bind_app_write bundle_id:com.appstudio.Jinx → /ios_data_com_appstudio_jinx + backup 路径。",
+        summary: "Writable on-demand bind of an app's data container → /ios_data_<app>, for modifying the app's data in place (IAP state/values/settings/receipts). Before binding, Documents+Library are auto-backed up to workspace backups/; restore from backup if broken. Risk: corrupting the app's data container may stop that app from launching (only affects the target app, not the AI env). NEVER bind the own container or the whole /var/mobile (self-reference crash source). For read-only analysis use bind_app. Example: bind_app_write bundle_id:com.appstudio.Jinx → /ios_data_com_appstudio_jinx + backup path.",
         parameters: [
             "bundle_id": "App bundle ID (required)"
         ], verified: true, category: "filesystem")
