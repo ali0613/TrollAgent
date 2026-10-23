@@ -5,6 +5,7 @@
 
 #include "wrapper.h"
 
+#include <sys/mman.h>   // v7.0.4.3: troll_jit_probe() 的 mmap/munmap/MAP_JIT
 #include "ish/kernel/init.h"
 #include "ish/kernel/task.h"
 #include "ish/kernel/calls.h"
