@@ -5,10 +5,19 @@ import SwiftUI
 // 复用于：应用选择（AppPickerView）、注入与自动化（InjectionView）
 
 enum AppCategory: String, CaseIterable {
-    case all = L10n.t("i18n_942")
-    case user = L10n.t("i18n_943")
-    case troll = L10n.t("i18n_944")
-    case running = L10n.t("i18n_945")
+    case all = "all"
+    case user = "user"
+    case troll = "troll"
+    case running = "running"
+
+    var displayName: String {
+        switch self {
+        case .all: return L10n.t("i18n_942")
+        case .user: return L10n.t("i18n_943")
+        case .troll: return L10n.t("i18n_944")
+        case .running: return L10n.t("i18n_945")
+        }
+    }
 }
 
 struct AppBrowserList: View {

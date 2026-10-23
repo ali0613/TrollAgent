@@ -7,10 +7,17 @@ import Combine
 /// v4.5.0：可爱助手全局开关 + 角色（设置里可选开/关、切换角色，UserDefaults 持久化）
 /// 角色：小萝莉(girl_*) / 兔娘(rabit_*) / 猫娘(cat_*)
 enum GirlCharacter: String, CaseIterable, Identifiable {
-    case loli = L10n.t("i18n_807")
-    case rabit = L10n.t("i18n_808")
-    case cat = L10n.t("i18n_809")
+    case loli
+    case rabit
+    case cat
     var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .loli: return L10n.t("i18n_807")
+        case .rabit: return L10n.t("i18n_808")
+        case .cat: return L10n.t("i18n_809")
+        }
+    }
     var iconPrefix: String {
         switch self {
         case .loli: return "girl"
@@ -27,6 +34,8 @@ extension GirlCharacter {
     static func stored(rawValue: String?) -> GirlCharacter {
         guard let raw = rawValue, !raw.isEmpty else { return .loli }
         if raw == L10n.t("i18n_810") { return .rabit }   // 旧 rawValue 迁移：御姐兔女郎 → 兔娘
+        let legacy: [String: GirlCharacter] = ["小萝莉": .loli, "兔娘": .rabit, "猫娘": .cat, "御姐兔女郎": .rabit]
+        if let c = legacy[raw] { return c }
         return GirlCharacter(rawValue: raw) ?? .loli
     }
 }

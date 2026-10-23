@@ -7,9 +7,17 @@ import SwiftUI
 
 enum ToolLayer: String, CaseIterable {
     // v6.6.0-fix33: 三层重构——封装工具（MCP）/ 原生工具（iOS 芯片直跑命令）/ Alpine 工具（Linux 沙箱命令）
-    case packaged = L10n.t("i18n_244")
-    case native = L10n.t("i18n_245")
-    case alpine = L10n.t("i18n_1147")
+    case packaged = "packaged"
+    case native = "native"
+    case alpine = "alpine"
+
+    var displayName: String {
+        switch self {
+        case .packaged: return L10n.t("i18n_244")
+        case .native: return L10n.t("i18n_245")
+        case .alpine: return L10n.t("i18n_1147")
+        }
+    }
 
     var subtitle: String {
         switch self {
@@ -202,7 +210,7 @@ struct ToolCenterView: View {
 
                 ForEach(grouped, id: \.layer.rawValue) { item in
                     Section(header: VStack(alignment: .leading, spacing: 2) {
-                        Text("\(item.layer.rawValue)（\(item.families.reduce(0) { $0 + $1.rows.count })）")
+                        Text("\(item.layer.displayName)（\(item.families.reduce(0) { $0 + $1.rows.count })）")
                             .font(.system(size: 15, weight: .bold))
                         Text(item.layer.subtitle)
                             .font(.system(size: 12))

@@ -2187,7 +2187,7 @@ struct ChatInputTextView: UIViewRepresentable {
         tv.backgroundColor = .clear
         tv.font = .systemFont(ofSize: 16)
         tv.textColor = UIColor.label
-        tv.placeholder = L10n.t("i18n_1051")
+        tv.placeholder = L10n.t("i18n_1051") as NSString
         tv.placeholderColor = .gray
         tv.minimumNumberOfLines = 1
         tv.maximumNumberOfLines = 4
