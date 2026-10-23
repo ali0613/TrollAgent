@@ -43,7 +43,7 @@ struct SmartSearchView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     stepRow(1, L10n.t("i18n_613"))
                     stepRow(2, L10n.t("i18n_614"))
-                    stepRow(3, L10n.t("i18n_914"))
+                    stepRow(3, L10n.t("i18n_974"))
                 }
             }
 
@@ -59,7 +59,7 @@ struct SmartSearchView: View {
                             .font(.caption)
                             .foregroundColor(.primary)
                     }
-                    Text(L10n.t("i18n_867"))
+                    Text(L10n.t("i18n_927"))
                         .font(.system(.caption, design: .monospaced))
                         .foregroundColor(.secondary)
                 }

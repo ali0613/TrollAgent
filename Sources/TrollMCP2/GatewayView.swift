@@ -56,7 +56,7 @@ struct AutomationView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle(L10n.t("i18n_969"))
+            .navigationTitle(L10n.t("i18n_1029"))
         }
         .navigationViewStyle(.stack)
     }

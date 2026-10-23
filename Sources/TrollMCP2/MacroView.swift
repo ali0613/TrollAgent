@@ -189,7 +189,7 @@ struct MacroView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 ui.macroPresented = true
                 refresh()
-                showToast(out["message"] as? String ?? L10n.t("i18n_956"))
+                showToast(out["message"] as? String ?? L10n.t("i18n_1016"))
             }
         }
     }

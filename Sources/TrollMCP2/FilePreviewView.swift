@@ -17,7 +17,7 @@ struct QLFilePreview: View {
         urls.first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
-    private var fileName: String { url?.lastPathComponent ?? "未知文件" }
+    private var fileName: String { url?.lastPathComponent ?? L10n.t("i18n_844") }
     private var ext: String { (fileName as NSString).pathExtension.lowercased() }
 
     private var sizeText: String {
@@ -39,7 +39,7 @@ struct QLFilePreview: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
-                        Button("完成") { dismiss() }
+                        Button(L10n.t("i18n_1016")) { dismiss() }
                     }
                     // 注意：toolbar 内不可用 if 分支（buildIf 需 iOS 16+，项目最低 iOS 14），
                     // 改为始终显示、无文件时禁用
@@ -74,7 +74,7 @@ struct QLFilePreview: View {
                 Image(systemName: "questionmark.folder")
                     .font(.system(size: 48))
                     .foregroundColor(.secondary)
-                Text("文件不存在")
+                Text(L10n.t("i18n_845"))
                     .foregroundColor(.secondary)
             }
         }
@@ -89,7 +89,7 @@ struct QLFilePreview: View {
                         .scaledToFit()
                         .frame(width: geo.size.width, height: geo.size.height)
                 } else {
-                    Text("无法渲染图片")
+                    Text(L10n.t("i18n_846"))
                         .foregroundColor(.secondary)
                 }
             }
@@ -99,7 +99,7 @@ struct QLFilePreview: View {
 
     private func textView(_ url: URL) -> some View {
         ScrollView {
-            Text(readText(url) ?? "无法读取")
+            Text(readText(url) ?? L10n.t("i18n_847"))
                 .font(.system(.footnote, design: .monospaced))
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -119,7 +119,7 @@ struct QLFilePreview: View {
             Text(sizeText)
                 .font(.caption)
                 .foregroundColor(.secondary)
-            Text("此类型无法直接预览，可用上方按钮存储到文件或用其他 App 打开")
+            Text(L10n.t("i18n_848"))
                 .font(.caption2)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)

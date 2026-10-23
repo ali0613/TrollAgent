@@ -68,7 +68,7 @@ struct TerminalView: View {
             }
         }
         .onAppear {
-            lines.append(TermLine(text: L10n.t("i18n_971"), isCmd: false, isError: false))
+            lines.append(TermLine(text: L10n.t("i18n_1031"), isCmd: false, isError: false))
             lines.append(TermLine(text: L10n.t("i18n_284"), isCmd: false, isError: false))
             focused = true
         }
@@ -88,7 +88,7 @@ struct TerminalView: View {
                 let out = r.output.isEmpty ? (r.exitCode == 0 ? "" : L10n.t("i18n_285")) : r.output
                 if !out.isEmpty {
                     // 长输出截断到最后 3000 字符（终端显示）
-                    let trimmed = out.count > 3000 ? String(out.suffix(3000)) + L10n.t("i18n_972") : out
+                    let trimmed = out.count > 3000 ? String(out.suffix(3000)) + L10n.t("i18n_1032") : out
                     lines.append(TermLine(text: trimmed, isCmd: false, isError: r.exitCode != 0))
                 }
                 if r.timedOut {

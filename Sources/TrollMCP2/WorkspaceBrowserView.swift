@@ -52,7 +52,7 @@ struct WorkspaceBrowserView: View {
         "tool_spill": L10n.t("i18n_633"),
         "backup": L10n.t("i18n_634"),
         "tmp": L10n.t("i18n_635"),
-        "deb": L10n.t("i18n_916")
+        "deb": L10n.t("i18n_976")
     ]
 
     /// v3.0.90：目录备注——先精确匹配，再模糊匹配（动态名字）

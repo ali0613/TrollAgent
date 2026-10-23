@@ -15,9 +15,9 @@ struct RemoteAccessView: View {
                             .foregroundColor(.tmCyan)
                             .frame(width: 32)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(L10n.t("i18n_951"))
+                            Text(L10n.t("i18n_1011"))
                                 .foregroundColor(.primary)
-                            Text(sshHost.isEmpty ? L10n.t("i18n_944") : sshHost)
+                            Text(sshHost.isEmpty ? L10n.t("i18n_1004") : sshHost)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }

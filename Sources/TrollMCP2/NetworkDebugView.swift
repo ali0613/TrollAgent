@@ -13,10 +13,10 @@ struct NetworkDebugView: View {
         switch level {
         case 0: return L10n.t("i18n_688")
         case 1: return L10n.t("i18n_689")
-        case 2: return L10n.t("i18n_917")
+        case 2: return L10n.t("i18n_977")
         case 3: return L10n.t("i18n_690")
         case 4: return L10n.t("i18n_691")
-        case 5: return L10n.t("i18n_918")
+        case 5: return L10n.t("i18n_978")
         default: return L10n.t("i18n_692", level)
         }
     }

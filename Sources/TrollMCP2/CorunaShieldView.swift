@@ -101,16 +101,16 @@ struct CorunaShieldView: View {
                         
                         VStack(spacing: 12) {
                             DefenseRow(icon: "globe", title: L10n.t("i18n_732"), desc: L10n.t("i18n_733"), enabled: shieldEnabled)
-                            DefenseRow(icon: "safari", title: L10n.t("i18n_921"), desc: L10n.t("i18n_734"), enabled: shieldEnabled)
-                            DefenseRow(icon: "doc.text.magnifyingglass", title: L10n.t("i18n_922"), desc: L10n.t("i18n_735"), enabled: shieldEnabled)
-                            DefenseRow(icon: "lock.shield", title: L10n.t("i18n_736"), desc: L10n.t("i18n_923"), enabled: shieldEnabled)
+                            DefenseRow(icon: "safari", title: L10n.t("i18n_981"), desc: L10n.t("i18n_734"), enabled: shieldEnabled)
+                            DefenseRow(icon: "doc.text.magnifyingglass", title: L10n.t("i18n_982"), desc: L10n.t("i18n_735"), enabled: shieldEnabled)
+                            DefenseRow(icon: "lock.shield", title: L10n.t("i18n_736"), desc: L10n.t("i18n_983"), enabled: shieldEnabled)
                         }
                         .padding(.horizontal)
                     }
                     
                     // 漏洞说明
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(L10n.t("i18n_924"))
+                        Text(L10n.t("i18n_984"))
                             .font(.headline)
                             .foregroundColor(.primary)
                             .padding(.horizontal)
@@ -119,7 +119,7 @@ struct CorunaShieldView: View {
                             InfoRow(label: L10n.t("i18n_737"), value: "iOS 13.0 - 17.2.1")
                             InfoRow(label: L10n.t("i18n_738"), value: L10n.t("i18n_739"))
                             InfoRow(label: L10n.t("i18n_740"), value: L10n.t("i18n_741"))
-                            InfoRow(label: L10n.t("i18n_742"), value: L10n.t("i18n_925"))
+                            InfoRow(label: L10n.t("i18n_742"), value: L10n.t("i18n_985"))
                         }
                         .padding()
                         .background(Color(.systemBackground))
@@ -146,7 +146,7 @@ struct CorunaShieldView: View {
                                     Text(L10n.t("i18n_744"))
                                         .font(.body)
                                         .foregroundColor(.primary)
-                                    Text(L10n.t("i18n_926"))
+                                    Text(L10n.t("i18n_986"))
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
@@ -166,7 +166,7 @@ struct CorunaShieldView: View {
                     }
 
                     // 底部
-                    Text(L10n.t("i18n_927"))
+                    Text(L10n.t("i18n_987"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.bottom, 40)

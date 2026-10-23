@@ -479,8 +479,8 @@ struct BuildView: View {
 
                 Section(header: SettingSectionHeader(title: L10n.t("i18n_339"))) {
                     SettingRowButton(
-                        title: L10n.t("i18n_869"),
-                        subtitle: L10n.t("i18n_870"),
+                        title: L10n.t("i18n_929"),
+                        subtitle: L10n.t("i18n_930"),
                         icon: "doc.badge.plus",
                         color: .blue
                     ) {
@@ -624,8 +624,8 @@ struct ToolPermissionPoliciesView: View {
     /// category 显示中文名
     private let categoryNames: [String: String] = [
         "injection": L10n.t("i18n_349"),
-        "app_control": L10n.t("i18n_871"),
-        "ui_control": L10n.t("i18n_872"),
+        "app_control": L10n.t("i18n_931"),
+        "ui_control": L10n.t("i18n_932"),
         "device": L10n.t("i18n_350"),
         "filesystem": L10n.t("i18n_351"),
         "shell": "💻 Shell",
@@ -708,7 +708,7 @@ struct ToolPermissionPoliciesView: View {
                             Image(systemName: "hand.raised.fill")
                                 .foregroundColor(.red)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(L10n.t("i18n_968"))
+                                Text(L10n.t("i18n_1028"))
                                     .foregroundColor(.primary)
                                 Text(L10n.t("i18n_366"))
                                     .font(.caption)
@@ -725,7 +725,7 @@ struct ToolPermissionPoliciesView: View {
                             Image(systemName: "bolt.fill")
                                 .foregroundColor(.yellow)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(L10n.t("i18n_969"))
+                                Text(L10n.t("i18n_1029"))
                                     .foregroundColor(.primary)
                                 Text(L10n.t("i18n_367"))
                                     .font(.caption)
@@ -854,11 +854,11 @@ struct DataManagementView: View {
             .padding(.vertical, 8)
 
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_816"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_876"))) {
                     LabeledRow(label: L10n.t("i18n_376"), value: Workspace.root.path)
                     SettingRowButton(
                         title: L10n.t("i18n_377"),
-                        subtitle: L10n.t("i18n_873"),
+                        subtitle: L10n.t("i18n_933"),
                         icon: "folder",
                         color: .blue
                     ) {
@@ -866,7 +866,7 @@ struct DataManagementView: View {
                     }
                     SettingRowButton(
                         title: L10n.t("i18n_378"),
-                        subtitle: L10n.t("i18n_874"),
+                        subtitle: L10n.t("i18n_934"),
                         icon: "trash",
                         color: .red
                     ) {
@@ -876,7 +876,7 @@ struct DataManagementView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_824"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_884"))) {
                     ForEach(files) { item in
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -1171,7 +1171,7 @@ struct DevInstructionEditorView: View {
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                     }
                     VStack(alignment: .leading, spacing: 6) {
-                        SettingSectionHeader(title: L10n.t("i18n_875"))
+                        SettingSectionHeader(title: L10n.t("i18n_935"))
                         TextEditor(text: $content)
                             .frame(minHeight: 520)
                             .font(.system(.body, design: .monospaced))
@@ -1219,7 +1219,7 @@ struct DevInstructionEditorView: View {
                         Button(action: copyContent) {
                             Image(systemName: "doc.on.doc")
                         }
-                        Button(L10n.t("i18n_942")) { save() }
+                        Button(L10n.t("i18n_1002")) { save() }
                     }
                 }
             }
@@ -1297,7 +1297,7 @@ struct KnowledgeBaseView: View {
                     }
                     SettingRowButton(
                         title: L10n.t("i18n_397"),
-                        subtitle: L10n.t("i18n_876"),
+                        subtitle: L10n.t("i18n_936"),
                         icon: "folder.badge.plus",
                         color: .green
                     ) {
@@ -1481,7 +1481,7 @@ struct WebhooksView: View {
 
     private func test() {
         guard let target = URL(string: url), !url.isEmpty else {
-            status = L10n.t("i18n_877")
+            status = L10n.t("i18n_937")
             return
         }
         var req = URLRequest(url: target, timeoutInterval: 15)

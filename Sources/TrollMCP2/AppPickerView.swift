@@ -9,19 +9,19 @@ struct AppPickerView: View {
     var body: some View {
         CompatNav {
             AppBrowserContainer(
-                title: "选择应用",
-                subtitle: "搜索 · 分类 · 版本 · 索引",
+                title: L10n.t("i18n_817"),
+                subtitle: L10n.t("i18n_818"),
                 icon: "app.badge.fill",
                 onTap: { app in
                     onSelect?(app)
                     presentationMode.wrappedValue.dismiss()
                 }
             )
-            .navigationTitle("选择应用")
+            .navigationTitle(L10n.t("i18n_817"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("取消") { presentationMode.wrappedValue.dismiss() }
+                    Button(L10n.t("ui_40")) { presentationMode.wrappedValue.dismiss() }
                 }
             }
         }

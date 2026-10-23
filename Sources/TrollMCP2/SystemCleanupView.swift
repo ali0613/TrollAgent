@@ -68,9 +68,9 @@ enum SystemCleanupEngine {
         let snapshots = dirSize("/var/mobile/Library/SplashBoard/Snapshots")
 
         items.append(SystemCleanupItem(id: "app_cache", label: L10n.t("i18n_574"),
-            detail: L10n.t("i18n_908"), paths: [], risk: .safe, size: appCache))
+            detail: L10n.t("i18n_968"), paths: [], risk: .safe, size: appCache))
         items.append(SystemCleanupItem(id: "app_logs", label: L10n.t("i18n_575"),
-            detail: L10n.t("i18n_909"), paths: [], risk: .safe, size: appLogs))
+            detail: L10n.t("i18n_969"), paths: [], risk: .safe, size: appLogs))
         items.append(SystemCleanupItem(id: "sys_cache", label: L10n.t("i18n_576"),
             detail: "/var/mobile/Library/Caches", paths: ["/var/mobile/Library/Caches"], risk: .safe,
             size: dirSize("/var/mobile/Library/Caches")))
@@ -88,7 +88,7 @@ enum SystemCleanupEngine {
             detail: "/var/mobile/Media/Downloads", paths: ["/var/mobile/Media/Downloads"], risk: .warn,
             size: dirSize("/var/mobile/Media/Downloads")))
         items.append(SystemCleanupItem(id: "snapshots", label: L10n.t("i18n_582"),
-            detail: L10n.t("i18n_910"), paths: ["/var/mobile/Library/SplashBoard/Snapshots"],
+            detail: L10n.t("i18n_970"), paths: ["/var/mobile/Library/SplashBoard/Snapshots"],
             risk: .safe, size: snapshots))
         items.append(SystemCleanupItem(id: "trash", label: L10n.t("i18n_583"),
             detail: "/var/mobile/.Trash", paths: ["/var/mobile/.Trash"], risk: .warn,
@@ -107,11 +107,11 @@ enum SystemCleanupEngine {
         let http = aggregateAppDirs("Library/HTTPStorages")
         let safari = dirSize("/var/mobile/Library/Caches/com.apple.mobilesafari")
 
-        items.append(SystemCleanupItem(id: "webkit", label: L10n.t("i18n_911"),
-            detail: L10n.t("i18n_912"), paths: [], risk: .safe, size: webkit))
+        items.append(SystemCleanupItem(id: "webkit", label: L10n.t("i18n_971"),
+            detail: L10n.t("i18n_972"), paths: [], risk: .safe, size: webkit))
         // v2.9.314：http_storage 已移除——清所有 App 的 Cookie/登录态太危险
         // items.append(SystemCleanupItem(id: "http_storage", ...))
-        items.append(SystemCleanupItem(id: "safari", label: L10n.t("i18n_913"),
+        items.append(SystemCleanupItem(id: "safari", label: L10n.t("i18n_973"),
             detail: L10n.t("i18n_586"),
             paths: ["/var/mobile/Library/Caches/com.apple.mobilesafari"], risk: .safe, size: safari))
         return items

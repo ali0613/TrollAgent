@@ -15,7 +15,7 @@ struct BrowserView: View {
                 // URL 栏
                 HStack(spacing: 8) {
                     HStack(spacing: 0) {
-                        TextField("输入网址，如 github.com", text: $urlText, onCommit: {
+                        TextField(L10n.t("i18n_819"), text: $urlText, onCommit: {
                             let text = urlText
                             urlText = ""
                             let result = bm.open(text)
@@ -61,9 +61,9 @@ struct BrowserView: View {
 
                 // 控制条
                 HStack(spacing: 20) {
-                    controlButton("arrow.backward", "后退") { _ = bm.goBack() }
-                    controlButton("arrow.forward", "前进") { _ = bm.goForward() }
-                    controlButton("arrow.clockwise", "刷新") { _ = bm.reload() }
+                    controlButton("arrow.backward", L10n.t("i18n_820")) { _ = bm.goBack() }
+                    controlButton("arrow.forward", L10n.t("i18n_821")) { _ = bm.goForward() }
+                    controlButton("arrow.clockwise", L10n.t("i18n_822")) { _ = bm.reload() }
                     Spacer()
                     // 高亮开关（蓝框）
                     HStack(spacing: 6) {
@@ -109,7 +109,7 @@ struct BrowserView: View {
                             .foregroundColor(.orange)
                             .lineLimit(1)
                         Spacer()
-                        Button("重试") { _ = bm.reload() }
+                        Button(L10n.t("i18n_823")) { _ = bm.reload() }
                             .font(.caption2.weight(.semibold))
                             .foregroundColor(.blue)
                     }
@@ -152,7 +152,7 @@ struct BrowserView: View {
                 .padding(.vertical, 6)
                 .background(Color(.secondarySystemBackground))
             }
-            .navigationTitle("内置浏览器")
+            .navigationTitle(L10n.t("i18n_824"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -165,7 +165,7 @@ struct BrowserView: View {
                             Image(systemName: isFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                                 .font(.footnote)
                         }
-                        Button("完成") { presentationMode.wrappedValue.dismiss() }
+                        Button(L10n.t("i18n_1016")) { presentationMode.wrappedValue.dismiss() }
                     }
                 }
             }

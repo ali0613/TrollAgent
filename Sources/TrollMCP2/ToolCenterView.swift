@@ -9,13 +9,13 @@ enum ToolLayer: String, CaseIterable {
     // v6.6.0-fix33: 三层重构——封装工具（MCP）/ 原生工具（iOS 芯片直跑命令）/ Alpine 工具（Linux 沙箱命令）
     case packaged = L10n.t("i18n_244")
     case native = L10n.t("i18n_245")
-    case alpine = L10n.t("i18n_953")
+    case alpine = L10n.t("i18n_1013")
 
     var subtitle: String {
         switch self {
         case .packaged: return L10n.t("i18n_246")
-        case .native: return L10n.t("i18n_954")
-        case .alpine: return L10n.t("i18n_955")
+        case .native: return L10n.t("i18n_1014")
+        case .alpine: return L10n.t("i18n_1015")
         }
     }
 
@@ -44,22 +44,22 @@ struct ToolCenterView: View {
     // v6.6.0-fix33: 原生工具命令清单（shell.exec 内可用——iOS 芯片直跑）
     private let nativeCommands: [(String, String)] = [
         // iOS 系统自带
-        ("sqlite3", L10n.t("i18n_958")),
-        ("plutil", L10n.t("i18n_959")),
+        ("sqlite3", L10n.t("i18n_1018")),
+        ("plutil", L10n.t("i18n_1019")),
         ("ta", L10n.t("i18n_249")),
         // bin/ 内置
         ("jtool2", L10n.t("i18n_250")),
-        ("py3-native", L10n.t("i18n_960")),
+        ("py3-native", L10n.t("i18n_1020")),
         ("node-native", L10n.t("i18n_251")),
-        ("git.py", L10n.t("i18n_961")),
+        ("git.py", L10n.t("i18n_1021")),
         ("nscan.py", L10n.t("i18n_252")),
         // 注入链工具（Resources/bin）
-        ("ldid", L10n.t("i18n_962")),
-        ("insert_dylib", L10n.t("i18n_963")),
-        ("optool", L10n.t("i18n_964")),
+        ("ldid", L10n.t("i18n_1022")),
+        ("insert_dylib", L10n.t("i18n_1023")),
+        ("optool", L10n.t("i18n_1024")),
         ("ct_bypass", L10n.t("i18n_253")),
-        ("opainject", L10n.t("i18n_965")),
-        ("install_name_tool", L10n.t("i18n_966")),
+        ("opainject", L10n.t("i18n_1025")),
+        ("install_name_tool", L10n.t("i18n_1026")),
         ("chown", L10n.t("i18n_254")),
         ("cp", L10n.t("i18n_255")),
         ("mkdir", L10n.t("i18n_256")),
@@ -121,7 +121,7 @@ struct ToolCenterView: View {
                     if !searchText.isEmpty && !cmd.localizedCaseInsensitiveContains(searchText) && !desc.localizedCaseInsensitiveContains(searchText) { continue }
                     alpineRows.append(ToolRowItem(def: ToolDefinition(name: cmd, summary: desc), branch: nil))
                 }
-                if !alpineRows.isEmpty { families.append((L10n.t("i18n_967"), alpineRows)) }
+                if !alpineRows.isEmpty { families.append((L10n.t("i18n_1027"), alpineRows)) }
             }
             if !families.isEmpty {
                 result.append((layer, families))
@@ -150,7 +150,7 @@ struct ToolCenterView: View {
                             Image(systemName: "hand.raised.fill")
                                 .foregroundColor(.red)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(L10n.t("i18n_968"))
+                                Text(L10n.t("i18n_1028"))
                                     .foregroundColor(.primary)
                                 Text(L10n.t("i18n_366"))
                                     .font(.caption)
@@ -167,7 +167,7 @@ struct ToolCenterView: View {
                             Image(systemName: "bolt.fill")
                                 .foregroundColor(.yellow)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(L10n.t("i18n_969"))
+                                Text(L10n.t("i18n_1029"))
                                     .foregroundColor(.primary)
                                 Text(L10n.t("i18n_367"))
                                     .font(.caption)
@@ -231,7 +231,7 @@ struct ToolCenterView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Button(L10n.t("i18n_956")) { presentationMode.wrappedValue.dismiss() }
+                        Button(L10n.t("i18n_1016")) { presentationMode.wrappedValue.dismiss() }
                     }
                 }
                 .navigationViewStyle(.stack)

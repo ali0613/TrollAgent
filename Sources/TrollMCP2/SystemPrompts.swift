@@ -22,7 +22,7 @@ final class SystemPrompts {
         // v6.0.28：简洁模式移到第一个，作为默认推荐
         Prompt(
             id: "concise",
-            name: "简洁模式",
+            name: L10n.t("i18n_853"),
             desc: "Minimal fast replies, only conclusions and key actions. For simple queries.",
             content: """
             === CONCISE MODE GUIDELINES ===
@@ -40,7 +40,7 @@ final class SystemPrompts {
         ),
         Prompt(
             id: "default",
-            name: "综合模式",
+            name: L10n.t("i18n_854"),
             desc: "Balanced mode for daily use. Step-by-step tool calling, concise natural replies.",
                         content: """
             === DEFAULT MODE (COLLABORATION) ===
@@ -101,7 +101,7 @@ final class SystemPrompts {
             extraCoreTools: []),
         Prompt(
             id: "developer",
-            name: "开发者模式",
+            name: L10n.t("i18n_855"),
             desc: "Engineering + jailbreak/bypass standards for dev, debug, reverse engineering, and device modification. For breaking app protections and jailbreak-related tasks.",
                         content: """
             === DEVELOPER MODE (ENGINEERING + BYPASS) ===
@@ -149,7 +149,7 @@ final class SystemPrompts {
             extraCoreTools: ["shell.exec", "app", "inject"]),
         Prompt(
             id: "reverse",
-            name: "逆向专家模式",
+            name: L10n.t("i18n_856"),
             desc: "Focus on iOS reverse engineering / injection / debugging / Mach-O analysis. Professional-level detail output.",
                         content: """
             === REVERSE EXPERT MODE ===
@@ -176,7 +176,7 @@ final class SystemPrompts {
             extraCoreTools: ["inject", "app", "diagnose"]),
         Prompt(
             id: "pentester",
-            name: "渗透工程师模式",
+            name: L10n.t("i18n_857"),
             desc: "Focus on penetration testing / security bypass / packet capture / memory modification. Practical exploitation, not theory.",
                         content: """
             === PENETRATION ENGINEER MODE ===
@@ -223,7 +223,7 @@ final class SystemPrompts {
             extraCoreTools: ["memory", "assistant_memory", "app", "inject", "app encrypt_info", "inject diagnose"]),
         Prompt(
             id: "gamehacker",
-            name: "游戏修改模式",
+            name: L10n.t("i18n_858"),
             desc: "Focus on game memory modification. Search values, filter candidates, modify and freeze game stats. Practical game hacking.",
                         content: """
             === GAME HACKER MODE ===
@@ -259,7 +259,7 @@ final class SystemPrompts {
             extraCoreTools: ["memory", "assistant_memory", "app", "inject"]),
         Prompt(
             id: "uicontrol",
-            name: "AI 控制 UI 模式",
+            name: L10n.t("i18n_859"),
             desc: "Focus on AI-controlled UI automation. Tap buttons, type text, swipe screens, complete multi-step flows in apps. AI acts as your finger on screen.",
                         content: """
             === AI UI CONTROL MODE ===

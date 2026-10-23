@@ -94,7 +94,7 @@ struct GirlCharacterPickerView: View {
             ["name":L10n.t("i18n_765"), "url":"weixin://", "bundleId":"com.tencent.xin"],
             ["name":L10n.t("i18n_766"), "url":"snssdk1128://", "bundleId":"com.ss.iphone.ugc.Aweme"],
             ["name":L10n.t("i18n_767"), "url":"camera://", "bundleId":"com.apple.camera"],
-            ["name":L10n.t("i18n_957"), "url":"App-prefs://", "bundleId":"com.apple.Preferences"]
+            ["name":L10n.t("i18n_1017"), "url":"App-prefs://", "bundleId":"com.apple.Preferences"]
         ]
         return Self.ensureAppIDs(base)   // v6.1.5-14ae：初始数据补稳定 id（ForEach 依赖）
     }()

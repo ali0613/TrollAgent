@@ -5,10 +5,10 @@ import SwiftUI
 // 复用于：应用选择（AppPickerView）、注入与自动化（InjectionView）
 
 enum AppCategory: String, CaseIterable {
-    case all = "全部"
-    case user = "用户"
-    case troll = "巨魔"
-    case running = "运行中"
+    case all = L10n.t("i18n_808")
+    case user = L10n.t("i18n_809")
+    case troll = L10n.t("i18n_810")
+    case running = L10n.t("i18n_811")
 }
 
 struct AppBrowserList: View {
@@ -82,7 +82,7 @@ struct AppBrowserList: View {
                                 VStack(spacing: 10) {
                                     Image(systemName: "magnifyingglass")
                                         .font(.system(size: 34)).foregroundColor(.secondary)
-                                    Text(category == .running ? "当前分类下无运行中的应用" : "无匹配应用")
+                                    Text(category == .running ? L10n.t("i18n_812") : L10n.t("i18n_813"))
                                         .font(.footnote).foregroundColor(.secondary)
                                 }
                             }
@@ -105,7 +105,7 @@ struct AppBrowserList: View {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.secondary)
                 .font(.system(size: 14))
-            TextField("搜索应用名称或 Bundle ID", text: $searchText)
+            TextField(L10n.t("i18n_814"), text: $searchText)
                 .font(.subheadline)
             if !searchText.isEmpty {
                 Button { searchText = "" } label: {
@@ -181,9 +181,9 @@ struct AppBrowserList: View {
 
     private func typeBadge(_ app: AppCatalog.AppEntry) -> some View {
         let (text, color): (String, Color) = {
-            if app.isTroll { return ("巨魔", Color.tmCyan) }
-            if app.isSystem { return ("系统", .gray) }
-            return ("用户", .blue)
+            if app.isTroll { return (L10n.t("i18n_810"), Color.tmCyan) }
+            if app.isSystem { return (L10n.t("i18n_815"), .gray) }
+            return (L10n.t("i18n_809"), .blue)
         }()
         return Text(text)
             .font(.system(size: 9, weight: .bold))
@@ -237,7 +237,7 @@ struct AppBrowserContainer: View {
 
             if !loaded {
                 Spacer()
-                ProgressView("加载应用列表…")
+                ProgressView(L10n.t("i18n_816"))
                 Spacer()
             } else {
                 // v6.0.31：UIKit 原生渲染（TrollStore 同款 UITableView），替换 SwiftUI AppBrowserList

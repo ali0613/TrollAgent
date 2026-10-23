@@ -25,7 +25,7 @@ struct RemoteDiagnosticsView: View {
 
             Section(header: Text(L10n.t("i18n_702"))) {
                 HStack {
-                    Text(L10n.t("i18n_919"))
+                    Text(L10n.t("i18n_979"))
                     Spacer()
                     Text(agent.deviceID)
                         .font(.caption2)
@@ -35,7 +35,7 @@ struct RemoteDiagnosticsView: View {
                 }
                 Button(L10n.t("i18n_703")) {
                     UIPasteboard.general.string = agent.deviceID
-                    testResult = L10n.t("i18n_973")
+                    testResult = L10n.t("i18n_1033")
                 }
             }
 
@@ -47,7 +47,7 @@ struct RemoteDiagnosticsView: View {
                 if let testResult = testResult {
                     Text(testResult)
                         .font(.caption)
-                        .foregroundColor(testResult.hasPrefix(L10n.t("i18n_706")) || testResult == L10n.t("i18n_973") ? .green : .red)
+                        .foregroundColor(testResult.hasPrefix(L10n.t("i18n_706")) || testResult == L10n.t("i18n_1033") ? .green : .red)
                 }
                 HStack {
                     Text(L10n.t("i18n_707"))
