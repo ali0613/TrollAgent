@@ -14,7 +14,10 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/types.h>
-#include <sys/ptrace.h>
+#include <stdint.h>
+
+// iOS SDK 无 sys/ptrace.h——与 TrollStore RootHelper/jit.m 一致，手动声明
+int ptrace(int request, pid_t pid, void *addr, int data);
 
 #ifndef PT_DETACH
 #define PT_DETACH 11
