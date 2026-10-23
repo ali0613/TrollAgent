@@ -545,18 +545,6 @@ final class ScanQRTool: MCPTool {
     }
 }
 
-final class ProcessListTool: MCPTool {
-    let definition = ToolDefinition(name: "process.list", summary: "List all running apps/processes on the device. Use for: find what's currently running, check if an app is alive, find app bundle_id. Don't use for: find a specific app (use injection.list with search), kill app (use app.restart). Example: user says 'what is running in the background' → list all running processes.")
-    func invoke(_ params: [String: Any]) throws -> [String: Any] {
-        var procs: [[String: Any]] = []
-        for app in AppCatalog.list() {
-            procs.append(["bundle_id": app.bundleId, "name": app.name])
-            if procs.count >= 100 { break }
-        }
-        return ["count": procs.count, "processes": procs]
-    }
-}
-
 // MARK: - M6 编译模式工具
 
 final class BuildRunnerTokenTool: MCPTool {
@@ -675,54 +663,6 @@ final class ModelUpdateTool: MCPTool {
         AuditLog.shared.log("model.update", detail: "\(name): \(changed.joined(separator: ", "))")
         return ["ok": true, "name": name, "changed": changed,
                 "now": ["model": cfg.model, "baseURL": cfg.baseURL, "apiProtocol": cfg.apiProtocol, "compatLevel": cfg.compatLevel]]
-    }
-}
-
-final class WorkspaceInfoTool: MCPTool {
-    let definition = ToolDefinition(name: "workspace.info", summary: "Show workspace info: path, free space, directory structure with descriptions. Use for: locate files, understand what each directory is for. Don't use for: read file contents (use artifact).")
-    func invoke(_ params: [String: Any]) throws -> [String: Any] {
-        let fm = FileManager.default
-        let items = (try? fm.contentsOfDirectory(atPath: Workspace.root.path)) ?? []
-        let attrs = (try? fm.attributesOfItem(atPath: Workspace.root.path)) ?? [:]
-
-        // 目录说明 (AI 一看就知道每个目录是干嘛的）
-        let dirDescriptions: [String: String] = [
-            "uploads": "用户上传的文件 (图片/文件附件自动复制到这里)",
-            "downloads": "下载的文件 (IPA / dylib / 工具等)",
-            "projects": "编译项目 (每个项目一个子目录，放 tweak 源码)",
-            "duplicates": "App 双开副本 (app.duplicate 生成)",
-            "static_inject": "静态注入临时目录 (injection.static 用)",
-            "screenshots": "截图 (control.screenshot 保存到这里)",
-            "tweaks": "内置 dylib 插件 (ControlAgent / ProbeAgent / MemoryTweak 等)",
-            "bridge_exports": "桥接导出文件",
-            "artifacts": "生成的产物 (编译结果 / 分析报告等)",
-            "knowledge": "知识库文件",
-            "backups": "备份文件 (注入前自动备份)",
-            "logs": "日志文件",
-            "cache": "缓存文件"
-        ]
-
-        // 给每个条目加说明
-        var annotatedEntries: [[String: Any]] = []
-        for item in items {
-            var entry: [String: Any] = ["name": item]
-            if let desc = dirDescriptions[item] {
-                entry["description"] = desc
-            }
-            // 检查是不是目录
-            var isDir: ObjCBool = false
-            fm.fileExists(atPath: Workspace.root.appendingPathComponent(item).path, isDirectory: &isDir)
-            entry["is_dir"] = isDir.boolValue
-            annotatedEntries.append(entry)
-        }
-
-        return [
-            "root": Workspace.root.path,
-            "entries": annotatedEntries,
-            "entry_count": items.count,
-            "size_bytes": attrs[.size] ?? 0,
-            "note": "each directory purpose is described in the description field. Use artifact for files, shell.exec for directories."
-        ]
     }
 }
 

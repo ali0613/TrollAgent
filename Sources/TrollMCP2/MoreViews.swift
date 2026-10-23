@@ -521,8 +521,7 @@ struct SystemCapabilitiesView: View {
                     capRow("定位", "location.get", "location", .tmIndigo)
                     capRow("本地通知", "notification.send", "bell", .orange)
                     capRow("扫码识别", "scan.qr", "qrcode.viewfinder", .purple)
-                    capRow("进程枚举", "process.list", "list.bullet", .gray)
-                }
+                                    }
 
                 Section(header: SettingSectionHeader(title: "说明")) {
                     Text(L10n.t("ui_143"))
@@ -577,7 +576,6 @@ struct ToolPermissionPoliciesView: View {
         "artifact.read_text",
         "artifact.write_text",
         "artifact.list",
-        "workspace.info",
         "assistant.memory_set",
         "assistant.memory_list",
         "assistant.memory_delete",
@@ -594,11 +592,9 @@ struct ToolPermissionPoliciesView: View {
         "location.get",
         "notification.send",
         "scan.qr",
-        "process.list",
         "build.runner.token",
         "project.generate_tweak",
         "model.config",
-        "model.authentication",
         "model.selectedProfileID",
         "workspace.outputBookmark",
         "workspace.outputName",

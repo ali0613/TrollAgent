@@ -9,7 +9,7 @@ import Darwin
 final class ToolLoadDylibTool: MCPTool {
     let definition = ToolDefinition(
         name: "tool.load_dylib",
-        summary: "Load a custom dylib to add new tools. Use for: self-evolution - AI writes a new tool in Swift, compiles it, loads it to extend TrollAgent. Don't use for: inject dylib into other apps (use injection.enable), build project (use build.run). Safe: only loads into TrollAgent itself. Example: user says 'AI wrote a new tool, load it' → load dylib.",
+        summary: "Load a custom dylib to add new tools. Use for: self-evolution - AI writes a new tool in Swift, compiles it, loads it to extend TrollAgent. Don't use for: inject dylib into other apps (use injection.enable). Safe: only loads into TrollAgent itself. Example: user says 'AI wrote a new tool, load it' → load dylib.",
         parameters: [
             "path": "Path to .dylib file to load"
         ],

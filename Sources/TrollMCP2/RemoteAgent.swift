@@ -34,7 +34,7 @@ public final class RemoteAgent: ObservableObject {
 
     /// 远程可执行的只读诊断白名单 (其余工具一律拒绝）
     private static let safeTools: Set<String> = [
-        "ping", "device.info", "device.probe", "workspace.info",
+        "ping", "device.info", "device.probe",
         "artifact.list", "artifact.read_text", "artifact.find",
         "shell.exec", "artifact", "shell.exec", "shell.exec", "shell.exec",
         "shell.exec", "shell.exec", "shell.exec", "shell.exec", "shell.exec",

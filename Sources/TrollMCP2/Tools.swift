@@ -22,7 +22,7 @@ final class DeviceInfoTool: MCPTool {
 final class DeviceProbeTool: MCPTool {
     let definition = ToolDefinition(
         name: "device.probe",
-        summary: "Probe/check device environment: TrollStore installed, can we inject, what permissions available. Use for: check if device supports injection, see what capabilities are available. Don't use for: get device specs (use device.info), check battery/memory (use device.snapshot). Example: user says 'can my phone inject, how is the environment' → probe device.",
+        summary: "Probe/check device environment: TrollStore installed, can we inject, what permissions available. Use for: check if device supports injection, see what capabilities are available. Don't use for: get device specs (use device.info), check battery/memory (use device snapshot 子命令). Example: user says 'can my phone inject, how is the environment' → probe device.",
         verified: true, category: "device")
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {

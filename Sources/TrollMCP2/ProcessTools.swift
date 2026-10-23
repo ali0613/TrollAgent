@@ -205,7 +205,7 @@ final class AppRestartTool: MCPTool {
 final class AppStatusTool: MCPTool {
     let definition = ToolDefinition(
         name: "app.status",
-        summary: "Check if an app is running + its resource usage (CPU, memory, PID). Use for: see if app is alive, check how much memory it uses. Don't use for: list all running apps (use process.list), stop app (use app.stop). Example: user says 'is 小红书 running, how much memory' → check app status.",
+        summary: "Check if an app is running + its resource usage (CPU, memory, PID). Use for: see if app is alive, check how much memory it uses. Don't use for: stop app (use app.stop). Example: user says 'is 小红书 running, how much memory' → check app status.",
         parameters: [
             "bundle_id": "Target App bundle ID (required)"
         ],
@@ -253,7 +253,7 @@ final class AppStatusTool: MCPTool {
 final class AppStatsTool: MCPTool {
     let definition = ToolDefinition(
         name: "app.stats",
-        summary: "Profile CPU/memory usage of an app. Use for: performance analysis, detect memory leaks. Don't use for: check if app is running (use app.status), list running apps (use process.list). Example: user says 'measure 小红书 memory usage' → profile stats.",
+        summary: "Profile CPU/memory usage of an app. Use for: performance analysis, detect memory leaks. Don't use for: check if app is running (use app.status). Example: user says 'measure 小红书 memory usage' → profile stats.",
         parameters: [
             "bundle_id": "Target app bundle ID",
             "duration": "How long to sample (default: 10s)",
