@@ -23,6 +23,7 @@ struct ChatView: View {
     @State private var pendingFilePick = false
     @State private var showModelPicker = false  // v2.9.36：聊天框切换上游模型
     @State private var showToolCenter = false  // v6.1.5-14bm：/tools 打开工具中心
+    @State private var showTerminal = false  // v7.0.4：终端按钮 → 简易终端
     // v3.3.4：输入框 + 号展开"应用/相册/文件/浏览器"快捷行（点 + 变 x 收起）
     @State private var attachExpanded = false
 
@@ -278,6 +279,10 @@ struct ChatView: View {
         // v3.0.76：快捷标签 sheet
         .sheet(isPresented: Binding(get: { AppUIState.shared.quickTerminalPresented }, set: { AppUIState.shared.quickTerminalPresented = $0 })) {
             RemoteTerminalView()
+        }
+        // v7.0.4：聊天框终端按钮 → 简易终端（统一环境 shell.exec）
+        .sheet(isPresented: $showTerminal) {
+            TerminalView()
         }
         // v6.1.5-14bm：/tools → 工具中心（三层工具总览，给用户看）
         .sheet(isPresented: $showToolCenter) {
@@ -650,7 +655,7 @@ struct ChatView: View {
             // v3.0.83：输入栏 —— 终端键 + 输入框 + +号 + 发送键 统一放进同一个大圆角框
             HStack(spacing: 6) {
                 Button(action: {
-                    AppUIState.shared.quickTerminalPresented = true
+                    showTerminal = true   // v7.0.4：打开简易终端（原为远程终端设置页）
                 }) {
                     Image(systemName: "terminal")
                         .font(.system(size: 15, weight: .semibold))
