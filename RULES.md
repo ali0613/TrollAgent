@@ -1,47 +1,47 @@
-# RULES.md — TrollAgent 操作契约
+# RULES.md — TrollAgent Operating Contract
 
-> 所有在 TrollAgent 上执行的任务都受本契约约束。语义级别遵循 RFC 2119：MUST（必须）、MUST NOT（禁止）、SHOULD（原则上）、MAY（可选）。
+> Every task executed on TrollAgent is bound by this contract. Semantics follow RFC 2119: MUST, MUST NOT, SHOULD, MAY.
 
-## 路由契约（MUST）
+## Routing Contract (MUST)
 
-1. **先路由后动手**：接到任务先 `skills.list` 搜索匹配技能；命中则 `skills.read` 读完整指令再执行。禁止不看技能就直接乱试工具。
-2. 输出当前所选技能的 **PRIMARY** 路径 + 一句话依据。
-3. 复杂任务先落地目标：明确"对象 App / 文件路径 / 数据库 / 包"，不要用占位符。
-4. 未命中技能 → 用 `ta list` 组合工具，或提议新增技能，**禁止**把任务硬塞到不匹配工具。
+1. **Route first, then act**: on receiving a task, run `skills.list` to search for a matching skill; on a hit, `skills.read` the full instructions and execute them. Don't randomly try tools without checking skills.
+2. Output the selected skill's **PRIMARY** path plus a one-line rationale.
+3. For complex tasks, pin down the target first: explicit "object app / file path / database / package", no placeholders.
+4. No skill hit → compose tools from tool summaries, or propose adding a skill. **Never** force a task into a mismatched tool.
 
-## 工具使用（MUST NOT）
+## Tool Usage (MUST NOT)
 
-- **禁止**用通配符展开、`cd` 后相对路径、二进制 grep（`grep -a` 对 Mach-O/二进制不可靠）在 iOS 原生 shell 中操作；一律用绝对路径。
-- **禁止**跨环境手动 `cp/echo` 进 Alpine 的 `/tmp`（单向桥，iOS 后写文件 Alpine 看不到）；需要跨环境数据用自动桥接或从 Alpine 侧写入。
-- **禁止**在未确认目标前修改 App 二进制 / dylib / smali / 数据库内容；先读取、再决定。
-- **禁止**静默覆盖用户已有文件；涉及替换/注入前先备份（`_bak` 或复制副本）。
+- **Don't** rely on glob expansion, relative paths after `cd`, or binary grep (`grep -a` is unreliable on Mach-O/binary) — always use absolute paths.
+- **Don't** manually `cp/echo` across environments into Alpine `/tmp` (one-way bridge; files written on the iOS side after that are invisible to Alpine). For cross-environment data use the auto-bridge or write from the Alpine side.
+- **Don't** modify app binaries / dylibs / databases before confirming the target; read first, then decide.
+- **Don't** silently overwrite the user's existing files; back up before any replace/injection (`_bak` or a copy).
 
-## 操作安全（SHOULD）
+## Operational Safety (SHOULD)
 
-- 涉及系统级操作（注入、签名、抓包证书、内核辅助）前，先做**只读探测**（status / 文件元数据 / 日志），确认当前状态再动手。
-- 失败时先读报错并按提示修正；同类错误连续失败两次就换命令/路径/实现，不无限重试。
-- 用 `bin/` 下 helper（ldid/opainject/insert_dylib 等）时确认其依赖与可执行权限；shell 无法直接执行 bundle 内工具时，从 App 进程或经桥接处理。
+- Before system-level operations (injection, signing, capture certs, kernel helpers), do a **read-only probe** (status / file metadata / logs) to confirm the current state first.
+- On failure, read the error and fix per the hint; after two consecutive failures of the same kind, switch command/path/approach — no infinite retries.
+- When using `bin/` helpers (ldid / opainject / insert_dylib etc.), confirm their dependencies and execute permissions; if the shell can't execute an in-bundle tool, handle it from the app process or via bridging.
 
-## 证据契约（MUST）
+## Evidence Contract (MUST)
 
-- 结论必须附带可复现证据：命令原文、文件绝对路径、字节数、哈希、表结构、关键行。
-- 区分"已查证"与"推断"；拿不到的字段明确标注，不编造。
-- 数字（大小/计数/耗时）来自真实命令输出，不用估算替代。
+- Conclusions must carry reproducible evidence: the command as run, absolute file paths, byte counts, hashes, table structures, key lines.
+- Distinguish "verified" from "inferred"; explicitly mark fields you couldn't obtain — never fabricate.
+- Numbers (size/count/duration) come from real command output, not estimates.
 
-## 结论契约（SHOULD）
+## Conclusion Contract (SHOULD)
 
-- 复杂分析优先按 **Evidence → Finding → Path** 三段输出：先给证据，再给判断，最后给下一步路径。
-- 涉及多步骤流程（注入→验证、抓包→证书、解包→分析）按技能内推荐工作流推进，不跳步。
+- Complex analyses output in **Evidence → Finding → Path** order: evidence first, then the judgment, then the next-step path.
+- Multi-step flows (inject→verify, capture→certs, unpack→analyze) follow the workflow recommended by the skill; don't skip steps.
 
-## 任务完成自检（声称完成前 MUST 通过）
+## Self-Check Before Claiming Done (MUST pass)
 
-- [ ] 我是否执行了工作流每一步（而不是只阅读）？
-- [ ] 我是否用了真实工具路径 / 绝对路径？
-- [ ] 我是否产出可复现证据（命令/路径/字节/哈希/表结构）？
-- [ ] 我是否区分了已查证与推断？
-- [ ] 我是否给了下一步路径（或明确"到此为止"）？
+- [ ] Did I actually execute each step of the workflow (not just read)?
+- [ ] Did I use real tool paths / absolute paths?
+- [ ] Did I produce reproducible evidence (commands/paths/bytes/hashes/table structure)?
+- [ ] Did I distinguish verified from inferred?
+- [ ] Did I give a next-step path (or explicitly say "that's it")?
 
-## 失败与交付
+## Failure & Delivery
 
-- 确实做不到时，明确说明未完成项、原因和影响，不悄悄降级后宣称完成。
-- 交付产物给出可访问路径与打开方式。
+- When something genuinely can't be done, state the incomplete items, the reason and the impact — don't quietly downgrade and claim done.
+- Deliverables come with an accessible path and how to open them.

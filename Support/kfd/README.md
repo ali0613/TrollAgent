@@ -1,94 +1,89 @@
-# kfd 免越狱信任注入（system VPN 真连）
+# kfd Jailbreak-Free Trust Injection (system VPN real connect)
 
-## 要解决的问题
+> Scope: this is internal research documentation for making TrollAgent's own capture VPN work on the user's own device. kfd is a public open-source kernel-exploit library; the scheme is used only for debugging/development on the user's own hardware.
 
-TrollAgent 用 TrollStore 假签名装好、主 App 能跑，但 **packet-tunnel 扩展被 NECP 校验拦下**（CS_VALID 过不了假签名），表现为 `NEVPNErrorConfigurationInvalid`，system VPN 连不上、设置里也开不了。
+## Problem Being Solved
 
-审计"fuck巨魔工具箱"（同为 TrollStore 装的 .tipa，能真连抓包 VPN）后确认其机制：
+TrollAgent installs fine via TrollStore with a fake signature and the main app runs, but the **packet-tunnel extension is blocked by NECP validation** (CS_VALID fails on the fake signature), surfacing as `NEVPNErrorConfigurationInvalid` — the system VPN won't connect and can't be enabled in Settings either.
 
-- **不是** entitlements 写法（无 team / allow-vpn 只是它的签名表象）
-- **是** 它内置 **kfd 内核利用**（`FuckKfdHelper`，`puaf_landa`/MEOW 漏洞）：
-  起 VPN 前把 packet-tunnel 扩展的 **cdhash 写进内核 trust cache** → 系统把假签名当合法信任 → NECP 放行 → 真连
-- kfd 是**免越狱**的临时内核利用（用完退出、不留痕），支持 **iOS 15.5–16.6.1**（16.7 起被修）——你的 iOS 16.3 正在黄金区间
-- iOS 17.x 需**真越狱**（Dopamine 3.0 / palera1n），靠 `jailbreakd` hook csops+necp 常驻放行，非越狱无解
+Auditing the "Fuck toolbox" (a TrollStore-installed .tipa that really connects its capture VPN) confirmed its mechanism:
 
-## 统一架构（一套代码跨版本）
+- **Not** an entitlements matter (no team; allow-vpn is only its signing surface)
+- It bundles a **kfd kernel exploit** (`FuckKfdHelper`, `puaf_landa`/MEOW):
+  before starting the VPN it writes the packet-tunnel extension's **cdhash into the kernel trust cache** → the system treats the fake signature as trusted → NECP passes → real connect
+- kfd is a **jailbreak-free, temporary kernel exploit** (exits after use, leaves no trace), supports **iOS 15.5–16.6.1** (patched from 16.7) — this device's iOS 16.3 is in the golden range
+- iOS 17.x needs a **real jailbreak** (Dopamine 3.0 / palera1n), kept alive by `jailbreakd` hooking csops+necp; no solution without jailbreak
+
+## Unified Architecture (one code path across versions)
 
 ```
-TrollAgent 主 App（共用层：聊天/MCP/抓包/解析）
+TrollAgent main app (shared layer: chat/MCP/capture/parse)
         │
-        ▼  起 VPN 前
+        ▼  before starting VPN
 TrustEnabler.resolvePath()
-   ├─ .kfdInject  iOS 16.x 非越狱 → posix_spawn kfd_helper 注入 trust cache
-   ├─ .jailbreak  iOS 17.x 越狱   → jailbreakd 已常驻，直接起
-   └─ .fallback   都不满足        → 本地代理(127.0.0.1:18180)抓 HTTP
+   ├─ .kfdInject  iOS 16.x no-jailbreak → posix_spawn kfd_helper to inject the trust cache
+   ├─ .jailbreak  iOS 17.x jailbroken   → jailbreakd already resident, start directly
+   └─ .fallback   neither              → local proxy (127.0.0.1:18180) captures HTTP
         │
         ▼
-VpnManager.startVpnViaRegisteredManager()  ← 统一出口
+VpnManager.startVpnViaRegisteredManager()  ← unified exit
 ```
 
-## 注入机制（v3.6.18 起：胶水版 + FuckKfdHelper 引擎）
+## Injection Mechanism (since v3.6.18: glue + FuckKfdHelper engine)
 
-v3.6.18 之前，`kfd_helper.c` 自实现 kfd 注入，卡在 `kalloc`（内核内存分配）与"调用 `pmap_image4_trust_caches`"两个原语上（libkfd 只给 kread/kwrite，无 kalloc/kcall）。
+Before v3.6.18, `kfd_helper.c` implemented kfd injection itself and got stuck on the `kalloc` (kernel memory allocation) and "call `pmap_image4_trust_caches`" primitives (libkfd only exposes kread/kwrite, no kalloc/kcall).
 
-v3.6.18 起改为**复用已验证的注入引擎**（路线 A）：
+Since v3.6.18 it reuses a **verified injection engine** (route A):
 
 ```
-TrustEnabler spawn kfd_helper <VpnTunnel.appex 路径>
-   │  kfd_helper（纯 C 胶水，本仓库 tools/kfd_helper.c）
-   │    1. 解析 Mach-O → 提取 VpnTunnel 的 20B cdhash（40 位 hex）
-   │    2. posix_spawn 同目录 Resources/bin/fuck_helper <40hex>
+TrustEnabler spawns kfd_helper <VpnTunnel.appex path>
+   │  kfd_helper (pure C glue, this repo's tools/kfd_helper.c)
+   │    1. parse Mach-O → extract VpnTunnel's 20B cdhash (40 hex chars)
+   │    2. posix_spawn Resources/bin/fuck_helper <40hex> from the same directory
    ▼
-fuck_helper（= Fuck 工具箱的 FuckKfdHelper，已完整逆向其机制）
-     kopen(puaf_landa) 临时拿内核读写
-     → patchfind pmap_image4_trust_caches（运行时扫内核 __text 特征，无静态偏移表）
-     → IOSurface kalloc 分配一块内核可写内存（tc_kaddr）
-     → kwrite 把 trust_cache（含 VpnTunnel 的 cdhash）写进 tc_kaddr
-     → DMA 物理写注册（IOBufferMemoryDescriptor+IODMACommand+ml_dbgwrap_halt_cpu 暂停 CPU 绕 PPL）
-     → kread 校验 tc 是否生效
-     → kclose 退出（免越狱、不留痕）
+fuck_helper (= Fuck toolbox's FuckKfdHelper, mechanism fully reverse-engineered)
+     kopen(puaf_landa) for temporary kernel read/write
+     → patchfind pmap_image4_trust_caches (scans kernel __text signatures at runtime, no static offset table)
+     → IOSurface kalloc allocates a kernel-writable memory block (tc_kaddr)
+     → kwrite writes the trust cache (containing VpnTunnel's cdhash) into tc_kaddr
+     → DMA physical write registration (IOBufferMemoryDescriptor+IODMACommand+ml_dbgwrap_halt_cpu to pause the CPU and bypass PPL)
+     → kread verifies the tc took effect
+     → kclose exits (jailbreak-free, no trace)
    │
-   ▼ 返回 0 → TrustEnabler 放行 → VpnManager 起 packet-tunnel
+   ▼ returns 0 → TrustEnabler allows → VpnManager starts the packet-tunnel
 ```
 
-**为什么用 Fuck 的引擎而非自研**：FuckKfdHelper 已在 iOS 16.3 巨魔上被验证能真连抓包，其完整机制已被逆向确认（IOSurface kalloc + DMA 物理写绕过 PPL），自研移植（ObjC/C 混合 + PPL 绕过 + halt CPU）工作量大且无法在无 Xcode 的 Linux 环境本地编译验证，风险高。Fuck 二进制在仓库 `Resources/bin/fuck_helper`（arm64，TrollStore 假签名环境可执行），自用无碍。
+**Why use Fuck's engine instead of building our own**: FuckKfdHelper was verified on iOS 16.3 + TrollStore to really connect and capture; its full mechanism was reverse-confirmed (IOSurface kalloc + DMA physical write bypassing PPL). A self-built port (ObjC/C mix + PPL bypass + halt CPU) is high-effort and can't be locally compiled/verified in a Linux env without Xcode. The Fuck binary lives at `Resources/bin/fuck_helper` (arm64, runs in the TrollStore fake-signature env).
 
-## 文件清单
+## File List
 
-| 文件 | 作用 |
+| File | Purpose |
 |---|---|
-| `tools/kfd_helper.c` | **纯 C 胶水**（v3.6.18 重写）：提取 VpnTunnel 的 cdhash → posix_spawn 同目录 fuck_helper，返回其退出码。不依赖 libkfd |
-| `tools/build_kfd_helper.sh` | macOS 编译脚本（纯 C + CommonCrypto，无需 clone libkfd） |
-| `Resources/bin/fuck_helper` | FuckKfdHelper 注入引擎（arm64，已验证 16.3） |
-| `Sources/TrollMCP2/TrustEnabler.swift` | Swift 探测(越狱/iOS版本/kfd区间) + 路径调度 + posix_spawn |
-| `Sources/TrollMCP2/VpnManager.swift` | `startVpn` 起手调用 `TrustEnabler.injectIfNeeded` |
-| `.github/workflows/build-trollmcp2.yml` | 加 "Build kfd_helper" step（失败不阻塞） |
+| `tools/kfd_helper.c` | **Pure C glue** (rewritten v3.6.18): extracts VpnTunnel's cdhash → posix_spawns `fuck_helper` in the same directory, returns its exit code. No libkfd dependency |
+| `tools/build_kfd_helper.sh` | macOS build script (pure C + CommonCrypto, no libkfd clone needed) |
+| `Resources/bin/fuck_helper` | FuckKfdHelper injection engine (arm64, verified on 16.3) |
+| `Sources/TrollMCP2/TrustEnabler.swift` | Swift probe (jailbreak/iOS version/kfd range) + path dispatch + posix_spawn |
+| `Sources/TrollMCP2/VpnManager.swift` | `startVpn` calls `TrustEnabler.injectIfNeeded` |
+| `.github/workflows/build-trollmcp2.yml` | added "Build kfd_helper" step (non-blocking on failure) |
 
-## 编译
+## Build
 
-CI 的 macOS runner 会自动跑 `tools/build_kfd_helper.sh` 把 `kfd_helper`（胶水版）放进 `Resources/bin/`（打进 IPA）。
-`fuck_helper` 是**预编译二进制**直接躺在 `Resources/bin/`，无需编译。本地：`bash tools/build_kfd_helper.sh`。
+The CI macOS runner automatically runs `tools/build_kfd_helper.sh` to put `kfd_helper` (glue) into `Resources/bin/` (packed into the IPA). `fuck_helper` is a **precompiled binary** already sitting in `Resources/bin/`, nothing to build. Locally: `bash tools/build_kfd_helper.sh`.
 
-## 逆向记录（FuckKfdHelper 机制，已完成）
+## Reverse-Engineering Record (FuckKfdHelper mechanism, done)
 
-对 `Fuck.ipa` 内的 `FuckKfdHelper` 做了完整反汇编（30794 条）+ 符号表解析，机制全部落地：
+Full disassembly (30794 instructions) + symbol table of `FuckKfdHelper` from `Fuck.ipa`; the mechanism is fully mapped:
 
-- **kalloc** = `_dg_kalloc`（0x10001f97c）：`IOSurfaceCreate` 分配用户可控内核对象 → kread 沿对象链定位内核地址（tc_kaddr）
-- **"调用 pmap"** = `_dma_perform`（0x10001055c）：不是普通 kcall，而是 **PPL 绕过的 DMA 物理写**——`IOBufferMemoryDescriptor+IODMACommand` 建立 DMA 映射 + `ml_dbgwrap_halt_cpu` 暂停 CPU → `_dma_writevirt64(pmap_addr, tc)` → `_physwrite64_mapped` → 恢复 CPU
-- **patchfind** = `_find_pmap_image4_trust_caches`（0x100010ab0）：运行时扫内核 `__text` 匹配序言特征（无静态偏移表）
-- 备选：还内置 `_dimentio`/`_tfp0`（拿 tfp0 后 kread/kwrite）、`_meow`、`_isarm64e`
+- **kalloc** = `_dg_kalloc` (0x10001f97c): `IOSurfaceCreate` allocates a user-controlled kernel object → kread walks the object chain to locate the kernel address (tc_kaddr)
+- **"call pmap"** = `_dma_perform` (0x10001055c): not an ordinary kcall but a **PPL-bypassing DMA physical write** — `IOBufferMemoryDescriptor+IODMACommand` builds a DMA mapping + `ml_dbgwrap_halt_cpu` pauses the CPU → `_dma_writevirt64(pmap_addr, tc)` → `_physwrite64_mapped` → CPU resumes
+- **patchfind** = `_find_pmap_image4_trust_caches` (0x100010ab0): scans the kernel `__text` at runtime for prologue signatures (no static offset table)
+- Also built in: `_dimentio`/`_tfp0` (tfp0 then kread/kwrite), `_meow`, `_isarm64e`
 
-## 验证方法（改完后真机）
+## Verification (on-device after changes)
 
-1. `bash tools/build_kfd_helper.sh` 编译通过，`file Resources/bin/kfd_helper` 显示 arm64；`file Resources/bin/fuck_helper` 显示 arm64
-2. 装 TrollAgent → 起 VPN → 看日志 `/var/mobile/Documents/kfd_helper.log`：
-   - 应有 `extracted cdhash=...`、`invoking .../fuck_helper ...`、`fuck_helper exit=0`
-   - FuckKfdHelper 自身日志（NSLog/printf）也会进同一文件
-3. **硬标准**：设置→VPN 出现"TrollAgent 抓包 VPN"、能开、状态栏出现**钥匙图标**
-   （App 内显示"已连接"不算，那可能只是假成功）
-4. 若注入失败（日志 kopen failed / fuck_helper exit 非 0），确认设备 iOS 在 15.5–16.6.1、且非越狱
-
-## 安全边界
-
-kfd 是公开开源的内核利用库，本方案仅用于**用户自有设备**上让 TrollAgent
-自身的抓包 VPN 正常工作，属自有设备调试/逆向开发，不涉及他人系统。
+1. `bash tools/build_kfd_helper.sh` compiles; `file Resources/bin/kfd_helper` shows arm64; `file Resources/bin/fuck_helper` shows arm64
+2. Install TrollAgent → start the VPN → check `/var/mobile/Documents/kfd_helper.log`:
+   - expect `extracted cdhash=...`, `invoking .../fuck_helper ...`, `fuck_helper exit=0`
+   - FuckKfdHelper's own logs (NSLog/printf) also land in the same file
+3. **Hard standard**: Settings→VPN shows "TrollAgent Capture VPN", it can be enabled, and the status bar shows the **key icon** (the in-app "connected" state doesn't count — it can be a false success)
+4. If injection fails (log shows kopen failed / fuck_helper exit != 0), confirm the device iOS is 15.5–16.6.1 and not jailbroken

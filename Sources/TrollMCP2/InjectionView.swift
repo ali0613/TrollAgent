@@ -292,7 +292,7 @@ struct InjectionView: View {
                 case "recover_all":
                     let restored = result["restored_count"] as? Int ?? 0
                     let failed = result["failed_count"] as? Int ?? 0
-                    rescueMessage = failed == 0 ? L10n.t("i18n_482", restored) : L10n.t("i18n_483", restored, failed, result["failed"] ?? "")
+                    rescueMessage = failed == 0 ? L10n.t("i18n_482", restored) : L10n.t("i18n_483", restored, failed, (result["failed"] as? String) ?? "")
                 default:
                     let cleaned = result["cleaned_count"] as? Int ?? 0
                     let errors = result["errors"] as? [String] ?? []

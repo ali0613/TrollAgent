@@ -847,7 +847,7 @@ enum AgentJSONStore {
         if let data = try? JSONSerialization.data(withJSONObject: list, options: .prettyPrinted) {
             try? data.write(to: url)
         }
-        AuditLog.shared.log("agents", detail: L10n.t("i18n_958", entry["name"] ?? ""))
+        AuditLog.shared.log("agents", detail: L10n.t("i18n_958", (entry["name"] as? String) ?? ""))
     }
 }
 

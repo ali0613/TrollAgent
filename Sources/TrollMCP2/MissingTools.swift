@@ -571,7 +571,8 @@ final class KnowledgeStore {
         if saved != currentSeedVersion {
             // v4.3.66：前缀列表扩展，覆盖第二批种子；只删固定前缀，保留用户自建
             for prefix in ["内置-逆向分析", "内置-插件安全", "内置-iOS逆向", "内置-iOS系统",
-                           "内置-巨魔", "内置-运行时", "内置-游戏破解", "内置-逆向"] {
+                           "内置-巨魔", "内置-运行时", "内置-游戏破解", "内置-逆向",
+                       "builtin-reverse-analysis", "builtin-plugin-security"] {
                 if let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
                     for f in files where f.lastPathComponent.hasPrefix(prefix) {
                         try? fm.removeItem(at: f)
@@ -581,58 +582,58 @@ final class KnowledgeStore {
             UserDefaults.standard.set(currentSeedVersion, forKey: seedVersionKey)
         }
         let seeds: [(String, String)] = [
-            ("内置-逆向分析-方法论.md", """
-# 二进制逆向分析方法论
+            ("builtin-reverse-analysis-methodology.md", """
+# Binary Reverse-Engineering Analysis Methodology
 
-总流程: 侦察(triage) → 静态(不运行读代码) → 动态(运行看行为) → 结论。静态与动态交叉验证。
+Overall flow: triage → static (read code without running) → dynamic (observe runtime behavior) → conclusion. Cross-validate static and dynamic findings.
 
-## 0 侦察(先定性, 不急着读代码)
-- 格式识别: 用 file / 看头部魔数, 判断 Mach-O(64位魔数0xFEEDFACF) / ELF / ipa / deb / 文本。
-- 加密态: cryptid=1 是加密二进制, 静态工具全无效, 先砸壳(解密)再分析。
-- 依赖库/架构: 读 Mach-O load commands 的 LC_LOAD_DYLIB。异常依赖(纯JSON库却链了 WebKit/Metal/Network)是"重打包/加料"强信号。
-- 哈希+体积: SHA256 + 大小, 用于跨版本比对。
+## 0 Triage (classify first, don't rush into code)
+- Format identification: use \`file\` / check header magic — Mach-O (64-bit magic 0xFEEDFACF) / ELF / ipa / deb / text.
+- Encryption state: cryptid=1 means an encrypted binary; all static tools are ineffective — decrypt (crack the shell) before analysis.
+- Dependencies/architecture: read LC_LOAD_DYLIB from the Mach-O load commands. Abnormal dependencies (a pure-JSON library linked against WebKit/Metal/Network) are a strong signal of repackaging/tampering.
+- Hash + size: SHA256 + file size for cross-version comparison.
 
-## 1 静态(不运行, 读代码与数据)
-- 符号/字符串/ObjC类: 用 binary.symbols / inject binary_symbols 提取(nm 全局符号 + 字符串 + _OBJC_CLASS_$_ 类名)。
-- 定向过滤: search 关键词(类名/方法/可疑API)。
-- 字符串线索: 提取后看 URL/域名/IP/keychain/API名/错误文案。先提取文本再分析, 不要直接 grep 二进制。
-- 结构/分页: hexdump 看字节; package 解包 ipa/deb 列结构。
-- ObjC 更准: 直读 __TEXT,__objc_methname(方法选择器) 与 __TEXT,__objc_classname(类名) 段。
-- 混淆/加壳迹象: 大量随机符号、超高熵、符号表缺失、超长垃圾串、异常压缩段 → obfuscated/packed, 结论降级为"需深挖"。
+## 1 Static (don't run; read code and data)
+- Symbols/strings/ObjC classes: extract with binary.symbols / inject binary_symbols (nm global symbols + strings + _OBJC_CLASS_$_ class names).
+- Targeted filtering: search keywords (class names / methods / suspicious APIs).
+- String leads: after extraction look for URLs/domains/IPs/keychain/API names/error copy. Extract text first, then analyze — don't grep the binary directly.
+- Structure/paging: hexdump for raw bytes; package to unpack ipa/deb and list structure.
+- ObjC is more precise: read __TEXT,__objc_methname (method selectors) and __TEXT,__objc_classname (class names) sections directly.
+- Obfuscation/packing signs: many random symbols, ultra-high entropy, missing symbol table, overly long junk strings, abnormal compressed sections → obfuscated/packed; downgrade the conclusion to "needs deeper digging".
 
-## 2 动态(运行看行为, 需真机跑目标App)
-- 网络: 抓包看外连域名/上传内容/是否窃取后回传。
-- 数据访问: 读容器, 看目标是否读写通讯录/短信/文件/keychain/相册。
-- 进程: 看是否拉起额外进程/守护/自启动。
+## 2 Dynamic (observe runtime behavior; needs the target app running on a real device)
+- Network: capture traffic — check outbound domains / uploaded content / exfiltration.
+- Data access: read the container — check whether the target reads contacts/SMS/files/keychain/photo library.
+- Processes: check whether it spawns extra processes/daemons/auto-starts.
 
-## 3 边界
-- 深度反汇编/反编译/许可逻辑还原 → 电脑侧 Ghidra/rizin/llvm-objdump。
-- App 内完成: 侦察 + 静态提取 + 动态观察 + 风险判定。要更深时明确说"需电脑侧 Ghidra 深挖"。
+## 3 Boundaries
+- Deep disassembly/decompilation/license-logic recovery → do on a computer with Ghidra/rizin/llvm-objdump.
+- In-app scope: triage + static extraction + dynamic observation + risk verdict. For deeper work, explicitly say "needs deeper Ghidra digging on a computer".
 """),
-            ("内置-插件安全-风险判定.md", """
-# 插件/二进制安全审查风险判定
+            ("builtin-plugin-security-assessment.md", """
+# Plugin / Binary Security Review Risk Assessment
 
-先列"命中清单+证据行(哪个字符串/哪个类/哪条依赖)", 再给结论。不下无证据结论。
+First list "hits + evidence lines (which string / which class / which dependency)", then give the verdict. No conclusion without evidence.
 
-## 高危命中(任一即高风险)
-- 隐私API(通讯录 CNContact/AddressBook、短信 CTMessage、定位 CLLocation、相册 PHPhotoLibrary) + 网络上传/回连组合。
-- 动态加载后执行: dlopen / dlsym / NSClassFromString / performSelector。
-- 连接非白名单域名; 解密/强混淆 + 外传特征。
-- 持久化: DYLD_INSERT_LIBRARIES / LaunchDaemons / LaunchAgents / 自启动守护。
+## High-risk hits (any one = high risk)
+- Privacy APIs (contacts CNContact/AddressBook, SMS CTMessage, location CLLocation, photo library PHPhotoLibrary) combined with network upload / callbacks.
+- Dynamic load then execute: dlopen / dlsym / NSClassFromString / performSelector.
+- Connecting to non-whitelisted domains; decryption/heavy obfuscation combined with exfiltration traits.
+- Persistence: DYLD_INSERT_LIBRARIES / LaunchDaemons / LaunchAgents / self-starting daemons.
 
-## 中危
-- keychain/SecItem 读写、cookie/令牌提取、大量 base64 数据、socket 自建连接。
+## Medium risk
+- keychain/SecItem read-write, cookie/token extraction, large base64 blobs, raw socket connections.
 
-## 低危(提示)
-- 仅读自身 bundle 路径、正常系统 SDK 依赖、标准 UI 库、广告/统计 SDK(需确认数据只发往其官方域名)。
+## Low risk (notes)
+- Only reading its own bundle path, normal system SDK dependencies, standard UI libraries, ad/analytics SDKs (confirm data only goes to their official domains).
 
-## 白名单方向
-- 苹果系: apple.com / icloud.com / mzstatic.com。
-- 常见广告统计: google/facebook/unity/ironsource/applovin/kochava/adjust/appsflyer/bugly/firebase 等官方域名。
-- 国内大厂 SDK: tencent/aliyun/bytedance/baidu/xiaomi 等官方域名。
+## Whitelist direction
+- Apple: apple.com / icloud.com / mzstatic.com.
+- Common ad/analytics: google/facebook/unity/ironsource/applovin/kochava/adjust/appsflyer/bugly/firebase etc. official domains.
+- Big-tech SDKs: tencent/aliyun/bytedance/baidu/xiaomi etc. official domains.
 
-## 结论格式
-可信 / 需真机验证(network.capture 看实际回连) / 可疑 / 恶意特征。命中要引用提取到的原文。
+## Verdict format
+Trusted / needs real-device verification (network.capture to check actual callbacks) / suspicious / malicious traits. Cite the extracted original text for any hit.
 """)
         ]
         for (name, content) in seeds + SeedKnowledgeData.v2Seeds {

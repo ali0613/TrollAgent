@@ -1,115 +1,69 @@
-# TrollMCP2 / TrollAgent — 项目目标与路线图（2026-10 版）
+# TrollAgent — Project Goals & Roadmap (2026-10)
 
-> 本文件是项目的唯一权威目标记录。上下文压缩/丢失后，先读本文件恢复方向。
-> 最后更新：2026-10-23（v6.6.0——统一环境落地，CELF/elf-runner/iSH 路由全部退役）
+> This file is the project's single authoritative goal record. If context is compressed/lost, read this file first to recover direction.
+> Last updated: 2026-10-23 (v6.6.0 — unified environment landed; CELF/elf-runner/iSH routing all retired)
 
-## 终极目标（一句话）
+## End Goal (one line)
 
-**把 TrollMCP2 从"iOS 原生 + iSH/Alpine 双轨 + 路由翻译"收敛为"单一 iOS 原生环境 + Linux 用户态运行时"——已实现：iSH 退场（Asbestos 接管），AI 只感知一个环境。**
+**Converge the project from "iOS native + iSH/Alpine dual-track + routing translation" into "one iOS environment + Linux userspace runtime" — done: iSH retired (Asbestos took over), AI perceives a single environment.**
 
-## 为什么做（用户原话记录的动机）
+## Why (user-recorded motivation)
 
-- "审计后很多工具命令用不了、闪退"——双轨路由 + iSH 模拟器是闪退头号来源（cpu_run_to_interrupt、rootfs 自引用、numpy 段错误全是它）
-- "不信任这里面所有工具，总觉得漏洞 bug 很多，环境很不稳，不是一个整体"
-- 用户明确要求："去把 a-Shell 拉过来看看，然后看怎么废除 iSH 和路由，全部原生化"
+- "After auditing, many tool commands don't work / crash" — the dual-track routing + iSH emulator was the #1 crash source (cpu_run_to_interrupt, rootfs self-reference, numpy segfaults)
+- "I don't trust any of these tools; it feels buggy and unstable, not one coherent whole"
+- User explicitly asked: "pull a-Shell over and figure out how to abolish iSH and routing, go fully native"
 
-## 已确认的架构决策（带证据，勿轻易推翻）
+## Confirmed Architecture Decisions (with evidence; don't overturn lightly)
 
-| 决策 | 依据/证据 |
+| Decision | Evidence |
 |---|---|
-| **14c1：引擎回退纯 arm64**（已做） | 14ca3ca 双架构把 libish 编入 arm64e，A15 跑 iSH x86 模拟即段错误；6.0.25 纯 arm64 正常 |
-| **14c3：Alpine 裁剪**（已做） | 原生已覆盖命令从 Alpine 删除（幂等）；保留 rm/mv/cp/mkdir/chmod/ln/sh/sed/awk/grep/find/head/tail（apk 脚本依赖） |
-| **默认删 iSH，仅"特定工具确实需要内核"才按需保留**（用户拍板） | 真 Linux 内核语义对 AI/用户实际使用频率 <1%；删 iSH = 根治闪退 + 包小 ~15MB |
-| **ELF 不用"格式转换"，用"运行时翻译"** | ELF→Mach-O 转换不可行（dyld/libc/syscall 全不对应）；正确姿势 = ELF 加载器 + 指令直跑 + syscall 翻译层（WSL1/elfuse 架构） |
-| **"装工具"换入口**：pip 即时装 / 下载 arm64 二进制 / CI 重编进包，apk 非必需 | apk 装的是 Linux ELF，原生跑不了；但有源码就重编（99% 工具），无源码走 ELF 运行时 |
-| **环境变量不"装"要"统一"** | 现在双轨（Alpine Linux PATH / 原生进程环境）不一致；原生化后统一 PATH(bin/)/HOME/TMPDIR，AI 无感 |
+| **14c1: engine reverted to pure arm64** (done) | 14ca3ca dual-arch built libish into arm64e, A15 segfaulted on iSH x86 emulation; 6.0.25 pure arm64 works |
+| **14c3: Alpine trimming** (done) | commands covered natively were removed from Alpine (idempotent); kept rm/mv/cp/mkdir/chmod/ln/sh/sed/awk/grep/find/head/tail (apk script deps) |
+| **Default: drop iSH, keep only if a tool genuinely needs kernel semantics** (user decision) | real Linux kernel semantics are used by AI/user <1% of the time; removing iSH = crash root fix + ~15MB smaller |
+| **ELF: not "format conversion", but "runtime translation"** | ELF→Mach-O conversion is infeasible (dyld/libc/syscall don't map); correct approach = ELF loader + direct instruction execution + syscall translation layer (WSL1/elfuse architecture) |
+| **"Install tools" new entry points**: pip install-on-demand / download arm64 binaries / CI recompile into the package; apk optional | apk installs Linux ELF, can't run natively; with source, recompile (99% of tools); without source, use the ELF runtime |
+| **Env vars: not "installed" but "unified"** | the old dual-track (Alpine PATH / native process env) was inconsistent; after unification PATH(bin/)/HOME/TMPDIR are uniform, AI-agnostic |
 
-## 分层愿景（终态）
+## Layered Vision (final state)
 
 ```
-统一环境（AI 感知唯一入口 = TrollRuntime）
- └─ Asbestos ARM64 解释器 + Alpine 完整 rootfs（apk 任意装包——python3/git/sqlite/jq/binutils/lua/node/radare2…）
-      ├─ 全部命令在统一环境执行（ls/cat/git/python3/ps/df…）
-      ├─ iOS 特有命令（plutil/sysctl/notifyutil/uicache/sbreload/idevice_id/swift）内部自动原生兜底
-      ├─ iOS 注入工具链（ldid/optool/insert_dylib/ct_bypass）原生直跑
-      └─ jtool2（Mach-O 解析专长）App 自带原生
-（v6.6.0 起：无路由、无双环境、无 iSH/QEMU 后备——单一环境）
+Unified environment (AI sees one entry point = TrollRuntime)
+ └─ Asbestos ARM64 interpreter + full Alpine rootfs (apk installs anything — python3/git/sqlite/jq/binutils/lua/node/radare2…)
+      ├─ all commands run in the unified env (ls/cat/git/python3/ps/df…)
+      ├─ iOS-specific tools (plutil/sqlite3) always available as Swift-native implementations
+      └─ iOS injection toolchain (ldid/optool/insert_dylib/ct_bypass) runs natively
+(since v6.6.0: no routing, no dual environment, no iSH/QEMU fallback — one environment)
 ```
 
-## 路线图状态
+## Roadmap Status
 
-| 阶段 | 内容 | 状态 |
+| Phase | Content | Status |
 |---|---|---|
-| P0 | 14c1 引擎回退纯 arm64，Alpine 恢复 | ✅ 已交付装机（Alpine sh 实测恢复） |
-| P1 | ~~原生工具扩军~~ **已并入统一环境**（v6.6.0：Alpine apk 工具链替代全部原生芯片工具——lua/node/r2/cstool/llvm 族全清） | ✅ 并入 v6.6.0 |
-| P3 | ~~原生 pip~~ **统一环境 Alpine python3+pip 完整**（apk 任意装包） | ✅ v6.6.0 |
-| P4 | 路由废除 + 统一环境层 | ✅ v6.6.0 完成（runtime 参数废除、ISHEngine→TrollRuntimeEngine、iSH 文案清零） |
-| P5 | aarch64 ELF 运行时 → **已由 rcarmo/ios-linuxkit Asbestos 接管（v6.5.0 切核心，v6.6.0 统一环境）**——emu.c/CELF 退役 | ✅ v6.5.0-v6.6.0 完成（真机验证：apk 装包/动态库链/git/ps/df/numpy 全通） |
-| ~~P2~~ | ~~原生受限 shell（组合命令原生化）~~ **已并入 P5** | 2026-10-17 用户拍板"组合命令最后弄"：组合命令终极形态=P5 ELF 运行时（Linux shell 语义白送），自写 Swift shell 无必要；且 fork 实测在原生 iOS 挂起（python3 subprocess NO JSON），P2 的进程拉起路线本就要等 P5 |
+| P0 | 14c1 engine reverted to pure arm64, Alpine restored | ✅ delivered & installed (Alpine sh verified) |
+| P1 | ~~native tool expansion~~ **merged into the unified env** (v6.6.0: Alpine apk toolchain replaces all native-chip tools — lua/node/r2/cstool/llvm family cleared) | ✅ merged in v6.6.0 |
+| P3 | ~~native pip~~ **unified-env Alpine python3+pip complete** (apk installs anything) | ✅ v6.6.0 |
+| P4 | routing abolished + unified env layer | ✅ v6.6.0 (runtime param removed, ISHEngine→TrollRuntimeEngine, iSH copy cleared) |
+| P5 | aarch64 ELF runtime → **taken over by rcarmo/ios-linuxkit Asbestos (core switch v6.5.0, unified env v6.6.0)** — emu.c/CELF retired | ✅ v6.5.0–v6.6.0 (device-verified: apk installs/dynamic lib chains/git/ps/df/numpy all pass) |
+| ~~P2~~ | ~~native restricted shell (composed commands)~~ **merged into P5** | user decision 2026-10-17: composed commands' final form = P5 ELF runtime (Linux shell semantics for free); self-written Swift shell unnecessary; fork verified to hang on native iOS (python3 subprocess NO JSON) |
 
-**关键决策（2026-10-17→10-23 演进）**：busybox 静态 ELF 路线（emu.c/CELF）**已退役（v6.6.0）**——被 rcarmo Asbestos（iSH 的 ARM64 解释器分支，无 JIT、iOS W^X 合规）取代：完整 Alpine rootfs + apk 生态 + 动态 ELF 全支持，真机验证通过。
+**Key decision (2026-10-17→10-23)**: the busybox static-ELF route (emu.c/CELF) **retired (v6.6.0)** — replaced by rcarmo Asbestos (the ARM64 interpreter branch of iSH, no JIT, iOS W^X compliant): full Alpine rootfs + apk ecosystem + full dynamic ELF support, device-verified.
 
-## 当前状态（2026-10-23，v6.6.0 已 push）
+## Current State (2026-10-23, v6.6.0 pushed)
 
-- **v6.6.0 系列已 push（fix1-9）**：CELF/elf-runner/静态 busybox/iSH 路由全部退役；统一环境落地（shell.exec 无 runtime——全部命令默认 TrollRuntime=Asbestos+Alpine 完整工具链；iOS 特有命令自动原生兜底）；rootfs 完整化；原生芯片工具全清（lua/node/r2/cstool/llvm 族——Alpine 替代）+ CI 加速 25-45min
-- **下一步**：v6.6.0 真机验证（覆盖安装）→ 大范围回归 → vendored（Asbestos 源码入仓）+ CISH target 重命名收尾
-- 已记录事实：python3 subprocess/os.system 在原生 iOS 下挂起无响应（fork 受限再证实）→ 组合命令并入 P5，不再自写 Swift shell
+- **v6.6.0 series pushed (fix1-9)**: CELF/elf-runner/static busybox/iSH routing all retired; unified environment landed (shell.exec has no runtime param — all commands default to TrollRuntime = Asbestos + full Alpine toolchain; iOS-specific commands auto-handled natively); rootfs completed; native-chip tools cleared (lua/node/r2/cstool/llvm family — Alpine replaces them) + CI 25-45min faster
+- **Next**: v6.6.0 device verification (overwrite install) → broad regression → vendored (Asbestos source into the repo) + CISH target rename wrap-up
+- Recorded fact: python3 subprocess/os.system hangs on native iOS (fork restriction re-confirmed) → composed commands merged into P5, no self-written Swift shell
 
-## 仓库与发布信息
+## Repo & Release Info
 
-- 仓库：zrrt/trollmcp2（main），GitHub token 存会话记忆/环境变量（勿写入本文件——Push Protection 拦截）
-- 发布：release latest = TrollAgent.tipa（每次构建覆盖）
-- 真机远程测试：N1 SSH 跳板 root@121.31.139.125 / 密码 1335612901 → iPhone 终端 192.168.31.108:8790（/health 免认证查 build）
-- a-Shell 结论：主 App 源码未公开；a-Shell-commands 是 WASM 命令（非 iOS 原生 ARM 二进制），可作工具清单参考
-
----
-
-## VPN/抓包主线交接留档（2026-10-19 归档）
-
-### 背景
-- 用户上传《巨魔Fuck法克工具箱_1.8.5.tipa》（TrollStore 生态抓包工具），目标是让 TrollAgent 具备同等 VPN 抓包能力，解决"点注入信任就黑屏"问题。
-- **最终定案：放弃 kfd 注入路线，改走 VpnTunnel 自带 entitlements 直接起隧道。** 本主线已整体交接另一 AI，不再由本会话推进。
-
-### Fuck 工具箱原理（分析结论）
-1. Fuck 是**注入型抓包工具**：`fuck_helper`（信任自己的黑盒 helper）通过 **kfd（kernel read/write 漏洞）** 注入抓包代理到目标 App 进程。
-2. VPN 隧道：NetworkExtension `NEPacketTunnelProvider` 起 utun；HTTPS 解密靠 **mitm 证书**（系统装 mitm CA）。
-3. **黑屏根因（已钉死）**："点注入信任就黑屏" = kfd 注入目标不匹配 → **DMA panic → 黑屏重启**。`fuck_helper` 只信任自己，无法对 VpnTunnel 定向信任；每次开 VPN 触发注入 → 不匹配 → panic。
-4. Fuck 的抓包 VPN 用户侧可用：隧道+证书正常，崩的只是注入 hook 步。→ 取舍：**隧道保留、注入砍掉**。
-
-### 已放弃路线（死路，勿重试）
-**核心放弃：kfd 注入**（注入信任 → DMA panic 黑屏），连带整套注入 hook 路线。iOS 16.3 / iPhone14,3 / TrollStore 6.0.25 实测锁死清单：
-| 路线 | 实测结果 |
-|---|---|
-| kfd 注入（fuck 同款） | 目标不匹配 → DMA panic 黑屏 |
-| MAP_JIT（含 16KB 对齐/MAP_FIXED） | 全部 EINVAL |
-| ptrace 自 attach | EPERM |
-| fork 子进程 | iOS16 必 SIGBUS |
-| dlopen 固定 LaunchServices 路径 | iOS16 无实体文件 |
-| apple-magnifier://enable-jit 切 TrollStore | LSOpen err=0 仍 EINVAL，闪切闪退 |
-| allow-jit entitlement | 已签但 AMFI 不认（csops allow-jit-check=0） |
-| RWX mmap | 成功但取指 SIGBUS，**csflags=0x32007005 铁证** |
-
-### 新方向：VpnTunnel 直接起隧道（自研 vs 复刻判断）
-- **判断：借鉴概念 + 自研实现，非照搬源码**（tipa 是二进制，无源码，只能反汇编参考机制）。
-- 新方案 = NEPacketTunnelProvider 子类 + 系统 VPN 配置 + TrollStore 签名 entitlements（no-sandbox / platform-application / networkextension packet-tunnel-provider）；开 VPN 不再触发 kfd 注入，纯系统 VPN 路由抓包。
-- **代价**：放弃注入 = 放弃定向 hook 目标 App，只能抓 VPN 路由到的流量。
-- **复刻 Fuck 最小清单**：①NEPacketTunnelProvider 子类起 utun 读写隧道包；②NETunnelProviderProtocol + NEVPNManager 装配置（显示名自定义，苹果设置里显示我们起的名字）；③entitlements（networkextension packet-tunnel-provider + no-sandbox/platform-application）；④mitm 证书安装（抓 HTTPS 必需）；⑤无需 helper、无需 kfd。
-- 参考 Fuck 二进制手段：`ldid -e` 看 entitlements、反汇编（capstone/Hopper）看隧道启动与包处理、`strings` 找 VPN 配置/证书文件名。
-
-### 项目硬事实（供新 AI 继续）
-- 仓库：github.com/zrrt/trollmcp2；本地 checkout `/home/user/Doubao/chats/38444602897901314/trollmcp2_audit`
-- 可用 PAT 存会话记忆/环境变量（勿写入本文件——Push Protection 拦截）；已失效 PAT 列表存会话记忆
-- 公网跳板 IP（动态）：变必须问用户要新；SSH root / 密码 `1335612901`
-- iPhone 远程终端：`http://192.168.31.108:8790` token `1335612901`；API `POST /api/tool` body `{"name":"shell.exec","params":{"command":"…","runtime":"ios"}}`（经跳板 sftp 写 /tmp/body.json 再 curl）
-- 设备端：bundle `org.python.python`；App `TrollAgent.app`；真机 busybox `/var/mobile/Documents/Workspace/linux/busybox`；日志 `elf_out.log`；崩溃 `crash/sig_*.txt`
-- 用户习惯：每个构建走 commit → CI → release asset+aka → 手动 TrollStore 安装 → 真机验证；留档走 commit 历史 + GOALS.md；不绕路反复试死路。
-
-### 当前主线状态（2026-10-23：CELF/elf-runner 已退役）
-- **emu.c/CELF/elf-runner（静态 busybox 翻译器路线）已全部退役（v6.6.0）**——调试记录见 git 历史（117-348 行旧版，2026-10-19/20 的 CSEL/UBFM/SXTW/栈布局等全部根因修复已随 emu.c 归档）。
-- **接替者：rcarmo/ios-linuxkit Asbestos**（iSH 的 ARM64 解释器分支——2026-10 活跃维护，无 JIT/MAP_JIT，48-bit guest 地址空间，完整 Alpine+apk）——v6.5.0 切核心、v6.5.1 真机验证全通、v6.6.0 统一环境落地。
-- **验证证据（v6.5.1 真机）**：日常命令/管道/apk 装包（htop/git）/动态库链（ncurses）/符号链接工具/ps/df/native Python+numpy 全通——cpu_run_to_interrupt 闪退消失。
-- **本地交叉构建资产**：qemu-aarch64 跑静态 ish（build-cross/ish 3.3MB）+ alpine-chroot（装包验证）——见仓库 ios-linuxkit/ 与 /home/user/Doubao/chats/38448344203617282/ios-linuxkit。
+- Repo: zrrt/TrollAgent (main); GitHub token lives in session memory / env vars (never write it into this file — Push Protection blocks it)
+- Release: latest = TrollAgent.tipa (overwritten on every build)
+- Device remote test: N1 SSH jump host → iPhone terminal 192.168.31.108:8790 (/health needs no auth; check build). The jump host's public IP is dynamic — ask the user for the current one; credentials are kept in session memory, not in the repo.
+- a-Shell conclusion: main app source is not public; a-Shell-commands are WASM commands (not native iOS ARM binaries), usable only as a tool-list reference
 
 ---
-## 历史调试记录（已归档，git 历史保留）
-2026-10-19/20 的 elf-runner 离线调试进展（指令覆盖：CSEL/SDIV/RBIT/BFM/LDUR/stub syscall；UBFM 根因；SXTW/SXTX 移位；栈布局 v4；真机 UNSUPPORTED madd 等）——**全部已随 emu.c 退役归档**，详见 git log（v6.6.0 删除提交 16000fa）。
+
+## Archived Handoffs (details live in git history)
+
+- **VPN/capture main line handoff (archived 2026-10-19)**: kfd-injection route abandoned (DMA panic → black screen); final decision = VpnTunnel starts the tunnel directly with its own entitlements. Full analysis and dead-end list are in git history / old versions of this file.
+- **Historical debug records (archived)**: 2026-10-19/20 elf-runner offline debugging (CSEL/SDIV/RBIT/BFM/LDUR/stub syscall; UBFM root cause; SXTW/SXTX shifts; stack layout v4; device UNSUPPORTED madd…) — all archived with emu.c retirement, see git log (v6.6.0 removal commit 16000fa).

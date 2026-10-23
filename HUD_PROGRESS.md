@@ -1,56 +1,24 @@
-# HUD 桌面悬浮 106 → 方案 B(TheBall) · 进度快照
+# HUD Desktop Floating — Progress Snapshot (archived)
 
-- 日期: 2026-10-07
-- 状态: **方向已改拍板 B(TheBall 方案)，放弃 A(libxpc)。下一步逆向 TheBall 悬浮窗窗口 API 后实现**
+- Date: 2026-10-07 → resolved 2026-10-11+
+- Status: **resolved**. The floating mascot ships and works; bubble quotes are bilingual (see HUD/README.md). This file keeps the investigation record only.
 
-## 已确证(真机 exec_m)
+## Verified Facts (device)
 
-1. entitlements 完整：platform-application=5 / no-sandbox=4 / accessibility-window-hosting=2 / get-task-allow=5 / persona-mgmt / launchd.job-manager / launchd.job-submission —— **权限够，106 与 entitlements 无关**
-2. launchctl 对 App 不可用：spawn ENOENT + /usr/bin /usr/sbin /bin /sbin /usr/libexec 全部 No such file；launchd 在 /sbin(存在)
-3. posix_spawn persona 99 -106：persona attr 设置成功(返回0) 但 spawn -106 = **iOS 16 + ldid 注入 platform-application 非真 platform codesign → 提权被拒**(已知限制)
-4. 手机无 OpenSSH(/usr/sbin/sshd 不存在)；用户开的只是 8790 App 远程终端，真系统 shell 不可达
+1. Entitlements were complete: platform-application / no-sandbox / accessibility-window-hosting / get-task-allow / persona-mgmt / launchd.job-manager / launchd.job-submission — the old "spawn -106" was **not** an entitlements problem.
+2. `launchctl` unusable from the app: spawn ENOENT; /usr/bin /usr/sbin /bin /sbin /usr/libexec all missing from the app's view.
+3. `posix_spawn` with persona 99 → -106: iOS 16 + ldid-injected platform-application isn't a real platform codesign → privilege elevation denied (known limit).
+4. No OpenSSH on the phone; the 8790 endpoint is the app's remote terminal, not a real system shell.
 
-## 方向变更：放弃 A(libxpc)，改走 B(TheBall 方案)
+## Root Cause & Direction Change
 
-**根因定论**：之前 106 = 试图"拉起独立 HUD 进程"(要 launchd/root，这台 iOS 16 都不给)。**正确做法 = 主 App 内悬浮窗 + 后台保活，不拉独立进程、不碰 launchd/root/libxpc。**
+- The old -106 = trying to **launch a standalone HUD process** (needs launchd/root, which this iOS 16 won't grant). Correct approach = **in-app floating window + background keep-alive**, no standalone process, no launchd/root/libxpc.
+- Step 1 verified: HUD launch switched to **non-elevated posix_spawn** → errno 106 completely avoided; `hud.log: start OK (posix_spawn, mobile)`; HUD process visible in ps.
+- Step 2: HUD window mechanism refactored from the TrollSpeed plugin mode (GSInitialize + BKSDisplayServicesStart + UIApplicationInitialize + plugin event takeover — needs root persona) to **a normal UIApplication + high-windowLevel accessibility global window** (TheBall way, works as mobile).
+- TheBall reverse conclusions used: in-app `FloatingContentViewController` + `floatingWindow` (high windowLevel); covering the desktop = accessibility window hosting (springboard.accessibility-window-hosting + physicalinteraction.client + assistivetouch.daemon + AXEventRepresentation); background keep-alive = `UIBackgroundModes: processing` + `beginBackgroundTask`.
 
-## TheBall 逆向结论(research/TheBall，hhse/TheBall 闭源 ipa)
+## References
 
-- 主 App 内 `FloatingContentViewController` + `floatingWindow`(高 windowLevel) 显示悬浮窗
-- 盖到桌面 = **accessibility 窗口托管**(AssistiveTouch 式)：`com.apple.springboard.accessibility-window-hosting` + `com.apple.accessibility.physicalinteraction.client` + `com.apple.assistivetouch.daemon` + AXEventRepresentation
-- 后台保活 = `UIBackgroundModes: processing` + `beginBackgroundTask`(后台不死、锁屏可用)
-- **launchd: 0 / job-manager: 0** —— 完全不碰 launchd/root
-- **我们也有 accessibility-window-hosting entitlement → 这条路可行**
-
-## 下一步
-
-1. 逆向 TheBall 悬浮窗窗口创建 API(accessibility 托管 + windowLevel 具体怎么调)
-2. 抄实现进 TrollAgent：主 App 内创建 accessibility 托管悬浮窗 + 加 UIBackgroundModes processing 保活
-3. 推版真机测
-
-## 参考资源
-
-- TheBall 源码/ipa: `research/TheBall/`(1.6–2.7.ipa 已解包 2.7，主可执行"后台不死是"已逆向出机制)
-- TrollSpeed 参考(launchctl/persona 路线，已确认此机不可行): `research/TrollSpeed/`
-- 仓库: zrrt/trollmcp2 main
-
-## 2026-10-07 晚更新（方案 B Step 1 成功 + Step 2 定方向）
-
-### Step 1 已验证成功（真机 hud.log + ps）
-- HUD 拉起改**不提权 posix_spawn**（spawn 而非 spawnRoot persona 99）→ **errno 106 彻底避开**
-- hud.log: `start OK (posix_spawn 不提权, mobile)`
-- ps 看到 HUD 进程被拉起（PID, 父进程 1）
-
-### HUD 起来但桌面没显示
-- 今天(10-07)无崩溃日志(.ips)；ps 只有主 App 进程 → **HUD -hud 进程起来后退出了**
-- 根因：`HUDMainStart()`(HUD/sources/HUDApp.mm) 用 **TrollSpeed 插件模式**：
-  `GSInitialize + BKSDisplayServicesStart + UIApplicationInitialize + __completeAndRunAsPlugin + HUDMainApplication 私有事件接管(反汇编 _run)`
-  ——**这套依赖 root persona，mobile 不提权下跑不动(退出)**
-
-### Step 2 方向
-- **重构 HUDMainStart**：从插件模式 → **普通 UIApplication + 高 windowLevel accessibility 全局窗口**(TheBall 方式, mobile 可行)
-- HUD/sources 有 HUDMainApplication.mm(142)/HUDMainWindow.mm(19)/HUDRootViewController.mm 需重构窗口机制
-- 工作量大，需多轮改+测
-
-### 待解
-- TheBall 悬浮球进程 uid 未确证(装 TheBall 到手机 ps 可测)；但 mobile + accessibility 全局窗口确定性成立(已从 TheBall 逆向确认机制)
+- TheBall source/ipa: `research/TheBall/`
+- TrollSpeed reference (launchctl/persona route, confirmed infeasible on this device): `research/TrollSpeed/`
+- Repo: zrrt/TrollAgent (main)

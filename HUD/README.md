@@ -1,21 +1,23 @@
-# HUD —— 桌面悬浮窗框架（抄自 TrollSpeed，MIT）
+# HUD — Desktop Floating Window Framework (based on TrollSpeed, MIT)
 
-本目录是 **TrollSpeed**（https://github.com/Lessica/TrollSpeed ，MIT License, Copyright (c) 2023 Lessica）的 HUD（悬浮窗）框架源码与私有头文件，复制进 TrollAgent 工程用于实现「桌面悬浮小女孩」。
+This directory holds the floating-window (HUD) framework source and private headers originally from **TrollSpeed** (https://github.com/Lessica/TrollSpeed, MIT License, Copyright (c) 2023 Lessica), integrated into TrollAgent for the desktop floating mascot.
 
-## 架构
-- `HUDApp.mm` —— HUD 独立进程的 `main`（`-hud` 参数分支，自己初始化 UIApplication）
-- `HUDMainApplication.mm` —— HUD 的 UIApplication 子类（装 HID 事件源，接收触摸）
-- `HUDMainWindow.mm` —— 全局系统窗口（`_isSystemWindow` 等私有方法）
-- `HUDHelper.mm` —— `posix_spawn` + root persona 拉起 HUD 进程
-- `MainApplication.mm` / `MainApplicationDelegate.mm` —— 主 App 入口与 spawn 触发（参考）
-- `headers/` —— 私有框架头文件（UIAutoRotatingWindow / UIEventDispatcher / SBSAccessibilityWindowHostingController 等）
-- `supports/entitlements.plist` —— HUD 进程系统级 entitlements（persona-mgmt / no-sandbox / hid.client / springboard.accessibility-window-hosting 等）
+## Architecture
+- `HUDApp.mm` — the HUD standalone process's `main` (`-hud` argument branch; initializes its own UIApplication)
+- `HUDMainApplication.mm` — the HUD's UIApplication subclass (installs a HID event source, receives touches)
+- `HUDMainWindow.mm` — global system window (`_isSystemWindow` and other private methods)
+- `HUDHelper.mm` — process spawn + persona handling for launching the HUD
+- `MainApplication.mm` / `MainApplicationDelegate.mm` — main-app entry and spawn trigger (reference)
+- `headers/` — private framework headers (UIAutoRotatingWindow / UIEventDispatcher / SBSAccessibilityWindowHostingController etc.)
+- `supports/entitlements.plist` — HUD process system-level entitlements (persona-mgmt / no-sandbox / hid.client / springboard.accessibility-window-hosting etc.)
 
-## 版权
-TrollSpeed 是 MIT 开源，核心框架直接抄用，保留原版权声明。本目录文件保留原作者的 header 注释。
+## Copyright
+TrollSpeed is MIT-licensed; the core framework is used directly with its original copyright notice preserved. Files in this directory keep the original author's header comments.
 
-## 集成方式（本工程选型）
-主 App（SwiftPM Swift 工程）与 HUD 分离：
-- HUD 作为**独立二进制**，用 theos 编译（参考 TrollSpeed Makefile，只编 HUD 部分），带 `supports/entitlements.plist` 独立签名
-- 主 App 设置里加「桌面悬浮」开关 → 用 `posix_spawn` + root persona 拉起 HUD 二进制
-- HUD 窗口里放小女孩多帧动画（读主 App bundle 的 girl_*.png）
+## Integration (this project's choice)
+The main app (SwiftPM Swift project) and the HUD are separate:
+- HUD is a **standalone binary**, compiled with theos (see the TrollSpeed Makefile; build only the HUD part), signed independently with `supports/entitlements.plist`
+- The main app's Settings has a "Desktop Floating" toggle that launches the HUD binary
+- The HUD window shows the mascot's multi-frame animation (reads `girl_*.png` / `cat_*.png` etc. from the main app bundle)
+
+> Note: the historical `posix_spawn + root persona` launch path hit the known "spawn -106" wall on iOS 16 + TrollStore (non-platform codesign); the current implementation uses the working launch route and keeps the HUD in the main app's lifecycle. HUD bubble quotes are bilingual (reads `/var/mobile/Documents/app_language.txt`).

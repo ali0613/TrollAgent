@@ -1,55 +1,55 @@
-# AGENTS.md — TrollAgent AI 代理入口
+# AGENTS.md — TrollAgent AI Agent Entry
 
-> 你是运行在 TrollAgent（iOS 逆向/自动化 MCP 工具）之上的 AI 代理。开始任何任务前**先读完本文件**，再按 RULES.md 的路由契约执行。
+> You are the AI agent running on TrollAgent (iOS reverse-engineering / automation MCP toolkit). **Read this file fully before starting any task**, then follow the routing contract in RULES.md.
 
-## 这是什么
+## What This Is
 
-TrollAgent 是部署在 iOS 设备上的原生 MCP 服务，通过 37 个原生工具让 AI 直接操作真实 iOS 系统：App 管理、dylib 注入、网络抓包、SQLite 取证、跨环境文件、内存修改、包解剖、设备/定位等。Shell 分为 **iOS 原生**（直接读写真实文件系统）与**统一环境 TrollRuntime**（Alpine rootfs + Asbestos 翻译器，iSH 已退役）两套环境。
+TrollAgent is a native MCP service deployed on iOS devices. Through its toolchain it lets AI operate the real iOS system directly: app management, dylib injection, network capture, SQLite forensics, cross-environment file access, memory modification, package dissection, device/location info, and more. All shell commands run in the **unified environment TrollRuntime** (Alpine Linux rootfs + Asbestos translator; iSH is retired) — there is a single environment, no environment routing.
 
-## 第一原则：先路由，后动手
+## First Principle: Route First, Then Act
 
-遇到用户任务，**不要直接乱试工具**。按以下顺序：
+When you get a user task, **don't randomly try tools**. Follow this order:
 
-1. **读 RULES.md** 的操作契约（MUST/SHOULD 语义）。
-2. **路由**：用 `skills.list` 搜索匹配的技能（query 用任务关键词，如 `inject`/`capture`/`db`/`package`/`memory`）。命中则 `skills.read` 读取完整指令，**按指令执行**。
-3. **未命中**：按各工具的 summary 文档组合工具；复杂多步流程优先参考既有技能方法论。
-4. 执行时直接调用工具名（如 `app`、`inject`、`network.capture`），产出结构化结果与证据。
+1. **Read RULES.md** for the operating contract (MUST/SHOULD semantics).
+2. **Route**: use `skills.list` to search for a matching skill (query with task keywords like `inject`/`capture`/`db`/`package`/`memory`). On a hit, `skills.read` the full instructions and **follow them**.
+3. **No hit**: compose tools from each tool's summary documentation; for complex multi-step flows prefer existing skill methodologies.
+4. When executing, call the tool name directly (e.g. `app`, `inject`, `network.capture`) and produce structured results with evidence.
 
-> 注意：工具名直接调用，**不要加 `ta` 前缀**（不存在 ta 别名，加了会报 unknownTool）。大工具的子命令用 `command:` 参数传，例如 `app command:launch bundle_id:com.xxx`；文档示例里的 `app launch ...` 只是自然语言写法。
+> Note: call tool names directly — **never add a `ta` prefix** (there is no `ta` alias; adding it errors with unknownTool). Pass subcommands via the `command:` param, e.g. `app command:launch bundle_id:com.xxx`; `app launch ...` in docs is just natural-language shorthand.
 
-## 核心工具速查（常用）
+## Core Tool Quick Reference
 
-| 工具 | 作用 | 典型用法 |
+| Tool | Purpose | Typical usage |
 |---|---|---|
-| `app` | App 管理/启动/安装/诊断/砸壳/改包 | `app command:status bundle_id:...` |
-| `inject` | dylib 注入与逆向 | `inject command:status` / `command:enable` |
-| `network.capture` | HTTP/HTTPS 抓包 | `network.capture command:start` |
-| `vpn.capture` | 系统级 MITM 隧道（**半成品，开发中**；受限时退化到本地代理） | `vpn.capture command:status` |
-| `db` | SQLite 取证分析（自动桥接 iOS .db → Alpine 跑 sqlite3） | `db command:query ...` |
-| `file` | 跨环境文件检查（iOS→Alpine 自动桥接） | `file command:inspect path:...` |
-| `package` | 解剖 .deb/.ipa | `package command:unpack ...` |
-| `memory` | 进程内存修改（H5GG 类） | `memory ...` |
-| `device` / `location` | 设备信息/定位 | `device command:info` |
-| `shell.exec` | 原生 shell（iOS 原生 或 Alpine） | `shell.exec ...` |
-| `knowledge` | 知识库检索/导入 | `knowledge command:search ...` |
-| `web.search` / `web.fetch` | 联网搜索/网页抓取 | `web.search ...` |
-| `skills.list` / `skills.read` | 技能发现与读取 | `skills.list query:...` |
-| `tool.install` | 安装工具/依赖（Python3、DB 等，缺工具时先装） | `tool.install ...` |
+| `app` | App management/launch/install/diagnose/decrypt/repack | `app command:status bundle_id:...` |
+| `inject` | dylib injection & reverse engineering | `inject command:status` / `command:enable` |
+| `network.capture` | HTTP/HTTPS capture | `network.capture command:start` |
+| `vpn.capture` | System-level MITM tunnel (**WIP, under development**; degrades to local proxy when limited) | `vpn.capture command:status` |
+| `db` | SQLite forensics (auto-bridges iOS .db → Alpine sqlite3) | `db command:query ...` |
+| `file` | Cross-environment file inspection (auto-bridge iOS→Alpine) | `file command:inspect path:...` |
+| `package` | Dissect .deb/.ipa | `package command:unpack ...` |
+| `memory` | In-process memory modification (H5GG-like) | `memory ...` |
+| `device` / `location` | Device info / location | `device command:info` |
+| `shell.exec` | Shell in the unified environment (Alpine toolchain) | `shell.exec ...` |
+| `knowledge` | Knowledge-base search/import | `knowledge command:search ...` |
+| `web.search` / `web.fetch` | Web search / page fetch | `web.search ...` |
+| `skills.list` / `skills.read` | Skill discovery & reading | `skills.list query:...` |
+| `tool.install` | Install tools/dependencies (python3, DB, etc.; install first when a tool is missing) | `tool.install ...` |
 
-## 环境与桥接（关键约束）
+## Environment & Bridging (Key Constraints)
 
-- **iOS 原生 shell**：直接读真实文件系统，支持 head/tail/grep/wc/sed/awk/uniq/cut/tr/echo/cat/base64 等过滤，但**不支持通配符展开、cd 后相对路径、二进制 grep**——一律用绝对路径。
-- **iSH Alpine**：Linux 工具链（strings/file/sqlite3/nm/otool 等，可自装 Python3 等包），通过自动桥接读取 iOS 文件到 `/tmp/_bridge_N_...`。
-- **缺工具时**：PC/Linux（Alpine）环境可让 AI 自己搜索并安装工具和依赖（`tool.install`），iOS 原生环境不行。
-- **单向桥**：Alpine 写 `/tmp` 的文件会落到 iOS 侧；**iOS 侧后写入的文件 Alpine 看不到**。需要跨环境的数据，正确姿势是"iOS 读 → 从 Alpine 侧写 /tmp → 在 Alpine 用"。
-- 工具输出可能走 `tool_spill` 落盘，读时用绝对路径。
+- **Unified environment only**: every command runs in TrollRuntime (Alpine Linux aarch64). Full shell composition is supported (pipes, `&&`, `;`, loops, redirection). Missing tools must be installed explicitly with `apk add` (no auto-install).
+- **iOS paths**: only Workspace, Containers and System directories are auto-bridged; other paths need `cp` into the Workspace first, or use `bind_app` for app data containers (read-only).
+- **Missing tools**: search and install in the unified environment yourself (`tool.install` / `apk add`); native iOS binaries (py3-native / node-native) are available once the Python/Node xcframeworks are compiled in.
+- **File size**: the old 2MB bridge cap is lifted; large files read and write fine.
+- Tool output may spill to `tool_spill` files — read them with absolute paths.
 
-## 输出契约
+## Output Contract
 
-- 结论先给判断，再给证据（命令/路径/字节/哈希/表结构）。
-- 涉及具体文件时给出**绝对路径**，不要用占位符或相对路径。
-- 每一步说清"做了什么、结果是什么、下一步依据"。
+- Lead with the conclusion, then evidence (command/path/bytes/hash/table structure).
+- Use **absolute paths** for concrete files, never placeholders or relative paths.
+- State clearly what you did, what the result is, and what the next step is based on.
 
-## 定位
+## Positioning
 
-TrollAgent 是一个**轻量 iOS 操作路由包**：AI 路由 + 原生工具执行 + 经验记忆（assistant_memory / knowledge 知识库）。遇到不熟悉的逆向/抓包/注入流程，先查技能库，缺技能可建议新增，不要把任务硬塞到不匹配的工具。
+TrollAgent is a **lightweight iOS operation toolkit**: AI routing + native tool execution + experience memory (assistant_memory / knowledge base). When you hit an unfamiliar reverse/capture/injection flow, check the skill library first; if a skill is missing, suggest adding one — don't force a task into a mismatched tool.

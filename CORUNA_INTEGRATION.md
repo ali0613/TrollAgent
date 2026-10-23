@@ -1,113 +1,113 @@
-# Coruna Web 注入集成技术文档
+# Coruna Web Injection Integration (Technical Doc)
 
-## 概述
+## Overview
 
-将 Coruna 漏洞利用链集成到 TrollAgent v3.0.5，实现网页端一键注入 dylib 到任意 App。
+Integrates the Coruna exploit chain into TrollAgent for one-click dylib injection into any app from a web page. Research/educational use only.
 
-## 漏洞利用链架构
+## Exploit Chain Architecture
 
 ```
-WebView 加载 exploit 页面
+WebView loads the exploit page
     │
     ▼
 Stage 1: WebKit RCE (CVE-2024-23222)
-    ├─ 路径 A: iOS OfflineAudioContext 堆腐蚀 (Fq2t1Q_dbfd6e84.js)
-    ├─ 路径 B: macOS NaN-Boxing 类型混淆 (YGPUu7_8dbfa3fd.js)
-    └─ 路径 C: macOS JIT 结构检查消除 (KRfmo6_166411bd.js)
+    ├─ Path A: iOS OfflineAudioContext heap corruption (Fq2t1Q_dbfd6e84.js)
+    ├─ Path B: macOS NaN-Boxing type confusion (YGPUu7_8dbfa3fd.js)
+    └─ Path C: macOS JIT structure-check elimination (KRfmo6_166411bd.js)
     │
     ▼
-Stage 2: Wasm call_indirect 调度劫持
-    └─ 覆盖 Wasm Table 中的 JIT 函数指针 → 任意原生调用
+Stage 2: Wasm call_indirect dispatch hijack
+    └─ Overwrite JIT function pointers in the Wasm Table → arbitrary native calls
     │
     ▼
-Stage 3: PAC 绕过 (arm64e GOT-Swap)
-    └─ 通过 Apple 私有框架"混淆代理"伪造 PAC 签名
+Stage 3: PAC bypass (arm64e GOT-Swap)
+    └─ Forge PAC signatures via Apple private-framework "confusion proxy"
     │
     ▼
-Stage 4: 沙盒逃逸 (mach_vm_allocate RWX)
-    └─ 在 JIT 沙盒外分配可执行内存页
+Stage 4: Sandbox escape (mach_vm_allocate RWX)
+    └─ Allocate executable pages outside the JIT sandbox
     │
     ▼
-Stage 5: JIT Cage 逃逸 (PACDB Hash 伪造)
-    └─ JavaScript 中伪造滚动哈希，通过内核 JIT 验证
+Stage 5: JIT Cage escape (PACDB hash forgery)
+    └─ Forge rolling hashes in JavaScript to pass the kernel JIT check
     │
     ▼
-Stage 6: Shellcode 执行 (mini dyld)
-    └─ 加载 Mach-O，解析符号，应用重定位
+Stage 6: Shellcode execution (mini dyld)
+    └─ Load Mach-O, resolve symbols, apply relocations
     │
     ▼
-Stage 7: 内核 exploit (CVE-2023-41974 IOSurfaceRoot)
-    └─ IOSurface 漏洞 → 内核任意读写
+Stage 7: Kernel exploit (CVE-2023-41974 IOSurfaceRoot)
+    └─ IOSurface bug → arbitrary kernel read/write
     │
     ▼
-Stage 8: PPL 绕过 (GPU 命令写物理内存)
+Stage 8: PPL bypass (GPU commands writing physical memory)
     │
     ▼
-Stage 9: AMFI 补丁
-    ├─ 启用 Developer Mode (developer_mode_status)
-    └─ 启用 Security Research Mode (allows_security_research)
+Stage 9: AMFI patch
+    ├─ Enable Developer Mode (developer_mode_status)
+    └─ Enable Security Research Mode (allows_security_research)
     │
     ▼
-完成：内核 R/W + 无签名执行 + 可注入任意 dylib
+Done: kernel R/W + unsigned execution + arbitrary dylib injection
 ```
 
-## 集成文件清单
+## Integrated Files
 
-### 新增 Swift 源文件
+### New Swift sources
 - `Sources/TrollMCP2/CorunaWebInjector.swift` (14KB)
-  - 核心管理器，单例模式
-  - 管理 exploit 生命周期状态机
-  - 负责加载 exploit HTML 页面
-  - 处理 WKScriptMessageHandler 回调
+  - Core manager, singleton
+  - Exploit lifecycle state machine
+  - Loads the exploit HTML page
+  - Handles WKScriptMessageHandler callbacks
 
 - `Sources/TrollMCP2/CorunaInjectView.swift` (16KB)
-  - SwiftUI 用户界面
-  - 目标 App 选择器
-  - Dylib 文件选择器
-  - 漏洞链进度可视化
-  - 平台路径选择
+  - SwiftUI UI
+  - Target app picker
+  - Dylib file picker
+  - Exploit-chain progress visualization
+  - Platform path selection
 
-### 修改的文件
+### Modified files
 - `Sources/TrollMCP2/SettingsView.swift`
-  - 在 Coruna 安全盾下方添加 "Coruna Web 注入" 入口
+  - Added the "Coruna Web Injection" entry under the Coruna security shield
 
-### 资源文件 (Resources/coruna/)
-- `coruna-dump/` (5MB) - 完整 Coruna dump
-  - `samples/` - 28 个 JavaScript 模块
-    - `Fq2t1Q_dbfd6e84.js` (29KB) - iOS OfflineAudioContext 路径
-    - `YGPUu7_8dbfa3fd.js` (14KB) - macOS NaN-Boxing 路径
-    - `KRfmo6_166411bd.js` (24KB) - macOS JIT 路径
-    - `final_payload_A_*.js` / `final_payload_B_*.js` - 最终 payload
-    - `ios_qeqLdN_*.js` / `ios_uOj89n_*.js` - iOS 备用路径
-  - `extracted_binaries/` - 提取的二进制文件
-    - `dump.bin` (2MB) - 内核 exploit Mach-O
-    - `final_payload_*_shellcode.bin` (31KB each) - ARM64 shellcode
-    - `final_payload_*_macho.bin` (89KB each) - Mach-O loader
-  - `detailed_reports/` - 详细技术报告
-  - `docs/` - 完整技术分析文档 (6630 行)
-  - `kernel_analysis/` - 内核 exploit 逆向分析
+### Resources (Resources/coruna/)
+- `coruna-dump/` (5MB) — full Coruna dump
+  - `samples/` — 28 JavaScript modules
+    - `Fq2t1Q_dbfd6e84.js` (29KB) — iOS OfflineAudioContext path
+    - `YGPUu7_8dbfa3fd.js` (14KB) — macOS NaN-Boxing path
+    - `KRfmo6_166411bd.js` (24KB) — macOS JIT path
+    - `final_payload_A_*.js` / `final_payload_B_*.js` — final payloads
+    - `ios_qeqLdN_*.js` / `ios_uOj89n_*.js` — iOS fallback paths
+  - `extracted_binaries/` — extracted binaries
+    - `dump.bin` (2MB) — kernel-exploit Mach-O
+    - `final_payload_*_shellcode.bin` (31KB each) — ARM64 shellcode
+    - `final_payload_*_macho.bin` (89KB each) — Mach-O loader
+  - `detailed_reports/` — detailed technical reports
+  - `docs/` — full technical analysis docs (6630 lines)
+  - `kernel_analysis/` — kernel-exploit reverse analysis
 
-## 设备兼容性
+## Device Compatibility
 
-| 项目 | 你的设备 | 支持情况 |
-|------|---------|---------|
-| 型号 | iPhone 13 Pro Max (iPhone14,3) | ✅ arm64e (A15) |
-| iOS 版本 | 16.3 | ✅ 13.0 - 17.2.1 范围内 |
-| TrollStore | 已安装 | ✅ 已有内核级注入能力 |
+| Item | Device | Support |
+|---|---|---|
+| Model | iPhone 13 Pro Max (iPhone14,3) | ✅ arm64e (A15) |
+| iOS | 16.3 | ✅ within 13.0–17.2.1 |
+| TrollStore | installed | ✅ already has kernel-level injection ability |
 
-## 使用流程
+## Usage Flow
 
-1. 打开 TrollAgent → 设置 → Coruna Web 注入
-2. 选择目标 App（要注入的应用）
-3. 选择要注入的 dylib 文件（Documents/dylibs/ 目录）
-4. 选择利用路径（默认自动检测）
-5. 点击"启动网页注入"
-6. 观察漏洞链执行进度
-7. 完成后自动注入 dylib 到目标 App
+1. Open TrollAgent → Settings → Coruna Web Injection
+2. Pick the target app (the one to inject)
+3. Pick the dylib file (Documents/dylibs/ directory)
+4. Pick the exploit path (auto-detect by default)
+5. Tap "Start Web Injection"
+6. Watch the exploit-chain progress
+7. On completion the dylib is injected into the target app
 
-## 技术实现细节
+## Implementation Details
 
-### 状态机
+### State machine
 ```
 idle → loadingPage → fingerprinting → webkitRCE → pacBypass 
      → shellcode → kernelExploit → ppLBypass → amfiPatch 
@@ -116,36 +116,36 @@ idle → loadingPage → fingerprinting → webkitRCE → pacBypass
                  failed / crashed
 ```
 
-### 与 WebView 的通信
-- 使用 `WKScriptMessageHandler` 实现 Swift ↔ JavaScript 双向通信
-- JS 端通过 `window.webkit.messageHandlers.corunaCallback.postMessage()` 发送进度
-- Swift 端解析 JSON 消息，更新 UI 状态
+### WebView communication
+- `WKScriptMessageHandler` for Swift ↔ JavaScript bidirectional messaging
+- JS side reports progress via `window.webkit.messageHandlers.corunaCallback.postMessage()`
+- Swift side parses JSON messages and updates UI state
 
-### 资源加载
-- 所有 exploit 模块打包在 App Bundle 内 `coruna/coruna-dump/samples/`
-- 通过 `Bundle.main.resourcePath` 定位
-- 使用 `loadHTMLString` + `baseURL` 加载本地 exploit 页面
+### Asset loading
+- All exploit modules are bundled under `coruna/coruna-dump/samples/` in the app bundle
+- Located via `Bundle.main.resourcePath`
+- Local exploit pages load via `loadHTMLString` + `baseURL`
 
-## 注意事项
+## Notes
 
-1. **iOS 15.6 兼容**：Coruna 核心 exploit 仅支持 iOS 16.0+，iOS 15.6 上此功能不可用（UI 会显示不兼容警告）
-2. **不破坏现有功能**：完全独立于现有 TrollFools 注入流程
-3. **稳定性**：exploit 执行过程中 WebContent 进程可能崩溃，有重试机制
-4. **研究用途**：此功能仅用于安全研究和学习目的
+1. **iOS 15.6**: the Coruna core exploit requires iOS 16.0+; the feature is unavailable on iOS 15.6 (UI shows an incompatibility warning)
+2. **No impact on existing features**: fully independent of the existing injection flow
+3. **Stability**: the WebContent process may crash mid-exploit; a retry mechanism exists
+4. **Research use**: this feature is for security research and learning only
 
-## 构建说明
+## Build Notes
 
 ```bash
-# 标准构建流程
+# Standard build flow
 ./scripts/build-ipa.sh
 
-# 资源会自动打包：
-# Resources/coruna/ → TrollMCP2.app/coruna/
+# Assets bundle automatically:
+# Resources/coruna/ → TrollAgent.app/coruna/
 ```
 
-## 参考资料
+## References
 
-- Google GTIG Coruna 报告: https://cloud.google.com/blog/topics/threat-intelligence/coruna-powerful-ios-exploit-kit
-- matteyeux 技术分析: https://matteyeux.com/posts/2026-03-06-coruna/
-- NadSec 逆向分析: https://www.nadsec.online/blog/coruna
+- Google GTIG Coruna report: https://cloud.google.com/blog/topics/threat-intelligence/coruna-powerful-ios-exploit-kit
+- matteyeux technical analysis: https://matteyeux.com/posts/2026-03-06-coruna/
+- NadSec reverse analysis: https://www.nadsec.online/blog/coruna
 - GitHub dump: Rat5ak/CORUNA_IOS-MACOS_FULL_DUMP
