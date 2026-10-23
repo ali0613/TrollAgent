@@ -378,6 +378,8 @@ if [ -n "$XCF_DIR" ]; then
         if [ -d "$XCF_DIR/lib/python3.14" ]; then
             mkdir -p "$APP/python/lib"
             cp -R "$XCF_DIR/lib/python3.14" "$APP/python/lib/"
+            # v6.6.0-fix30: 排除 python test 目录（162MB 纯测试文件——运行时不需要——tipa 瘦身 ~30MB）
+            rm -rf "$APP/python/lib/python3.14/test"
             echo ">>> stdlib: $(du -sh "$APP/python" | cut -f1)"
         else
             echo "!!! XCFramework lib/python3.14 missing (shared stdlib)" >&2
