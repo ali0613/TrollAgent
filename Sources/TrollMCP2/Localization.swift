@@ -22,12 +22,16 @@ final class LanguageManager: ObservableObject {
     @Published var language: AppLanguage {
         didSet {
             UserDefaults.standard.set(language.rawValue, forKey: "app_language")
+            // v7.0.5：同步写全局语言文件，供 HUD 独立进程读气泡台词双语
+            try? (language.rawValue as NSString).write(toFile: "/var/mobile/Documents/app_language.txt", atomically: true, encoding: String.Encoding.utf8.rawValue)
         }
     }
 
     private init() {
         let raw = UserDefaults.standard.string(forKey: "app_language") ?? "zh"
         language = AppLanguage(rawValue: raw) ?? .zh
+        // 启动时也写一次，确保 HUD 能读到当前语言
+        try? (language.rawValue as NSString).write(toFile: "/var/mobile/Documents/app_language.txt", atomically: true, encoding: String.Encoding.utf8.rawValue)
     }
 
     var isZh: Bool { language == .zh }

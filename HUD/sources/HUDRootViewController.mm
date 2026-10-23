@@ -110,6 +110,13 @@ extern "C" double g_hud_size;
 // v6.0.7：悬浮角色（girl=小萝莉 / rabit=兔娘），由主 App 启动时 -char 传入（HUDMain.mm 解析）
 extern "C" const char *g_hud_char;
 
+
+// v7.0.5：气泡台词双语——读主 App 写的语言文件（/var/mobile/Documents/app_language.txt）
+static BOOL HUDIsZh(void) {
+    NSString *lang = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/app_language.txt" encoding:NSUTF8StringEncoding error:nil];
+    return !(lang && [lang hasPrefix:@"en"]);
+}
+
 @implementation HUDRootViewController {
     UIImageView *_girlView;
     NSArray<UIImage *> *_idleFrames;
@@ -837,47 +844,47 @@ extern "C" const char *g_hud_char;
     if (hour >= 6 && hour < 11) {
         // 早上
         if ([_charPrefix isEqualToString:@"rabit"]) {
-            timeGreetings = @[@"早上好呀～ 新的一天开始啦", @"早安！今天也要元气满满哦", @"起床了吗？记得吃早餐哦", @"早上好主人，昨晚睡得好吗？"];
+timeGreetings = HUDIsZh() ? @[@"早上好呀～ 新的一天开始啦", @"早安！今天也要元气满满哦", @"起床了吗？记得吃早餐哦", @"早上好主人，昨晚睡得好吗？"] : @[@"Good morning~ A new day begins!", @"Good morning! Stay energized today!", @"Up yet? Don't skip breakfast!", @"Good morning, master. Slept well?"];
         } else if ([_charPrefix isEqualToString:@"cat"]) {
-            timeGreetings = @[@"...哼，早上好", @"这么早叫我干嘛...哦，该吃饭了？", @"早安...别烦我，我还没睡醒", @"哼，人类早上就是麻烦"];
+timeGreetings = HUDIsZh() ? @[@"...哼，早上好", @"这么早叫我干嘛...哦，该吃饭了？", @"早安...别烦我，我还没睡醒", @"哼，人类早上就是麻烦"] : @[@"...Hmph, good morning.", @"Why wake me this early... oh, feeding time?", @"Morning... don't bother me, I'm still sleepy.", @"Hmph, humans are such a hassle in the morning."];
         } else {
-            timeGreetings = @[@"早安呀！太阳晒屁股啦", @"早上好！今天要玩什么？", @"起床起床！陪我玩嘛", @"早上好哥哥/姐姐！"];
+timeGreetings = HUDIsZh() ? @[@"早安呀！太阳晒屁股啦", @"早上好！今天要玩什么？", @"起床起床！陪我玩嘛", @"早上好哥哥/姐姐！"] : @[@"Morning! Sun's up and shining!", @"Good morning! What shall we play today?", @"Wake up wake up! Play with me!", @"Good morning, big bro/sis!"];
         }
     } else if (hour >= 11 && hour < 14) {
         // 中午
         if ([_charPrefix isEqualToString:@"rabit"]) {
-            timeGreetings = @[@"中午啦～ 记得吃午饭哦", @"午饭吃了吗？别饿肚子", @"中午好，工作歇一会吧", @"该吃饭啦，别太累着自己"];
+timeGreetings = HUDIsZh() ? @[@"中午啦～ 记得吃午饭哦", @"午饭吃了吗？别饿肚子", @"中午好，工作歇一会吧", @"该吃饭啦，别太累着自己"] : @[@"It's noon~ Don't skip lunch!", @"Eaten lunch yet? Don't go hungry.", @"Noon break — rest a bit from work.", @"Time to eat! Don't overwork yourself."];
         } else if ([_charPrefix isEqualToString:@"cat"]) {
-            timeGreetings = @[@"哼，该喂饭了吧？", @"中午了，我要吃小鱼干", @"人类，你午饭吃什么？给我也来点", @"...好吧，中午了，勉强打个招呼"];
+timeGreetings = HUDIsZh() ? @[@"哼，该喂饭了吧？", @"中午了，我要吃小鱼干", @"人类，你午饭吃什么？给我也来点", @"...好吧，中午了，勉强打个招呼"] : @[@"Hmph, it's feeding time, right?", @"It's noon, I want dried fish.", @"Human, what's for your lunch? Share some.", @"...Fine, it's noon, I'll greet you reluctantly."];
         } else {
-            timeGreetings = @[@"中午好！我要吃午饭！", @"肚子饿了～ 要吃饭饭", @"中午啦，我们一起吃饭好不好？", @"哥哥/姐姐 吃了吗？"];
+timeGreetings = HUDIsZh() ? @[@"中午好！我要吃午饭！", @"肚子饿了～ 要吃饭饭", @"中午啦，我们一起吃饭好不好？", @"哥哥/姐姐 吃了吗？"] : @[@"Noon! I want lunch!", @"So hungry~ Want food!", @"Noon! Let's eat together, okay?", @"Big bro/sis, eaten yet?"];
         }
     } else if (hour >= 14 && hour < 18) {
         // 下午
         if ([_charPrefix isEqualToString:@"rabit"]) {
-            timeGreetings = @[@"下午好呀～ 喝杯茶歇一会吧", @"下午工作累不累呀？", @"下午茶时间，想吃小点心吗？", @"这个时间晒太阳好舒服"];
+timeGreetings = HUDIsZh() ? @[@"下午好呀～ 喝杯茶歇一会吧", @"下午工作累不累呀？", @"下午茶时间，想吃小点心吗？", @"这个时间晒太阳好舒服"] : @[@"Good afternoon~ Have some tea and rest.", @"Afternoon work tiring?", @"Tea time! Want a little snack?", @"Sunbathing at this hour feels great."];
         } else if ([_charPrefix isEqualToString:@"cat"]) {
-            timeGreetings = @[@"哼，下午了还不陪我玩", @"晒了一下午太阳，好舒服", @"人类，你下午吃零食了吗？", @"...下午好，勉强打个招呼"];
+timeGreetings = HUDIsZh() ? @[@"哼，下午了还不陪我玩", @"晒了一下午太阳，好舒服", @"人类，你下午吃零食了吗？", @"...下午好，勉强打个招呼"] : @[@"Hmph, it's afternoon and you still won't play with me.", @"Sunbathed all afternoon, so comfy.", @"Human, did you snack this afternoon?", @"...Good afternoon, greeting you reluctantly."];
         } else {
-            timeGreetings = @[@"下午好！我们一起玩吧", @"下午茶时间！吃蛋糕吗？", @"下午的阳光好舒服呀", @"哥哥/姐姐 累不累呀？"];
+timeGreetings = HUDIsZh() ? @[@"下午好！我们一起玩吧", @"下午茶时间！吃蛋糕吗？", @"下午的阳光好舒服呀", @"哥哥/姐姐 累不累呀？"] : @[@"Good afternoon! Let's play together!", @"Tea time! Cake?", @"The afternoon sun feels so nice.", @"Big bro/sis, are you tired?"];
         }
     } else if (hour >= 18 && hour < 22) {
         // 晚上
         if ([_charPrefix isEqualToString:@"rabit"]) {
-            timeGreetings = @[@"晚上好呀～ 今天辛苦了", @"下班了吗？好好休息一下", @"晚上好，我等你好久了", @"晚安之前，我会一直陪着你"];
+timeGreetings = HUDIsZh() ? @[@"晚上好呀～ 今天辛苦了", @"下班了吗？好好休息一下", @"晚上好，我等你好久了", @"晚安之前，我会一直陪着你"] : @[@"Good evening~ Hard day, huh?", @"Off work? Rest well now.", @"Good evening, I've waited so long.", @"Until goodnight, I'll stay with you."];
         } else if ([_charPrefix isEqualToString:@"cat"]) {
-            timeGreetings = @[@"哼，晚上了，该陪我玩了", @"晚上好...你终于回来了", @"这个点才回来？我都等饿了", @"...晚上好，就勉强理你一下"];
+timeGreetings = HUDIsZh() ? @[@"哼，晚上了，该陪我玩了", @"晚上好...你终于回来了", @"这个点才回来？我都等饿了", @"...晚上好，就勉强理你一下"] : @[@"Hmph, it's evening, time to play with me.", @"Good evening... you're finally back.", @"Back this late? I got hungry waiting.", @"...Good evening, I'll grudgingly acknowledge you."];
         } else {
-            timeGreetings = @[@"晚上好！欢迎回来～", @"陪我玩嘛，白天好无聊", @"晚上吃什么好吃的？", @"我好想你呀！"];
+timeGreetings = HUDIsZh() ? @[@"晚上好！欢迎回来～", @"陪我玩嘛，白天好无聊", @"晚上吃什么好吃的？", @"我好想你呀！"] : @[@"Good evening! Welcome back~", @"Play with me, the day was so boring.", @"What's for dinner?", @"I missed you so much!"];
         }
     } else {
         // 深夜/凌晨（22点到次日6点）
         if ([_charPrefix isEqualToString:@"rabit"]) {
-            timeGreetings = @[@"这么晚还没睡呀？早点休息哦", @"别熬夜啦，对身体不好", @"晚安，做个好梦", @"我会在这里陪着你，快睡吧"];
+timeGreetings = HUDIsZh() ? @[@"这么晚还没睡呀？早点休息哦", @"别熬夜啦，对身体不好", @"晚安，做个好梦", @"我会在这里陪着你，快睡吧"] : @[@"Still up this late? Rest early, okay?", @"Don't stay up late, it's bad for you.", @"Good night, sweet dreams.", @"I'll stay here with you. Sleep now."];
         } else if ([_charPrefix isEqualToString:@"cat"]) {
-            timeGreetings = @[@"...大半夜的，你还不睡？", @"哼，熬夜对身体不好哦...才不是关心你", @"快睡吧，我困了", @"晚安...别吵我"];
+timeGreetings = HUDIsZh() ? @[@"...大半夜的，你还不睡？", @"哼，熬夜对身体不好哦...才不是关心你", @"快睡吧，我困了", @"晚安...别吵我"] : @[@"...It's the middle of the night, still awake?", @"Hmph, staying up is unhealthy... not that I care.", @"Go to sleep, I'm tired.", @"Good night... don't disturb me."];
         } else {
-            timeGreetings = @[@"好晚呀... 我困了", @"要睡觉觉啦，晚安", @"哥哥/姐姐 早点睡好不好？", @"我打哈欠了，该睡了"];
+timeGreetings = HUDIsZh() ? @[@"好晚呀... 我困了", @"要睡觉觉啦，晚安", @"哥哥/姐姐 早点睡好不好？", @"我打哈欠了，该睡了"] : @[@"So late... I'm sleepy.", @"Time for beddy-bye, good night.", @"Big bro/sis, sleep early, okay?", @"I'm yawning, time to sleep."];
         }
     }
     
@@ -888,7 +895,7 @@ extern "C" const char *g_hud_char;
     } else {
         // 按角色选普通文案（v6.0.28：每个角色58条）
         if ([_charPrefix isEqualToString:@"rabit"]) {
-        messages = @[
+        messages = HUDIsZh() ? @[
             @"趴墙好累... 有没有人扶我一把",
             @"这个位置看风景还不错",
             @"你在看什么呢？",
@@ -944,10 +951,67 @@ extern "C" const char *g_hud_char;
             @"么么哒",
             @"啾咪",
             @"抱抱",
-            @"贴贴"
+            @"贴贴",
+        ] : @[
+            @"Wall-clinging is tiring... anyone got a hand?",
+            @"This spot has a nice view.",
+            @"Whatcha looking at?",
+            @"Want a snack? I'm hungry.",
+            @"Good work... take a break.",
+            @"The weather is lovely today.",
+            @"You... why keep staring at me?",
+            @"Come talk to me~",
+            @"My bunny ears itch... don't touch!",
+            @"I can jump super high! Watch me.",
+            @"Today's carrot is so sweet.",
+            @"Master's back? Welcome home~",
+            @"I've been waiting here so long.",
+            @"Want to have some tea together?",
+            @"Don't work too hard, take care.",
+            @"Like my new dress?",
+            @"This height is perfect for watching you.",
+            @"Don't tap me down, I want to stay a bit more.",
+            @"What should we eat tonight?",
+            @"I almost fell just now... so scared.",
+            @"Master seems in a good mood today.",
+            @"Heart for you~ Got it?",
+            @"My ears are sharp — I heard every whisper.",
+            @"Want me to tell you a story?",
+            @"Hard day — virtual hug for you.",
+            @"Don't stare at your phone, rest your eyes.",
+            @"I'm cheering you on!",
+            @"You type so fast, amazing!",
+            @"Thirsty? Remember to drink water.",
+            @"Been sitting long? Stand up and stretch.",
+            @"I'll watch the screen and ping you on messages.",
+            @"From this angle I can see you smiling.",
+            @"Secret: you're my favorite.",
+            @"Tired? Look at me and unwind.",
+            @"I'll always be here with you.",
+            @"Stay full of energy today!",
+            @"Master is the best!",
+            @"With me here, nothing to fear.",
+            @"Wanna pinch my cheek?",
+            @"I'm soft and squishy.",
+            @"Stop frowning, smile!",
+            @"Your smile is lovely, smile more.",
+            @"Let me warm your hands.",
+            @"It's cold — bundle up.",
+            @"Keep working hard tomorrow too.",
+            @"I'll behave, no mischief.",
+            @"Ask me if you need help.",
+            @"I'm always here.",
+            @"Love you~",
+            @"Missed you.",
+            @"Wherever you are, I am.",
+            @"Forever by your side.",
+            @"Mwah.",
+            @"Chu~",
+            @"Hug.",
+            @"Smooch.",
         ];
     } else if ([_charPrefix isEqualToString:@"cat"]) {
-        messages = @[
+        messages = HUDIsZh() ? @[
             @"哼... 才不是故意趴在这的！",
             @"别误会！我只是歇一会！",
             @"你... 你要看多久啊！",
@@ -1000,15 +1064,72 @@ extern "C" const char *g_hud_char;
             @"就一下哦！多了不行",
             @"我喜欢你... 才怪！",
             @"...一点点啦",
-            @"mua",
             @"喵",
             @"呼噜",
             @"蹭蹭",
             @"贴贴",
-            @"哼唧"
+            @"哼唧",
+        ] : @[
+            @"Hmph... it's not like I meant to lie here!",
+            @"Don't get it wrong! Just resting a bit!",
+            @"You... how long will you stare!",
+            @"Petting my head... I guess it's allowed.",
+            @"Hurry... say I'm cute!",
+            @"It's not like I WANT to stay beside you!",
+            @"Give me dried fish! Or I won't talk to you.",
+            @"Hmph... silly master.",
+            @"My paws are dirty, won't touch you.",
+            @"Just lounging around, don't overthink.",
+            @"My tail is comfy... don't touch!",
+            @"His Meowjesty is in a good mood — you may look.",
+            @"What are you doing? Come pet me already.",
+            @"Hmph, humans are such trouble.",
+            @"I don't miss you. Don't flatter yourself.",
+            @"...Fine, maybe a tiny bit.",
+            @"Buy me a can and I'll forgive you.",
+            @"Stop patting my head!... One more is fine.",
+            @"I'm angry! The unfixable kind!... A fish snack will do.",
+            @"What are you looking at? Never seen a gorgeous cat?",
+            @"My posture is elegant, right?",
+            @"This sunny spot is so nice.",
+            @"Don't move me! I'm staying right here.",
+            @"Master's back?... Oh.",
+            @"I wasn't waiting for you. Just happened to be here.",
+            @"I watch you while you work.",
+            @"No petting other cats! I'm your only one.",
+            @"Hmph, try touching another cat and see.",
+            @"I'm aloof, don't get too close.",
+            @"...A little closer is fine.",
+            @"Scratch my chin, feels good.",
+            @"Purr purr... don't stop.",
+            @"I'm kneading — it means I trust you.",
+            @"Don't touch my tail! That's the limit.",
+            @"Claws sharpened. Watch your sofa.",
+            @"I jump precisely. Won't fall.",
+            @"Perfect height to watch you.",
+            @"I saw you sneaking snacks.",
+            @"Give me a bite! Stingy.",
+            @"I'm not hungry. Just watching you eat.",
+            @"...Okay fine, I want some too.",
+            @"No peeking while I sleep.",
+            @"My yawn is cute? No photos!",
+            @"Ears twitched — means I noticed you.",
+            @"Tail flicking you means I like you.",
+            @"Hmph, one grudging compliment: you're okay.",
+            @"Don't leave too long, I'll get mad.",
+            @"...I'll worry.",
+            @"Fine, I allow one hug.",
+            @"Just one! No more.",
+            @"I like you... NOT!",
+            @"...Just a little.",
+            @"Meow.",
+            @"Purr.",
+            @"Nuzzle.",
+            @"Smooch.",
+            @"Nyah.",
         ];
     } else {
-        messages = @[
+        messages = HUDIsZh() ? @[
             @"趴高高！看得到好远！",
             @"这里好凉好舒服~",
             @"要一起玩吗？",
@@ -1059,14 +1180,71 @@ extern "C" const char *g_hud_char;
             @"举高高！",
             @"我喜欢你！",
             @"最喜欢你了！",
-            @"mua~",
             @"啾~",
             @"哇！",
             @"嘿嘿",
             @"嘻嘻",
             @"好呀好呀",
             @"太棒了！",
-            @"耶！"
+            @"耶！",
+        ] : @[
+            @"Climbing high! I can see so far!",
+            @"This spot is cool and comfy~",
+            @"Wanna play together?",
+            @"I'm hungry... want cake.",
+            @"Big bro/sis, what are you doing?",
+            @"So bored... play with me~",
+            @"Did that person just look at me?",
+            @"Was I good today?",
+            @"I climbed up! Cool, right?",
+            @"From here I can see the whole room!",
+            @"I want strawberry cake!",
+            @"Big bro/sis, typing?",
+            @"Cheering for you!",
+            @"Does my little dress look pretty?",
+            @"Is my hair messy? Check for me.",
+            @"Wanna play hide-and-seek?",
+            @"Count to ten, then find me!",
+            @"Did I hide well?",
+            @"You found me! Wow, amazing!",
+            @"One more round!",
+            @"I want to hear a story.",
+            @"Tell the little bunny story?",
+            @"I hug a plushie when I sleep.",
+            @"I put on my own shoes today!",
+            @"Cool, right? I'm growing up!",
+            @"Big bro/sis, no more overtime.",
+            @"Come play with me early.",
+            @"I'll be right here waiting.",
+            @"You're back! Hug!",
+            @"Welcome home~",
+            @"I saved a snack for you.",
+            @"Let's share it, okay?",
+            @"This candy's for you — sweet?",
+            @"I drew a picture, wanna see?",
+            @"It's us two!",
+            @"Pretty? I colored it.",
+            @"I got a little red flower at school today!",
+            @"Teacher praised me.",
+            @"Here, a red flower for you!",
+            @"You're the best big bro/sis too.",
+            @"Pinky promise!",
+            @"Pinky swear, a hundred years.",
+            @"I'll be with you forever.",
+            @"Please never leave me.",
+            @"I'll miss you.",
+            @"Kiss.",
+            @"Hug.",
+            @"Lift me up!",
+            @"I like you!",
+            @"I like you the most!",
+            @"Chu~",
+            @"Wow!",
+            @"Hehe.",
+            @"Heehee.",
+            @"Okay okay!",
+            @"Awesome!",
+            @"Yay!",
         ];
         }
     }
@@ -1280,35 +1458,89 @@ extern "C" const char *g_hud_char;
 - (NSArray *)_sceneExtraLines {
     NSArray *w = @[]; NSArray *care = @[]; NSArray *mood = @[]; NSArray *act = @[]; NSArray *fest = @[];
     if ([_charPrefix isEqualToString:@"rabit"]) {
-        w = @[@"今天阳光真好呀，晒得我耳朵都暖了", @"晴天的天空好蓝，心情也跟着变好了",
-              @"下雨了呢... 记得带伞，别淋湿了", @"下雨天适合窝在家里喝热茶呢",
-              @"下雪啦！好漂亮，你也要注意保暖哦", @"雪天路滑，出门要小心呀",
-              @"今天多云呢，风轻轻的，很舒服", @"云把太阳挡住了，但也不会冷呢",
-              @"打雷了... 别怕，我陪着你", @"天气有点糟糕呢，待在家里最安心了"];
-        care = @[@"坐了好久啦，起来伸个懒腰吧", @"喝口水休息一下吧，别累着了", @"到饭点啦，记得好好吃饭哦", @"别看太久屏幕，让眼睛歇一歇", @"今天有没有按时喝水呀？", @"肩颈酸不酸？揉一揉会舒服些", @"早点睡哦，明天才有精神", @"工作再忙也要照顾好自己", @"风有点大，出门记得加件衣服", @"感觉你有点累，快去休息一下吧"];
-        mood = @[@"今天也辛苦啦，摸摸头", @"遇到烦心事了吗？跟我说说", @"你已经做得很好了，真的", @"别给自己太大压力哦", @"我在这里陪着你，不是一个人", @"心情不好的话，抱抱我试试", @"深呼吸～ 一切都会好起来的", @"就算今天不顺，明天也会好的", @"你已经很努力了，奖励自己一下吧", @"想哭就哭出来，没关系的"];
-        act = @[@"你戳我一下，我就知道你在啦", @"拖着我走的时候，感觉在带我散步", @"轻轻摸我，我最喜欢了", @"再双击我，我就要跳高高啦", @"把我放到这里，是想让我看风景吗？", @"你躲起来了？我还能感觉到你哦", @"把我缩小放大都行，别把我弄丢就好", @"捏我的脸？好痛啦！", @"你偷偷看我，我也在偷偷看你哦", @"把我晾在一边... 我会无聊的"];
-        fest = @[@"周末啦！要不要一起放松一下", @"今天是特别的日子呢，开心吗？", @"月初啦，新的一月新的期待", @"月底了，这个月你辛苦啦", @"今天是你的节日哦，我来陪你庆祝", @"晚上啦，今天也快到尾声了", @"新的一天，要有好心情哦", @"过了一天，别忘了给自己一个微笑", @"今天也要过得像礼物一样呀", @"这个月快结束了，你做得超棒的"];
+        w = HUDIsZh() ? @[
+            @"今天阳光真好呀，晒得我耳朵都暖了",
+            @"晴天的天空好蓝，心情也跟着变好了",
+            @"下雨了呢... 记得带伞，别淋湿了",
+            @"下雨天适合窝在家里喝热茶呢",
+            @"下雪啦！好漂亮，你也要注意保暖哦",
+            @"雪天路滑，出门要小心呀",
+            @"今天多云呢，风轻轻的，很舒服",
+            @"云把太阳挡住了，但也不会冷呢",
+            @"打雷了... 别怕，我陪着你",
+            @"天气有点糟糕呢，待在家里最安心了",
+        ] : @[
+            @"The sun is lovely today, warming my ears.",
+            @"Such a blue sky — my mood lifts with it.",
+            @"It's raining... bring an umbrella, don't get wet.",
+            @"Rainy days call for hot tea at home.",
+            @"Snow! So pretty — stay warm too!",
+            @"Snow makes it slippery — walk carefully.",
+            @"Cloudy with a gentle breeze — so comfy.",
+            @"Clouds hide the sun, but it's not cold.",
+            @"Thunder... don't fear, I'm here.",
+            @"Nasty weather — safest to stay home.",
+        ];
+care = HUDIsZh() ? @[@"坐了好久啦，起来伸个懒腰吧", @"喝口水休息一下吧，别累着了", @"到饭点啦，记得好好吃饭哦", @"别看太久屏幕，让眼睛歇一歇", @"今天有没有按时喝水呀？", @"肩颈酸不酸？揉一揉会舒服些", @"早点睡哦，明天才有精神", @"工作再忙也要照顾好自己", @"风有点大，出门记得加件衣服", @"感觉你有点累，快去休息一下吧"] : @[@"Sitting long? Stand and stretch.", @"Drink some water and rest.", @"Mealtime — remember to eat well.", @"Don't stare at the screen — rest your eyes.", @"Did you drink water on time today?", @"Shoulders stiff? A rub will help.", @"Sleep early for tomorrow's energy.", @"Busy or not, take care of yourself.", @"Windy out — add a layer before leaving.", @"You seem tired — go rest."];
+mood = HUDIsZh() ? @[@"今天也辛苦啦，摸摸头", @"遇到烦心事了吗？跟我说说", @"你已经做得很好了，真的", @"别给自己太大压力哦", @"我在这里陪着你，不是一个人", @"心情不好的话，抱抱我试试", @"深呼吸～ 一切都会好起来的", @"就算今天不顺，明天也会好的", @"你已经很努力了，奖励自己一下吧", @"想哭就哭出来，没关系的"] : @[@"Good work today — head pat.", @"Troubled? Tell me about it.", @"You're doing great, truly.", @"Don't put too much pressure on yourself.", @"I'm right here with you.", @"Feeling low? Try hugging me.", @"Breathe~ Everything will be fine.", @"Even if today's rough, tomorrow gets better.", @"You've worked hard — reward yourself.", @"Cry it out, it's okay."];
+act = HUDIsZh() ? @[@"你戳我一下，我就知道你在啦", @"拖着我走的时候，感觉在带我散步", @"轻轻摸我，我最喜欢了", @"再双击我，我就要跳高高啦", @"把我放到这里，是想让我看风景吗？", @"你躲起来了？我还能感觉到你哦", @"把我缩小放大都行，别把我弄丢就好", @"捏我的脸？好痛啦！", @"你偷偷看我，我也在偷偷看你哦", @"把我晾在一边... 我会无聊的"] : @[@"Tap me once and I know you're here.", @"Dragging me around feels like a stroll.", @"Gentle pets — my favorite.", @"Double-tap again and I'll jump high!", @"Put me here to see the view?", @"Hiding? I can still sense you.", @"Resize me all you want, just don't lose me.", @"Pinching my cheek? Ouch!", @"You sneak peeks at me — I peek back.", @"Left me hanging... I'll get bored."];
+fest = HUDIsZh() ? @[@"周末啦！要不要一起放松一下", @"今天是特别的日子呢，开心吗？", @"月初啦，新的一月新的期待", @"月底了，这个月你辛苦啦", @"今天是你的节日哦，我来陪你庆祝", @"晚上啦，今天也快到尾声了", @"新的一天，要有好心情哦", @"过了一天，别忘了给自己一个微笑", @"今天也要过得像礼物一样呀", @"这个月快结束了，你做得超棒的"] : @[@"Weekend! Wanna relax together?", @"Special day today — happy?", @"New month, new hopes.", @"Month's end — you worked hard.", @"Your special day — I'm here to celebrate!", @"Evening — the day's wrapping up.", @"New day, keep a good mood!", @"End of day — don't forget to smile.", @"Make today a gift.", @"Month's ending — you did amazingly."];
     } else if ([_charPrefix isEqualToString:@"cat"]) {
-        w = @[@"...晴天，适合睡午觉", @"太阳这么好，本喵要晒太阳了",
-              @"下雨了...烦人，毛都湿了", @"这雨下得，本喵才懒得出去呢",
-              @"下雪了？...哼，还挺好看", @"雪天冷死了，本喵要钻被窝",
-              @"多云，风凉凉的，勉强舒服", @"阴天，最适合窝着不动了",
-              @"打雷了！...才、才没被吓到", @"这鬼天气，本喵心情不好，要小鱼干哄"];
-        care = @[@"喂，人类，该喝水了...才不是关心你", @"坐那么久，腰不酸吗？哼", @"到饭点了，本喵等着你吃饭", @"屏幕看太久，眼睛不要了？", @"你好像忘了喝水...本喵可没提醒你", @"起来走走，别像木头一样", @"这么晚还不睡，你想当夜猫子？", @"累了就去躺平，本喵准了", @"外面风大，穿厚点，别感冒", @"看你无精打采的...哼，准你休息"];
-        mood = @[@"...遇到什么烦心事了？说说看", @"不开心就来找本喵，勉强听一下", @"你已经很努力了，本喵都看在眼里", @"别皱眉，丑死了...但还是好看的", @"本喵在这，没人敢欺负你", @"深呼吸，天塌了本喵顶着", @"难过就哭出来，本喵当没看见", @"明天会好的，本喵说的，准了", @"你做得不错，本喵盖章认可", @"累了就靠过来，本喵勉强借你靠一下"];
-        act = @[@"你戳本喵干嘛？...再来一下也行", @"拖着本喵走，把本喵当行李了？", @"摸本喵...舒服，但别摸耳朵！", @"双击本喵，本喵就赏你跳一下", @"把本喵放这，是想让本喵看门？", @"藏起来了？本喵的鼻子可灵了", @"放大缩小随便你，本喵无所谓", @"捏本喵的脸？大胆人类！", @"你偷看本喵，本喵也偷看你了", @"晾着本喵？哼，本喵自己玩"];
-        fest = @[@"周末，本喵允许你陪着玩", @"特别的日子？本喵记着呢", @"月初了，本喵心情不错，赏你摸摸", @"月底，这个月你辛苦了，本喵知道", @"你的节日？本喵勉为其难陪你过", @"晚上啦，今天差不多得了", @"新的一天，本喵心情还行", @"忙一天了，本喵准你歇着", @"今天过得不错？本喵看着还行", @"月末总结：你表现还行，本喵认可"];
+        w = HUDIsZh() ? @[
+            @"...晴天，适合睡午觉",
+            @"太阳这么好，本喵要晒太阳了",
+            @"下雨了...烦人，毛都湿了",
+            @"这雨下得，本喵才懒得出去呢",
+            @"下雪了？...哼，还挺好看",
+            @"雪天冷死了，本喵要钻被窝",
+            @"多云，风凉凉的，勉强舒服",
+            @"阴天，最适合窝着不动了",
+            @"打雷了！...才、才没被吓到",
+            @"这鬼天气，本喵心情不好，要小鱼干哄",
+        ] : @[
+            @"...Sunny day, perfect for a nap.",
+            @"Sun's this nice? His Meowjesty shall sunbathe.",
+            @"Rain... annoying, my fur's wet.",
+            @"With this rain, His Meowjesty stays in.",
+            @"Snowing? ...Hmph, it's pretty though.",
+            @"Freezing — diving into my bed.",
+            @"Cloudy with a cool breeze — barely comfortable.",
+            @"Overcast — the best day to stay put.",
+            @"Thunder! ...I-I'm not scared!",
+            @"Bad weather ruins my mood — fish bribe needed.",
+        ];
+care = HUDIsZh() ? @[@"喂，人类，该喝水了...才不是关心你", @"坐那么久，腰不酸吗？哼", @"到饭点了，本喵等着你吃饭", @"屏幕看太久，眼睛不要了？", @"你好像忘了喝水...本喵可没提醒你", @"起来走走，别像木头一样", @"这么晚还不睡，你想当夜猫子？", @"累了就去躺平，本喵准了", @"外面风大，穿厚点，别感冒", @"看你无精打采的...哼，准你休息"] : @[@"Hey human, drink water... not that I care.", @"Sitting that long — back sore? Hmph.", @"Mealtime — I await your feeding.", @"Screen too long — want to lose your eyes?", @"You forgot water... not that I reminded you.", @"Get up and walk, don't be a statue.", @"Still awake? Want to be a night owl?", @"Tired? Go lie down, I permit it.", @"Strong wind — bundle up, don't catch cold.", @"You look drained... fine, rest allowed."];
+mood = HUDIsZh() ? @[@"...遇到什么烦心事了？说说看", @"不开心就来找本喵，勉强听一下", @"你已经很努力了，本喵都看在眼里", @"别皱眉，丑死了...但还是好看的", @"本喵在这，没人敢欺负你", @"深呼吸，天塌了本喵顶着", @"难过就哭出来，本喵当没看见", @"明天会好的，本喵说的，准了", @"你做得不错，本喵盖章认可", @"累了就靠过来，本喵勉强借你靠一下"] : @[@"...Something bothering you? Spill it.", @"Sad? Come to me, I'll grudgingly listen.", @"I've seen your effort, and it counts.", @"Stop frowning — ugly... though still pretty.", @"I'm here — nobody dares bully you.", @"Deep breath — I'll hold the sky up.", @"Cry if you need — His Meowjesty won't look.", @"It'll get better tomorrow — meow's word.", @"Good work — approved by me.", @"Exhausted? Lean on me, grudgingly offered."];
+act = HUDIsZh() ? @[@"你戳本喵干嘛？...再来一下也行", @"拖着本喵走，把本喵当行李了？", @"摸本喵...舒服，但别摸耳朵！", @"双击本喵，本喵就赏你跳一下", @"把本喵放这，是想让本喵看门？", @"藏起来了？本喵的鼻子可灵了", @"放大缩小随便你，本喵无所谓", @"捏本喵的脸？大胆人类！", @"你偷看本喵，本喵也偷看你了", @"晾着本喵？哼，本喵自己玩"] : @[@"Why tap His Meowjesty?... One more's fine.", @"Dragging me — am I luggage?", @"Petting... nice, but NOT the ears!", @"Double-tap and I'll honor you with a jump.", @"Put me here to guard the door?", @"Hiding? My nose is sharp.", @"Resize freely — I don't care.", @"Pinch my face? Bold human!", @"You peek at me — I peek back.", @"Ignoring me? Fine, I'll play alone."];
+fest = HUDIsZh() ? @[@"周末，本喵允许你陪着玩", @"特别的日子？本喵记着呢", @"月初了，本喵心情不错，赏你摸摸", @"月底，这个月你辛苦了，本喵知道", @"你的节日？本喵勉为其难陪你过", @"晚上啦，今天差不多得了", @"新的一天，本喵心情还行", @"忙一天了，本喵准你歇着", @"今天过得不错？本喵看着还行", @"月末总结：你表现还行，本喵认可"] : @[@"Weekend — I allow you to play along.", @"Special day? I remember.", @"Month starts — you may pet me.", @"I know you worked hard this month.", @"Your day? I'll grudgingly join.", @"Evening — that's enough for today.", @"New day — mood's decent.", @"Busy day — I permit you to rest.", @"Day went well? Looks acceptable to me.", @"Month review: acceptable. Approved."];
     } else {
-        w = @[@"今天太阳好好呀，我们出去玩吧！", @"晴天最适合放风筝啦！",
-              @"下雨啦！我们一起听雨声吧", @"下雨天，我陪你在家躲雨呀",
-              @"下雪啦！好想堆雪人！", @"雪天好冷，我要钻进你怀里",
-              @"今天云朵好多，像棉花糖", @"阴阴的，但和你一起就不无聊啦",
-              @"打雷了！我有点怕怕...你保护我", @"天气不好，但我们有彼此呀"];
-        care = @[@"坐好久啦！起来蹦一蹦！", @"喝水喝水！我帮你数着哦", @"饭饭时间到！好好吃饭才长高高", @"眼睛累了吧？看看我放松一下", @"水水喝了吗？乖啦", @"脖子酸不酸？我帮你揉揉", @"该睡觉觉啦，明天才有精神玩", @"辛苦啦！我给你加油鼓劲", @"天冷了，要穿暖暖的哦", @"累了就躺一会，我陪你"];
-        mood = @[@"不开心吗？来抱抱！", @"谁欺负你啦？我去找他！", @"你已经超棒啦！真的！", @"别难过，我永远站在你这边", @"有我在，你不是一个人哦", @"抱抱我，心情就好了！", @"呼～ 深呼吸，我们一起", @"明天一定更棒！我保证！", @"你做得太好啦，给你小红花！", @"哭出来也没关系，我在呢"];
-        act = @[@"你戳我！痒痒的～", @"拖着我去散步啦？好耶！", @"摸我的头，好舒服～", @"双击我！我跳高高给你看！", @"把我放在这里，是想一起看风景呀", @"躲猫猫？我可会找了！", @"缩小放大都好玩！别弄丢我就行", @"捏我脸？哈哈好痒！", @"你偷看我，被我抓住啦！", @"晾着我？我要闹啦！"];
-        fest = @[@"周末啦！陪我玩一整天！", @"今天是个好日子！开心！", @"月初啦！新的冒险开始！", @"月底啦，这个月你好棒！", @"你的节日！我给你准备了表演！", @"晚上啦，今天过得好快呀", @"新的一天！元气满满！", @"过了一天，给你一个大大拥抱", @"今天也要像糖一样甜呀", @"月末啦！你值得最好的奖励！"];
+        w = HUDIsZh() ? @[
+            @"今天太阳好好呀，我们出去玩吧！",
+            @"晴天最适合放风筝啦！",
+            @"下雨啦！我们一起听雨声吧",
+            @"下雨天，我陪你在家躲雨呀",
+            @"下雪啦！好想堆雪人！",
+            @"雪天好冷，我要钻进你怀里",
+            @"今天云朵好多，像棉花糖",
+            @"阴阴的，但和你一起就不无聊啦",
+            @"打雷了！我有点怕怕...你保护我",
+            @"天气不好，但我们有彼此呀",
+        ] : @[
+            @"The sun is great today — let's go out and play!",
+            @"Perfect weather for kite flying!",
+            @"Rain! Let's listen to it together.",
+            @"On rainy days I'll shelter with you.",
+            @"Snow! I want to build a snowman!",
+            @"So cold — let me burrow into your arms.",
+            @"So many clouds, like cotton candy.",
+            @"Gloomy out, but never boring with you.",
+            @"Thunder! I'm scared... protect me.",
+            @"Bad weather, but we have each other.",
+        ];
+care = HUDIsZh() ? @[@"坐好久啦！起来蹦一蹦！", @"喝水喝水！我帮你数着哦", @"饭饭时间到！好好吃饭才长高高", @"眼睛累了吧？看看我放松一下", @"水水喝了吗？乖啦", @"脖子酸不酸？我帮你揉揉", @"该睡觉觉啦，明天才有精神玩", @"辛苦啦！我给你加油鼓劲", @"天冷了，要穿暖暖的哦", @"累了就躺一会，我陪你"] : @[@"Sitting too long! Jump around!", @"Hydrate! I'll count for you.", @"Dinner time! Eat well to grow tall!", @"Eyes tired? Look at me to relax.", @"Water drunk? Good.", @"Neck sore? I'll massage it.", @"Bedtime — more energy to play tomorrow.", @"Hard work! Cheering you on.", @"It's cold — dress warm!", @"Tired? Lie down, I'll stay."];
+mood = HUDIsZh() ? @[@"不开心吗？来抱抱！", @"谁欺负你啦？我去找他！", @"你已经超棒啦！真的！", @"别难过，我永远站在你这边", @"有我在，你不是一个人哦", @"抱抱我，心情就好了！", @"呼～ 深呼吸，我们一起", @"明天一定更棒！我保证！", @"你做得太好啦，给你小红花！", @"哭出来也没关系，我在呢"] : @[@"Feeling down? Come hug!", @"Who bullied you? I'll find them!", @"You're awesome! Really!", @"Don't be sad — I'm always on your side.", @"I'm here — you're not alone.", @"Hug me and feel better!", @"Breathe in — let's do it together.", @"Tomorrow will be even better — promise!", @"You did so well — here's a red flower!", @"It's fine to cry — I'm here."];
+act = HUDIsZh() ? @[@"你戳我！痒痒的～", @"拖着我去散步啦？好耶！", @"摸我的头，好舒服～", @"双击我！我跳高高给你看！", @"把我放在这里，是想一起看风景呀", @"躲猫猫？我可会找了！", @"缩小放大都好玩！别弄丢我就行", @"捏我脸？哈哈好痒！", @"你偷看我，被我抓住啦！", @"晾着我？我要闹啦！"] : @[@"You tapped me! Ticklish~", @"Dragging me for a walk? Yay!", @"Pet my head — so comfy~", @"Double-tap me! I'll jump for you!", @"Placed here to watch the view together.", @"Hide-and-seek? I'm a pro!", @"Resizing is fun! Just don't lose me.", @"Pinch my face? Ha, ticklish!", @"You peeked! Caught you!", @"Ignoring me? I'll throw a fit!"];
+fest = HUDIsZh() ? @[@"周末啦！陪我玩一整天！", @"今天是个好日子！开心！", @"月初啦！新的冒险开始！", @"月底啦，这个月你好棒！", @"你的节日！我给你准备了表演！", @"晚上啦，今天过得好快呀", @"新的一天！元气满满！", @"过了一天，给你一个大大拥抱", @"今天也要像糖一样甜呀", @"月末啦！你值得最好的奖励！"] : @[@"Weekend! Play with me all day!", @"A great day! So happy!", @"New month! New adventure!", @"Month's end — you were great!", @"Your day! I prepared a show!", @"Evening — today flew by!", @"New day! Full of energy!", @"Day's over — big hug for you.", @"Be sweet as candy today.", @"Month's end! You deserve the best reward!"];
     }
     // 天气：已拉取按类型取对应2条；未拉取/未知从10条随机2条（保证池总50条）
     NSArray *weatherPick;
@@ -2068,14 +2300,14 @@ extern "C" const char *g_hud_char;
             NSString *mainUrl = [NSString stringWithFormat:@"trollagent://open?bid=%@", bidEnc];
             [self _appendHudLog:[NSString stringWithFormat:@"open mainApp fallback url=%@", mainUrl]];
             [[UIApplication sharedApplication] openURL:[NSURL URLWithString:mainUrl] options:@{} completionHandler:^(BOOL ok) {
-                if (!ok) [self _showToast:[NSString stringWithFormat:@"打不开 %@", target[@"name"] ?: @"该应用"]];
+                if (!ok) [self _showToast:[NSString stringWithFormat:HUDIsZh() ? @"打不开 %@" : @"Can't open %@", target[@"name"] ?: (HUDIsZh() ? @"该应用" : @"this app")]];
             }];
         }
     } else if (url.length > 0) {
         // url scheme 打开（AI 聊天/自定义 scheme）
         [[UIApplication sharedApplication] openURL:[NSURL URLWithString:url] options:@{} completionHandler:nil];
     } else {
-        [self _showToast:@"该应用未配置打开方式"];
+        [self _showToast:HUDIsZh() ? @"该应用未配置打开方式" : @"No open method configured for this app"];
     }
 }
 
@@ -2211,7 +2443,7 @@ static UIImage * _realAppIcon(NSString *bundleId) {
         for (NSDictionary *a in savedApps) {
             // v6.0.30修复：从已安装应用添加的条目只有bundleId没有url，
             // 字典字面量遇nil值直接抛NSInvalidArgumentException崩溃（菜单弹不出）
-            NSString *name = a[@"name"] ?: @"应用";
+            NSString *name = a[@"name"] ?: (HUDIsZh() ? @"应用" : @"Apps");
             NSString *url = a[@"url"] ?: @"";
             NSString *bid = a[@"bundleId"] ?: @"";
             [apps addObject:@{
@@ -2227,13 +2459,13 @@ static UIImage * _realAppIcon(NSString *bundleId) {
         [apps addObjectsFromArray:@[
             @{@"name":@"微信", @"url":@"weixin://", @"bundleId":@"com.tencent.xin", @"color":[UIColor colorWithRed:0.19 green:0.78 blue:0.32 alpha:1.0]},
             @{@"name":@"抖音", @"url":@"snssdk1128://", @"bundleId":@"com.ss.iphone.ugc.Aweme", @"color":[UIColor blackColor]},
-            @{@"name":@"相机", @"url":@"camera://", @"bundleId":@"com.apple.camera", @"color":[UIColor systemTealColor]},
-            @{@"name":@"设置", @"url":@"App-prefs://", @"bundleId":@"com.apple.Preferences", @"color":[UIColor grayColor]}
+            @{@"name":HUDIsZh() ? @"相机" : @"Camera", @"url":@"camera://", @"bundleId":@"com.apple.camera", @"color":[UIColor systemTealColor]},
+            @{@"name":HUDIsZh() ? @"设置" : @"Settings", @"url":@"App-prefs://", @"bundleId":@"com.apple.Preferences", @"color":[UIColor grayColor]}
         ]];
     }
     // 最后固定加AI聊天和隐藏
     [apps addObject:@{@"name":@"AI", @"url":@"trollagent://chat", @"bundleId":@"", @"color":[UIColor systemBlueColor]}];
-    [apps addObject:@{@"name":@"隐藏", @"url":@"trollagent://hide", @"bundleId":@"", @"color":[UIColor systemRedColor]}];
+    [apps addObject:@{@"name":HUDIsZh() ? @"隐藏" : @"Hide", @"url":@"trollagent://hide", @"bundleId":@"", @"color":[UIColor systemRedColor]}];
     // v6.1.5-7：诊断——记录本次菜单数据来源与内容
     NSMutableString *names = [NSMutableString string];
     for (NSDictionary *a in apps) { [names appendFormat:@"%@,", a[@"name"]]; }
