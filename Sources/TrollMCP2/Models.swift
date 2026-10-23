@@ -711,8 +711,8 @@ final class ConversationStore: ObservableObject {
         isLoading && selectedIndex == activeConvIndex
     }
 
-    func newConversation(title: String = "New Chat") {
-        let conv = ChatConversation(title: title, createdAt: Date(), updatedAt: Date(), messages: [])
+    func newConversation(title: String? = nil) {
+        let conv = ChatConversation(title: title ?? L10n.t("i18n_1059"), createdAt: Date(), updatedAt: Date(), messages: [])
         conversations.insert(conv, at: 0)
         selectedId = conv.id
         // v2.9.22：新会话清空工具会话授权 (AI 需重新搜索/决定）
@@ -781,7 +781,7 @@ final class ConversationStore: ObservableObject {
         guard let idx = selectedIndex else { return }
         var conv = conversations[idx]
         conv.messages.removeAll()
-        conv.title = "New Chat"
+        conv.title = L10n.t("i18n_1059")
         conv.updatedAt = Date()
         conversations[idx] = conv
         sortAndSave()

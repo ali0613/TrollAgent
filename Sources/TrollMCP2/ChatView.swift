@@ -428,7 +428,7 @@ struct ChatView: View {
                     miniCard("bolt.fill", L10n.t("home_quick_automation"), L10n.t("home_quick_automation_sub"), [.blue, .purple], promptId: "default") {
                         runQuickPrompt("Create an automation task: ping every 5 minutes and alert me on failure")
                     }
-                    miniCard("wrench.and.screwdriver.fill", "Dev Environment Monitor", "Check toolchain install state and versions", [.green, .blue], promptId: "developer") {
+                    miniCard("wrench.and.screwdriver.fill", L10n.t("home_quick_dev"), L10n.t("home_quick_dev_sub"), [.green, .blue], promptId: "developer") {
                         runQuickPrompt("Check the current dev environment: python3/git/vim/curl versions, which are installed and which aren't")
                     }
                 }
@@ -618,7 +618,7 @@ struct ChatView: View {
                 ChatChip(label: L10n.t("i18n_1086", thinkEnabled ? L10n.t("i18n_1088") : L10n.t("i18n_1089")), action: {
                     thinkEnabled.toggle()
                 }, accent: thinkEnabled, icon: "lightbulb").frame(height: 36)
-                ChatChip(label: L10n.t("i18n_1087", smartSearch ? "On" : "Off"), action: {
+                ChatChip(label: L10n.t("i18n_1087", smartSearch ? L10n.t("i18n_1088") : L10n.t("i18n_1089")), action: {
                     smartSearch.toggle()
                 }, accent: smartSearch, icon: "magnifyingglass").frame(height: 36)
                 QuickTabButton(icon: "bolt", label: L10n.t("i18n_1038")) {
@@ -2187,7 +2187,7 @@ struct ChatInputTextView: UIViewRepresentable {
         tv.backgroundColor = .clear
         tv.font = .systemFont(ofSize: 16)
         tv.textColor = UIColor.label
-        tv.placeholder = L10n.t("i18n_1051") as NSString
+        tv.placeholder = L10n.t("input_placeholder") as NSString
         tv.placeholderColor = .gray
         tv.minimumNumberOfLines = 1
         tv.maximumNumberOfLines = 4
