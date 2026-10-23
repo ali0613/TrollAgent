@@ -37,7 +37,7 @@ struct ToolCenterView: View {
     @ObservedObject private var registry = ToolRegistry.shared
     @Environment(\.presentationMode) private var presentationMode
     @State private var searchText = ""
-    @State private var showOnlyReal = true   // v6.6.0-fix32: 默认只显示真实实现（占位工具隐藏——减少混乱）
+    @State private var showOnlyReal = false  // v6.6.0-fix35: 默认显示全部注册工具（注册=有 handler——不再有"占位"概念）；开关改"仅真机验证"
 
     // v6.1.5-14bo：真实实现清单（并入原权限页）——区分"有真实实现" vs "占位/文档"
     // v6.6.0-fix33: 原生工具命令清单（shell.exec 内可用——iOS 芯片直跑）
@@ -78,23 +78,9 @@ struct ToolCenterView: View {
         ("vi/nano/echo/printf", "文本编辑/输出"),
     ]
 
-    private let realTools: Set<String> = [
-        "ping", "device.info", "device.probe",
-        "artifact.read_text", "artifact.write_text", "artifact.list", "workspace.info",
-        "assistant.memory_set", "assistant.memory_list", "assistant.memory_delete",
-        "apps.cache_inspect", "apps.cache_clear", "apps.open", "apps.open_and_input",
-        "wechat.prepare_message", "container.write_text", "container.delete",
-        "contacts.search", "calendar.list", "reminder.create", "location.get",
-        "notification.send", "scan.qr", "process.list",
-        "build.runner.token", "project.generate_tweak",
-        "model.config", "model.authentication", "model.selectedProfileID",
-        "injection.enable", "injection.disable", "injection.status",
-        "injection.inspect", "injection.list", "injection.remove",
-        "skills.list", "skills.read", "skills.set_enabled"
-    ]
-
     private func passesFilter(_ def: ToolDefinition) -> Bool {
-        if showOnlyReal && !realTools.contains(def.name) { return false }
+        // v6.6.0-fix35: 白名单删除——"真实实现"= 已注册（都有 handler）；开关改为"仅真机验证"（def.verified）
+        if showOnlyReal && !def.verified { return false }
         if searchText.isEmpty { return true }
         return def.name.localizedCaseInsensitiveContains(searchText)
             || def.displaySummary.localizedCaseInsensitiveContains(searchText)
@@ -106,14 +92,14 @@ struct ToolCenterView: View {
             var rows: [ToolRowItem] = []
             switch layer {
             case .packaged:
-                // 封装工具层：MCP 工具（注册表——真实实现过滤 + 搜索）
+                // 封装工具层：平铺全部注册工具（注册 = 有 handler——无占位概念）
                 for def in registry.definitions.sorted(by: { $0.name < $1.name }) {
                     guard passesFilter(def) else { continue }
                     var branch: String? = nil
                     if def.name == "shell.exec" {
                         branch = "统一环境执行（iOS 原生命令 + Alpine 工具链）"
                     }
-                    rows.append(ToolRowItem(def: def, branch: branch, isReal: realTools.contains(def.name)))
+                    rows.append(ToolRowItem(def: def, branch: branch, isReal: true))
                 }
             case .native:
                 // 原生工具层：静态命令清单（搜索过滤）
@@ -142,7 +128,7 @@ struct ToolCenterView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("工具分三层")
                             .font(.headline)
-                        Text("封装工具 = 注册的大工具（AI 直接调用）；原生工具 = iOS 芯片直跑命令；Alpine 工具 = Linux 沙箱工具链。shell.exec 统一执行原生 + Alpine 命令，无需选择环境。")
+                        Text("封装工具 = 注册的大工具（AI 直接调用——✓ 已验证 = 真机实测过）；原生工具 = iOS 芯片直跑命令；Alpine 工具 = Linux 沙箱工具链。")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -202,7 +188,7 @@ struct ToolCenterView: View {
                             }
                         }
                     }
-                    Toggle("仅显示真实实现（默认开——隐藏占位）", isOn: $showOnlyReal)
+                    Toggle("仅真机验证", isOn: $showOnlyReal)
                         .accentColor(.tmCyan)
                 }
 
