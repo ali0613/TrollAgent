@@ -1057,6 +1057,7 @@ enum L10n {
             "i18n_807": ["zh": "网络错误: %@", "en": "Network error: %@"],
             "i18n_808": ["zh": "Client ID 无效。若手动填过 Client ID：请到仓库设置里清空并保存 (自动回退内置默认)，或注册自己的 GitHub App", "en": "Invalid Client ID. If you set it manually: clear & save in repo settings (falls back to built-in default), or register your own GitHub App"],
             "i18n_809": ["zh": "设备码请求failed (HTTP %d) %@", "en": "Device code request failed (HTTP %d) %@"],
+            "i18n_1189": ["zh": "Client ID 无效。若手动填过 Client ID：请到仓库设置里清空并保存 (自动回退内置默认)，或注册自己的 OAuth App 后填入真实 Client ID。", "en": "Invalid Client ID. If you entered one manually: clear and save it in the repo settings (auto-falls back to built-in default), or register your own OAuth App and put in a real Client ID."],
             "i18n_810": ["zh": "请在浏览器输入代码 %@", "en": "Enter code %@ in browser"],
             "i18n_811": ["zh": "GitHub Device Flow 开始: user_code=%@", "en": "GitHub Device Flow started: user_code=%@"],
             "i18n_812": ["zh": "请在浏览器输入代码 %@，等待授权…", "en": "Enter code %@ in browser and wait for authorization…"],

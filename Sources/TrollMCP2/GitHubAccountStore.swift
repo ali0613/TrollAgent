@@ -186,7 +186,7 @@ final class GitHubAccountStore: ObservableObject {
                 guard let data = data,
                       let code = try? JSONDecoder().decode(DeviceCode.self, from: data) else {
                     let raw = data.map { String(data: $0, encoding: .utf8) ?? "" } ?? ""
-                    self.lastError = status == 404 ? "Client ID 无效。若手动填过 Client ID：请到仓库设置里清空并保存 (自动回退内置默认)，或注册自己的 OAuth App 后填入真实 Client ID。" : L10n.t("i18n_809", status, raw.prefix(200))
+                    self.lastError = status == 404 ? L10n.t("i18n_1189") : L10n.t("i18n_809", status, String(raw.prefix(200)))
                     completion(nil, self.lastError)
                     return
                 }

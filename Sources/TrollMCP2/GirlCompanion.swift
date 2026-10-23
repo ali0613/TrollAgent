@@ -18,7 +18,6 @@ enum GirlCharacter: String, CaseIterable, Identifiable {
         case .cat: return L10n.t("i18n_839")
         }
     }
-    var id: String { rawValue }
     var iconPrefix: String {
         switch self {
         case .loli: return "girl"
