@@ -1408,7 +1408,6 @@ enum L10n {
             "i18n_1196": ["zh": "\\n…[输出过长已截断]", "en": "⏎…[output too long, truncated]"],
             "i18n_1197": ["zh": "已复制", "en": "Copied"],
         ]
-    }
 
     static func t(_ key: String) -> String {
         let lang = LanguageManager.shared.language.rawValue
