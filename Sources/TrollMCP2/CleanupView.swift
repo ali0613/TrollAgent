@@ -10,8 +10,8 @@ struct CleanupCenterView: View {
 
     var body: some View {
         AppBrowserContainer(
-            title: L10n.t("i18n_24"),
-            subtitle: L10n.t("i18n_461"),
+            title: L10n.t("i18n_219"),
+            subtitle: L10n.t("i18n_672"),
             icon: "sparkles.rectangle.stack",
             defaultCategory: .user,
             onTap: { app in
@@ -19,7 +19,7 @@ struct CleanupCenterView: View {
                 showCleanup = true
             }
         )
-        .navigationTitle(L10n.t("i18n_24"))
+        .navigationTitle(L10n.t("i18n_219"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -35,7 +35,7 @@ struct CleanupCenterView: View {
                     AppCleanupView(bundleId: app.bundleId, name: app.name)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {
-                                Button(L10n.t("done")) { showCleanup = false }
+                                Button(L10n.t("i18n_956")) { showCleanup = false }
                             }
                         }
             }
@@ -69,7 +69,7 @@ struct AppCleanupView: View {
                     Button {
                         scan()
                     } label: {
-                        Label(L10n.t("i18n_462"), systemImage: "magnifyingglass")
+                        Label(L10n.t("i18n_673"), systemImage: "magnifyingglass")
                             .font(.headline)
                             .padding(.horizontal, 28).padding(.vertical, 10)
                             .background(Color.tmCyan)
@@ -80,7 +80,7 @@ struct AppCleanupView: View {
                 Spacer()
             } else if scanning {
                 Spacer()
-                ProgressView(L10n.t("i18n_463")).font(.footnote)
+                ProgressView(L10n.t("i18n_674")).font(.footnote)
                 Spacer()
             } else if scanFailed {
                 Spacer()
@@ -92,7 +92,7 @@ struct AppCleanupView: View {
                     Text(L10n.t("ui_162"))
                         .font(.footnote).foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
-                    Button(L10n.t("btn_retry")) { scan() }
+                    Button(L10n.t("i18n_503")) { scan() }
                         .font(.headline)
                         .padding(.horizontal, 24).padding(.vertical, 8)
                         .background(Color.tmCyan).foregroundColor(.white)
@@ -101,7 +101,7 @@ struct AppCleanupView: View {
                 Spacer()
             } else {
                 List {
-                    Section(header: SettingSectionHeader(title: L10n.t("i18n_464"))) {
+                    Section(header: SettingSectionHeader(title: L10n.t("i18n_675"))) {
                         ForEach(items, id: \.id) { item in
                             HStack(spacing: 12) {
                                 Image(systemName: iconName(item.risk))
@@ -140,7 +140,7 @@ struct AppCleanupView: View {
                     }
                     Section {
                         Button {
-                            if selected.isEmpty { toast = L10n.t("i18n_465") }
+                            if selected.isEmpty { toast = L10n.t("i18n_676") }
                             else { runCleanup() }
                         } label: {
                             HStack {
@@ -148,7 +148,7 @@ struct AppCleanupView: View {
                                 if running {
                                     ProgressView().tint(.white)
                                 } else {
-                                    Label(L10n.t("i18n_466", selected.count), systemImage: "trash.fill")
+                                    Label(L10n.t("i18n_677", selected.count), systemImage: "trash.fill")
                                 }
                                 Spacer()
                             }
@@ -170,7 +170,7 @@ struct AppCleanupView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if !items.isEmpty {
-                    Button(L10n.t("i18n_467")) { scan() }
+                    Button(L10n.t("i18n_678")) { scan() }
                 } else {
                     EmptyView()
                 }
@@ -207,10 +207,10 @@ struct AppCleanupView: View {
                 scanning = false
                 if result.isEmpty {
                     scanFailed = true
-                    toast = L10n.t("i18n_468")
+                    toast = L10n.t("i18n_679")
                 } else {
                     selected = Set(result.filter { $0.risk == .safe && $0.id != "idfv" }.map { $0.id })
-                    toast = L10n.t("i18n_469", result.count)
+                    toast = L10n.t("i18n_680", result.count)
                 }
             }
         }
@@ -218,14 +218,14 @@ struct AppCleanupView: View {
 
     private func toggle(_ item: CleanupItem) {
         guard item.id != "idfv" else {
-            toast = L10n.t("i18n_470")
+            toast = L10n.t("i18n_681")
             return
         }
         if item.risk == .danger {
             if selected.contains(item.id) { selected.remove(item.id) }
             else {
                 selected.insert(item.id)
-                toast = L10n.t("i18n_471")
+                toast = L10n.t("i18n_682")
             }
             return
         }
@@ -242,7 +242,7 @@ struct AppCleanupView: View {
                 running = false
                 let failed = results.filter { ($0["ok"] as? Bool) != true }.count
                 let okCount = results.count - failed
-                toast = L10n.t("i18n_472", okCount, failed)
+                toast = L10n.t("i18n_683", okCount, failed)
                 // 刷新状态
                 let fresh = CleanupScanner.scan(bundleId: bundleId)
                 items = fresh
@@ -252,7 +252,7 @@ struct AppCleanupView: View {
     }
 
     private func riskBadge(_ risk: CleanupItem.Risk) -> some View {
-        Text(risk == .safe ? L10n.t("sec_security") : (risk == .warn ? L10n.t("i18n_473") : L10n.t("i18n_474")))
+        Text(risk == .safe ? L10n.t("i18n_684") : (risk == .warn ? L10n.t("i18n_685") : L10n.t("i18n_686")))
             .font(.system(size: 10, weight: .bold))
             .padding(.horizontal, 6).padding(.vertical, 1)
             .background(colorFor(risk).opacity(0.15))

@@ -29,7 +29,7 @@ struct VpnCaptureView: View {
                     .padding(.top, 10)
 
                     Button(action: { vpnActive ? stopAll() : connectVpn() }) {
-                        Text(vpnActive ? L10n.t("i18n_301") : L10n.t("i18n_302"))
+                        Text(vpnActive ? L10n.t("i18n_505") : L10n.t("i18n_506"))
                             .font(.headline)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -52,10 +52,10 @@ struct VpnCaptureView: View {
             Section {
                 // 流量抓取 = 抓包总开关（连接/断开 VPN）
                 moduleCard(
-                    title: L10n.t("i18n_303"),
+                    title: L10n.t("i18n_507"),
                     icon: "arrow.down.doc.fill",
                     color: .green,
-                    desc: L10n.t("i18n_304"),
+                    desc: L10n.t("i18n_508"),
                     trailing: AnyView(
                         Toggle("", isOn: Binding(
                             get: { vpnActive },
@@ -66,13 +66,13 @@ struct VpnCaptureView: View {
                 )
                 // CA 证书：状态 + 点击生成
                 moduleCard(
-                    title: L10n.t("i18n_619"),
+                    title: L10n.t("i18n_895"),
                     icon: "checkmark.shield.fill",
                     color: .green,
-                    desc: caExists ? L10n.t("i18n_305") : L10n.t("i18n_306"),
+                    desc: caExists ? L10n.t("i18n_509") : L10n.t("i18n_510"),
                     trailing: AnyView(
                         Button(action: shareCert) {
-                            Text(caExists ? L10n.t("i18n_307") : L10n.t("not_configured"))
+                            Text(caExists ? L10n.t("i18n_511") : L10n.t("i18n_944"))
                                 .font(.subheadline)
                                 .foregroundColor(caExists ? .green : .secondary)
                         }
@@ -80,14 +80,14 @@ struct VpnCaptureView: View {
                 )
                 // 抓包记录：数量 + 点击展开
                 moduleCard(
-                    title: L10n.t("i18n_308"),
+                    title: L10n.t("i18n_513"),
                     icon: "doc.text.fill",
                     color: .blue,
-                    desc: L10n.t("i18n_620"),
+                    desc: L10n.t("i18n_896"),
                     trailing: AnyView(
                         Button(action: { showLogs = true }) {
                             HStack(spacing: 4) {
-                                Text(L10n.t("i18n_309", logFiles.count))
+                                Text(L10n.t("i18n_514", logFiles.count))
                                     .font(.subheadline)
                                     .foregroundColor(logFiles.isEmpty ? .secondary : .blue)
                                 Image(systemName: "chevron.right")
@@ -111,10 +111,10 @@ struct VpnCaptureView: View {
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundColor(.orange)
                         }
-                        Text(localProxyOn ? L10n.t("i18n_310") : L10n.t("i18n_311"))
+                        Text(localProxyOn ? L10n.t("i18n_515") : L10n.t("i18n_516"))
                             .foregroundColor(.primary)
                         Spacer()
-                        Text(localProxyOn ? L10n.t("i18n_312") : L10n.t("i18n_313"))
+                        Text(localProxyOn ? L10n.t("i18n_517") : L10n.t("i18n_518"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -122,30 +122,30 @@ struct VpnCaptureView: View {
             }
 
             // 使用步骤（保留功能指引）
-            Section(header: SettingSectionHeader(title: L10n.t("i18n_314"))) {
-                stepRow(1, L10n.t("i18n_315"), L10n.t("i18n_316"))
-                stepRow(2, L10n.t("btn_install"), L10n.t("i18n_317"))
-                stepRow(3, L10n.t("i18n_318"), L10n.t("i18n_319"))
-                stepRow(4, L10n.t("i18n_239"), L10n.t("i18n_621"))
-                stepRow(5, L10n.t("i18n_320"), L10n.t("i18n_622"))
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_519"))) {
+                stepRow(1, L10n.t("i18n_520"), L10n.t("i18n_521"))
+                stepRow(2, L10n.t("i18n_522"), L10n.t("i18n_523"))
+                stepRow(3, L10n.t("i18n_524"), L10n.t("i18n_525"))
+                stepRow(4, L10n.t("i18n_438"), L10n.t("i18n_897"))
+                stepRow(5, L10n.t("i18n_526"), L10n.t("i18n_898"))
             }
 
             if !notice.isEmpty {
-                Section(header: SettingSectionHeader(title: L10n.t("warning"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_527"))) {
                     Text(notice)
                         .font(.caption)
                         .foregroundColor(.orange)
                 }
             }
         }
-        .navigationTitle(L10n.t("i18n_662"))
+        .navigationTitle(L10n.t("i18n_939"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { refresh() }
         .sheet(isPresented: $showLogs) {
             NavigationView {
                 List {
                     if logFiles.isEmpty {
-                        Text(L10n.t("i18n_321"))
+                        Text(L10n.t("i18n_528"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     } else {
@@ -154,11 +154,11 @@ struct VpnCaptureView: View {
                         }
                     }
                 }
-                .navigationTitle(L10n.t("i18n_322", logFiles.count))
+                .navigationTitle(L10n.t("i18n_529", logFiles.count))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(L10n.t("done")) { showLogs = false }
+                        Button(L10n.t("i18n_956")) { showLogs = false }
                     }
                 }
             }
@@ -230,10 +230,10 @@ struct VpnCaptureView: View {
     }
 
     private func statusHint() -> String {
-        if vpnStatusText == "connected" { return L10n.t("i18n_323") }
-        if vpnStatusText == "connecting" { return L10n.t("i18n_324") }
-        if localProxyOn { return L10n.t("i18n_325") }
-        return L10n.t("i18n_326")
+        if vpnStatusText == "connected" { return L10n.t("i18n_530") }
+        if vpnStatusText == "connecting" { return L10n.t("i18n_531") }
+        if localProxyOn { return L10n.t("i18n_532") }
+        return L10n.t("i18n_533")
     }
 
     private func stopAll() {
@@ -258,12 +258,12 @@ struct VpnCaptureView: View {
 
     private func connectVpn() {
         // v3.5.16h：点按钮立刻给反馈，不再静默等——避免"点了没反应"的错觉
-        notice = L10n.t("i18n_328")
+        notice = L10n.t("i18n_535")
         VpnManager.shared.startVpn { err in
             if let e = err {
-                notice = L10n.t("i18n_329", e)
+                notice = L10n.t("i18n_536", e)
             } else {
-                notice = L10n.t("i18n_330")
+                notice = L10n.t("i18n_537")
             }
             refresh()
         }
@@ -274,14 +274,14 @@ struct VpnCaptureView: View {
             VpnManager.shared.stopLocalProxy()
         } else {
             _ = VpnManager.shared.startLocalProxy()
-            notice = L10n.t("i18n_331")
+            notice = L10n.t("i18n_538")
         }
         refresh()
     }
 
     private func shareCert() {
         guard let path = VpnManager.shared.generateMobileConfig() else {
-            notice = L10n.t("i18n_332")
+            notice = L10n.t("i18n_539")
             return
         }
         refresh()
@@ -292,9 +292,9 @@ struct VpnCaptureView: View {
         let url = URL(string: "http://127.0.0.1:18080/TrollAgentCA.mobileconfig")!
         UIApplication.shared.open(url, options: [:]) { ok in
             if !ok {
-                notice = L10n.t("i18n_335", path)
+                notice = L10n.t("i18n_542", path)
             } else {
-                notice = L10n.t("i18n_336")
+                notice = L10n.t("i18n_543")
             }
         }
     }

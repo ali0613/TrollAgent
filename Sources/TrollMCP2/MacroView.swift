@@ -58,7 +58,7 @@ struct MacroView: View {
         .onAppear { refresh() }
         .alert(L10n.t("ui_184", L10n.t("ui_184")), isPresented: $showNewName) {
             TextField(L10n.t("ui_185", L10n.t("ui_185")), text: $newName)
-            Button(L10n.t("ui_48", L10n.t("i18n_475"))) {
+            Button(L10n.t("ui_48", L10n.t("i18n_687"))) {
                 let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !name.isEmpty else { showToast(L10n.t("ui_186", L10n.t("ui_186"))); return }
                 MacroRecorder.shared.start(name: name)
@@ -73,7 +73,7 @@ struct MacroView: View {
     private var recordingBanner: some View {
         HStack(spacing: 10) {
             Circle().fill(Color.red).frame(width: 10, height: 10)
-            Text("🎬 \(L10n.t("ui_188", "录制中"))：\(MacroRecorder.shared.currentName)")
+            Text("🎬 \(L10n.t("ui_188"))：\(MacroRecorder.shared.currentName)")
                 .font(.subheadline.weight(.semibold))
             Spacer()
             Button {
@@ -189,7 +189,7 @@ struct MacroView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 ui.macroPresented = true
                 refresh()
-                showToast(out["message"] as? String ?? L10n.t("done"))
+                showToast(out["message"] as? String ?? L10n.t("i18n_956"))
             }
         }
     }

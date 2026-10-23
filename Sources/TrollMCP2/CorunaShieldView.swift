@@ -49,14 +49,14 @@ struct CorunaShieldView: View {
                         .padding(.top, 40)
                         
                         VStack(spacing: 8) {
-                            Text(shieldEnabled ? (isSafe ? L10n.t("i18n_505") : L10n.t("i18n_506")) : L10n.t("i18n_507"))
+                            Text(shieldEnabled ? (isSafe ? L10n.t("i18n_718") : L10n.t("i18n_719")) : L10n.t("i18n_720"))
                                 .font(.largeTitle)
                                 .fontWeight(.bold)
                                 .foregroundColor(isSafe ? Color(red: 0.1, green: 0.5, blue: 0.3) : .red)
                             
                             Text(shieldEnabled 
-                                ? (isSafe ? L10n.t("i18n_508") : L10n.t("i18n_509"))
-                                : L10n.t("i18n_510"))
+                                ? (isSafe ? L10n.t("i18n_721") : L10n.t("i18n_722"))
+                                : L10n.t("i18n_723"))
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
@@ -64,9 +64,9 @@ struct CorunaShieldView: View {
                     
                     // 统计卡片
                     HStack(spacing: 16) {
-                        StatCard(title: L10n.t("i18n_511"), value: "\(blockedCount)", unit: L10n.t("i18n_512"), icon: "hand.raised.fill", color: .orange)
-                        StatCard(title: L10n.t("i18n_513"), value: shieldEnabled ? "ON" : "OFF", unit: "", icon: "shield.fill", color: shieldEnabled ? .green : .gray)
-                        StatCard(title: L10n.t("i18n_514"), value: "17.2", unit: L10n.t("i18n_515"), icon: "iphone", color: .blue)
+                        StatCard(title: L10n.t("i18n_724"), value: "\(blockedCount)", unit: L10n.t("i18n_725"), icon: "hand.raised.fill", color: .orange)
+                        StatCard(title: L10n.t("i18n_726"), value: shieldEnabled ? "ON" : "OFF", unit: "", icon: "shield.fill", color: shieldEnabled ? .green : .gray)
+                        StatCard(title: L10n.t("i18n_727"), value: "17.2", unit: L10n.t("i18n_728"), icon: "iphone", color: .blue)
                     }
                     .padding(.horizontal)
                     
@@ -79,7 +79,7 @@ struct CorunaShieldView: View {
                         HStack {
                             Image(systemName: shieldEnabled ? "power.circle.fill" : "power.circle")
                                 .font(.title2)
-                            Text(shieldEnabled ? L10n.t("i18n_516") : L10n.t("i18n_517"))
+                            Text(shieldEnabled ? L10n.t("i18n_729") : L10n.t("i18n_730"))
                                 .font(.headline)
                         }
                         .foregroundColor(.white)
@@ -94,32 +94,32 @@ struct CorunaShieldView: View {
                     
                     // 防御措施卡片
                     VStack(alignment: .leading, spacing: 16) {
-                        Text(L10n.t("i18n_518"))
+                        Text(L10n.t("i18n_731"))
                             .font(.headline)
                             .foregroundColor(.primary)
                             .padding(.horizontal)
                         
                         VStack(spacing: 12) {
-                            DefenseRow(icon: "globe", title: L10n.t("i18n_519"), desc: L10n.t("i18n_520"), enabled: shieldEnabled)
-                            DefenseRow(icon: "safari", title: L10n.t("i18n_644"), desc: L10n.t("i18n_521"), enabled: shieldEnabled)
-                            DefenseRow(icon: "doc.text.magnifyingglass", title: L10n.t("i18n_645"), desc: L10n.t("i18n_522"), enabled: shieldEnabled)
-                            DefenseRow(icon: "lock.shield", title: L10n.t("i18n_523"), desc: L10n.t("i18n_646"), enabled: shieldEnabled)
+                            DefenseRow(icon: "globe", title: L10n.t("i18n_732"), desc: L10n.t("i18n_733"), enabled: shieldEnabled)
+                            DefenseRow(icon: "safari", title: L10n.t("i18n_921"), desc: L10n.t("i18n_734"), enabled: shieldEnabled)
+                            DefenseRow(icon: "doc.text.magnifyingglass", title: L10n.t("i18n_922"), desc: L10n.t("i18n_735"), enabled: shieldEnabled)
+                            DefenseRow(icon: "lock.shield", title: L10n.t("i18n_736"), desc: L10n.t("i18n_923"), enabled: shieldEnabled)
                         }
                         .padding(.horizontal)
                     }
                     
                     // 漏洞说明
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(L10n.t("i18n_647"))
+                        Text(L10n.t("i18n_924"))
                             .font(.headline)
                             .foregroundColor(.primary)
                             .padding(.horizontal)
                         
                         VStack(alignment: .leading, spacing: 8) {
-                            InfoRow(label: L10n.t("i18n_524"), value: "iOS 13.0 - 17.2.1")
-                            InfoRow(label: L10n.t("i18n_525"), value: L10n.t("i18n_526"))
-                            InfoRow(label: L10n.t("i18n_527"), value: L10n.t("i18n_528"))
-                            InfoRow(label: L10n.t("i18n_529"), value: L10n.t("i18n_648"))
+                            InfoRow(label: L10n.t("i18n_737"), value: "iOS 13.0 - 17.2.1")
+                            InfoRow(label: L10n.t("i18n_738"), value: L10n.t("i18n_739"))
+                            InfoRow(label: L10n.t("i18n_740"), value: L10n.t("i18n_741"))
+                            InfoRow(label: L10n.t("i18n_742"), value: L10n.t("i18n_925"))
                         }
                         .padding()
                         .background(Color(.systemBackground))
@@ -130,7 +130,7 @@ struct CorunaShieldView: View {
                     
                     // Web 注入工具入口
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(L10n.t("i18n_530"))
+                        Text(L10n.t("i18n_743"))
                             .font(.headline)
                             .foregroundColor(.primary)
                             .padding(.horizontal)
@@ -143,10 +143,10 @@ struct CorunaShieldView: View {
                                     .frame(width: 40)
 
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(L10n.t("i18n_531"))
+                                    Text(L10n.t("i18n_744"))
                                         .font(.body)
                                         .foregroundColor(.primary)
-                                    Text(L10n.t("i18n_649"))
+                                    Text(L10n.t("i18n_926"))
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
@@ -166,7 +166,7 @@ struct CorunaShieldView: View {
                     }
 
                     // 底部
-                    Text(L10n.t("i18n_650"))
+                    Text(L10n.t("i18n_927"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.bottom, 40)

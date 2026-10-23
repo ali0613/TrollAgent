@@ -5,13 +5,13 @@ struct ToolsView: View {
 
     private var grouped: [(String, [ToolDefinition])] {
         let categories: [(String, String, [String])] = [
-            (L10n.t("i18n_81"), "folder", ["artifact.read_text", "artifact.write_text", "artifact.list"]),
-            (L10n.t("i18n_82"), "syringe", ["injection.enable", "injection.disable", "injection.mem", "injection.restore", "rescue.scan", "rescue.recover_all", "rescue.cleanup", "injection.status", "injection.inspect", "injection.list", "container.write_text"]),
-            (L10n.t("i18n_83"), "scope", ["probe.inspect", "hook.apply", "device.fake", "device.restore"]),
+            (L10n.t("i18n_276"), "folder", ["artifact.read_text", "artifact.write_text", "artifact.list"]),
+            (L10n.t("i18n_277"), "syringe", ["injection.enable", "injection.disable", "injection.mem", "injection.restore", "rescue.scan", "rescue.recover_all", "rescue.cleanup", "injection.status", "injection.inspect", "injection.list", "container.write_text"]),
+            (L10n.t("i18n_278"), "scope", ["probe.inspect", "hook.apply", "device.fake", "device.restore"]),
             ("Gateway", "network", ["gateway.status", "gateway.connect", "gateway.node_invoke", "cron.fire"]),
-            (L10n.t("home_quick_automation"), "bolt", ["automation.run", "automation.list", "automation.stop", "automation.status"]),
-            (L10n.t("i18n_145"), "gearshape.2", ["contacts.search", "calendar.list", "reminder.create", "location.get", "notification.send", "scan.qr"]),
-            (L10n.t("i18n_85"), "hammer", ["build.runner.token", "project.generate_tweak", "model.config", "ping", "device.info"])
+            (L10n.t("i18n_969"), "bolt", ["automation.run", "automation.list", "automation.stop", "automation.status"]),
+            (L10n.t("i18n_341"), "gearshape.2", ["contacts.search", "calendar.list", "reminder.create", "location.get", "notification.send", "scan.qr"]),
+            (L10n.t("i18n_280"), "hammer", ["build.runner.token", "project.generate_tweak", "model.config", "ping", "device.info"])
         ]
         let map = Dictionary(uniqueKeysWithValues: defs.map { ($0.name, $0) })
         return categories.compactMap { cat, _, names in
@@ -42,7 +42,7 @@ struct ToolsView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_683", defs.count))
+            .navigationTitle(L10n.t("i18n_970", defs.count))
         }
         .navigationViewStyle(.stack)
     }

@@ -29,7 +29,7 @@ struct CorunaInjectView: View {
             }
             .padding()
         }
-        .navigationTitle(L10n.t("i18n_651"))
+        .navigationTitle(L10n.t("i18n_928"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             isDeviceCompatible = CorunaWebInjector.isCompatible
@@ -45,11 +45,11 @@ struct CorunaInjectView: View {
         .sheet(isPresented: $showWebView) {
             CorunaExploitWebView(injector: injector)
         }
-        .alert(L10n.t("i18n_532"), isPresented: $showWarning) {
-            Button(L10n.t("i18n_533"), role: .destructive) { startInjection() }
+        .alert(L10n.t("i18n_745"), isPresented: $showWarning) {
+            Button(L10n.t("i18n_746"), role: .destructive) { startInjection() }
             Button(L10n.t("ui_40"), role: .cancel) {}
         } message: {
-            Text(L10n.t("i18n_534", selectedApp?.name ?? L10n.t("i18n_643")))
+            Text(L10n.t("i18n_747", selectedApp?.name ?? L10n.t("i18n_920")))
         }
     }
 
@@ -59,11 +59,11 @@ struct CorunaInjectView: View {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.orange)
-                Text(L10n.t("i18n_535"))
+                Text(L10n.t("i18n_748"))
                     .font(.headline)
                     .foregroundColor(.orange)
             }
-            Text(L10n.t("i18n_652", CorunaWebInjector.deviceInfo))
+            Text(L10n.t("i18n_929", CorunaWebInjector.deviceInfo))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -90,7 +90,7 @@ struct CorunaInjectView: View {
             ProgressView(value: injector.stageProgress)
                 .progressViewStyle(LinearProgressViewStyle(tint: statusColor))
             HStack {
-                statusBadge(label: L10n.t("i18n_536"), active: injector.kernelRWReady)
+                statusBadge(label: L10n.t("i18n_749"), active: injector.kernelRWReady)
                 statusBadge(label: "Dev Mode", active: injector.developerModeEnabled)
                 statusBadge(label: "PAC", active: injector.stageProgress >= 0.6)
                 Spacer()
@@ -133,14 +133,14 @@ struct CorunaInjectView: View {
     // MARK: - 配置区域
     private var configurationSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.t("i18n_537")).font(.headline)
+            Text(L10n.t("i18n_750")).font(.headline)
 
             Button(action: { showAppPicker = true }) {
                 HStack {
                     Image(systemName: "app.dashed").foregroundColor(.blue)
                     VStack(alignment: .leading) {
-                        Text(L10n.t("i18n_643")).font(.subheadline)
-                        Text(selectedApp?.name ?? L10n.t("i18n_538"))
+                        Text(L10n.t("i18n_920")).font(.subheadline)
+                        Text(selectedApp?.name ?? L10n.t("i18n_751"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -156,8 +156,8 @@ struct CorunaInjectView: View {
                 HStack {
                     Image(systemName: "square.stack.3d.down.right").foregroundColor(.purple)
                     VStack(alignment: .leading) {
-                        Text(L10n.t("i18n_653")).font(.subheadline)
-                        Text(selectedDylib.isEmpty ? L10n.t("i18n_539") : (selectedDylib as NSString).lastPathComponent)
+                        Text(L10n.t("i18n_930")).font(.subheadline)
+                        Text(selectedDylib.isEmpty ? L10n.t("i18n_752") : (selectedDylib as NSString).lastPathComponent)
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -170,8 +170,8 @@ struct CorunaInjectView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(L10n.t("i18n_540")).font(.subheadline)
-                Picker(L10n.t("i18n_540"), selection: $injector.selectedPlatform) {
+                Text(L10n.t("i18n_753")).font(.subheadline)
+                Picker(L10n.t("i18n_753"), selection: $injector.selectedPlatform) {
                     ForEach(CorunaWebInjector.PlatformPath.allCases, id: \.self) { path in
                         Text(path.rawValue).tag(path)
                     }
@@ -184,14 +184,14 @@ struct CorunaInjectView: View {
     // MARK: - 漏洞链信息
     private var chainInfoSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.t("i18n_541")).font(.headline)
+            Text(L10n.t("i18n_754")).font(.headline)
             VStack(alignment: .leading, spacing: 8) {
-                chainStep(number: 1, title: "WebKit RCE", desc: L10n.t("i18n_654"), active: injector.stageProgress >= 0.3)
-                chainStep(number: 2, title: L10n.t("i18n_655"), desc: L10n.t("i18n_656"), active: injector.stageProgress >= 0.4)
-                chainStep(number: 3, title: L10n.t("i18n_657"), desc: "arm64e GOT-swap", active: injector.stageProgress >= 0.6)
-                chainStep(number: 4, title: L10n.t("i18n_542"), desc: "mach_vm_allocate RWX", active: injector.stageProgress >= 0.7)
-                chainStep(number: 5, title: L10n.t("i18n_536"), desc: "CVE-2023-41974 IOSurface", active: injector.stageProgress >= 0.8)
-                chainStep(number: 6, title: L10n.t("i18n_658"), desc: L10n.t("i18n_659"), active: injector.stageProgress >= 0.9)
+                chainStep(number: 1, title: "WebKit RCE", desc: L10n.t("i18n_931"), active: injector.stageProgress >= 0.3)
+                chainStep(number: 2, title: L10n.t("i18n_932"), desc: L10n.t("i18n_933"), active: injector.stageProgress >= 0.4)
+                chainStep(number: 3, title: L10n.t("i18n_934"), desc: "arm64e GOT-swap", active: injector.stageProgress >= 0.6)
+                chainStep(number: 4, title: L10n.t("i18n_755"), desc: "mach_vm_allocate RWX", active: injector.stageProgress >= 0.7)
+                chainStep(number: 5, title: L10n.t("i18n_749"), desc: "CVE-2023-41974 IOSurface", active: injector.stageProgress >= 0.8)
+                chainStep(number: 6, title: L10n.t("i18n_935"), desc: L10n.t("i18n_936"), active: injector.stageProgress >= 0.9)
             }
         }
         .padding()
@@ -226,7 +226,7 @@ struct CorunaInjectView: View {
             Button(action: { showWarning = true }) {
                 HStack {
                     Image(systemName: "bolt.fill")
-                    Text(L10n.t("i18n_543")).font(.headline)
+                    Text(L10n.t("i18n_756")).font(.headline)
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -240,7 +240,7 @@ struct CorunaInjectView: View {
                 Button(action: { injector.stop() }) {
                     HStack {
                         Image(systemName: "stop.fill")
-                        Text(L10n.t("btn_stop")).font(.headline)
+                        Text(L10n.t("i18n_504")).font(.headline)
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -251,13 +251,13 @@ struct CorunaInjectView: View {
             }
 
             if !injector.lastError.isEmpty {
-                Text(L10n.t("i18n_544", injector.lastError)).font(.caption).foregroundColor(.red)
+                Text(L10n.t("i18n_757", injector.lastError)).font(.caption).foregroundColor(.red)
             }
 
             // 控制台日志
             if !injector.consoleLog.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(L10n.t("i18n_545")).font(.caption.bold())
+                    Text(L10n.t("i18n_758")).font(.caption.bold())
                     let recent = Array(injector.consoleLog.suffix(20))
                     ForEach(Array(recent.enumerated()), id: \.offset) { _, line in
                         Text(line).font(.system(size: 10, design: .monospaced))
@@ -330,7 +330,7 @@ struct AppPickerSheet: View {
                     }
                 }
             }
-            .navigationTitle(L10n.t("i18n_546"))
+            .navigationTitle(L10n.t("i18n_759"))
             .navigationBarItems(trailing: Button(L10n.t("ui_177")) {
                 presentationMode.wrappedValue.dismiss()
             })
@@ -361,7 +361,7 @@ struct DylibPickerSheet: View {
                     }
                 }
             }
-            .navigationTitle(L10n.t("i18n_660"))
+            .navigationTitle(L10n.t("i18n_937"))
             .navigationBarItems(trailing: Button(L10n.t("ui_177")) {
                 presentationMode.wrappedValue.dismiss()
             })
@@ -437,9 +437,9 @@ class CorunaWebViewController: UIViewController, WKNavigationDelegate, WKScriptM
 
     // WKNavigationDelegate
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        injector?.appendLog(L10n.t("i18n_547"))
+        injector?.appendLog(L10n.t("i18n_760"))
     }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        injector?.appendLog(L10n.t("i18n_548", error.localizedDescription))
+        injector?.appendLog(L10n.t("i18n_761", error.localizedDescription))
     }
 }

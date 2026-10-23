@@ -64,18 +64,18 @@ struct ModelsView: View {
             }
             .listStyle(.insetGrouped)
         }
-        .navigationTitle(L10n.t("row_model_api"))
+        .navigationTitle(L10n.t("i18n_878"))
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 // v2.9.108：从剪贴板粘贴导入（借鉴 cc-switch ccswitch:// 一键导入思路，零 URL Scheme 风险）
                 Button(action: importFromClipboard) {
                     Image(systemName: "doc.on.clipboard")
                 }
-                .help(L10n.t("i18n_209"))
+                .help(L10n.t("i18n_408"))
                 Button(action: { showingUsage = true }) {
                     Image(systemName: "chart.bar.fill")
                 }
-                .help(L10n.t("i18n_210"))
+                .help(L10n.t("i18n_409"))
                 Button(action: {
                     isNewModel = true
                     editing = ModelConfig(name: "", provider: "custom", apiProtocol: "OpenAI Chat Completions", baseURL: "", apiKey: "", model: "")
@@ -111,18 +111,18 @@ struct ModelsView: View {
                     if let text = try? String(contentsOf: url, encoding: .utf8) {
                         let r = store.importJSON(text)
                         if r.failed > 0 {
-                            importMessage = L10n.t("i18n_212", r.ok, r.failed)
+                            importMessage = L10n.t("i18n_411", r.ok, r.failed)
                         } else {
-                            importMessage = L10n.t("i18n_213", r.ok)
+                            importMessage = L10n.t("i18n_412", r.ok)
                         }
                     } else {
-                        importMessage = L10n.t("i18n_214")
+                        importMessage = L10n.t("i18n_413")
                     }
                 } else {
-                    importMessage = L10n.t("i18n_215")
+                    importMessage = L10n.t("i18n_414")
                 }
             case .failure:
-                importMessage = L10n.t("i18n_216")
+                importMessage = L10n.t("i18n_415")
             }
             showImportMessage = true
         }
@@ -135,14 +135,14 @@ struct ModelsView: View {
     /// v2.9.108：从剪贴板粘贴 JSON 导入（分享链接/文本一键导入）
     private func importFromClipboard() {
         guard let text = UIPasteboard.general.string, !text.isEmpty else {
-            importMessage = L10n.t("i18n_217")
+            importMessage = L10n.t("i18n_416")
             showImportMessage = true
             return
         }
         let r = store.importJSON(text)
         importMessage = r.failed > 0
-            ? L10n.t("i18n_212", r.ok, r.failed)
-            : L10n.t("i18n_213", r.ok)
+            ? L10n.t("i18n_411", r.ok, r.failed)
+            : L10n.t("i18n_412", r.ok)
         showImportMessage = true
     }
 
@@ -293,7 +293,7 @@ struct ModelRow: View {
     private func duplicate() {
         var c = config
         c.id = UUID()
-        c.name = config.name + L10n.t("i18n_218")
+        c.name = config.name + L10n.t("i18n_417")
         c.isDefault = false
         ModelStore.shared.add(c)
         AuditLog.shared.log("model.duplicate", detail: config.name)
@@ -319,7 +319,7 @@ struct ModelRow: View {
         latencyText = ""
         let base = config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + "/models") else {
-            latencyText = L10n.t("i18n_603")
+            latencyText = L10n.t("i18n_879")
             latencyColor = .red
             testing = false
             return
@@ -338,10 +338,10 @@ struct ModelRow: View {
                 testing = false
                 let ms = Int(Date().timeIntervalSince(start) * 1000)
                 if error != nil {
-                    latencyText = L10n.t("i18n_219", ms)
+                    latencyText = L10n.t("i18n_418", ms)
                     latencyColor = .red
                 } else {
-                    latencyText = L10n.t("i18n_604", ms)
+                    latencyText = L10n.t("i18n_880", ms)
                     latencyColor = ms < 500 ? .green : (ms < 2000 ? .orange : .red)
                 }
             }
@@ -494,14 +494,14 @@ struct ModelEditorView: View {
             List {
                 Section(header: sectionHeader(apiProtocol.uppercased())) {
                     quickConfigRow
-                    editorRow(L10n.t("i18n_221"), text: $name, placeholder: "Botcf")
-                    pickerRow(L10n.t("i18n_605"), selection: $apiProtocol, options: ModelConfig.apiProtocols)
+                    editorRow(L10n.t("i18n_420"), text: $name, placeholder: "Botcf")
+                    pickerRow(L10n.t("i18n_881"), selection: $apiProtocol, options: ModelConfig.apiProtocols)
                 }
 
-                Section(header: sectionHeader(L10n.t("i18n_606"))) {
+                Section(header: sectionHeader(L10n.t("i18n_882"))) {
                     editorRow("Base URL", text: $baseURL, placeholder: "https://botcf.com/v1")
-                    editorRow(L10n.t("i18n_222"), text: $model, placeholder: "gpt-5.6-terra")
-                    pickerRow(L10n.t("i18n_223"), selection: $authMethod, options: ModelConfig.authMethods)
+                    editorRow(L10n.t("i18n_421"), text: $model, placeholder: "gpt-5.6-terra")
+                    pickerRow(L10n.t("i18n_422"), selection: $authMethod, options: ModelConfig.authMethods)
                     tokenRow
                     // v6.1.5-14bk：参数别名/分组 UI 移除（用户看不懂也不需要填）——
                     // 别名兼容由 OpenAIClient compatLevel 0-4 自动降级覆盖，分组默认"默认"即可
@@ -511,7 +511,7 @@ struct ModelEditorView: View {
                 // 按行业标准默认值自动生效(参考Codex等AI同行)：temperature 0.7 / maxTokens 2048 / 上下文预算默认，
                 // 保存时沿用默认值，无需手动配置
 
-                Section(header: sectionHeader(L10n.t("i18n_205"))) {
+                Section(header: sectionHeader(L10n.t("i18n_404"))) {
                     Button(action: fetchUpstreamModels) {
                         HStack(spacing: 12) {
                             Image(systemName: "arrow.down.circle")
@@ -573,7 +573,7 @@ struct ModelEditorView: View {
                 }
 
                 if !testStatus.isEmpty {
-                    Section(header: sectionHeader(L10n.t("i18n_224"))) {
+                    Section(header: sectionHeader(L10n.t("i18n_423"))) {
                         Text(testStatus)
                             .font(.caption)
                             .foregroundColor(testColor)
@@ -587,13 +587,13 @@ struct ModelEditorView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(config == nil ? L10n.t("i18n_225") : name)
+            .navigationTitle(config == nil ? L10n.t("i18n_424") : name)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(L10n.t("ui_40")) { presentationMode.wrappedValue.dismiss() }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(L10n.t("done")) { saveOnly() }
+                    Button(L10n.t("i18n_956")) { saveOnly() }
                 }
             }
             .sheet(isPresented: $showingQuickPicker) {
@@ -650,7 +650,7 @@ struct ModelEditorView: View {
     private var tokenRow: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(authMethod == "None" ? L10n.t("i18n_226") : "\(authMethod) Token")
+                Text(authMethod == "None" ? L10n.t("i18n_425") : "\(authMethod) Token")
                     .font(.body)
                 if showKey {
                     TextField("sk-...", text: $apiKey)
@@ -751,7 +751,7 @@ struct ModelEditorView: View {
         onSave(cfg)
         savedFlag = true
         isTesting = true
-        testStatus = L10n.t("i18n_227")
+        testStatus = L10n.t("i18n_426")
         testColor = .secondary
         ModelAPIClient.shared.testConnection(config: cfg) { result in
             isTesting = false
@@ -771,7 +771,7 @@ struct ModelEditorView: View {
         onSave(cfg)
         savedFlag = true
         isTesting = true
-        testStatus = L10n.t("i18n_228")
+        testStatus = L10n.t("i18n_427")
         testColor = .secondary
         ModelAPIClient.shared.fetchModelList(config: cfg) { result in
             isTesting = false
@@ -779,10 +779,10 @@ struct ModelEditorView: View {
             case .success(let models):
                 fetchedModels = models
                 if models.isEmpty {
-                    testStatus = L10n.t("i18n_229")
+                    testStatus = L10n.t("i18n_428")
                     testColor = .orange
                 } else {
-                    testStatus = L10n.t("i18n_230", models.count)
+                    testStatus = L10n.t("i18n_429", models.count)
                     testColor = .green
                     showingModelPicker = true
                 }
@@ -796,12 +796,12 @@ struct ModelEditorView: View {
     /// v2.9.107：只测接口延迟（不保存）
     private func speedTestOnly() {
         isTesting = true
-        testStatus = L10n.t("i18n_231")
+        testStatus = L10n.t("i18n_430")
         testColor = .secondary
         let base = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + "/models") else {
             isTesting = false
-            testStatus = L10n.t("i18n_603")
+            testStatus = L10n.t("i18n_879")
             testColor = .red
             return
         }
@@ -819,10 +819,10 @@ struct ModelEditorView: View {
                 isTesting = false
                 let ms = Int(Date().timeIntervalSince(start) * 1000)
                 if error != nil {
-                    testStatus = L10n.t("i18n_219", ms)
+                    testStatus = L10n.t("i18n_418", ms)
                     testColor = .red
                 } else {
-                    testStatus = L10n.t("i18n_232", ms)
+                    testStatus = L10n.t("i18n_431", ms)
                     testColor = ms < 500 ? .green : (ms < 2000 ? .orange : .red)
                 }
             }
@@ -900,7 +900,7 @@ struct ModelPickerSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_233"))
+            .navigationTitle(L10n.t("i18n_432"))
             .toolbar {
                 Button(L10n.t("ui_177")) { presentationMode.wrappedValue.dismiss() }
             }
@@ -938,10 +938,10 @@ struct UsageStatsView: View {
                 let agg = aggregate()
                 Section(header: Text(L10n.t("ui_60"))) {
                     HStack {
-                        statCell(title: L10n.t("i18n_234"), value: "\(agg.total)", color: .blue)
-                        statCell(title: L10n.t("i18n_235"), value: agg.total > 0 ? "\(Int(Double(agg.ok) / Double(agg.total) * 100))%" : "-", color: .green)
-                        statCell(title: L10n.t("i18n_236"), value: agg.total > 0 ? "\(agg.elapsed / agg.total)ms" : "-", color: .orange)
-                        statCell(title: L10n.t("i18n_607"), value: "\(fmtK(agg.inputTokens))", color: .purple)
+                        statCell(title: L10n.t("i18n_433"), value: "\(agg.total)", color: .blue)
+                        statCell(title: L10n.t("i18n_434"), value: agg.total > 0 ? "\(Int(Double(agg.ok) / Double(agg.total) * 100))%" : "-", color: .green)
+                        statCell(title: L10n.t("i18n_435"), value: agg.total > 0 ? "\(agg.elapsed / agg.total)ms" : "-", color: .orange)
+                        statCell(title: L10n.t("i18n_883"), value: "\(fmtK(agg.inputTokens))", color: .purple)
                     }
                 }
 
@@ -973,16 +973,16 @@ struct UsageStatsView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_210"))
+            .navigationTitle(L10n.t("i18n_409"))
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(L10n.t("i18n_237")) {
+                    Button(L10n.t("i18n_436")) {
                         UsageRecorder.shared.clear()
                         records = []
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(L10n.t("done")) { presentationMode.wrappedValue.dismiss() }
+                    Button(L10n.t("i18n_956")) { presentationMode.wrappedValue.dismiss() }
                 }
             }
             .onAppear {

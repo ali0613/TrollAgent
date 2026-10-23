@@ -33,26 +33,26 @@ struct WorkspaceBrowserView: View {
 
     /// v2.9.292：已知目录的中文用途说明（给人看的）
     static let dirNotes: [String: String] = [
-        "audit": L10n.t("i18n_408"),
-        "control_shots": L10n.t("i18n_409"),
-        "crash": L10n.t("row_crash"),
-        "decrypted": L10n.t("i18n_410"),
-        "downloads": L10n.t("i18n_411"),
-        "duplicates": L10n.t("i18n_412"),
-        "knowledge": L10n.t("i18n_413"),
-        "logs": L10n.t("i18n_545"),
-        "macros": L10n.t("i18n_415"),
-        "network_capture": L10n.t("i18n_416"),
-        "plugins": L10n.t("i18n_417"),
-        "projects": L10n.t("i18n_418"),
-        "reports": L10n.t("i18n_419"),
-        "uploads": L10n.t("i18n_420"),
-        "screenshots": L10n.t("i18n_421"),
-        "tweaks": L10n.t("i18n_422"),
-        "tool_spill": L10n.t("i18n_423"),
-        "backup": L10n.t("i18n_424"),
-        "tmp": L10n.t("i18n_425"),
-        "deb": L10n.t("i18n_639")
+        "audit": L10n.t("i18n_617"),
+        "control_shots": L10n.t("i18n_618"),
+        "crash": L10n.t("i18n_619"),
+        "decrypted": L10n.t("i18n_620"),
+        "downloads": L10n.t("i18n_621"),
+        "duplicates": L10n.t("i18n_622"),
+        "knowledge": L10n.t("i18n_623"),
+        "logs": L10n.t("i18n_758"),
+        "macros": L10n.t("i18n_625"),
+        "network_capture": L10n.t("i18n_626"),
+        "plugins": L10n.t("i18n_627"),
+        "projects": L10n.t("i18n_628"),
+        "reports": L10n.t("i18n_629"),
+        "uploads": L10n.t("i18n_630"),
+        "screenshots": L10n.t("i18n_631"),
+        "tweaks": L10n.t("i18n_632"),
+        "tool_spill": L10n.t("i18n_633"),
+        "backup": L10n.t("i18n_634"),
+        "tmp": L10n.t("i18n_635"),
+        "deb": L10n.t("i18n_916")
     ]
 
     /// v3.0.90：目录备注——先精确匹配，再模糊匹配（动态名字）
@@ -60,11 +60,11 @@ struct WorkspaceBrowserView: View {
         // 精确匹配
         if let note = dirNotes[name] { return note }
         // 模糊匹配（动态前缀）
-        if name.hasPrefix("replace_tmp_") { return L10n.t("i18n_426") }
-        if name.hasPrefix("crash_repro_") { return L10n.t("i18n_427") }
-        if name.hasPrefix("static_inject") { return L10n.t("i18n_428") }
-        if name.hasSuffix(".db") { return L10n.t("i18n_429") }
-        if name.hasSuffix(".plist") { return L10n.t("i18n_430") }
+        if name.hasPrefix("replace_tmp_") { return L10n.t("i18n_636") }
+        if name.hasPrefix("crash_repro_") { return L10n.t("i18n_637") }
+        if name.hasPrefix("static_inject") { return L10n.t("i18n_638") }
+        if name.hasSuffix(".db") { return L10n.t("i18n_639") }
+        if name.hasSuffix(".plist") { return L10n.t("i18n_640") }
         return nil
     }
 
@@ -83,7 +83,7 @@ struct WorkspaceBrowserView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                TextField(L10n.t("i18n_431"), text: $query)
+                TextField(L10n.t("i18n_641"), text: $query)
                     .font(.subheadline)
                     .autocorrectionDisabled()
                 if !query.isEmpty {
@@ -170,7 +170,7 @@ struct WorkspaceBrowserView: View {
                             .padding(.vertical, 2)
                         }
                         .contextMenu {
-                            Button { copyPath(item.path) } label: { Label(L10n.t("i18n_432"), systemImage: "doc.on.doc") }
+                            Button { copyPath(item.path) } label: { Label(L10n.t("i18n_642"), systemImage: "doc.on.doc") }
                             if !item.isDir {
                                 // v4.3.44：文件分享走 QuickLook 中间层（menuShare 低版本分支设 binding）
                                 SharePresenter.menuShare(url: URL(fileURLWithPath: item.path))
@@ -188,7 +188,7 @@ struct WorkspaceBrowserView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button { showNewFolder = true } label: { Label(L10n.t("btn_new"), systemImage: "folder.badge.plus") }
+                Button { showNewFolder = true } label: { Label(L10n.t("i18n_643"), systemImage: "folder.badge.plus") }
             }
         }
         .onAppear { reload() }
@@ -197,34 +197,34 @@ struct WorkspaceBrowserView: View {
              FilePreviewView(item: item) 
         }
         // v3.0.82: 用 SharePresenter 替代 ShareSheet——修复从 sheet 里再弹 sheet 闪退
-        .alert(L10n.t("i18n_433"), isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } })) {
+        .alert(L10n.t("i18n_644"), isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } })) {
             Button(L10n.t("ui_40"), role: .cancel) { confirmDelete = nil }
             Button(L10n.t("ui_195"), role: .destructive) {
                 if let item = confirmDelete {
                     do {
                         try FileManager.default.removeItem(atPath: item.path)
-                        toast = L10n.t("i18n_434", item.name)
+                        toast = L10n.t("i18n_645", item.name)
                     } catch {
-                        toast = L10n.t("i18n_435", error.localizedDescription)
+                        toast = L10n.t("i18n_646", error.localizedDescription)
                     }
                     confirmDelete = nil
                     reload()
                 }
             }
         } message: {
-            Text(L10n.t("i18n_436", confirmDelete?.name ?? ""))
+            Text(L10n.t("i18n_647", confirmDelete?.name ?? ""))
         }
-        .alert(L10n.t("i18n_437"), isPresented: $showNewFolder) {
-            TextField(L10n.t("i18n_221"), text: $newFolderName)
-            Button(L10n.t("i18n_438")) {
+        .alert(L10n.t("i18n_648"), isPresented: $showNewFolder) {
+            TextField(L10n.t("i18n_420"), text: $newFolderName)
+            Button(L10n.t("i18n_649")) {
                 let name = newFolderName.trimmingCharacters(in: .whitespaces)
                 if !name.isEmpty {
                     let dir = currentPath + "/" + name
                     do {
                         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-                        toast = L10n.t("i18n_439", name)
+                        toast = L10n.t("i18n_650", name)
                     } catch {
-                        toast = L10n.t("i18n_440", error.localizedDescription)
+                        toast = L10n.t("i18n_651", error.localizedDescription)
                     }
                     newFolderName = ""
                     reload()
@@ -333,7 +333,7 @@ struct WorkspaceBrowserView: View {
 
     private func copyPath(_ path: String) {
         UIPasteboard.general.string = path
-        toast = L10n.t("i18n_441")
+        toast = L10n.t("i18n_652")
     }
 
     private func iconName(_ item: FileItem) -> String {
@@ -393,7 +393,7 @@ struct FilePreviewView: View {
         Group {
             switch mode {
             case .loading:
-                ProgressView(L10n.t("i18n_442"))
+                ProgressView(L10n.t("i18n_653"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .text:
                 ScrollView {
@@ -426,7 +426,7 @@ struct FilePreviewView: View {
                     Text(L10n.t("ui_167", bytesLabel(item.size)))
                         .font(.footnote)
                         .foregroundColor(.secondary)
-                    Button(L10n.t("i18n_443")) { loadText(force: true) }
+                    Button(L10n.t("i18n_654")) { loadText(force: true) }
                         .buttonStyle(.borderedProminent)
                 }
             }
@@ -435,7 +435,7 @@ struct FilePreviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button { UIPasteboard.general.string = item.path } label: { Label(L10n.t("i18n_432"), systemImage: "doc.on.doc") }
+                Button { UIPasteboard.general.string = item.path } label: { Label(L10n.t("i18n_642"), systemImage: "doc.on.doc") }
             }
         }
         .onAppear { load() }
@@ -452,7 +452,7 @@ struct FilePreviewView: View {
                 mode = .image
                 return
             }
-            text = L10n.t("i18n_444", item.name)
+            text = L10n.t("i18n_655", item.name)
             mode = .binary
             return
         }
@@ -486,7 +486,7 @@ struct FilePreviewView: View {
         } else {
             guard let data = FileManager.default.contents(atPath: item.path) else {
                 mode = .binary
-                text = L10n.t("i18n_445")
+                text = L10n.t("i18n_656")
                 return
             }
             render(data)
@@ -501,7 +501,7 @@ struct FilePreviewView: View {
         } || sample.isEmpty
         let ext = (item.name as NSString).pathExtension.lowercased()
         if isText {
-            var s = String(data: data, encoding: .utf8) ?? L10n.t("i18n_446")
+            var s = String(data: data, encoding: .utf8) ?? L10n.t("i18n_657")
             if ext == "plist" {
                 if let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) {
                     s = pretty(plist)
@@ -526,7 +526,7 @@ struct FilePreviewView: View {
                 lines[lines.count - 1] += String(format: "%02x ", byte)
                 if i % 16 == 15 { lines.append("") }
             }
-            text = L10n.t("i18n_447", bytesLabel(data.count)) + lines.joined(separator: "\n")
+            text = L10n.t("i18n_658", bytesLabel(data.count)) + lines.joined(separator: "\n")
             mode = .binary
         }
     }

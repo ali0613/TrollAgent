@@ -10,22 +10,22 @@ struct RemoteDiagnosticsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle(L10n.t("i18n_487"), isOn: $agent.enabled)
+                Toggle(L10n.t("i18n_699"), isOn: $agent.enabled)
                     .onChange(of: agent.enabled) { _ in agent.save() }
-                TextField(L10n.t("i18n_488"), text: $agent.serverURL)
+                TextField(L10n.t("i18n_700"), text: $agent.serverURL)
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .onChange(of: agent.serverURL) { _ in agent.save() }
-                TextField(L10n.t("i18n_489"), text: $agent.token)
+                TextField(L10n.t("i18n_701"), text: $agent.token)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .onChange(of: agent.token) { _ in agent.save() }
             }
 
-            Section(header: Text(L10n.t("i18n_490"))) {
+            Section(header: Text(L10n.t("i18n_702"))) {
                 HStack {
-                    Text(L10n.t("i18n_642"))
+                    Text(L10n.t("i18n_919"))
                     Spacer()
                     Text(agent.deviceID)
                         .font(.caption2)
@@ -33,37 +33,37 @@ struct RemoteDiagnosticsView: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.trailing)
                 }
-                Button(L10n.t("i18n_491")) {
+                Button(L10n.t("i18n_703")) {
                     UIPasteboard.general.string = agent.deviceID
-                    testResult = L10n.t("relay_card_copied")
+                    testResult = L10n.t("i18n_973")
                 }
             }
 
             Section {
-                Button(testing ? L10n.t("i18n_492") : L10n.t("i18n_493")) {
+                Button(testing ? L10n.t("i18n_704") : L10n.t("i18n_705")) {
                     testConnection()
                 }
                 .disabled(testing || agent.serverURL.isEmpty || agent.token.isEmpty)
                 if let testResult = testResult {
                     Text(testResult)
                         .font(.caption)
-                        .foregroundColor(testResult.hasPrefix(L10n.t("i18n_494")) || testResult == L10n.t("relay_card_copied") ? .green : .red)
+                        .foregroundColor(testResult.hasPrefix(L10n.t("i18n_706")) || testResult == L10n.t("i18n_973") ? .green : .red)
                 }
                 HStack {
-                    Text(L10n.t("i18n_495"))
+                    Text(L10n.t("i18n_707"))
                     Spacer()
                     Text("\(agent.executedCount)")
                         .foregroundColor(.secondary)
                 }
             }
 
-            Section(header: Text(L10n.t("i18n_496")), footer: Text(L10n.t("i18n_497"))) {
-                Label(L10n.t("i18n_498"), systemImage: "checkmark.shield.fill")
+            Section(header: Text(L10n.t("i18n_708")), footer: Text(L10n.t("i18n_709"))) {
+                Label(L10n.t("i18n_710"), systemImage: "checkmark.shield.fill")
                     .foregroundColor(.green)
                     .font(.caption)
             }
         }
-        .navigationTitle(L10n.t("i18n_499"))
+        .navigationTitle(L10n.t("i18n_711"))
         .navigationBarTitleDisplayMode(.inline)
     }
 

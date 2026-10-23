@@ -7,7 +7,7 @@ struct RemoteAccessView: View {
 
     var body: some View {
         Form {
-            Section(header: Text(L10n.t("i18n_396"))) {
+            Section(header: Text(L10n.t("i18n_604"))) {
                 NavigationLink(destination: SSHSettingsView()) {
                     HStack(spacing: 12) {
                         Image(systemName: "arrow.up.forward.circle.fill")
@@ -15,9 +15,9 @@ struct RemoteAccessView: View {
                             .foregroundColor(.tmCyan)
                             .frame(width: 32)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(L10n.t("page_ssh"))
+                            Text(L10n.t("i18n_951"))
                                 .foregroundColor(.primary)
-                            Text(sshHost.isEmpty ? L10n.t("not_configured") : sshHost)
+                            Text(sshHost.isEmpty ? L10n.t("i18n_944") : sshHost)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -25,7 +25,7 @@ struct RemoteAccessView: View {
                 }
             }
 
-            Section(header: Text(L10n.t("i18n_397"))) {
+            Section(header: Text(L10n.t("i18n_606"))) {
                 NavigationLink(destination: RemoteTerminalView()) {
                     HStack(spacing: 12) {
                         Image(systemName: "arrow.down.left.circle.fill")
@@ -33,9 +33,9 @@ struct RemoteAccessView: View {
                             .foregroundColor(.green)
                             .frame(width: 32)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(L10n.t("i18n_398"))
+                            Text(L10n.t("i18n_607"))
                                 .foregroundColor(.primary)
-                            Text(terminalRunning ? L10n.t("i18n_399", RemoteTerminalServer.shared.port) : L10n.t("i18n_400"))
+                            Text(terminalRunning ? L10n.t("i18n_608", RemoteTerminalServer.shared.port) : L10n.t("i18n_609"))
                                 .font(.caption)
                                 .foregroundColor(terminalRunning ? .green : .secondary)
                         }
@@ -43,7 +43,7 @@ struct RemoteAccessView: View {
                 }
             }
         }
-        .navigationTitle(L10n.t("i18n_401"))
+        .navigationTitle(L10n.t("i18n_610"))
         .onAppear {
             terminalRunning = RemoteTerminalServer.shared.isRunning
         }

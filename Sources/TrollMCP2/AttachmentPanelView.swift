@@ -66,8 +66,8 @@ struct AttachmentPanelView: View {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 18) {
                 AttachmentOption(
                     icon: "square.grid.2x2",
-                    title: "应用",
-                    subtitle: "选择分析"
+                    title: L10n.t("i18n_822"),
+                    subtitle: L10n.t("i18n_858")
                 ) {
                     presentationMode.wrappedValue.dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -76,8 +76,8 @@ struct AttachmentPanelView: View {
                 }
                 AttachmentOption(
                     icon: "photo.on.rectangle",
-                    title: "相册",
-                    subtitle: "最多 8 张"
+                    title: L10n.t("i18n_823"),
+                    subtitle: L10n.t("i18n_859")
                 ) {
                     presentationMode.wrappedValue.dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -86,8 +86,8 @@ struct AttachmentPanelView: View {
                 }
                 AttachmentOption(
                     icon: "paperclip",
-                    title: "文件",
-                    subtitle: "最多 8 个"
+                    title: L10n.t("i18n_824"),
+                    subtitle: L10n.t("i18n_860")
                 ) {
                     presentationMode.wrappedValue.dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -97,8 +97,8 @@ struct AttachmentPanelView: View {
                 // v2.9.37：内置浏览器（AI 可控制，蓝框高亮）
                 AttachmentOption(
                     icon: "globe",
-                    title: "浏览器",
-                    subtitle: "AI 可控制"
+                    title: L10n.t("i18n_825"),
+                    subtitle: L10n.t("i18n_861")
                 ) {
                     presentationMode.wrappedValue.dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {

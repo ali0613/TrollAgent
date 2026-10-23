@@ -35,7 +35,7 @@ struct HudSizeSettingsView: View {
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.pink)
 
-            Text(L10n.t("i18n_585"))
+            Text(L10n.t("i18n_798"))
                 .font(.footnote)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -43,7 +43,7 @@ struct HudSizeSettingsView: View {
             Spacer()
         }
         .padding(.top, 24)
-        .navigationTitle(L10n.t("i18n_586"))
+        .navigationTitle(L10n.t("i18n_799"))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

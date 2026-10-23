@@ -20,7 +20,7 @@ struct GitHubAccountView: View {
             runsSection
         }
         .listStyle(.insetGrouped)
-        .navigationTitle(L10n.t("row_github"))
+        .navigationTitle(L10n.t("i18n_899"))
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showAdd) {
             AddGitHubAccountView()
@@ -44,7 +44,7 @@ struct GitHubAccountView: View {
     }
 
     @ViewBuilder private var currentAccountSection: some View {
-        Section(header: SettingSectionHeader(title: L10n.t("i18n_337"))) {
+        Section(header: SettingSectionHeader(title: L10n.t("i18n_544"))) {
             if let acct = store.activeAccount {
                 HStack(spacing: 12) {
                     AvatarView(login: acct.login, url: acct.avatarURL)
@@ -69,8 +69,8 @@ struct GitHubAccountView: View {
             }
 
             SettingRowButton(
-                title: store.activeAccount == nil ? L10n.t("i18n_623") : L10n.t("i18n_338"),
-                subtitle: L10n.t("i18n_624"),
+                title: store.activeAccount == nil ? L10n.t("i18n_900") : L10n.t("i18n_545"),
+                subtitle: L10n.t("i18n_901"),
                 icon: "person.badge.plus",
                 color: .blue
             ) { showAdd = true }
@@ -79,7 +79,7 @@ struct GitHubAccountView: View {
 
     @ViewBuilder private var savedAccountsSection: some View {
         if !store.accounts.isEmpty {
-            Section(header: SettingSectionHeader(title: L10n.t("i18n_339"))) {
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_546"))) {
                 ForEach(store.accounts) { acct in
                     accountRow(acct)
                 }
@@ -90,7 +90,7 @@ struct GitHubAccountView: View {
     private func accountRow(_ acct: GitHubAccount) -> some View {
         Button {
             store.switchTo(acct.login)
-            toast = L10n.t("i18n_340", acct.login)
+            toast = L10n.t("i18n_547", acct.login)
         } label: {
             HStack(spacing: 12) {
                 AvatarView(login: acct.login, url: acct.avatarURL)
@@ -111,33 +111,33 @@ struct GitHubAccountView: View {
         .contextMenu {
             Button {
                 store.remove(acct.login)
-                toast = L10n.t("i18n_341", acct.login)
+                toast = L10n.t("i18n_548", acct.login)
             } label: {
-                Label(L10n.t("i18n_342"), systemImage: "trash")
+                Label(L10n.t("i18n_549"), systemImage: "trash")
             }
         }
     }
 
     @ViewBuilder private var buildSection: some View {
-        Section(header: SettingSectionHeader(title: L10n.t("i18n_625"))) {
-            TextField(L10n.t("i18n_626"), text: $tweakName)
+        Section(header: SettingSectionHeader(title: L10n.t("i18n_902"))) {
+            TextField(L10n.t("i18n_903"), text: $tweakName)
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
                 .font(.system(.body, design: .monospaced))
 
             SettingRowButton(
-                title: L10n.t("i18n_343"),
-                subtitle: store.activeAccount == nil ? L10n.t("i18n_344") : "\(store.repoOwner)/\(store.repoName) · workflow=\(store.workflowId)",
+                title: L10n.t("i18n_550"),
+                subtitle: store.activeAccount == nil ? L10n.t("i18n_551") : "\(store.repoOwner)/\(store.repoName) · workflow=\(store.workflowId)",
                 icon: "hammer.fill",
                 color: .orange
             ) {
                 guard store.activeAccount != nil else {
-                    toast = L10n.t("i18n_627"); return
+                    toast = L10n.t("i18n_904"); return
                 }
-                busyMessage = L10n.t("i18n_345", tweakName)
+                busyMessage = L10n.t("i18n_552", tweakName)
                 store.triggerBuild(tweak: tweakName) { ok, msg in
                     busyMessage = nil
-                    toast = ok ? msg : (msg ?? L10n.t("i18n_346"))
+                    toast = ok ? msg : (msg ?? L10n.t("i18n_553"))
                     if ok { store.fetchRuns { _ in } }
                 }
             }
@@ -171,12 +171,12 @@ struct GitHubAccountView: View {
     }
 
     @ViewBuilder private var runsSection: some View {
-        Section(header: SettingSectionHeader(title: L10n.t("i18n_347"))) {
+        Section(header: SettingSectionHeader(title: L10n.t("i18n_554"))) {
             if store.runs.isEmpty {
                 HStack {
                     Text(L10n.t("ui_92")).font(.caption).foregroundColor(.secondary)
                     Spacer()
-                    Button(L10n.t("refresh")) {
+                    Button(L10n.t("i18n_555")) {
                         store.fetchRuns { _ in }
                     }
                     .font(.caption)
@@ -192,7 +192,7 @@ struct GitHubAccountView: View {
                         }
                     }
                 }
-                Button(L10n.t("i18n_348")) {
+                Button(L10n.t("i18n_556")) {
                     store.fetchRuns { _ in }
                 }
                 .font(.footnote)
@@ -274,14 +274,14 @@ struct AddGitHubAccountView: View {
                 webLoginSection
                 patLoginSection
             }
-            .navigationTitle(L10n.t("i18n_628"))
+            .navigationTitle(L10n.t("i18n_905"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if loading {
                         ProgressView().scaleEffect(0.8)
                     } else {
-                        Button(L10n.t("i18n_349")) {
+                        Button(L10n.t("i18n_557")) {
                             login()
                         }
                         .disabled(token.isEmpty)
@@ -306,11 +306,11 @@ struct AddGitHubAccountView: View {
     }
 
     @ViewBuilder private var webLoginSection: some View {
-        Section(header: SettingSectionHeader(title: L10n.t("i18n_350"))) {
+        Section(header: SettingSectionHeader(title: L10n.t("i18n_558"))) {
             if deviceStep == 0 {
                 SettingRowButton(
-                    title: L10n.t("i18n_351"),
-                    subtitle: store.clientID.isEmpty ? L10n.t("i18n_352") : "Client ID: \(store.clientID)",
+                    title: L10n.t("i18n_559"),
+                    subtitle: store.clientID.isEmpty ? L10n.t("i18n_560") : "Client ID: \(store.clientID)",
                     icon: "safari.fill",
                     color: .black
                 ) {
@@ -333,7 +333,7 @@ struct AddGitHubAccountView: View {
                     Text(L10n.t("ui_43"))
                         .font(.caption).foregroundColor(.secondary)
                     SettingRowButton(
-                        title: L10n.t("i18n_353"),
+                        title: L10n.t("i18n_561"),
                         subtitle: dc.verification_uri,
                         icon: "safari",
                         color: .blue
@@ -354,7 +354,7 @@ struct AddGitHubAccountView: View {
     }
 
     @ViewBuilder private var patLoginSection: some View {
-        Section(header: SettingSectionHeader(title: L10n.t("i18n_354"))) {
+        Section(header: SettingSectionHeader(title: L10n.t("i18n_562"))) {
             SecureField("ghp_…", text: $token)
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
@@ -387,13 +387,13 @@ struct AddGitHubAccountView: View {
                             presentationMode.wrappedValue.dismiss()
                         }
                     } else {
-                        errorMsg = msg ?? L10n.t("i18n_355")
+                        errorMsg = msg ?? L10n.t("i18n_563")
                         deviceStep = 0
                         showSafari = false   // 失败也自动关掉浏览器
                     }
                 }
             } else {
-                errorMsg = err ?? L10n.t("i18n_356")
+                errorMsg = err ?? L10n.t("i18n_564")
             }
         }
     }
@@ -444,12 +444,12 @@ struct GitHubRepoSettingsView: View {
 
     var body: some View {
         Form {
-            Section(header: SettingSectionHeader(title: L10n.t("i18n_629"))) {
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_906"))) {
                 TextField("OAuth App Client ID", text: $store.clientID)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
                     .font(.system(.body, design: .monospaced))
-                Button(L10n.t("i18n_357")) {
+                Button(L10n.t("i18n_565")) {
                     store.restoreDefaultClientID()
                     saved = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
@@ -458,23 +458,23 @@ struct GitHubRepoSettingsView: View {
                 }
             }
 
-            Section(header: SettingSectionHeader(title: L10n.t("i18n_358"))) {
-                TextField(L10n.t("i18n_359"), text: $store.repoOwner)
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_566"))) {
+                TextField(L10n.t("i18n_567"), text: $store.repoOwner)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                TextField(L10n.t("i18n_360"), text: $store.repoName)
+                TextField(L10n.t("i18n_568"), text: $store.repoName)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                TextField(L10n.t("i18n_630"), text: $store.workflowId)
+                TextField(L10n.t("i18n_907"), text: $store.workflowId)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                TextField(L10n.t("i18n_361"), text: $store.branch)
+                TextField(L10n.t("i18n_569"), text: $store.branch)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
             }
 
             Section {
-                Button(L10n.t("save")) {
+                Button(L10n.t("i18n_942")) {
                     store.persistNow()
                     saved = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
@@ -482,12 +482,12 @@ struct GitHubRepoSettingsView: View {
                     }
                 }
                 if saved {
-                    Text(store.clientID.isEmpty ? L10n.t("i18n_362") : L10n.t("i18n_363"))
+                    Text(store.clientID.isEmpty ? L10n.t("i18n_570") : L10n.t("i18n_571"))
                         .font(.footnote).foregroundColor(.green)
                 }
             }
         }
-        .navigationTitle(L10n.t("i18n_364"))
+        .navigationTitle(L10n.t("i18n_572"))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

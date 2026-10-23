@@ -116,7 +116,7 @@ struct SettingsView: View {
         // 模型
         groups.append(SettingsGroup(header: L10n.t("sec_models"), items: [
             SettingsItem(title: L10n.t("row_model_api"),
-                         subtitle: L10n.t("i18n_3", ModelStore.shared.configs.count, modelProviderName()),
+                         subtitle: L10n.t("i18n_198", ModelStore.shared.configs.count, modelProviderName()),
                          icon: "rectangle.stack.badge.person.crop", color: .blue,
                          destination: AnyView(ModelsView())),
             SettingsItem(title: L10n.t("row_sys_prompts"),
@@ -130,17 +130,17 @@ struct SettingsView: View {
         ]))
 
         // v6.1.5-14bm：工具中心——给用户看的分层工具总览（iOS/原生/Alpine）
-        groups.append(SettingsGroup(header: L10n.t("i18n_4"), items: [
-            SettingsItem(title: L10n.t("i18n_5"),
-                         subtitle: L10n.t("i18n_661", ToolRegistry.shared.toolCount),
+        groups.append(SettingsGroup(header: L10n.t("i18n_849"), items: [
+            SettingsItem(title: L10n.t("i18n_200"),
+                         subtitle: L10n.t("i18n_938", ToolRegistry.shared.toolCount),
                          icon: "wrench.and.screwdriver.fill", color: .green,
                          destination: AnyView(ToolCenterView(inSheet: false)))
         ]))
 
         // 网络与抓包（v3.3.1：独立分组，不依赖开发者模式——普通用户也能直接看到抓包入口）
-        groups.append(SettingsGroup(header: L10n.t("i18n_6"), items: [
+        groups.append(SettingsGroup(header: L10n.t("i18n_201"), items: [
             // v3.3.2：开关 + 点击进详情（Toggle 一键开/关，NavigationLink 进详情页）
-            SettingsItem(title: L10n.t("i18n_662"),
+            SettingsItem(title: L10n.t("i18n_939"),
                          subtitle: vpnActiveSubtitle(),
                          icon: "antenna.radiowaves.left.and.right", color: .tmCyan,
                          destination: AnyView(VpnCaptureView()),
@@ -155,7 +155,7 @@ struct SettingsView: View {
                              }
                          }),
             SettingsItem(title: L10n.t("row_netlog"),
-                         subtitle: NetworkLog.lastCompatNote ?? L10n.t("i18n_7"),
+                         subtitle: NetworkLog.lastCompatNote ?? L10n.t("i18n_202"),
                          icon: "network", color: .orange,
                          destination: AnyView(NetworkDebugView()))
         ]))
@@ -163,11 +163,11 @@ struct SettingsView: View {
         // 线上编译
         groups.append(SettingsGroup(header: L10n.t("sec_build"), items: [
             SettingsItem(title: L10n.t("row_github"),
-                         subtitle: L10n.t("i18n_8", githubAccountSubtitle()),
+                         subtitle: L10n.t("i18n_203", githubAccountSubtitle()),
                          icon: "person.crop.circle.fill.badge.checkmark", color: .black,
                          destination: AnyView(GitHubAccountView())),
             SettingsItem(title: L10n.t("row_downloads"),
-                         subtitle: L10n.t("i18n_9"),
+                         subtitle: L10n.t("i18n_204"),
                          icon: "arrow.down.circle.fill", color: .green,
                          destination: AnyView(DownloadsView()))
         ]))
@@ -180,7 +180,7 @@ struct SettingsView: View {
                          destination: AnyView(RemoteControlView())),
             // v2.9.144：AI 控制中心 + 操作宏（从聊天框移入设置，退出设置页后全屏弹出）
             SettingsItem(title: L10n.t("ui_172"),
-                         subtitle: L10n.t("i18n_10"),
+                         subtitle: L10n.t("i18n_205"),
                          icon: "target", color: .indigo,
                          action: {
                              presentationMode.wrappedValue.dismiss()
@@ -191,9 +191,9 @@ struct SettingsView: View {
         ]
         // v4.5.0：可爱助手开关（聊天页右下角悬浮 + 语音/点击互动，可切换角色）
         controlItems.append(SettingsItem(
-            title: L10n.t("i18n_11"),
+            title: L10n.t("i18n_206"),
             subtitle: HUDManager.shared.lastStartError
-                ?? (HUDManager.shared.isRunning ? L10n.t("i18n_12") : L10n.t("i18n_13")),
+                ?? (HUDManager.shared.isRunning ? L10n.t("i18n_207") : L10n.t("i18n_208")),
             icon: "heart.fill",
             color: .pink,
             // 点击进入角色选择页（v6.0.2：角色选择直接放进可爱助手）
@@ -214,19 +214,19 @@ struct SettingsView: View {
                 // v4.3.53：图标主题功能彻底移除（含 Resources 残留图标文件）。
                 // 侧载环境下动态图标注册可能干扰 MobileIcons 图标缓存（分享面板崩溃嫌疑项）。
                 SettingsItem(title: L10n.t("row_device_fake"),
-                             subtitle: L10n.t("i18n_14"),
+                             subtitle: L10n.t("i18n_209"),
                              icon: "iphone.gen3.radiowaves.left.and.right", color: .pink,
                              destination: AnyView(FakeDeviceView())),
                 SettingsItem(title: L10n.t("row_transcripts"),
-                             subtitle: L10n.t("i18n_15"),
+                             subtitle: L10n.t("i18n_210"),
                              icon: "text.book.closed.fill", color: .tmBrown,
                              destination: AnyView(ConversationTranscriptView())),
-                SettingsItem(title: L10n.t("i18n_401"),
-                             subtitle: L10n.t("i18n_17"),
+                SettingsItem(title: L10n.t("i18n_610"),
+                             subtitle: L10n.t("i18n_212"),
                              icon: "terminal.fill", color: .teal,
                              destination: AnyView(RemoteAccessView())),
                 SettingsItem(title: L10n.t("row_browser"),
-                             subtitle: L10n.t("i18n_18"),
+                             subtitle: L10n.t("i18n_213"),
                              icon: "globe.asia.australia.fill", color: .cyan,
                              action: {
                                  presentationMode.wrappedValue.dismiss()
@@ -235,32 +235,32 @@ struct SettingsView: View {
                                  }
                              }),
                 SettingsItem(title: L10n.t("row_agents"),
-                             subtitle: L10n.t("i18n_19"),
+                             subtitle: L10n.t("i18n_214"),
                              icon: "person.3.fill", color: .indigo,
                              destination: AnyView(AgentsAndSkillsView())),
                 SettingsItem(title: L10n.t("row_kb"),
-                             subtitle: L10n.t("i18n_20"),
+                             subtitle: L10n.t("i18n_215"),
                              icon: "books.vertical.fill", color: .brown,
                              destination: AnyView(KnowledgeBaseView()))
             ]
-            groups.append(SettingsGroup(header: L10n.t("i18n_21"), items: devItems))
+            groups.append(SettingsGroup(header: L10n.t("i18n_216"), items: devItems))
 
         // 安全
         groups.append(SettingsGroup(header: L10n.t("sec_security"), items: [
             SettingsItem(title: L10n.t("row_audit"),
-                         subtitle: L10n.t("i18n_22"),
+                         subtitle: L10n.t("i18n_217"),
                          icon: "list.bullet.rectangle", color: .tmIndigo,
                          destination: AnyView(AuditLogView())),
             SettingsItem(title: L10n.t("row_workspace"),
-                         subtitle: L10n.t("i18n_23"),
+                         subtitle: L10n.t("i18n_218"),
                          icon: "folder", color: .blue,
                          destination: AnyView(WorkspaceBrowserView())),
-            SettingsItem(title: L10n.t("i18n_24"),
-                         subtitle: L10n.t("i18n_25"),
+            SettingsItem(title: L10n.t("i18n_219"),
+                         subtitle: L10n.t("i18n_220"),
                          icon: "sparkles.rectangle.stack", color: .orange,
                          destination: AnyView(CleanupCenterView())),
-            SettingsItem(title: L10n.t("i18n_663"),
-                         subtitle: L10n.t("i18n_26"),
+            SettingsItem(title: L10n.t("i18n_940"),
+                         subtitle: L10n.t("i18n_221"),
                          icon: "shield.lefthalf.filled", color: .green,
                          destination: AnyView(CorunaShieldView())),
         ]))
@@ -269,7 +269,7 @@ struct SettingsView: View {
         let ver = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
         var aboutItems: [SettingsItem] = [
             SettingsItem(title: L10n.t("about_title"),
-                         subtitle: L10n.t("about_subtitle"),
+                         subtitle: L10n.t("i18n_941"),
                          icon: "person.crop.circle.fill", color: .blue,
                          destination: AnyView(AboutAuthorView())),
             SettingsItem(title: L10n.t("row_lang"),
@@ -321,7 +321,7 @@ struct SettingsView: View {
                 } + [.cancel(Text(L10n.t("cancel")))]
             )
         }
-        .alert(L10n.t("i18n_662"), isPresented: Binding(
+        .alert(L10n.t("i18n_939"), isPresented: Binding(
             get: { !vpnToggleError.isEmpty },
             set: { if !$0 { vpnToggleError = "" } }
         )) {
@@ -339,14 +339,14 @@ struct SettingsView: View {
                             .frame(minHeight: 110)
                     }
                 }
-                .navigationTitle(L10n.t("i18n_48"))
+                .navigationTitle(L10n.t("i18n_243"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(L10n.t("ui_40")) { showMirrorEditor = false }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(L10n.t("save")) {
+                        Button(L10n.t("i18n_942")) {
                             UpdateManager.shared.saveMirrors(mirrorsText)
                             showMirrorEditor = false
                         }
@@ -389,9 +389,9 @@ struct SettingsView: View {
     private func envSubtitle() -> String {
         if let r = lastProbe {
             let failed = r.checks.filter { !$0.passed }.count
-            return r.ready ? L10n.t("drawer_ready") : L10n.t("i18n_28", failed)
+            return r.ready ? L10n.t("i18n_943") : L10n.t("i18n_223", failed)
         }
-        return L10n.t("i18n_29")
+        return L10n.t("i18n_224")
     }
 
     private func envIcon() -> String {
@@ -419,7 +419,7 @@ struct SettingsView: View {
     }
 
     private func modelProviderName() -> String {
-        ModelStore.shared.configs.first(where: { $0.isDefault })?.provider ?? ModelStore.shared.configs.first?.provider ?? L10n.t("not_configured")
+        ModelStore.shared.configs.first(where: { $0.isDefault })?.provider ?? ModelStore.shared.configs.first?.provider ?? L10n.t("i18n_944")
     }
 
     private func permissionCount() -> Int {
@@ -431,17 +431,17 @@ struct SettingsView: View {
             return "@\(login)"
         }
         let count = GitHubAccountStore.shared.accounts.count
-        return count == 0 ? L10n.t("i18n_30") : L10n.t("i18n_31", count)
+        return count == 0 ? L10n.t("i18n_225") : L10n.t("i18n_226", count)
     }
 
     private func devInstructionsSubtitle() -> String {
         let count = DeveloperInstructionStore.shared.list().count
-        return L10n.t("i18n_32", count)
+        return L10n.t("i18n_227", count)
     }
 
     private func sshConfigSubtitle() -> String {
         let host = UserDefaults.standard.string(forKey: "ssh.host") ?? ""
-        return host.isEmpty ? L10n.t("not_configured") : host
+        return host.isEmpty ? L10n.t("i18n_944") : host
     }
 
     // v4.3.29：副标题实时反映更新状态（检查中/下载进度/发现新版本/错误/已是最新）
@@ -449,14 +449,14 @@ struct SettingsView: View {
     private func updateSubtitle() -> String {
         let m = updateManager
         if m.isChecking {
-            return L10n.t("i18n_33")
+            return L10n.t("i18n_228")
         }
         if m.isDownloading {
             let pct = Int(m.downloadProgress * 100)
-            return L10n.t("i18n_34", m.latestVersion ?? "", pct)
+            return L10n.t("i18n_229", m.latestVersion ?? "", pct)
         }
         if m.updateAvailable, let v = m.latestVersion {
-            return L10n.t("i18n_35", v)
+            return L10n.t("i18n_230", v)
         }
         if let s = m.installMessage, !s.isEmpty {
             return s
@@ -465,9 +465,9 @@ struct SettingsView: View {
             return e
         }
         if let s = m.lastSource {
-            return L10n.t("i18n_36", s)
+            return L10n.t("i18n_231", s)
         }
-        return L10n.t("i18n_37")
+        return L10n.t("i18n_232")
     }
 
     // v4.3.30：镜像源副标题（显示当前生效的镜像，去协议前缀）
@@ -476,12 +476,12 @@ struct SettingsView: View {
             .map { $0.replacingOccurrences(of: "https://", with: "")
                       .replacingOccurrences(of: "http://", with: "")
                       .replacingOccurrences(of: "/", with: "") }
-        return L10n.t("i18n_664") + list.joined(separator: ", ")
+        return L10n.t("i18n_945") + list.joined(separator: ", ")
     }
 
     // v3.3.2：抓包 VPN 开关副标题
     private func vpnActiveSubtitle() -> String {
-        VpnManager.shared.vpnActive ? L10n.t("i18n_38") : L10n.t("i18n_39")
+        VpnManager.shared.vpnActive ? L10n.t("i18n_233") : L10n.t("i18n_234")
     }
 }
 
@@ -549,20 +549,20 @@ struct UpdateView: View {
     }
     
     private var updateSubtitle: String {
-        if updateManager.isChecking { return L10n.t("i18n_40") }
-        if updateManager.downloadProgress > 0 { return L10n.t("i18n_41", updateManager.latestVersion ?? "", Int(updateManager.downloadProgress*100)) }
+        if updateManager.isChecking { return L10n.t("i18n_235") }
+        if updateManager.downloadProgress > 0 { return L10n.t("i18n_236", updateManager.latestVersion ?? "", Int(updateManager.downloadProgress*100)) }
         if updateManager.updateAvailable, let v = updateManager.latestVersion {
-            return L10n.t("i18n_42", v)
+            return L10n.t("i18n_237", v)
         }
         if let s = updateManager.installMessage, !s.isEmpty { return s }
-        return L10n.t("i18n_43")
+        return L10n.t("i18n_238")
     }
     
     var body: some View {
         List {
-            Section(header: Text(L10n.t("i18n_44"))) {
+            Section(header: Text(L10n.t("i18n_239"))) {
                 HStack {
-                    Text(L10n.t("i18n_45"))
+                    Text(L10n.t("i18n_240"))
                     Spacer()
                     Text(currentVersion)
                         .foregroundColor(.secondary)
@@ -577,12 +577,12 @@ struct UpdateView: View {
                 Button(action: { updateManager.updateNow(currentVersion: currentVersion) }) {
                     HStack {
                         Image(systemName: "arrow.triangle.2.circlepath")
-                        Text(L10n.t("i18n_46"))
+                        Text(L10n.t("i18n_241"))
                     }
                 }
             }
             
-            Section(header: Text(L10n.t("i18n_47"))) {
+            Section(header: Text(L10n.t("i18n_242"))) {
                 Button(action: {
                     mirrorsText = UpdateManager.shared.mirrorsText
                     showMirrorEditor = true
@@ -590,7 +590,7 @@ struct UpdateView: View {
                     HStack {
                         Image(systemName: "arrow.triangle.branch")
                             .foregroundColor(.orange)
-                        Text(L10n.t("i18n_48"))
+                        Text(L10n.t("i18n_243"))
                         Spacer()
                         Text(mirrorHost())
                             .foregroundColor(.secondary)
@@ -599,7 +599,7 @@ struct UpdateView: View {
                 }
             }
         }
-        .navigationTitle(L10n.t("row_check_update"))
+        .navigationTitle(L10n.t("i18n_946"))
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showMirrorEditor) {
             NavigationView {
@@ -610,14 +610,14 @@ struct UpdateView: View {
                             .frame(minHeight: 110)
                     }
                 }
-                .navigationTitle(L10n.t("i18n_48"))
+                .navigationTitle(L10n.t("i18n_243"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(L10n.t("ui_40")) { showMirrorEditor = false }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(L10n.t("save")) {
+                        Button(L10n.t("i18n_942")) {
                             UpdateManager.shared.saveMirrors(mirrorsText)
                             showMirrorEditor = false
                         }
@@ -629,7 +629,7 @@ struct UpdateView: View {
     
     private func mirrorHost() -> String {
         let m = UpdateManager.shared.mirrorsText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if m.isEmpty { return L10n.t("i18n_665") }
+        if m.isEmpty { return L10n.t("i18n_947") }
         let first = m.components(separatedBy: [",", "\n"]).first(where: { !$0.isEmpty }) ?? ""
         return first.isEmpty ? L10n.t("ui_144") : first
     }
@@ -649,7 +649,7 @@ struct SSHSettingsView: View {
             Section(header: Text(L10n.t("ui_137"))) {
                 HStack {
                     Text(L10n.t("ui_20")).frame(width: 80, alignment: .leading)
-                    TextField(L10n.t("i18n_666"), text: $host)
+                    TextField(L10n.t("i18n_948"), text: $host)
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
                 }
@@ -660,7 +660,7 @@ struct SSHSettingsView: View {
                 }
                 HStack {
                     Text(L10n.t("ui_112")).frame(width: 80, alignment: .leading)
-                    TextField(L10n.t("i18n_667"), text: $user)
+                    TextField(L10n.t("i18n_949"), text: $user)
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
                 }
@@ -673,7 +673,7 @@ struct SSHSettingsView: View {
                 }
                 HStack {
                     Text(L10n.t("ui_117")).frame(width: 80, alignment: .leading)
-                    TextField(L10n.t("i18n_668"), text: $keyPath)
+                    TextField(L10n.t("i18n_950"), text: $keyPath)
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
                 }
@@ -693,7 +693,7 @@ struct SSHSettingsView: View {
             }
             // v6.1.5-14ax：SSH 配置说明区块已整体移除（原 ui_140 灰色介绍）
         }
-        .navigationTitle(L10n.t("page_ssh"))
+        .navigationTitle(L10n.t("i18n_951"))
         .onAppear {
             let defaults = UserDefaults.standard
             host = defaults.string(forKey: "ssh_host") ?? ""

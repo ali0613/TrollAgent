@@ -34,7 +34,7 @@ struct AuditLogView: View {
                 Text(L10n.t("ui_135")).tag(0)
                 Text(L10n.t("ui_29")).tag(1)
                 Text(L10n.t("ui_75")).tag(2)
-                Text(L10n.t("i18n_121")).tag(3)
+                Text(L10n.t("i18n_316")).tag(3)
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, 16)
@@ -72,7 +72,7 @@ struct AuditLogView: View {
             if let p = exportPath, p.hasPrefix("/") {
                 return Alert(title: Text(L10n.t("ui_45")),
                              message: Text(p),
-                             primaryButton: .default(Text(L10n.t("share"))) {
+                             primaryButton: .default(Text(L10n.t("i18n_317"))) {
                                  pendingSharePath = p
                              },
                              secondaryButton: .cancel(Text(L10n.t("ui_44"))))
@@ -101,7 +101,7 @@ struct AuditLogView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "checkmark.shield")
                             .foregroundColor(.green)
-                        Text(L10n.t("i18n_122"))
+                        Text(L10n.t("i18n_318"))
                             .foregroundColor(.secondary)
                     }
                     .padding(.vertical, 20)
@@ -125,10 +125,10 @@ struct AuditLogView: View {
     private var sortBar: some View {
         HStack(spacing: 8) {
             Menu {
-                Button(L10n.t("i18n_123")) { sortBy = .time }
-                Button(L10n.t("i18n_124")) { sortBy = .status }
-                Button(L10n.t("i18n_125")) { sortBy = .elapsed }
-                Button(L10n.t("i18n_126")) { sortBy = .category }
+                Button(L10n.t("i18n_319")) { sortBy = .time }
+                Button(L10n.t("i18n_320")) { sortBy = .status }
+                Button(L10n.t("i18n_321")) { sortBy = .elapsed }
+                Button(L10n.t("i18n_322")) { sortBy = .category }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.up.arrow.down.circle")
@@ -145,7 +145,7 @@ struct AuditLogView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: sortOrder == .newest ? "clock.fill" : "clock.arrow.circlepath")
-                    Text(sortOrder == .newest ? L10n.t("i18n_127") : L10n.t("i18n_128")).font(.caption)
+                    Text(sortOrder == .newest ? L10n.t("i18n_323") : L10n.t("i18n_324")).font(.caption)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -161,10 +161,10 @@ struct AuditLogView: View {
 
     private var sortByTitle: String {
         switch sortBy {
-        case .time: return L10n.t("i18n_129")
+        case .time: return L10n.t("i18n_325")
         case .status: return L10n.t("ui_110")
-        case .elapsed: return L10n.t("i18n_130")
-        case .category: return L10n.t("i18n_131")
+        case .elapsed: return L10n.t("i18n_326")
+        case .category: return L10n.t("i18n_327")
         }
     }
 
@@ -231,7 +231,7 @@ struct AuditLogView: View {
                                         }
                                     }
                                     HStack(spacing: 6) {
-                                        Text(status == .success ? L10n.t("i18n_132") : L10n.t("i18n_133"))
+                                        Text(status == .success ? L10n.t("i18n_328") : L10n.t("i18n_329"))
                                             .font(.caption2)
                                             .fontWeight(.semibold)
                                             .foregroundColor(status == .success ? .green : .red)
@@ -301,7 +301,7 @@ struct AuditLogView: View {
         let summary = log.healthSummary(limit: 40)
         let dist = log.codeDistribution()
         return List {
-            Section(header: SettingSectionHeader(title: L10n.t("i18n_135"))) {
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_331"))) {
                 if dist.isEmpty {
                     Text(L10n.t("ui_82")).font(.footnote).foregroundColor(.secondary)
                 } else {
@@ -323,7 +323,7 @@ struct AuditLogView: View {
                     }
                 }
             }
-            Section(header: SettingSectionHeader(title: L10n.t("i18n_136"))) {
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_332"))) {
                 if summary.isEmpty {
                     Text(L10n.t("ui_84")).font(.footnote).foregroundColor(.secondary)
                 } else {
@@ -376,7 +376,7 @@ struct AuditLogView: View {
     // MARK: Tab3 文件日志（按天滚动，读当天）
     private var fileLogView: some View {
         ScrollView {
-            Text(fileLogText.isEmpty ? L10n.t("i18n_137") : fileLogText)
+            Text(fileLogText.isEmpty ? L10n.t("i18n_333") : fileLogText)
                 .font(.system(.caption2, design: .monospaced))
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -390,7 +390,7 @@ struct AuditLogView: View {
             .appendingPathComponent("Logs", isDirectory: true)
         let df = DateFormatter(); df.dateFormat = "yyyyMMdd"
         let file = logsDir.appendingPathComponent("audit-\(df.string(from: Date())).log")
-        fileLogText = (try? String(contentsOf: file, encoding: .utf8)) ?? L10n.t("i18n_138")
+        fileLogText = (try? String(contentsOf: file, encoding: .utf8)) ?? L10n.t("i18n_334")
     }
 
     private func codeColor(_ code: String) -> Color {
@@ -419,7 +419,7 @@ struct AuditLogView: View {
             showExportAlert = true
             AuditLog.shared.log("audit.export", detail: url.path)
         } catch {
-            exportPath = L10n.t("i18n_139", error.localizedDescription)
+            exportPath = L10n.t("i18n_335", error.localizedDescription)
             showExportAlert = true
         }
     }
@@ -456,10 +456,10 @@ struct BuildView: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_140"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_336"))) {
                     SettingRowButton(
-                        title: L10n.t("i18n_141"),
-                        subtitle: L10n.t("i18n_142"),
+                        title: L10n.t("i18n_337"),
+                        subtitle: L10n.t("i18n_338"),
                         icon: "key.fill",
                         color: .orange
                     ) {
@@ -477,10 +477,10 @@ struct BuildView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_143"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_339"))) {
                     SettingRowButton(
-                        title: L10n.t("i18n_594"),
-                        subtitle: L10n.t("i18n_595"),
+                        title: L10n.t("i18n_869"),
+                        subtitle: L10n.t("i18n_870"),
                         icon: "doc.badge.plus",
                         color: .blue
                     ) {
@@ -496,7 +496,7 @@ struct BuildView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_144"))
+            .navigationTitle(L10n.t("i18n_340"))
         }
         .navigationViewStyle(.stack)
     }
@@ -515,13 +515,13 @@ struct SystemCapabilitiesView: View {
             .padding(.vertical, 8)
 
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_145"))) {
-                    capRow(L10n.t("i18n_146"), "contacts.search", "person.crop.circle", .blue)
-                    capRow(L10n.t("i18n_147"), "calendar.list", "calendar", .red)
-                    capRow(L10n.t("i18n_148"), "reminder.create", "checkmark.square", .green)
-                    capRow(L10n.t("i18n_149"), "location.get", "location", .tmIndigo)
-                    capRow(L10n.t("i18n_150"), "notification.send", "bell", .orange)
-                    capRow(L10n.t("i18n_151"), "scan.qr", "qrcode.viewfinder", .purple)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_341"))) {
+                    capRow(L10n.t("i18n_342"), "contacts.search", "person.crop.circle", .blue)
+                    capRow(L10n.t("i18n_343"), "calendar.list", "calendar", .red)
+                    capRow(L10n.t("i18n_344"), "reminder.create", "checkmark.square", .green)
+                    capRow(L10n.t("i18n_345"), "location.get", "location", .tmIndigo)
+                    capRow(L10n.t("i18n_346"), "notification.send", "bell", .orange)
+                    capRow(L10n.t("i18n_347"), "scan.qr", "qrcode.viewfinder", .purple)
                                     }
 
                 Section(header: SettingSectionHeader(title: L10n.t("ui_132"))) {
@@ -623,25 +623,25 @@ struct ToolPermissionPoliciesView: View {
 
     /// category 显示中文名
     private let categoryNames: [String: String] = [
-        "injection": L10n.t("i18n_152"),
-        "app_control": L10n.t("i18n_596"),
-        "ui_control": L10n.t("i18n_597"),
-        "device": L10n.t("i18n_153"),
-        "filesystem": L10n.t("i18n_154"),
+        "injection": L10n.t("i18n_349"),
+        "app_control": L10n.t("i18n_871"),
+        "ui_control": L10n.t("i18n_872"),
+        "device": L10n.t("i18n_350"),
+        "filesystem": L10n.t("i18n_351"),
         "shell": "💻 Shell",
-        "browser": L10n.t("i18n_155"),
-        "build": L10n.t("i18n_156"),
-        "backup": L10n.t("i18n_157"),
-        "cleanup": L10n.t("i18n_158"),
-        "macro": L10n.t("i18n_159"),
-        "knowledge": L10n.t("i18n_160"),
-        "system": L10n.t("i18n_161"),
-        "diagnose": L10n.t("i18n_162"),
-        "analysis": L10n.t("i18n_163"),
-        "automation": L10n.t("i18n_164"),
-        "skills": L10n.t("i18n_165"),
-        "debug": L10n.t("i18n_166"),
-        "misc": L10n.t("i18n_167"),
+        "browser": L10n.t("i18n_352"),
+        "build": L10n.t("i18n_353"),
+        "backup": L10n.t("i18n_354"),
+        "cleanup": L10n.t("i18n_355"),
+        "macro": L10n.t("i18n_356"),
+        "knowledge": L10n.t("i18n_357"),
+        "system": L10n.t("i18n_358"),
+        "diagnose": L10n.t("i18n_359"),
+        "analysis": L10n.t("i18n_360"),
+        "automation": L10n.t("i18n_361"),
+        "skills": L10n.t("i18n_362"),
+        "debug": L10n.t("i18n_363"),
+        "misc": L10n.t("i18n_364"),
     ]
 
     /// 固定 category 排序
@@ -685,7 +685,7 @@ struct ToolPermissionPoliciesView: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                     .font(.system(size: 14))
-                TextField(L10n.t("i18n_168"), text: $searchText)
+                TextField(L10n.t("i18n_365"), text: $searchText)
                     .font(.subheadline)
                 if !searchText.isEmpty {
                     Button(action: { searchText = "" }) {
@@ -708,9 +708,9 @@ struct ToolPermissionPoliciesView: View {
                             Image(systemName: "hand.raised.fill")
                                 .foregroundColor(.red)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(L10n.t("i18n_682"))
+                                Text(L10n.t("i18n_968"))
                                     .foregroundColor(.primary)
-                                Text(L10n.t("i18n_169"))
+                                Text(L10n.t("i18n_366"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -725,9 +725,9 @@ struct ToolPermissionPoliciesView: View {
                             Image(systemName: "bolt.fill")
                                 .foregroundColor(.yellow)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(L10n.t("home_quick_automation"))
+                                Text(L10n.t("i18n_969"))
                                     .foregroundColor(.primary)
-                                Text(L10n.t("i18n_170"))
+                                Text(L10n.t("i18n_367"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -739,7 +739,7 @@ struct ToolPermissionPoliciesView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_171"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_368"))) {
                     // v2.9.31：工具按需加载——初始请求只带常驻核心（标★），其余靠搜索加载；
                     // v2.9.32：去掉授权弹窗，AI 搜索到工具即自动放行本会话。
                     // v2.9.36：去掉开关——勾选不再影响速度与放行，此页改为只读清单。
@@ -749,16 +749,16 @@ struct ToolPermissionPoliciesView: View {
                 }
 
                 // v2.9.23：并入原"本机工具审计"的过滤
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_172"))) {
-                    Toggle(L10n.t("i18n_173"), isOn: $showOnlyReal)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_369"))) {
+                    Toggle(L10n.t("i18n_370"), isOn: $showOnlyReal)
                         .accentColor(.tmCyan)
                     Text(L10n.t("ui_17"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
 
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_174", filtered.count))) {
-                    Text(L10n.t("i18n_175", groupedByCategory.count))
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_371", filtered.count))) {
+                    Text(L10n.t("i18n_372", groupedByCategory.count))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -775,7 +775,7 @@ struct ToolPermissionPoliciesView: View {
                                             .foregroundColor(.blue)
                                         + Text(def.name)
                                             .font(.system(.body, design: .monospaced))
-                                        Text(realTools.contains(def.name) ? L10n.t("i18n_176") : L10n.t("i18n_118"))
+                                        Text(realTools.contains(def.name) ? L10n.t("i18n_373") : L10n.t("i18n_313"))
                                             .font(.caption2)
                                             .fontWeight(.medium)
                                             .padding(.horizontal, 6)
@@ -785,7 +785,7 @@ struct ToolPermissionPoliciesView: View {
                                             .cornerRadius(4)
                                         // v2.9.252: 真机 HTTP 实测通过的工具加 ✅已检验 徽标
                                         if def.verified {
-                                            Text(L10n.t("i18n_177"))
+                                            Text(L10n.t("i18n_374"))
                                                 .font(.caption2)
                                                 .fontWeight(.medium)
                                                 .padding(.horizontal, 6)
@@ -854,19 +854,19 @@ struct DataManagementView: View {
             .padding(.vertical, 8)
 
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("page_workspace"))) {
-                    LabeledRow(label: L10n.t("i18n_178"), value: Workspace.root.path)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_816"))) {
+                    LabeledRow(label: L10n.t("i18n_376"), value: Workspace.root.path)
                     SettingRowButton(
-                        title: L10n.t("i18n_179"),
-                        subtitle: L10n.t("i18n_598"),
+                        title: L10n.t("i18n_377"),
+                        subtitle: L10n.t("i18n_873"),
                         icon: "folder",
                         color: .blue
                     ) {
                         AuditLog.shared.log("data.open_workspace", detail: Workspace.root.path)
                     }
                     SettingRowButton(
-                        title: L10n.t("i18n_180"),
-                        subtitle: L10n.t("i18n_599"),
+                        title: L10n.t("i18n_378"),
+                        subtitle: L10n.t("i18n_874"),
                         icon: "trash",
                         color: .red
                     ) {
@@ -876,7 +876,7 @@ struct DataManagementView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_181"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_824"))) {
                     ForEach(files) { item in
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -899,8 +899,8 @@ struct DataManagementView: View {
 
                 Section(header: SettingSectionHeader(title: L10n.t("ui_48"))) {
                     SettingRowButton(
-                        title: L10n.t("i18n_182"),
-                        subtitle: L10n.t("i18n_183"),
+                        title: L10n.t("i18n_380"),
+                        subtitle: L10n.t("i18n_381"),
                         icon: "doc.badge.plus",
                         color: .green
                     ) {
@@ -1008,13 +1008,13 @@ struct DeveloperInstructionsView: View {
                 // 破甲测试说明卡
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
-                        Label(L10n.t("i18n_184"), systemImage: "hammer.fill")
+                        Label(L10n.t("i18n_382"), systemImage: "hammer.fill")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.orange)
-                        Text(L10n.t("i18n_185"))
+                        Text(L10n.t("i18n_383"))
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text(L10n.t("i18n_186"))
+                        Text(L10n.t("i18n_384"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -1064,12 +1064,12 @@ struct DeveloperInstructionsView: View {
                         // 点开关按钮直接 toggle，点其他地方用 contextMenu 编辑
                         .contextMenu {
                             Button(action: { copyItem(item) }) {
-                                Label(L10n.t("i18n_187"), systemImage: "doc.on.doc")
+                                Label(L10n.t("i18n_385"), systemImage: "doc.on.doc")
                             }
                             Button(action: {
                                 editing = DevInstrEditorPayload(name: item.name, content: item.content)
                             }) {
-                                Label(L10n.t("btn_edit"), systemImage: "pencil")
+                                Label(L10n.t("i18n_386"), systemImage: "pencil")
                             }
                             Button(action: { remove(item) }) {
                                 Label(L10n.t("ui_195"), systemImage: "trash")
@@ -1077,7 +1077,7 @@ struct DeveloperInstructionsView: View {
                         }
                     }
                     Section {
-                        Text(L10n.t("i18n_188"))
+                        Text(L10n.t("i18n_387"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -1107,7 +1107,7 @@ struct DeveloperInstructionsView: View {
             let t = ln.trimmingCharacters(in: .whitespaces)
             if !t.isEmpty && !t.hasPrefix("#") { return String(t.prefix(60)) }
         }
-        return c.isEmpty ? L10n.t("i18n_189") : String(c.prefix(60))
+        return c.isEmpty ? L10n.t("i18n_388") : String(c.prefix(60))
     }
 
     private func reload() {
@@ -1166,12 +1166,12 @@ struct DevInstructionEditorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 6) {
-                        SettingSectionHeader(title: L10n.t("i18n_191"))
-                        TextField(L10n.t("i18n_192"), text: $title)
+                        SettingSectionHeader(title: L10n.t("i18n_390"))
+                        TextField(L10n.t("i18n_391"), text: $title)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                     }
                     VStack(alignment: .leading, spacing: 6) {
-                        SettingSectionHeader(title: L10n.t("i18n_600"))
+                        SettingSectionHeader(title: L10n.t("i18n_875"))
                         TextEditor(text: $content)
                             .frame(minHeight: 520)
                             .font(.system(.body, design: .monospaced))
@@ -1187,7 +1187,7 @@ struct DevInstructionEditorView: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                         // v3.3.0：隐藏标记说明——标记内的内容只给用户看，不注入 AI
-                        Text(L10n.t("i18n_193"))
+                        Text(L10n.t("i18n_392"))
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
@@ -1207,7 +1207,7 @@ struct DevInstructionEditorView: View {
                 // 键盘弹出时底部留白，确保能滚到末尾
                 .padding(.bottom, keyboardHeight > 0 ? keyboardHeight + 16 : 24)
             }
-            .navigationTitle(mode == .create ? L10n.t("i18n_194") : L10n.t("i18n_195"))
+            .navigationTitle(mode == .create ? L10n.t("i18n_393") : L10n.t("i18n_394"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -1219,7 +1219,7 @@ struct DevInstructionEditorView: View {
                         Button(action: copyContent) {
                             Image(systemName: "doc.on.doc")
                         }
-                        Button(L10n.t("save")) { save() }
+                        Button(L10n.t("i18n_942")) { save() }
                     }
                 }
             }
@@ -1286,9 +1286,9 @@ struct KnowledgeBaseView: View {
             .padding(.vertical, 8)
 
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_196"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_395"))) {
                     SettingRowButton(
-                        title: L10n.t("i18n_197"),
+                        title: L10n.t("i18n_396"),
                         subtitle: "Markdown / TXT / JSON / PDF",
                         icon: "doc.badge.plus",
                         color: .blue
@@ -1296,8 +1296,8 @@ struct KnowledgeBaseView: View {
                         showingImporter = true
                     }
                     SettingRowButton(
-                        title: L10n.t("i18n_198"),
-                        subtitle: L10n.t("i18n_601"),
+                        title: L10n.t("i18n_397"),
+                        subtitle: L10n.t("i18n_876"),
                         icon: "folder.badge.plus",
                         color: .green
                     ) {
@@ -1305,7 +1305,7 @@ struct KnowledgeBaseView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_199"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_398"))) {
                     if files.isEmpty {
                         Text(L10n.t("ui_89"))
                             .foregroundColor(.secondary)
@@ -1330,7 +1330,7 @@ struct KnowledgeBaseView: View {
                     Button {
                         showingClearConfirm = true
                     } label: {
-                        Label(L10n.t("i18n_200"), systemImage: "trash")
+                        Label(L10n.t("i18n_399"), systemImage: "trash")
                             .foregroundColor(.red)
                     }
                     .disabled(files.isEmpty)
@@ -1347,8 +1347,8 @@ struct KnowledgeBaseView: View {
                     refresh()
                 }
             }
-            .confirmationDialog(L10n.t("i18n_201"), isPresented: $showingClearConfirm, titleVisibility: .visible) {
-                Button(L10n.t("i18n_200"), role: .destructive) {
+            .confirmationDialog(L10n.t("i18n_400"), isPresented: $showingClearConfirm, titleVisibility: .visible) {
+                Button(L10n.t("i18n_399"), role: .destructive) {
                     clearAll()
                 }
                 Button(L10n.t("ui_40"), role: .cancel) {}
@@ -1426,13 +1426,13 @@ struct WebhooksView: View {
             .padding(.vertical, 8)
 
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_202"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_401"))) {
                     editorRow("URL", text: $url, placeholder: "https://example.com/webhook")
-                    editorRow("Secret", text: $secret, placeholder: L10n.t("i18n_203"))
-                    editorRow(L10n.t("i18n_204"), text: $events, placeholder: "audit,tool_call")
+                    editorRow("Secret", text: $secret, placeholder: L10n.t("i18n_402"))
+                    editorRow(L10n.t("i18n_403"), text: $events, placeholder: "audit,tool_call")
                 }
 
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_205"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_404"))) {
                     Button(action: save) {
                         HStack {
                             Image(systemName: "checkmark.circle")
@@ -1476,12 +1476,12 @@ struct WebhooksView: View {
 
     private func save() {
         UserDefaults.standard.set(["url": url, "secret": secret, "events": events], forKey: "trollmcp2.webhook")
-        status = L10n.t("i18n_206")
+        status = L10n.t("i18n_405")
     }
 
     private func test() {
         guard let target = URL(string: url), !url.isEmpty else {
-            status = L10n.t("i18n_602")
+            status = L10n.t("i18n_877")
             return
         }
         var req = URLRequest(url: target, timeoutInterval: 15)
@@ -1492,11 +1492,11 @@ struct WebhooksView: View {
         URLSession.shared.dataTask(with: req) { _, response, error in
             DispatchQueue.main.async {
                 if let error = error {
-                    status = L10n.t("i18n_207", error.localizedDescription)
+                    status = L10n.t("i18n_406", error.localizedDescription)
                 } else if let http = response as? HTTPURLResponse {
                     status = "HTTP \(http.statusCode)"
                 } else {
-                    status = L10n.t("i18n_208")
+                    status = L10n.t("i18n_407")
                 }
             }
         }.resume()

@@ -42,7 +42,7 @@ struct TerminalView: View {
                     Text("$")
                         .foregroundColor(.green)
                         .font(.system(.body, design: .monospaced))
-                    TextField(L10n.t("i18n_87"), text: $input)
+                    TextField(L10n.t("i18n_282"), text: $input)
                         .font(.system(.body, design: .monospaced))
                         .foregroundColor(.white)
                         .autocorrectionDisabled()
@@ -56,20 +56,20 @@ struct TerminalView: View {
                 .padding(10)
                 .background(Color(white: 0.13))
             }
-            .navigationTitle(L10n.t("i18n_120"))
+            .navigationTitle(L10n.t("i18n_315"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(L10n.t("ui_177")) { presentationMode.wrappedValue.dismiss() }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(L10n.t("i18n_88")) { lines.removeAll() }
+                    Button(L10n.t("i18n_283")) { lines.removeAll() }
                 }
             }
         }
         .onAppear {
-            lines.append(TermLine(text: L10n.t("i18n_684"), isCmd: false, isError: false))
-            lines.append(TermLine(text: L10n.t("i18n_89"), isCmd: false, isError: false))
+            lines.append(TermLine(text: L10n.t("i18n_971"), isCmd: false, isError: false))
+            lines.append(TermLine(text: L10n.t("i18n_284"), isCmd: false, isError: false))
             focused = true
         }
     }
@@ -85,14 +85,14 @@ struct TerminalView: View {
             let r = TrollRuntimeEngine.exec(cmd, timeout: 30)
             DispatchQueue.main.async {
                 busy = false
-                let out = r.output.isEmpty ? (r.exitCode == 0 ? "" : L10n.t("i18n_90")) : r.output
+                let out = r.output.isEmpty ? (r.exitCode == 0 ? "" : L10n.t("i18n_285")) : r.output
                 if !out.isEmpty {
                     // 长输出截断到最后 3000 字符（终端显示）
-                    let trimmed = out.count > 3000 ? String(out.suffix(3000)) + L10n.t("i18n_685") : out
+                    let trimmed = out.count > 3000 ? String(out.suffix(3000)) + L10n.t("i18n_972") : out
                     lines.append(TermLine(text: trimmed, isCmd: false, isError: r.exitCode != 0))
                 }
                 if r.timedOut {
-                    lines.append(TermLine(text: L10n.t("i18n_92"), isCmd: false, isError: true))
+                    lines.append(TermLine(text: L10n.t("i18n_287"), isCmd: false, isError: true))
                 }
                 focused = true
             }

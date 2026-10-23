@@ -142,7 +142,7 @@ struct SystemPromptsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 11, weight: .semibold))
-                    Text(isExpanded ? L10n.t("i18n_245") : L10n.t("i18n_246"))
+                    Text(isExpanded ? L10n.t("i18n_444") : L10n.t("i18n_445"))
                         .font(.caption)
                 }
                 .foregroundColor(.tmCyan)
@@ -163,7 +163,7 @@ struct SystemPromptsView: View {
     // 说明卡
     private var explainCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(L10n.t("i18n_247"), systemImage: "info.circle.fill")
+            Label(L10n.t("i18n_446"), systemImage: "info.circle.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundColor(.tmCyan)
             Text(L10n.t("ui_14"))
@@ -179,13 +179,13 @@ struct SystemPromptsView: View {
             Divider()
                 .padding(.vertical, 4)
 
-            Label(L10n.t("i18n_248"), systemImage: "hammer.fill")
+            Label(L10n.t("i18n_447"), systemImage: "hammer.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundColor(.orange)
-            Text(L10n.t("i18n_249"))
+            Text(L10n.t("i18n_448"))
                 .font(.caption)
                 .foregroundColor(.secondary)
-            Text(L10n.t("i18n_250"))
+            Text(L10n.t("i18n_449"))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

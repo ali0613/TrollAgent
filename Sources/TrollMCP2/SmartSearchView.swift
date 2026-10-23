@@ -14,7 +14,7 @@ struct SmartSearchView: View {
             )
 
             // 机制
-            CardSectionHeader(icon: "gearshape", title: L10n.t("i18n_402"))
+            CardSectionHeader(icon: "gearshape", title: L10n.t("i18n_611"))
             CardBox {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -38,17 +38,17 @@ struct SmartSearchView: View {
             }
 
             // 使用方法
-            CardSectionHeader(icon: "list.number", title: L10n.t("i18n_403"))
+            CardSectionHeader(icon: "list.number", title: L10n.t("i18n_612"))
             CardBox {
                 VStack(alignment: .leading, spacing: 10) {
-                    stepRow(1, L10n.t("i18n_404"))
-                    stepRow(2, L10n.t("i18n_405"))
-                    stepRow(3, L10n.t("i18n_637"))
+                    stepRow(1, L10n.t("i18n_613"))
+                    stepRow(2, L10n.t("i18n_614"))
+                    stepRow(3, L10n.t("i18n_914"))
                 }
             }
 
             // 示例
-            CardSectionHeader(icon: "text.bubble", title: L10n.t("i18n_406"))
+            CardSectionHeader(icon: "text.bubble", title: L10n.t("i18n_615"))
             CardBox {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
@@ -59,14 +59,14 @@ struct SmartSearchView: View {
                             .font(.caption)
                             .foregroundColor(.primary)
                     }
-                    Text(L10n.t("i18n_3"))
+                    Text(L10n.t("i18n_867"))
                         .font(.system(.caption, design: .monospaced))
                         .foregroundColor(.secondary)
                 }
             }
 
             // 隐私
-            CardSectionHeader(icon: "lock.shield", title: L10n.t("i18n_407"), color: .orange)
+            CardSectionHeader(icon: "lock.shield", title: L10n.t("i18n_616"), color: .orange)
             CardBox {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "hand.raised.fill")

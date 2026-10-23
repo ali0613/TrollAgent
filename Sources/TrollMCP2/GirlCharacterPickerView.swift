@@ -91,17 +91,17 @@ struct GirlCharacterPickerView: View {
         let base = (suite ?? std) ?? [
             // v6.1.5-8：默认项带 bundleId——点击走 LSApplicationWorkspace openApplicationWithBundleID
             // （camera:// App-prefs:// 等 scheme 在 iOS 上不存在/被拒，之前默认项点击必"没反应"）
-            ["name":L10n.t("i18n_552"), "url":"weixin://", "bundleId":"com.tencent.xin"],
-            ["name":L10n.t("i18n_553"), "url":"snssdk1128://", "bundleId":"com.ss.iphone.ugc.Aweme"],
-            ["name":L10n.t("i18n_554"), "url":"camera://", "bundleId":"com.apple.camera"],
-            ["name":L10n.t("settings"), "url":"App-prefs://", "bundleId":"com.apple.Preferences"]
+            ["name":L10n.t("i18n_765"), "url":"weixin://", "bundleId":"com.tencent.xin"],
+            ["name":L10n.t("i18n_766"), "url":"snssdk1128://", "bundleId":"com.ss.iphone.ugc.Aweme"],
+            ["name":L10n.t("i18n_767"), "url":"camera://", "bundleId":"com.apple.camera"],
+            ["name":L10n.t("i18n_957"), "url":"App-prefs://", "bundleId":"com.apple.Preferences"]
         ]
         return Self.ensureAppIDs(base)   // v6.1.5-14ae：初始数据补稳定 id（ForEach 依赖）
     }()
 
     var body: some View {
         Form {
-            Section(header: Text(L10n.t("i18n_555"))) {
+            Section(header: Text(L10n.t("i18n_768"))) {
                 // 三个角色并排：兔娘左、小萝莉中、猫娘右，名字都在图底部
                 HStack(spacing: 12) {
                     // 兔娘（左）
@@ -123,7 +123,7 @@ struct GirlCharacterPickerView: View {
                                     .scaledToFit()
                                     .frame(height: 110)
                             }
-                            Text(L10n.t("i18n_556"))
+                            Text(L10n.t("i18n_769"))
                                 .font(.headline)
                             if companion.selectedCharacter == .rabit {
                                 Image(systemName: "checkmark.circle.fill")
@@ -164,7 +164,7 @@ struct GirlCharacterPickerView: View {
                                     .scaledToFit()
                                     .frame(height: 110)
                             }
-                            Text(L10n.t("i18n_557"))
+                            Text(L10n.t("i18n_770"))
                                 .font(.headline)
                             if companion.selectedCharacter == .loli {
                                 Image(systemName: "checkmark.circle.fill")
@@ -205,7 +205,7 @@ struct GirlCharacterPickerView: View {
                                     .scaledToFit()
                                     .frame(height: 110)
                             }
-                            Text(L10n.t("i18n_558"))
+                            Text(L10n.t("i18n_771"))
                                 .font(.headline)
                             if companion.selectedCharacter == .cat {
                                 Image(systemName: "checkmark.circle.fill")
@@ -229,10 +229,10 @@ struct GirlCharacterPickerView: View {
                     .buttonStyle(PlainButtonStyle())
                 }
             }
-            Section(header: Text(L10n.t("i18n_559"))) {
+            Section(header: Text(L10n.t("i18n_772"))) {
                 VStack {
                     HStack {
-                        Text(L10n.t("i18n_560"))
+                        Text(L10n.t("i18n_773"))
                         Slider(value: $companion.floatSize, in: 170...300, step: 5) { editing in
                             // v6.0.30修复：拖动结束才重启（拖动中不重启），桌宠开着立即生效，关着只存参数不弹出
                             if !editing && HUDManager.shared.isRunning {
@@ -242,19 +242,19 @@ struct GirlCharacterPickerView: View {
                                 }
                             }
                         }
-                        Text(L10n.t("i18n_561"))
+                        Text(L10n.t("i18n_774"))
                     }
-                    Text(L10n.t("i18n_562", Int(companion.floatSize)))
+                    Text(L10n.t("i18n_775", Int(companion.floatSize)))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
-            Section(header: Text(L10n.t("i18n_563"))) {
-                Picker(L10n.t("i18n_564"), selection: $companion.bubbleStyle) {
-                    Text(L10n.t("i18n_565")).tag(0)
-                    Text(L10n.t("i18n_566")).tag(1)
-                    Text(L10n.t("i18n_567")).tag(2)
-                    Text(L10n.t("i18n_568")).tag(3)
+            Section(header: Text(L10n.t("i18n_776"))) {
+                Picker(L10n.t("i18n_777"), selection: $companion.bubbleStyle) {
+                    Text(L10n.t("i18n_778")).tag(0)
+                    Text(L10n.t("i18n_779")).tag(1)
+                    Text(L10n.t("i18n_780")).tag(2)
+                    Text(L10n.t("i18n_781")).tag(3)
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: companion.bubbleStyle) { _ in
@@ -270,7 +270,7 @@ struct GirlCharacterPickerView: View {
                 // v6.1.5：修复预览文字不显示——原 .overlay(不透明 fill) 会盖住文字，
                 // 改为 .background（形状画在文字下层），描边留在形状内不影响文字
                 VStack {
-                    Text(L10n.t("i18n_569"))
+                    Text(L10n.t("i18n_782"))
                         .padding(.horizontal, 20)
                         .padding(.vertical, 10)
                         .background(
@@ -303,11 +303,11 @@ struct GirlCharacterPickerView: View {
                 .padding(.vertical, 12)
             }
             Section(header: HStack {
-                Text(L10n.t("i18n_570"))
+                Text(L10n.t("i18n_783"))
                 Spacer()
                 EditButton()
             }) {
-                Picker(L10n.t("i18n_571"), selection: Binding<Int>(
+                Picker(L10n.t("i18n_784"), selection: Binding<Int>(
                     get: { Self.prefs.integer(forKey: "fanMenuStyle") },
                     set: { 
                         Self.prefs.set($0, forKey: "fanMenuStyle")
@@ -315,13 +315,13 @@ struct GirlCharacterPickerView: View {
                         Self.saveFanMenuSettings() // v6.1.5-14af：样式一并写全局文件（HUD 读 suite 失败时也能生效）
                     }
                 )) {
-                    Text(L10n.t("i18n_572")).tag(0)
-                    Text(L10n.t("i18n_573")).tag(1)
+                    Text(L10n.t("i18n_785")).tag(0)
+                    Text(L10n.t("i18n_786")).tag(1)
                 }
                 .pickerStyle(.segmented)
                 // v6.1.5-14n/r：菜单图标整体透明度 / 散开角度 / 弧度——@State 实时显示，松手才写文件+重启
                 HStack {
-                    Text(L10n.t("i18n_574")).font(.subheadline)
+                    Text(L10n.t("i18n_787")).font(.subheadline)
                     Spacer()
                     Slider(value: Binding<Double>(
                         get: { fanAlpha },
@@ -339,7 +339,7 @@ struct GirlCharacterPickerView: View {
                         .font(.caption).foregroundColor(.secondary).frame(width: 42)
                 }
                 HStack {
-                    Text(L10n.t("i18n_575")).font(.subheadline)
+                    Text(L10n.t("i18n_788")).font(.subheadline)
                     Spacer()
                     Slider(value: Binding<Double>(
                         get: { fanSpan },
@@ -357,7 +357,7 @@ struct GirlCharacterPickerView: View {
                         .font(.caption).foregroundColor(.secondary).frame(width: 42)
                 }
                 HStack {
-                    Text(L10n.t("i18n_576")).font(.subheadline)
+                    Text(L10n.t("i18n_789")).font(.subheadline)
                     Spacer()
                     Slider(value: Binding<Double>(
                         get: { fanArc },
@@ -376,7 +376,7 @@ struct GirlCharacterPickerView: View {
                 }
                 // v6.1.5-14aq：图标大小（40-80pt，默认56）——扇钮/竖排圆钮直径 + 布局半径/间距联动
                 HStack {
-                    Text(L10n.t("i18n_577")).font(.subheadline)
+                    Text(L10n.t("i18n_790")).font(.subheadline)
                     Spacer()
                     Slider(value: Binding<Double>(
                         get: { fanSize },
@@ -436,8 +436,8 @@ struct GirlCharacterPickerView: View {
                                 // 添加新应用
                                 FanMenuAddView(savedApps: $savedApps)
             }
-            Section(header: Text(L10n.t("i18n_580"))) {
-                Toggle(L10n.t("i18n_581"), isOn: Binding<Bool>(
+            Section(header: Text(L10n.t("i18n_793"))) {
+                Toggle(L10n.t("i18n_794"), isOn: Binding<Bool>(
                     get: { 
                         // 默认打开
                         if UserDefaults.standard.object(forKey: "autoHideWithKeyboard") == nil {
@@ -455,7 +455,7 @@ struct GirlCharacterPickerView: View {
                     }
                 ))
                 // v6.1.5-14ap：粒子特效开关——默认开；写全局文件让 HUD 轮询（与键盘开关同通道模式）
-                Toggle(L10n.t("i18n_582"), isOn: Binding<Bool>(
+                Toggle(L10n.t("i18n_795"), isOn: Binding<Bool>(
                     get: {
                         if UserDefaults.standard.object(forKey: "particleEnabled") == nil {
                             return true
@@ -473,7 +473,7 @@ struct GirlCharacterPickerView: View {
             }
             Section {}
         }
-        .navigationTitle(L10n.t("i18n_583"))
+        .navigationTitle(L10n.t("i18n_796"))
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -493,7 +493,7 @@ struct FanMenuAddView: View {
         } label: {
             HStack {
                 Image(systemName: "plus.circle.fill")
-                Text(L10n.t("i18n_584"))
+                Text(L10n.t("i18n_797"))
                 Spacer()
             }
         }

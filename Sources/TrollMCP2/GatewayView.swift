@@ -12,7 +12,7 @@ struct GatewayView: View {
                         .keyboardType(.URL)
                         .autocapitalization(.none)
                     HStack {
-                        Button(gateway.isConnected ? L10n.t("i18n_238") : L10n.t("i18n_239")) {
+                        Button(gateway.isConnected ? L10n.t("i18n_437") : L10n.t("i18n_438")) {
                             if gateway.isConnected {
                                 gateway.disconnect()
                             } else {
@@ -23,10 +23,10 @@ struct GatewayView: View {
                     }
                 }
                 Section(header: Text(L10n.t("ui_110"))) {
-                    LabeledRow(label: L10n.t("i18n_239"), value: gateway.isConnected ? L10n.t("i18n_240") : L10n.t("i18n_241"))
-                    LabeledRow(label: "URL", value: gateway.serverURL.isEmpty ? L10n.t("i18n_242") : gateway.serverURL)
+                    LabeledRow(label: L10n.t("i18n_438"), value: gateway.isConnected ? L10n.t("i18n_439") : L10n.t("i18n_440"))
+                    LabeledRow(label: "URL", value: gateway.serverURL.isEmpty ? L10n.t("i18n_441") : gateway.serverURL)
                     if let err = gateway.lastError {
-                        LabeledRow(label: L10n.t("i18n_243"), value: err)
+                        LabeledRow(label: L10n.t("i18n_442"), value: err)
                     }
                 }
                 Section(header: Text(L10n.t("ui_132"))) {
@@ -35,7 +35,7 @@ struct GatewayView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle(L10n.t("i18n_244"))
+            .navigationTitle(L10n.t("i18n_443"))
             .onAppear { urlInput = gateway.serverURL }
         }
         .navigationViewStyle(.stack)
@@ -56,7 +56,7 @@ struct AutomationView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle(L10n.t("home_quick_automation"))
+            .navigationTitle(L10n.t("i18n_969"))
         }
         .navigationViewStyle(.stack)
     }

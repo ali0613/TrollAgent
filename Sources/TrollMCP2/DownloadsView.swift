@@ -41,7 +41,7 @@ struct DownloadsView: View {
                 emptyState
             } else {
                 List {
-                    Section(header: SettingSectionHeader(title: L10n.t("i18n_390"))) {
+                    Section(header: SettingSectionHeader(title: L10n.t("i18n_598"))) {
                         ForEach(items) { item in
                             row(item)
                         }
@@ -60,7 +60,7 @@ struct DownloadsView: View {
         .navigationTitle(L10n.t("page_downloads"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarItems(
-            leading: Button(editMode ? L10n.t("done") : L10n.t("i18n_391")) {
+            leading: Button(editMode ? L10n.t("i18n_956") : L10n.t("i18n_599")) {
                 withAnimation { editMode.toggle() }
                 if !editMode { selected.removeAll() }
             },
@@ -167,7 +167,7 @@ struct DownloadsView: View {
         VStack(spacing: 0) {
             Divider()
             HStack {
-                Text(editMode ? L10n.t("i18n_392", selected.count) : L10n.t("i18n_393", items.count))
+                Text(editMode ? L10n.t("i18n_600", selected.count) : L10n.t("i18n_601", items.count))
                     .font(.footnote)
                     .foregroundColor(.secondary)
                 Spacer()
@@ -175,7 +175,7 @@ struct DownloadsView: View {
                     Button(action: {
                         let cnt = selected.count
                         guard cnt > 0 else { return }
-                        confirmMessage = L10n.t("i18n_394", cnt)
+                        confirmMessage = L10n.t("i18n_602", cnt)
                         showConfirm = true
                     }) {
                         Text(L10n.t("ui_34"))
@@ -224,7 +224,7 @@ struct DownloadsView: View {
     }
 
     private func humanSize(_ bytes: Int, isDir: Bool) -> String {
-        if isDir { return L10n.t("i18n_395") }
+        if isDir { return L10n.t("i18n_603") }
         let kb = Double(bytes) / 1024.0
         if kb < 1 { return "\(bytes) B" }
         if kb < 1024 { return String(format: "%.1f KB", kb) }

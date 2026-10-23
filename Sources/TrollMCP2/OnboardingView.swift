@@ -132,19 +132,19 @@ struct OnboardingView: View {
     // MARK: - 页 2：能力
     private var capabilityPage: some View {
         VStack(spacing: 20) {
-            Text(L10n.t("i18n_587"))
+            Text(L10n.t("i18n_800"))
                 .font(.title2)
                 .fontWeight(.bold)
                 .padding(.top, 10)
 
             ScrollView {
                 VStack(spacing: 12) {
-                    capRow("hammer.fill", L10n.t("i18n_588"), [.orange, .tmBrown])
-                    capRow("syringe.fill", L10n.t("i18n_589"), [.green, .tmTeal])
-                    capRow("cursorarrow.click.2", L10n.t("i18n_590"), [.tmCyan, .blue])
-                    capRow("text.viewfinder", L10n.t("i18n_591"), [.purple, .tmIndigo])
-                    capRow("terminal", L10n.t("i18n_592"), [.gray, .secondary])
-                    capRow("brain", L10n.t("i18n_593"), [.pink, .tmCyan])
+                    capRow("hammer.fill", L10n.t("i18n_801"), [.orange, .tmBrown])
+                    capRow("syringe.fill", L10n.t("i18n_802"), [.green, .tmTeal])
+                    capRow("cursorarrow.click.2", L10n.t("i18n_803"), [.tmCyan, .blue])
+                    capRow("text.viewfinder", L10n.t("i18n_804"), [.purple, .tmIndigo])
+                    capRow("terminal", L10n.t("i18n_805"), [.gray, .secondary])
+                    capRow("brain", L10n.t("i18n_806"), [.pink, .tmCyan])
                 }
                 .padding(.horizontal, 28)
             }

@@ -13,55 +13,55 @@ struct RemoteTerminalView: View {
 
     var body: some View {
         Form {
-            Section(header: Text(L10n.t("i18n_93")), footer: Text(running ? L10n.t("i18n_94", portText) : L10n.t("i18n_95", portText))) {
-                Toggle(L10n.t("i18n_398"), isOn: $running)
+            Section(header: Text(L10n.t("i18n_288")), footer: Text(running ? L10n.t("i18n_289", portText) : L10n.t("i18n_290", portText))) {
+                Toggle(L10n.t("i18n_607"), isOn: $running)
                     .onChange(of: running) { on in
                         if on {
                             RemoteTerminalServer.shared.token = token.trimmingCharacters(in: .whitespacesAndNewlines)
                             RemoteTerminalServer.shared.port = Int(portText) ?? 8790
                             RemoteTerminalServer.shared.allowDangerous = allowDangerous
                             let ok = RemoteTerminalServer.shared.start()
-                            toast = ok ? L10n.t("i18n_97", RemoteTerminalServer.shared.port) : L10n.t("i18n_98")
+                            toast = ok ? L10n.t("i18n_292", RemoteTerminalServer.shared.port) : L10n.t("i18n_293")
                         } else {
                             RemoteTerminalServer.shared.stop()
-                            toast = L10n.t("i18n_313")
+                            toast = L10n.t("i18n_518")
                         }
                     }
-                TextField(L10n.t("i18n_100"), text: $token)
+                TextField(L10n.t("i18n_295"), text: $token)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
-                TextField(L10n.t("i18n_101"), text: $portText)
+                TextField(L10n.t("i18n_296"), text: $portText)
                     .keyboardType(.numberPad)
             }
 
-            Section(header: Text(L10n.t("i18n_102"))) {
+            Section(header: Text(L10n.t("i18n_297"))) {
                 HStack {
-                    Text(L10n.t("i18n_103"))
+                    Text(L10n.t("i18n_298"))
                     Spacer()
-                    Text(lanIP.isEmpty ? L10n.t("i18n_104") : lanIP)
+                    Text(lanIP.isEmpty ? L10n.t("i18n_299") : lanIP)
                         .foregroundColor(.secondary)
                 }
                 HStack {
-                    Text(L10n.t("i18n_105"))
+                    Text(L10n.t("i18n_300"))
                     Spacer()
                     Text("http://\(lanIP):\(portText)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                Button(L10n.t("i18n_106")) {
+                Button(L10n.t("i18n_301")) {
                     UIPasteboard.general.string = "http://\(lanIP):\(portText)"
-                    toast = L10n.t("relay_card_copied")
+                    toast = L10n.t("i18n_973")
                 }
             }
 
-            Section(header: Text(L10n.t("i18n_107"))) {   // v6.1.5-14ax：教程型灰色介绍已移除
-                Label(L10n.t("i18n_108"), systemImage: "arrow.triangle.branch")
+            Section(header: Text(L10n.t("i18n_302"))) {   // v6.1.5-14ax：教程型灰色介绍已移除
+                Label(L10n.t("i18n_303"), systemImage: "arrow.triangle.branch")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
 
-            Section(header: Text(L10n.t("i18n_109")), footer: Text(L10n.t("i18n_110"))) {
-                Toggle(L10n.t("i18n_111"), isOn: $allowDangerous)
+            Section(header: Text(L10n.t("i18n_304")), footer: Text(L10n.t("i18n_305"))) {
+                Toggle(L10n.t("i18n_306"), isOn: $allowDangerous)
                     .tint(.red)
                     .onChange(of: allowDangerous) { v in
                         RemoteTerminalServer.shared.allowDangerous = v
@@ -72,7 +72,7 @@ struct RemoteTerminalView: View {
                 Section { Text(toast).font(.caption).foregroundColor(.secondary) }
             }
         }
-        .navigationTitle(L10n.t("i18n_112"))
+        .navigationTitle(L10n.t("i18n_307"))
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             // 保存

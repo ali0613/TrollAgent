@@ -67,34 +67,34 @@ enum SystemCleanupEngine {
         let appLogs = aggregateAppDirs("Library/Logs")
         let snapshots = dirSize("/var/mobile/Library/SplashBoard/Snapshots")
 
-        items.append(SystemCleanupItem(id: "app_cache", label: L10n.t("i18n_366"),
-            detail: L10n.t("i18n_631"), paths: [], risk: .safe, size: appCache))
-        items.append(SystemCleanupItem(id: "app_logs", label: L10n.t("i18n_367"),
-            detail: L10n.t("i18n_632"), paths: [], risk: .safe, size: appLogs))
-        items.append(SystemCleanupItem(id: "sys_cache", label: L10n.t("i18n_368"),
+        items.append(SystemCleanupItem(id: "app_cache", label: L10n.t("i18n_574"),
+            detail: L10n.t("i18n_908"), paths: [], risk: .safe, size: appCache))
+        items.append(SystemCleanupItem(id: "app_logs", label: L10n.t("i18n_575"),
+            detail: L10n.t("i18n_909"), paths: [], risk: .safe, size: appLogs))
+        items.append(SystemCleanupItem(id: "sys_cache", label: L10n.t("i18n_576"),
             detail: "/var/mobile/Library/Caches", paths: ["/var/mobile/Library/Caches"], risk: .safe,
             size: dirSize("/var/mobile/Library/Caches")))
-        items.append(SystemCleanupItem(id: "sys_logs", label: L10n.t("i18n_369"),
+        items.append(SystemCleanupItem(id: "sys_logs", label: L10n.t("i18n_577"),
             detail: "/var/mobile/Library/Logs", paths: ["/var/mobile/Library/Logs"], risk: .safe,
             size: dirSize("/var/mobile/Library/Logs")))
-        items.append(SystemCleanupItem(id: "sys_tmp", label: L10n.t("i18n_370"),
+        items.append(SystemCleanupItem(id: "sys_tmp", label: L10n.t("i18n_578"),
             detail: "/tmp + /var/tmp", paths: ["/tmp", "/var/tmp"], risk: .safe,
             size: dirSize("/tmp") + dirSize("/var/tmp")))
-        items.append(SystemCleanupItem(id: "photo_cache", label: L10n.t("i18n_371"),
-            detail: L10n.t("i18n_372"),
+        items.append(SystemCleanupItem(id: "photo_cache", label: L10n.t("i18n_579"),
+            detail: L10n.t("i18n_580"),
             paths: ["/var/mobile/Media/PhotoData/Thumbnails", "/var/mobile/Media/DCIM/Apple/Thumbs"],
             risk: .safe, size: dirSize("/var/mobile/Media/PhotoData/Thumbnails") + dirSize("/var/mobile/Media/DCIM/Apple/Thumbs")))
-        items.append(SystemCleanupItem(id: "downloads", label: L10n.t("i18n_411"),
+        items.append(SystemCleanupItem(id: "downloads", label: L10n.t("i18n_621"),
             detail: "/var/mobile/Media/Downloads", paths: ["/var/mobile/Media/Downloads"], risk: .warn,
             size: dirSize("/var/mobile/Media/Downloads")))
-        items.append(SystemCleanupItem(id: "snapshots", label: L10n.t("i18n_374"),
-            detail: L10n.t("i18n_633"), paths: ["/var/mobile/Library/SplashBoard/Snapshots"],
+        items.append(SystemCleanupItem(id: "snapshots", label: L10n.t("i18n_582"),
+            detail: L10n.t("i18n_910"), paths: ["/var/mobile/Library/SplashBoard/Snapshots"],
             risk: .safe, size: snapshots))
-        items.append(SystemCleanupItem(id: "trash", label: L10n.t("i18n_375"),
+        items.append(SystemCleanupItem(id: "trash", label: L10n.t("i18n_583"),
             detail: "/var/mobile/.Trash", paths: ["/var/mobile/.Trash"], risk: .warn,
             size: dirSize("/var/mobile/.Trash")))
-        items.append(SystemCleanupItem(id: "ota", label: L10n.t("i18n_376"),
-            detail: L10n.t("i18n_377"),
+        items.append(SystemCleanupItem(id: "ota", label: L10n.t("i18n_584"),
+            detail: L10n.t("i18n_585"),
             paths: ["/var/mobile/Library/SoftwareUpdate", "/var/mobile/Library/Assets/com_apple_MobileAsset_SoftwareUpdate"],
             risk: .warn, size: dirSize("/var/mobile/Library/SoftwareUpdate") + dirSize("/var/mobile/Library/Assets/com_apple_MobileAsset_SoftwareUpdate")))
         return items
@@ -107,12 +107,12 @@ enum SystemCleanupEngine {
         let http = aggregateAppDirs("Library/HTTPStorages")
         let safari = dirSize("/var/mobile/Library/Caches/com.apple.mobilesafari")
 
-        items.append(SystemCleanupItem(id: "webkit", label: L10n.t("i18n_634"),
-            detail: L10n.t("i18n_635"), paths: [], risk: .safe, size: webkit))
+        items.append(SystemCleanupItem(id: "webkit", label: L10n.t("i18n_911"),
+            detail: L10n.t("i18n_912"), paths: [], risk: .safe, size: webkit))
         // v2.9.314：http_storage 已移除——清所有 App 的 Cookie/登录态太危险
         // items.append(SystemCleanupItem(id: "http_storage", ...))
-        items.append(SystemCleanupItem(id: "safari", label: L10n.t("i18n_636"),
-            detail: L10n.t("i18n_378"),
+        items.append(SystemCleanupItem(id: "safari", label: L10n.t("i18n_913"),
+            detail: L10n.t("i18n_586"),
             paths: ["/var/mobile/Library/Caches/com.apple.mobilesafari"], risk: .safe, size: safari))
         return items
     }
@@ -275,7 +275,7 @@ struct SystemCleanupView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(storage["model"] as? String ?? "—")
                     .font(.subheadline.weight(.semibold))
-                Text(L10n.t("i18n_379", storage["used_readable"] as? String ?? "—", storage["total_readable"] as? String ?? "—"))
+                Text(L10n.t("i18n_587", storage["used_readable"] as? String ?? "—", storage["total_readable"] as? String ?? "—"))
                     .font(.caption).foregroundColor(.secondary)
                 Text(storage["system"] as? String ?? "—")
                     .font(.caption).foregroundColor(.secondary)
@@ -302,12 +302,12 @@ struct SystemCleanupView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.t("ui_124")).font(.subheadline.bold())
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                summaryCell(L10n.t("i18n_380"), quickItems.first(where: { $0.id == "sys_cache" })?.size ?? 0, "internaldrive")
-                summaryCell(L10n.t("i18n_381"), quickItems.first(where: { $0.id == "app_cache" })?.size ?? 0, "app.fill")
-                summaryCell(L10n.t("i18n_371"), quickItems.first(where: { $0.id == "photo_cache" })?.size ?? 0, "photo.fill")
-                summaryCell(L10n.t("i18n_425"), quickItems.first(where: { $0.id == "sys_tmp" })?.size ?? 0, "clock.fill")
-                summaryCell(L10n.t("i18n_383"), (quickItems.first(where: { $0.id == "sys_logs" })?.size ?? 0) + (quickItems.first(where: { $0.id == "app_logs" })?.size ?? 0), "doc.text.fill")
-                summaryCell(L10n.t("i18n_411"), quickItems.first(where: { $0.id == "downloads" })?.size ?? 0, "arrow.down.circle.fill")
+                summaryCell(L10n.t("i18n_588"), quickItems.first(where: { $0.id == "sys_cache" })?.size ?? 0, "internaldrive")
+                summaryCell(L10n.t("i18n_589"), quickItems.first(where: { $0.id == "app_cache" })?.size ?? 0, "app.fill")
+                summaryCell(L10n.t("i18n_579"), quickItems.first(where: { $0.id == "photo_cache" })?.size ?? 0, "photo.fill")
+                summaryCell(L10n.t("i18n_635"), quickItems.first(where: { $0.id == "sys_tmp" })?.size ?? 0, "clock.fill")
+                summaryCell(L10n.t("i18n_591"), (quickItems.first(where: { $0.id == "sys_logs" })?.size ?? 0) + (quickItems.first(where: { $0.id == "app_logs" })?.size ?? 0), "doc.text.fill")
+                summaryCell(L10n.t("i18n_621"), quickItems.first(where: { $0.id == "downloads" })?.size ?? 0, "arrow.down.circle.fill")
             }
         }
         .padding(14)
@@ -332,7 +332,7 @@ struct SystemCleanupView: View {
     // MARK: 快速/高级 Tab
     private var modePicker: some View {
         HStack(spacing: 0) {
-            ForEach([(Mode.quick, L10n.t("ui_58")), (Mode.advanced, L10n.t("i18n_384"))], id: \.0) { m, label in
+            ForEach([(Mode.quick, L10n.t("ui_58")), (Mode.advanced, L10n.t("i18n_592"))], id: \.0) { m, label in
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) { mode = m }
                 } label: {
@@ -396,7 +396,7 @@ struct SystemCleanupView: View {
                 if running {
                     ProgressView().tint(.white)
                 } else {
-                    Label(L10n.t("i18n_385", selected.count), systemImage: "trash.fill")
+                    Label(L10n.t("i18n_593", selected.count), systemImage: "trash.fill")
                 }
                 Spacer()
             }
@@ -414,7 +414,7 @@ struct SystemCleanupView: View {
         if selected.contains(item.id) { selected.remove(item.id) }
         else {
             if item.risk == .warn {
-                toast = L10n.t("i18n_386", item.label)
+                toast = L10n.t("i18n_594", item.label)
             }
             selected.insert(item.id)
         }
@@ -432,7 +432,7 @@ struct SystemCleanupView: View {
                 // 默认全选安全项
                 selected = Set(quick.filter { $0.risk == .safe }.map { $0.id })
                 scanning = false
-                toast = L10n.t("i18n_387", AppCacheScanner.humanSize((quick + adv).reduce(0) { $0 + $1.size }))
+                toast = L10n.t("i18n_595", AppCacheScanner.humanSize((quick + adv).reduce(0) { $0 + $1.size }))
             }
         }
     }
@@ -452,7 +452,7 @@ struct SystemCleanupView: View {
             let (ok, freed, failed) = SystemCleanupEngine.execute(items, selected: sel)
             DispatchQueue.main.async {
                 running = false
-                toast = L10n.t("i18n_388", ok, AppCacheScanner.humanSize(freed)) + (failed.isEmpty ? "" : L10n.t("i18n_389", failed.joined(separator: "、")))
+                toast = L10n.t("i18n_596", ok, AppCacheScanner.humanSize(freed)) + (failed.isEmpty ? "" : L10n.t("i18n_597", failed.joined(separator: "、")))
                 // 重新扫描 + 更新存储
                 storage = SystemCleanupEngine.storageInfo()
                 let quick = SystemCleanupEngine.quickItems()

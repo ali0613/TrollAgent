@@ -90,7 +90,7 @@ struct RemoteControlView: View {
                             Text(L10n.t("ui_114"))
                                 .font(.subheadline)
                                 .fontWeight(.semibold)
-                            Text(keepAliveOn ? L10n.t("i18n_251") : L10n.t("i18n_252"))
+                            Text(keepAliveOn ? L10n.t("i18n_450") : L10n.t("i18n_451"))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -112,50 +112,50 @@ struct RemoteControlView: View {
             CardSectionHeader(icon: "sparkles", title: L10n.t("page_remote_sub"))
             CardBox {
                 VStack(alignment: .leading, spacing: 10) {
-                    capabilityRow("tree", L10n.t("i18n_253"))
-                    capabilityRow("camera", L10n.t("i18n_254"))
-                    capabilityRow("hand.tap", L10n.t("i18n_255"))
-                    capabilityRow("keyboard", L10n.t("i18n_256"))
-                    capabilityRow("checkmark.circle", L10n.t("i18n_608"))
+                    capabilityRow("tree", L10n.t("i18n_452"))
+                    capabilityRow("camera", L10n.t("i18n_453"))
+                    capabilityRow("hand.tap", L10n.t("i18n_454"))
+                    capabilityRow("keyboard", L10n.t("i18n_455"))
+                    capabilityRow("checkmark.circle", L10n.t("i18n_884"))
                 }
             }
 
             // 使用流程
-            CardSectionHeader(icon: "list.number", title: L10n.t("i18n_257"))
+            CardSectionHeader(icon: "list.number", title: L10n.t("i18n_456"))
             CardBox {
                 VStack(alignment: .leading, spacing: 12) {
-                    stepView(1, L10n.t("i18n_300"))
-                    stepView(2, L10n.t("i18n_609"))
-                    stepView(3, L10n.t("i18n_259"))
-                    stepView(4, L10n.t("i18n_610"))
-                    stepView(5, L10n.t("i18n_260"))
+                    stepView(1, L10n.t("i18n_502"))
+                    stepView(2, L10n.t("i18n_885"))
+                    stepView(3, L10n.t("i18n_458"))
+                    stepView(4, L10n.t("i18n_886"))
+                    stepView(5, L10n.t("i18n_459"))
                 }
             }
 
             // 工具列表
-            CardSectionHeader(icon: "wrench.and.screwdriver", title: L10n.t("i18n_261"))
+            CardSectionHeader(icon: "wrench.and.screwdriver", title: L10n.t("i18n_460"))
             CardBox {
                 VStack(alignment: .leading, spacing: 8) {
-                    toolRow("control.inject", L10n.t("i18n_611"))
-                    toolRow("control.status", L10n.t("i18n_262"))
-                    toolRow("control.ui_tree", L10n.t("i18n_612"))
-                    toolRow("control.screenshot", L10n.t("i18n_263"))
-                    toolRow("control.tap", L10n.t("i18n_264"))
-                    toolRow("control.swipe", L10n.t("i18n_613"))
-                    toolRow("control.type", L10n.t("i18n_265"))
-                    toolRow("control.key", L10n.t("i18n_614"))
+                    toolRow("control.inject", L10n.t("i18n_887"))
+                    toolRow("control.status", L10n.t("i18n_461"))
+                    toolRow("control.ui_tree", L10n.t("i18n_888"))
+                    toolRow("control.screenshot", L10n.t("i18n_462"))
+                    toolRow("control.tap", L10n.t("i18n_463"))
+                    toolRow("control.swipe", L10n.t("i18n_889"))
+                    toolRow("control.type", L10n.t("i18n_464"))
+                    toolRow("control.key", L10n.t("i18n_890"))
                 }
             }
 
             // 注意事项
-            CardSectionHeader(icon: "exclamationmark.triangle", title: L10n.t("about_notes"), color: .orange)
+            CardSectionHeader(icon: "exclamationmark.triangle", title: L10n.t("i18n_465"), color: .orange)
             CardBox {
                 VStack(alignment: .leading, spacing: 6) {
-                    noteRow(L10n.t("i18n_615"))
-                    noteRow(L10n.t("i18n_616"))
-                    noteRow(L10n.t("i18n_266"))
-                    noteRow(L10n.t("i18n_2"))
-                    noteRow(L10n.t("i18n_618"))
+                    noteRow(L10n.t("i18n_891"))
+                    noteRow(L10n.t("i18n_892"))
+                    noteRow(L10n.t("i18n_466"))
+                    noteRow(L10n.t("i18n_866"))
+                    noteRow(L10n.t("i18n_894"))
                 }
             }
         }

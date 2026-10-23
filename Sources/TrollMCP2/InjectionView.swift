@@ -107,9 +107,9 @@ struct InjectionView: View {
             if showRescue {
                 VStack(spacing: 8) {
                     HStack(spacing: 8) {
-                        rescueButton(title: L10n.t("i18n_267"), icon: "magnifyingglass", color: .blue, action: { runRescue("scan") })
-                        rescueButton(title: L10n.t("inject_restore_all"), icon: "arrow.uturn.backward.circle", color: .orange, action: { confirmRescue("recover_all") })
-                        rescueButton(title: L10n.t("inject_cleanup_residual"), icon: "sparkles", color: .red, action: { confirmRescue("cleanup") })
+                        rescueButton(title: L10n.t("i18n_467"), icon: "magnifyingglass", color: .blue, action: { runRescue("scan") })
+                        rescueButton(title: L10n.t("i18n_468"), icon: "arrow.uturn.backward.circle", color: .orange, action: { confirmRescue("recover_all") })
+                        rescueButton(title: L10n.t("i18n_469"), icon: "sparkles", color: .red, action: { confirmRescue("cleanup") })
                     }
                     if let msg = rescueMessage {
                         Text(msg)
@@ -166,8 +166,8 @@ struct InjectionView: View {
         .alert(isPresented: $rescueAlert) {
             Alert(title: Text(L10n.t("ui_115")),
                   message: Text(pendingRescue == "recover_all"
-                                ? L10n.t("i18n_268")
-                                : L10n.t("i18n_269")),
+                                ? L10n.t("i18n_470")
+                                : L10n.t("i18n_471")),
                   primaryButton: .destructive(Text(L10n.t("ui_63"))) {
                       if let p = pendingRescue { runRescue(p) }
                   },
@@ -190,10 +190,10 @@ struct InjectionView: View {
     private func badgeText(_ f: ScanFinding?) -> String {
         guard let f = f else { return "" }
         var parts: [String] = []
-        if f.damaged { parts.append(L10n.t("i18n_270")) }
-        if f.hasBackup { parts.append(L10n.t("i18n_271")) }
-        if f.assetCount > 0 { parts.append(L10n.t("i18n_272", f.assetCount)) }
-        if f.modifiedCount > 0 { parts.append(L10n.t("i18n_273", f.modifiedCount)) }
+        if f.damaged { parts.append(L10n.t("i18n_472")) }
+        if f.hasBackup { parts.append(L10n.t("i18n_473")) }
+        if f.assetCount > 0 { parts.append(L10n.t("i18n_474", f.assetCount)) }
+        if f.modifiedCount > 0 { parts.append(L10n.t("i18n_475", f.modifiedCount)) }
         return parts.isEmpty ? f.bundleId : parts.joined(separator: " · ")
     }
 
@@ -210,18 +210,18 @@ struct InjectionView: View {
                     let restored = kind == "restore"
                         && (((r["status"] as? String) == "reverted") || !((r["restored_from_backup"] as? [String]) ?? []).isEmpty)
                     if kind == "restore" {
-                        rescueMessage = restored ? L10n.t("i18n_274", f.name) : "⚠️ \(f.name)：\(r["hint"] ?? "未确认恢复")"
+                        rescueMessage = restored ? L10n.t("i18n_476", f.name) : "⚠️ \(f.name)：\(r["hint"] ?? "未确认恢复")"
                     } else {
                         let cleaned = r["cleaned_count"] as? Int ?? 0
                         let errors = r["errors"] as? [String] ?? []
-                        rescueMessage = errors.isEmpty ? L10n.t("i18n_275", f.name, cleaned) : L10n.t("i18n_276", f.name, cleaned, errors.count)
+                        rescueMessage = errors.isEmpty ? L10n.t("i18n_477", f.name, cleaned) : L10n.t("i18n_478", f.name, cleaned, errors.count)
                     }
                     scanFindings.removeAll { $0.bundleId == f.bundleId }
                 }
             } catch {
                 DispatchQueue.main.async {
                     rescueBusy = false
-                    rescueMessage = L10n.t("i18n_277", f.name, error.localizedDescription)
+                    rescueMessage = L10n.t("i18n_479", f.name, error.localizedDescription)
                 }
             }
         }
@@ -263,7 +263,7 @@ struct InjectionView: View {
                 }
             } catch {
                 DispatchQueue.main.async {
-                    rescueMessage = L10n.t("i18n_278", error.localizedDescription)
+                    rescueMessage = L10n.t("i18n_480", error.localizedDescription)
                     rescueBusy = false
                 }
                 return
@@ -288,15 +288,15 @@ struct InjectionView: View {
                         }
                     }
                     scanFindings = list
-                    rescueMessage = L10n.t("i18n_279", count)
+                    rescueMessage = L10n.t("i18n_481", count)
                 case "recover_all":
                     let restored = result["restored_count"] as? Int ?? 0
                     let failed = result["failed_count"] as? Int ?? 0
-                    rescueMessage = failed == 0 ? L10n.t("i18n_280", restored) : L10n.t("i18n_281", restored, failed, result["failed"] ?? "")
+                    rescueMessage = failed == 0 ? L10n.t("i18n_482", restored) : L10n.t("i18n_483", restored, failed, result["failed"] ?? "")
                 default:
                     let cleaned = result["cleaned_count"] as? Int ?? 0
                     let errors = result["errors"] as? [String] ?? []
-                    rescueMessage = errors.isEmpty ? L10n.t("i18n_282", cleaned) : L10n.t("i18n_283", cleaned, errors.count, errors.joined(separator: "; "))
+                    rescueMessage = errors.isEmpty ? L10n.t("i18n_484", cleaned) : L10n.t("i18n_485", cleaned, errors.count, errors.joined(separator: "; "))
                 }
                 AuditLog.shared.log("rescue.ui", detail: "\(kind) \(rescueMessage ?? "")")
                 rescueBusy = false
@@ -361,21 +361,21 @@ struct AppDetailView: View {
     var body: some View {
         
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_284"))) {
-                    LabeledRow(label: L10n.t("i18n_221"), value: app.name)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_486"))) {
+                    LabeledRow(label: L10n.t("i18n_420"), value: app.name)
                     LabeledRow(label: "Bundle ID", value: app.bundleId)
-                    LabeledRow(label: L10n.t("i18n_178"), value: app.path)
+                    LabeledRow(label: L10n.t("i18n_376"), value: app.path)
                     if let container = AppCatalog.lookupContainer(bundleId: app.bundleId) {
-                        LabeledRow(label: L10n.t("i18n_285"), value: container)
+                        LabeledRow(label: L10n.t("i18n_487"), value: container)
                     }
                 }
                 // v2.9.21：手动注入 / 移除操作区
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_286"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_488"))) {
                     HStack(spacing: 8) {
                         Image(systemName: injected ? "checkmark.circle.fill" : "circle.dashed")
                             .font(.system(size: 17))
                             .foregroundColor(injected ? .green : .secondary)
-                        Text(injected ? L10n.t("i18n_287") : L10n.t("i18n_288"))
+                        Text(injected ? L10n.t("i18n_489") : L10n.t("i18n_490"))
                             .font(.body)
                         Spacer()
                     }
@@ -408,7 +408,7 @@ struct AppDetailView: View {
                     }
                     .disabled(busy)
                 }
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_289"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_491"))) {
                     ForEach(InjectionManager.shared.availableBinaries(), id: \.self) { bin in
                         HStack(spacing: 12) {
                             ZStack {
@@ -427,7 +427,7 @@ struct AppDetailView: View {
                     }
                 }
                 if !entries.isEmpty {
-                    Section(header: SettingSectionHeader(title: L10n.t("i18n_290"))) {
+                    Section(header: SettingSectionHeader(title: L10n.t("i18n_492"))) {
                         ForEach(entries) { e in
                             LabeledRow(label: e.key, value: e.value)
                         }
@@ -451,14 +451,14 @@ struct AppDetailView: View {
             } catch {
                 let msg = (error as? MCPError)?.description ?? error.localizedDescription
                 DispatchQueue.main.async {
-                    actionMessage = L10n.t("i18n_291", msg)
+                    actionMessage = L10n.t("i18n_493", msg)
                     busy = false
                 }
                 return
             }
             DispatchQueue.main.async {
                 let ok = (result["injected"] as? Bool) ?? false
-                actionMessage = ok ? L10n.t("i18n_292") : L10n.t("i18n_293")
+                actionMessage = ok ? L10n.t("i18n_494") : L10n.t("i18n_495")
                 inspectResult = InjectionManager.shared.inspect(app.bundleId)
                 busy = false
             }
@@ -476,14 +476,14 @@ struct AppDetailView: View {
             } catch {
                 let msg = (error as? MCPError)?.description ?? error.localizedDescription
                 DispatchQueue.main.async {
-                    actionMessage = L10n.t("i18n_294", msg)
+                    actionMessage = L10n.t("i18n_496", msg)
                     busy = false
                 }
                 return
             }
             DispatchQueue.main.async {
                 let ok = ((result["injected"] as? Bool) ?? true) == false
-                actionMessage = ok ? L10n.t("i18n_295") : L10n.t("i18n_296")
+                actionMessage = ok ? L10n.t("i18n_497") : L10n.t("i18n_498")
                 inspectResult = InjectionManager.shared.inspect(app.bundleId)
                 busy = false
             }
@@ -501,14 +501,14 @@ struct AppDetailView: View {
             } catch {
                 let msg = (error as? MCPError)?.description ?? error.localizedDescription
                 DispatchQueue.main.async {
-                    actionMessage = L10n.t("i18n_297", msg)
+                    actionMessage = L10n.t("i18n_499", msg)
                     busy = false
                 }
                 return
             }
             DispatchQueue.main.async {
                 let restored = ((result["status"] as? String) == "reverted") || !((result["restored_from_backup"] as? [String]) ?? []).isEmpty
-                actionMessage = restored ? L10n.t("i18n_298") : L10n.t("i18n_299")
+                actionMessage = restored ? L10n.t("i18n_500") : L10n.t("i18n_501")
                 inspectResult = InjectionManager.shared.inspect(app.bundleId)
                 busy = false
             }
