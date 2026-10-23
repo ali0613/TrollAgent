@@ -1256,7 +1256,7 @@ enum L10n {
             "i18n_1033": ["zh": "已切换：%@", "en": "Switched: %@"],
             "i18n_1034": ["zh": "网络已恢复", "en": "Network restored"],
             "i18n_1035": ["zh": "已回到前台", "en": "Back to foreground"],
-            "i18n_1036": ["zh": "第 %@ 轮", "en": "Round %@"],
+            "i18n_1036": ["zh": "第 %d 轮", "en": "Round %d"],
             "i18n_1037": ["zh": "推理·%@", "en": "Reasoning·%@"],
             "i18n_1038": ["zh": "技能", "en": "Skills"],
             "i18n_1041": ["zh": "低", "en": "Low"],
