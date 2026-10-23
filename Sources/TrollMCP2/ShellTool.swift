@@ -36,7 +36,7 @@ enum ShellDiag {
 final class ShellExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "shell.exec",
-        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux aarch64 完整工具链执行（原生 ARM64，apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写（仅 /ios_workspace、/ios_containers、/ios_system 三个——/ios_appdata 等不存在，无 iOS 原生 shell 兜底，plutil/jtool2 不可用，ps 只见容器进程）。python3/node 在统一环境原生执行；重计算用 py3-native/node-native 原生入口（shell.exec 路由前缀，iPhone 芯片直跑 numpy/pandas/重 node，未内置时自动降级 python3/node）。缺工具需显式 apk add（不会自动装；git/wget/curl 已预装；make/cmake/gcc/clang/openssl/radare2 均可用 apk 装）。Use for: file ops, system info, network, text processing.",
+        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux aarch64 完整工具链执行（原生 ARM64，apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写（仅 /ios_workspace、/ios_containers、/ios_system 三个——/ios_appdata 等不存在，无 iOS 原生 shell 兜底，plutil/jtool2 不可用，ps 只见容器进程）。python3/node 在统一环境原生执行；原生入口（shell.exec 路由前缀）：py3-native/node-native（芯片直跑，未内置自动降级）、plutil（plist 读/转换）、sqlite3（直查 SQLite）——均勿在统一环境 command -v。缺工具需显式 apk add（不会自动装；git/wget/curl 已预装；make/cmake/gcc/clang/openssl/radare2 均可用 apk 装）。Use for: file ops, system info, network, text processing.",
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",

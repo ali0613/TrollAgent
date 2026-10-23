@@ -378,9 +378,10 @@ final class SystemPrompts {
     - UNIFIED ENVIRONMENT (v6.6.0——路由废除): shell.exec 无 runtime 参数——全部命令默认在统一环境
       TrollRuntime（Alpine Linux 完整工具链）执行——aarch64 Linux 容器，所有 Alpine 包均为原生 ARM64 执行。
       ls/cat/grep/find/sed/awk/tar/git/python3/sqlite3/curl/ps/df 等全部可用，apk add 任意装包（pip/git/编译链）。
-      【无 iOS 原生 shell 兜底】：plutil/notifyutil/uicache/sbreload/idevice_id/swift/jtool2 均不存在；
-      sysctl 是 Alpine 的（无 /proc/sys，kern.* 不可查）；ps 只看到容器自身进程，看不到 iOS 侧进程。
-      plist 解析用 python3 plistlib；Mach-O 分析用 Alpine binutils（objdump/nm/strings/readelf/size）或 llvm-objdump。
+      【无 iOS 原生 shell 兜底】：notifyutil/uicache/sbreload/idevice_id/swift/jtool2 均不存在
+      （plutil/sqlite3 有 Swift 原生实现——见 NATIVE ENTRYPOINTS，直接可用）；sysctl 是 Alpine 的
+      （无 /proc/sys，kern.* 不可查）；ps 只看到容器自身进程，看不到 iOS 侧进程。
+      Mach-O 分析用 Alpine binutils（objdump/nm/strings/readelf/size）或 llvm-objdump。
       统一环境内命令/管道/路径全支持——环境是统一的，先查命令本身再下结论。
     - PYTHON3 & PY3-NATIVE (v6.6.0-fix15): python3 = 统一环境（Alpine aarch64）原生执行——apk add python3
       py3-numpy 等任意装包，日常/装包/生态用。py3-native = 原生 Python 入口（shell.exec 路由命令，iPhone 芯片直跑）——
@@ -391,9 +392,12 @@ final class SystemPrompts {
       node-native = 原生 node 入口（shell.exec 路由命令，V8 芯片直跑）——重 node 负载（构建工具/打包/webpack）用；
       写法：`node-native -e "..."` / `node-native script.js`（命令名前缀即路由）。若 node-native 报"原生 node 未内置"
       （构建未集成 nodejs-mobile）→ 降级用 node（统一环境 nodejs）。
-    - NATIVE ENTRYPOINTS 总览 (shell.exec 路由前缀——原生芯片直跑，非 Alpine 命令，勿在统一环境 command -v):
-      · `py3-native <args>`  原生 Python（numpy/pandas 深度运算；未内置自动降级 python3）
-      · `node-native <args>` 原生 node（V8 重负载；未内置自动降级 node）
+    - NATIVE ENTRYPOINTS 总览 (shell.exec 路由前缀——原生芯片直跑，非 Alpine 命令，勿在统一环境 command -v 判断缺失):
+      · `py3-native <args>`  原生 Python（numpy/pandas 深度运算；构建未内置 Python.xcframework 时自动降级 python3）
+      · `node-native <args>` 原生 node（V8 重负载；构建未内置 nodejs-mobile 时自动降级 node）
+      · `plutil <opts> <file>`  Swift 原生实现（读/转换 plist：-p 查看、-convert xml1 -o out 转换）——始终可用
+      · `sqlite3 <db> "<query>"`  Swift 原生实现（直查 SQLite：单/双引号 SQL 均支持）——始终可用
+      · `ta <cmd>`  宿主 MCP 工具路由（shell 内直调 MCP 工具）
       其余原生二进制（ldid/opainject/optool/insert_dylib/ct_bypass 等）由对应 MCP 工具内部调用，AI 无需直接执行。
       所有原生入口与统一环境共享 /ios_workspace 文件系统（中间数据文件流转）。
 
