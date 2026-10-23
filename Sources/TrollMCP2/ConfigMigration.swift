@@ -32,9 +32,9 @@ enum ConfigMigration {
             if let step = migrations[target] {
                 step()
                 UserDefaults.standard.set(target, forKey: versionKey)
-                NSLog("[ConfigMigration] schema \(v) → \(target) 迁移完成")
+                NSLog("[ConfigMigration] schema \(v) → \(target) migration done")
             } else {
-                NSLog("[ConfigMigration] 无迁移步骤 \(v) → \(target)，直接跳版本")
+                NSLog("[ConfigMigration] no migration steps \(v) → \(target), skipping versions")
                 UserDefaults.standard.set(target, forKey: versionKey)
             }
             v = target

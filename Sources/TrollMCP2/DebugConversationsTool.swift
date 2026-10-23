@@ -87,7 +87,7 @@ final class ModelListTool: MCPTool {
         }
         return [
             "total": configs.count,
-            "defaultModel": ModelStore.shared.defaultConfig?.name ?? "(无)",
+            "defaultModel": ModelStore.shared.defaultConfig?.name ?? "(none)",
             "models": configs
         ]
     }

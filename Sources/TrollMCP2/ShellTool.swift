@@ -488,16 +488,16 @@ final class ShellExecTool: MCPTool {
                 continue
             }
             guard (try? fm.attributesOfItem(atPath: norm)[.type]) as? FileAttributeType == .typeRegular else {
-                blocked.append("\(norm) 非普通文件"); continue
+                blocked.append("\(norm) not a regular file"); continue
             }
             let size = (try? fm.attributesOfItem(atPath: norm)[.size]) as? Int ?? 0
             if size <= 0 || size > maxBytes {
-                blocked.append("\(norm) \(size)B(超过2MB桥接上限)")
+                blocked.append("\(norm) \(size)B (over the 2MB bridge cap)")
             }
         }
         guard !blocked.isEmpty else { return nil }
-        return "该命令将走 Alpine，但引用了 Alpine 读不到的 iOS 文件（v6.0.28 新增检查，防止假零结果）：\n" + blocked.joined(separator: "\n") +
-               "\n解决方法：① 确认路径在自动绑定范围内（/var/mobile/Documents/Workspace、/var/containers、/System）；② App 数据容器路径（/var/mobile/Containers/...）不要用 Alpine，直接用 iOS 原生命令（ls/cat/du/df）；③ 其他路径先 cp 到 Workspace 再走 Alpine 分析。"
+        return "This command runs in Alpine but references iOS files Alpine can't read (check added to prevent false-zero results):\n" + blocked.joined(separator: "\n") +
+               "\nFix: ① confirm the path is within auto-bind scope (/var/mobile/Documents/Workspace, /var/containers, /System); ② app data container paths (/var/mobile/Containers/...）不要用 Alpine，直接用 iOS 原生命令（ls/cat/du/df）；③ 其他路径先 cp 到 Workspace 再走 Alpine 分析。"
     }
     
     /// 按管道/分号/逻辑符拆分命令 (尊重引号），返回 [(命令段, 连接符)]，连接符: | ; && ||
@@ -687,7 +687,7 @@ final class ShellExecTool: MCPTool {
                     let res = BuildRunner.shared.run(executable: p, args: args,
                                                      env: env, timeout: timeout)
                     var out = res.stdout
-                    if res.timedOut { out += "\n[执行超时 \(Int(timeout))s 被终止]" }
+                    if res.timedOut { out += "\n[execution timed out at \(Int(timeout))s, terminated]" }
                     return ["command": segment, "exit_code": res.exitCode, "stdout": out,
                             "stderr": res.stderr]
                 }
@@ -778,7 +778,7 @@ final class ShellExecTool: MCPTool {
                         var out = ShellExecTool.filterNoise(output)
                         if limit > 0 && out.count > limit {
                             let spillPath = ToolRegistry.spillLarge("runtime", out)
-                            out = String(out.prefix(limit / 2)) + "\n…[输出太长total \(out.count) 字符，已截断；完整输出: \(spillPath)]…\n" + String(out.suffix(limit / 2))
+                            out = String(out.prefix(limit / 2)) + "\n…[output too long: \(out.count) chars, truncated; full output: \(spillPath)]…\n" + String(out.suffix(limit / 2))
                         }
                         result = [
                             "command": body, "exit_code": Int(outputExit), "stdout": out,
@@ -813,7 +813,7 @@ final class ShellExecTool: MCPTool {
         }
         if limit > 0 && finalOut.count > limit {
             let spillPath = ToolRegistry.spillLarge("pipeline", joined)
-            finalOut = String(finalOut.prefix(limit / 2)) + "\n…[输出太长 total \(joined.count) 字符，已截断；完整输出: \(spillPath)]…\n" + String(finalOut.suffix(limit / 2))
+            finalOut = String(finalOut.prefix(limit / 2)) + "\n…[output too long: total \(joined.count) chars, truncated; full output: \(spillPath)]…\n" + String(finalOut.suffix(limit / 2))
         }
         return [
             "command": command,
@@ -1120,13 +1120,13 @@ final class ShellExecTool: MCPTool {
             let joined = input.replacingOccurrences(of: "\n", with: "")
             if opts.contains("-d") {
                 guard let decoded = Data(base64Encoded: joined, options: .ignoreUnknownCharacters) else {
-                    return "base64: invalid input\n原输出:\n\(input)"
+                    return "base64: invalid input\nOriginal output:\n\(input)"
                 }
                 return String(decoding: decoded, as: UTF8.self)
             }
             return Data(input.utf8).base64EncodedString()
         default:
-            return "复合命令过滤器不支持 \(word) (available: head/tail/grep/wc/sed/awk/sort/uniq/cut/tr/rev/echo/cat/base64)\nOriginal output:\n\(input)"
+            return "Compound-command filter doesn't support \(word) (available: head/tail/grep/wc/sed/awk/sort/uniq/cut/tr/rev/echo/cat/base64)\nOriginal output:\n\(input)"
         }
     }
     
@@ -1217,7 +1217,7 @@ final class ShellExecTool: MCPTool {
         var out = res.stdout
         if let d = try? String(contentsOfFile: pyOutPath, encoding: .utf8), !d.isEmpty { out += d }
         try? FileManager.default.removeItem(atPath: pyOutPath)
-        if res.timedOut { out += "\n[py3-native 执行超时被终止]" }
+        if res.timedOut { out += "\n[py3-native execution timed out, terminated]" }
         return ["command": "py3-native " + args, "exit_code": res.exitCode, "stdout": out,
                 "hint": "py3-native: native Python (runs numpy/pandas heavy compute directly on the iPhone chip). Daily use/packages/ecosystem: python3 (unified env Alpine)"]
     }
@@ -1234,7 +1234,7 @@ final class ShellExecTool: MCPTool {
         let res = BuildRunner.shared.run(executable: nodePath, args: split, env: ["PATH": Bundle.main.bundlePath + "/bin"], timeout: 120)
         var out = res.stdout
         if !res.stderr.isEmpty { out += (out.isEmpty ? "" : "\n") + res.stderr }
-        if res.timedOut { out += "\n[node-native 执行超时被终止]" }
+        if res.timedOut { out += "\n[node-native execution timed out, terminated]" }
         return ["command": "node-native " + args, "exit_code": res.exitCode, "stdout": out,
                 "hint": "node-native: native node (V8 runs directly on the chip — heavy node tasks/build tools). Light JS/daily use: node (unified env Alpine nodejs)"]
     }
@@ -1328,19 +1328,19 @@ final class ShellExecTool: MCPTool {
                 if fm.isExecutableFile(atPath: p) { foundAt = p; break }
             }
         }
-        let runHint = "在统一环境（TrollRuntime）里运行：sh -c \"\(target) ...\"；或原生若已内置直接 \(target) ..."
+        let runHint = "Run in the unified env (TrollRuntime): sh -c \"\(target) ...\"; or if natively bundled, run \(target) ... directly"
         if let found = foundAt {
-            var out = "\(target): ✅ 已安装（\(found.replacingOccurrences(of: NSHomeDirectory(), with: "~"))）"
+            var out = "\(target): ✅ installed (\(found.replacingOccurrences(of: NSHomeDirectory(), with: "~")))"
             if found.hasPrefix(Bundle.main.bundlePath) {
-                out += "\n运行方式：直接 \(target) ...（原生 ARM64，无需 Alpine）"
+                out += "\nHow to run: directly \(target) ... (native ARM64, no Alpine needed)"
             } else {
-                out += "\n运行方式：\(runHint)"
+                out += "\nHow to run: \(runHint)"
             }
             return ["command": seg, "exit_code": 0, "stdout": out, "note": "Probe result from the filesystem (command body not executed, avoiding interpreter high-CPU kills by the system）"]
         }
-        var out = "\(target): ❌ 未安装（iOS 无原生 \(target)）"
+        var out = "\(target): ❌ not installed (no native \(target) on iOS)"
         if target == "git" || target == "vim" || target == "curl" || target == "wget" {
-            out += "\n安装提示：请用 tool.install 手动安装（统一环境 apk add \(target)——v6.5.2 已 rootfs 预装 ca-certificates/curl/git，缺则 apk add）。"
+            out += "\nInstall hint: use tool.install to install manually (unified env apk add \(target) — v6.5.2 ships ca-certificates in rootfs/curl/git，缺则 apk add）。"
         } else {
             out += "\n安装提示：用 tool.install 安装，或统一环境里 apk add \(target)。"
         }

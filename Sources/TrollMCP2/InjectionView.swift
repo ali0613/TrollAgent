@@ -210,7 +210,7 @@ struct InjectionView: View {
                     let restored = kind == "restore"
                         && (((r["status"] as? String) == "reverted") || !((r["restored_from_backup"] as? [String]) ?? []).isEmpty)
                     if kind == "restore" {
-                        rescueMessage = restored ? L10n.t("i18n_476", f.name) : "⚠️ \(f.name)：\(r["hint"] ?? "未确认恢复")"
+                        rescueMessage = restored ? L10n.t("i18n_476", f.name) : "⚠️ \(f.name): \(r["hint"] ?? "restore unconfirmed")"
                     } else {
                         let cleaned = r["cleaned_count"] as? Int ?? 0
                         let errors = r["errors"] as? [String] ?? []

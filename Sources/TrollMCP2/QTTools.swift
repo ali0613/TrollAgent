@@ -304,15 +304,15 @@ final class InjectionDiagnoseTool: MCPTool {
             diagnosis["dylib_exists"] = FileManager.default.fileExists(atPath: dylib)
             if !FileManager.default.fileExists(atPath: dylib) {
                 issues.append("dylib file not found: \(dylib)")
-                fixes.append("用 artifact.find 定位正确的 dylib 路径")
+                fixes.append("Locate the correct dylib path with artifact.find")
             } else {
                 // 检查架构
                 let (_, fileOutput) = InjectionManager.shared.spawnRoot("/usr/bin/file", args: [dylib])
                 let isArm64 = fileOutput.contains("arm64")
                 diagnosis["dylib_arch"] = isArm64 ? "arm64" : "unknown"
                 if !isArm64 {
-                    issues.append("dylib 非 arm64 架构")
-                    fixes.append("重新编译 dylib 为 arm64 架构")
+                    issues.append("dylib isn't arm64")
+                    fixes.append("Recompile the dylib as arm64")
                 }
             }
         }
@@ -335,8 +335,8 @@ final class InjectionDiagnoseTool: MCPTool {
         diagnosis["main_binary"] = mainBinary
         diagnosis["main_binary_exists"] = mainExists
         if !mainExists {
-            issues.append("主二进制不存在: \(mainBinary)")
-            fixes.append("目标 App 已损坏或被篡改，先卸载重装目标 App")
+            issues.append("Main binary doesn't exist: \(mainBinary)")
+            fixes.append("The target app is corrupted or tampered with; uninstall/reinstall it first")
         }
         // v2.9.88：主二进制架构 (与 dylib 架构做匹配校验）
         let mainArch = machOArch(mainBinary)
@@ -345,11 +345,11 @@ final class InjectionDiagnoseTool: MCPTool {
             let dylibArch = machOArch(dylib)
             diagnosis["dylib_arch"] = dylibArch
             if !dylibArch.contains("arm64") {
-                issues.append("dylib 架构 \(dylibArch) 与设备不匹配 (需要 arm64)")
-                fixes.append("用 Theos 重新编译 dylib 为 arm64 架构")
+                issues.append("dylib arch \(dylibArch) doesn't match the device (arm64 needed)")
+                fixes.append("Recompile the dylib as arm64 with Theos")
             } else if mainArch.contains("arm64") && !mainArch.contains("fat") && mainArch != dylibArch {
-                issues.append("dylib 架构 \(dylibArch) 与主二进制 \(mainArch) 不一致")
-                fixes.append("重新编译匹配架构的 dylib，或用 lipo 合并两种架构")
+                issues.append("dylib arch \(dylibArch) doesn't match the main binary \(mainArch)")
+                fixes.append("Recompile a matching-arch dylib, or merge both archs with lipo")
             }
         }
         // v2.9.89：备份检查兼容 .troll-fools.bak (TrollFools 同款）与旧 .bak_macho
@@ -375,8 +375,8 @@ final class InjectionDiagnoseTool: MCPTool {
         diagnosis["injectable_targets_count"] = injectable.count
         diagnosis["macho_scan"] = ["total": totalMachOs, "encrypted": protectedCount, "skipped": allMachOs.count - totalMachOs]
         if injectable.isEmpty {
-            issues.append("没有可注入的 Mach-O (\(protectedCount)/\(totalMachOs) 个加密或不可读)")
-            fixes.append("App Store 加密 App 无法直接注入；用 app.decrypt 解密后再试，或换用支持的目标 App")
+            issues.append("No injectable Mach-O (\(protectedCount)/\(totalMachOs) encrypted or unreadable)")
+            fixes.append("Encrypted App Store apps can't be injected directly; decrypt with app.decrypt first, or use a supported target app")
         }
         if protectedCount > 0 {
             diagnosis["note"] = "⚠️ \(protectedCount) Mach-O files have encrypted segments (cryptid=1), injection would break them, auto-skipped; injection targets the unencrypted \(injectable.first.map { ($0 as NSString).lastPathComponent } ?? "无")"

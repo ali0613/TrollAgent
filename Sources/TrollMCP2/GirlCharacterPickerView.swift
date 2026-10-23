@@ -64,7 +64,7 @@ struct GirlCharacterPickerView: View {
         // 写后立即读回验证（暴露 App Group 失效 / 落盘失败）
         let backSuite = (UserDefaults(suiteName: "group.com.ai.iosxcode")?.array(forKey: "fanMenuApps") as? [[String:String]])?.count ?? -1
         let backStd = UserDefaults.standard.array(forKey: "fanMenuApps") as? [[String:String]]
-        let diag = "\(Date()): 写\(apps2.count)项 suite读回=\(backSuite) std读回=\(backStd?.count ?? -1)"
+        let diag = "\(Date()): wrote \(apps2.count) items suite-readback=\(backSuite) std-readback=\(backStd?.count ?? -1)"
         var logs = UserDefaults.standard.stringArray(forKey: "fanMenuDiag") ?? []
         logs.append(diag)
         if logs.count > 30 { logs.removeFirst(logs.count - 30) }

@@ -379,7 +379,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
             self.lastError = ""
             self.webView?.reload()
         }
-        return "刷新"
+        return "Reloaded"
     }
 
     // MARK: - v2.9.88 AI 可控浏览器补强：等待 / 正文提取 / 滚动 / 表单提交
@@ -388,7 +388,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     func wait(timeout: Int = 15) -> [String: Any] {
         guard ensureWebView() else { return ["ok": false, "error": "Browser initialization timeout"] }
         FloatingBrowser.shared.show()
-        beginAction("等待页面加载…")
+        beginAction("Waiting for page load…")
         let deadline = Date().addingTimeInterval(TimeInterval(timeout))
         var ready = false
         while Date() < deadline {
@@ -424,7 +424,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     func getText(maxChars: Int = 3000, query: String? = nil) -> String {
         guard ensureWebView() else { return errInit() }
         FloatingBrowser.shared.show()
-        beginAction("提取页面正文…")
+        beginAction("Extracting page content…")
         // fix3cl7: SPA 渲染等待——现代网页 JS 框架(React/Vue/Next)加载后 body 一开始是空的，
         // 立即抓内文会得到空页(用户反馈"很多网页加载不出来")。轮询等待 body 有内容或稳定，
         // 最多等 8s（每 500ms 一次）；空页时输出 JS 诊断而非裸空串。
@@ -477,14 +477,14 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     func scroll(_ direction: String) -> String {
         guard ensureWebView() else { return errInit() }
         FloatingBrowser.shared.show()
-        beginAction("滚动页面（\(direction)）")
+        beginAction("Scrolling page (\(direction))")
         let js: String
         switch direction {
         case "down": js = "window.scrollBy(0, window.innerHeight*0.8); 'scrolled down'"
         case "up": js = "window.scrollBy(0, -window.innerHeight*0.8); 'scrolled up'"
         case "top": js = "window.scrollTo(0,0); 'scrolled to top'"
         case "bottom": js = "window.scrollTo(0, document.body.scrollHeight); 'scrolled to bottom'"
-        default: endAction(); return "ERR: direction 只支持 down/up/top/bottom"
+        default: endAction(); return "ERR: direction only supports down/up/top/bottom"
         }
         let r = evalSync(js)
         _ = evalSync(Self.highlightScript)   // 滚动后元素位置变化，刷新蓝框编号
@@ -495,7 +495,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     /// 表单提交：在指定输入框按回车（触发 submit），或直接提交整个 form
     func submit(_ idx: Int) -> String {
         FloatingBrowser.shared.show()
-        beginAction("提交表单（元素 #\(idx)）…")
+        beginAction("Submitting form (element #\(idx))…")
         ensureMarked()
         let js = """
         (function(){
@@ -522,7 +522,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     func formFields() -> [String: Any] {
         guard ensureWebView() else { return ["ok": false, "error": "Browser initialization timeout"] }
         FloatingBrowser.shared.show()
-        beginAction("扫描表单字段…")
+        beginAction("Scanning form fields…")
         let js = """
         (function(){
           function xpath(e){
@@ -570,7 +570,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     func fillForm(values: [String: String], submit: Bool) -> [String: Any] {
         guard ensureWebView() else { return ["ok": false, "error": "Browser initialization timeout"] }
         FloatingBrowser.shared.show()
-        beginAction("自动填充表单…")
+        beginAction("Auto-filling form…")
         var js = """
         (function(){
           function xpath(e){
@@ -665,7 +665,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     func waitFor(text: String? = nil, selector: String? = nil, timeout: Int = 15) -> [String: Any] {
         guard ensureWebView() else { return ["ok": false, "error": "Browser initialization timeout"] }
         FloatingBrowser.shared.show()
-        beginAction("等待目标出现…")
+        beginAction("Waiting for the target to appear…")
         if let s = selector, !s.isEmpty {
             let sj = JSONString(s)
             let deadline = Date().addingTimeInterval(TimeInterval(timeout))
@@ -708,7 +708,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
         guard let wv = webView else { return "ERR: browser not initialized" }
         // v2.9.44：主线程调用会死锁（main.async 排队 + semaphore.wait 阻塞主线程），安全返回
         if Thread.isMainThread {
-            return "ERR: evalSync 不能在主线程调用（会阻塞 UI），请用异步 evaluateJavaScript"
+            return "ERR: evalSync can't be called on the main thread (blocks UI), use async evaluateJavaScript"
         }
         var result = "ERR: 执行超时"
         let sem = DispatchSemaphore(value: 0)

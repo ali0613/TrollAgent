@@ -656,7 +656,6 @@ final class ConversationStore: ObservableObject {
     /// v3.5.5：自适应纠正（对齐 Codex/agent-harness "机制决定行为"）——
     /// 模型直接发 tool_calls 但本轮没写可见正文解说时，不执行工具，注入纠正消息重跑一轮，
     /// 逼模型先写"先解说后执行"的正文。此字段为待注入的纠正消息（仅进 API 请求，不显示为 UI 气泡）。
-    private var pendingNarrationCorrection: String? = nil
     /// v3.5.5：连续纠正次数——同一 tool 决策最多纠正 2 次仍不解说就放行执行，避免死循环。
     private var narrationCorrectionCount = 0
     /// v3.5.6：工具参数 schema 预校验——模型调工具但缺必填参数时，不执行，注入纠正消息重跑
@@ -702,7 +701,7 @@ final class ConversationStore: ObservableObject {
     }
 
     var currentTitle: String {
-        guard let idx = selectedIndex else { return "会话" }
+        guard let idx = selectedIndex else { return "Conversation" }
         return conversations[idx].title
     }
 
@@ -813,7 +812,6 @@ final class ConversationStore: ObservableObject {
         liveProducedID = nil
         // v3.5.5：新任务开始，重置"先解说后执行"自适应纠正状态（避免跨任务计数器残留）
         narrationCorrectionCount = 0
-        pendingNarrationCorrection = nil
         // v3.5.16：新请求开始，清除上次的停止标志（让 runLoop 可继续）
         stopRequested = false
         // v3.5.6：重置工具参数预校验纠正状态
@@ -869,7 +867,7 @@ final class ConversationStore: ObservableObject {
                 NotificationCenter.default.removeObserver(o)
                 self.retryObserver = nil
             }
-            self.statusText = "网络已恢复，自动重试…"
+            self.statusText = "Network restored, auto-retrying…"
             self.isLoading = true
             self.runLoop(config: config, tools: tools, disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel)
         }
@@ -942,7 +940,7 @@ final class ConversationStore: ObservableObject {
         DispatchQueue.main.async {
             self.requestRound = depth + 1
             self.requestRounds = 0   // v4.3.71：无轮次上限
-            self.statusText = "已准备请求 (正在整理会话与可用工具)"
+            self.statusText = "Request ready (organizing conversation and available tools)"
             self.liveTrail = []   // v2.9.127：新一轮清空实时轨迹
         }
 
@@ -977,22 +975,16 @@ final class ConversationStore: ObservableObject {
         // 稳定前缀保持字节一致 → 官方 API 前缀缓存可直接matched (Anthropic/OpenAI）。
         history.insert(ChatMessage(role: "system", content: SystemPrompts.shared.selected.content), at: 0)
         if let devInstr = DeveloperInstructionStore.shared.defaultInjectionContent(), !devInstr.isEmpty {
-            history.insert(ChatMessage(role: "system", content: "以下是开发者指令，请始终遵守：\n" + devInstr), at: 0)
+            history.insert(ChatMessage(role: "system", content: "Developer instructions below, always follow:\n" + devInstr), at: 0)
         }
         // 动态状态块：最新信息放最后，不影响稳定前缀缓存
         history.insert(ChatMessage(role: "system", content: Self.dynamicStatePrompt()), at: 0)
-        // v3.5.5：自适应纠正注入——若上一轮模型漏了"先解说后执行"（直接发工具没写可见解说），
-        // 把纠正消息拼到本次请求末尾（最新指令，模型必须回应）。仅进请求、不显示为 UI 用户气泡。
-        if let correction = self.pendingNarrationCorrection, !correction.isEmpty {
-            history.append(ChatMessage(role: "user", content: correction))
-            self.pendingNarrationCorrection = nil
-        }
-        // v3.5.6：工具参数预校验纠正注入——上一轮调工具缺必填参数被拦，同样拼到请求末尾。
+        // Tool-param prevalidation correction injection: missing required params blocked last round, append likewise.
         if let pcorr = self.pendingParamCorrection, !pcorr.isEmpty {
             history.append(ChatMessage(role: "user", content: pcorr))
             self.pendingParamCorrection = nil
         }
-        // v4.3.25：空回复纠正注入——上一轮工具执行后模型输出空白，拼到请求末尾逼其给结论。
+        // Empty-reply correction injection: if the model output blank after running tools last round, append this to force a conclusion.
         if let ecorr = self.pendingEmptyReplyCorrection, !ecorr.isEmpty {
             history.append(ChatMessage(role: "user", content: ecorr))
             self.pendingEmptyReplyCorrection = nil
@@ -1001,11 +993,11 @@ final class ConversationStore: ObservableObject {
         client.send(messages: history, compactSource: prepared.compactSource, tools: effectiveTools, onStatus: { status in
             DispatchQueue.main.async {
                 // v2.9.34：带轮次前缀；v4.3.71 无上限 (requestRounds==0) 时不显示 "/0"
-                if self.requestRound > 0 && !status.contains("第 ") {
+                if self.requestRound > 0 && !status.contains("Round ") {
                     if self.requestRounds > 0 {
-                        self.statusText = "正在请求模型 (第 \(self.requestRound)/\(self.requestRounds) 轮)· \(status)"
+                        self.statusText = "Requesting model (round \(self.requestRound)/\(self.requestRounds))· \(status)"
                     } else {
-                        self.statusText = "正在请求模型 (第 \(self.requestRound) 轮)· \(status)"
+                        self.statusText = "Requesting model (round \(self.requestRound))· \(status)"
                     }
                 } else {
                     self.statusText = status
@@ -1139,7 +1131,7 @@ final class ConversationStore: ObservableObject {
                     }
                     if trimmedFinal.isEmpty && lastMsgIsTool && self.emptyReplyCorrectionCount < 2 {
                         self.emptyReplyCorrectionCount += 1
-                        self.pendingEmptyReplyCorrection = "你刚刚执行了工具但回复正文是空的。请基于已返回的工具结果，用一两句话向用户给出明确结论（或说明下一步该做什么），不要只回复空白或「Done」。"
+                        self.pendingEmptyReplyCorrection = "You just ran tools but your reply body is empty. Based on the returned tool results, give the user a clear 1-2 sentence conclusion (or say what to do next) — don't reply blank or just 'Done'."
                         self.trailStep(.done(.note, "Empty-reply correction", detail: "Model returned empty text, injected a correction and reran", ok: false))
                         // 清掉刚渲染的空 assistant 消息，避免界面残留空白气泡
                         if let sid = self.streamingMessageId {
@@ -1201,7 +1193,7 @@ final class ConversationStore: ObservableObject {
                     // 模型不解说就不放行，给到 4 次机会逼它写正文；仍不写则由 running 步骤卡兜底可见性。
                     if visibleTrim.isEmpty && self.narrationCorrectionCount < 4 {
                         self.narrationCorrectionCount += 1
-                        self.pendingNarrationCorrection = "你准备调用工具，但还没有向用户说明要做什么。请先用一两句自然语言（写在回复正文 content 里，不要放进思考）向用户说明你正要做什么、为什么，然后再调用工具。"
+
                         // 清掉本轮只挂了思考、没写正文的孤立消息，避免"卡在思考中"的观感，再重跑
                         if let sid = self.streamingMessageId,
                            let ci = self.activeConvIndex,
@@ -1254,7 +1246,7 @@ final class ConversationStore: ObservableObject {
                     self.thinkBuffer = "" // 重置缓冲区
                     self.streamingMessageId = nil
                     // v2.9.127：轨迹——AI 决定调用一批工具
-                    self.trailStep(.done(.tool, "AI 选择调用 \(calls.count) 个工具",
+                    self.trailStep(.done(.tool, "AI chose to call \(calls.count) tools",
                                          detail: calls.map { $0.name }.joined(separator: "、")))
                     // v2.9.31：递归处理一批工具调用 (后台执行，无授权弹窗）
                     // v3.1.72：thinkText 传可见文本 (工具调用前的说明），不再写入 tool 消息 thinking
@@ -1281,7 +1273,7 @@ final class ConversationStore: ObservableObject {
                     }
                     // v2.9.87：网络类错误 + 当前确认断网 → 等网络恢复自动重试一次
                     if self.shouldRetryOnNetworkRestore(nsErr) {
-                        self.statusText = "网络不可用，等待恢复后自动重试…"
+                        self.statusText = "Network unavailable, auto-retrying after recovery…"
                         self.scheduleRetryAfterNetworkRestore(config: config, tools: tools, disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel)
                         return
                     }
@@ -1369,13 +1361,13 @@ final class ConversationStore: ObservableObject {
                 switch result {
                 case .success(let r):
                     let raw = Self.jsonString(r)
-                    tm.content = raw.count > 8000 ? raw.prefix(8000) + "\n... [工具结果已截断, total \(raw.count) 字符]" : raw
-                    tm.toolArgs = String("命令: \(cmdCopy.prefix(120))")
+                    tm.content = raw.count > 8000 ? raw.prefix(8000) + "\n... [tool result truncated, total \(raw.count) chars]" : raw
+                    tm.toolArgs = String("Command: \(cmdCopy.prefix(120))")
                     tm.toolDuration = 0.01
                 case .failure(let e):
-                    tm.content = "执行失败: \(e.localizedDescription)"
+                    tm.content = "Execution failed: \(e.localizedDescription)"
                     tm.isError = true
-                    tm.toolArgs = String("命令: \(cmdCopy.prefix(120))")
+                    tm.toolArgs = String("Command: \(cmdCopy.prefix(120))")
                 }
                 self.appendToCurrent(tm)
                 self.liveProducedID = tm.id

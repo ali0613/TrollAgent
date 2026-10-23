@@ -146,7 +146,7 @@ enum TrollRuntimeEngine {
             let rc = bindMount(mount, host, readOnly: readOnly)
             if rc != 0 { return (false, nil, nil, nil, "bind failed rc=\(rc)") }
             mountedBindPoints.insert(mount)
-            ShellDiag.log("bindAppContainer: \(bundleId) \(host) → \(mount) ro=\(readOnly) rc=0 (按需容器绑定)\(backupPath.map{" backup="+$0} ?? "")")
+            ShellDiag.log("bindAppContainer: \(bundleId) \(host) → \(mount) ro=\(readOnly) rc=0 (on-demand container bind)\(backupPath.map{" backup="+$0} ?? "")")
         }
         return (true, mount, host, backupPath, nil)
     }
@@ -164,7 +164,7 @@ enum TrollRuntimeEngine {
             if fm.fileExists(atPath: src, isDirectory: &isDir), isDir.boolValue {
                 do {
                     try fm.copyItem(atPath: src, toPath: dest + "/" + sub)
-                } catch { /* 个别文件失败不致命, 尽力而为 */ }
+                } catch { /* individual file failures aren't fatal, best-effort */ }
             }
         }
         return fm.fileExists(atPath: dest) ? dest : nil
@@ -221,7 +221,7 @@ enum TrollRuntimeEngine {
                 let rc = bindMount(mount, iosRoot, readOnly: readOnly)
                 if rc == 0 {
                     mountedBindPoints.insert(mount)
-                    ShellDiag.log("autoBind: \(iosRoot) → \(mount) ro=\(readOnly) rc=0 (首次挂载)")
+                    ShellDiag.log("autoBind: \(iosRoot) → \(mount) ro=\(readOnly) rc=0 (first mount)")
                 } else {
                     ShellDiag.log("autoBind: \(iosRoot) bind rc=\(rc) skip rewrite")
                     continue
@@ -315,8 +315,8 @@ enum TrollRuntimeEngine {
                 return "[ish] kernel init failed: rootfs extraction failed \(error.localizedDescription)"
             }
             if !fm.fileExists(atPath: dataPath) {
-                state = .failed("rootfs 解压后缺少 data 目录")
-                return "[ish] 内核初始化失败: rootfs 解压后缺少 data 目录"
+                state = .failed("rootfs lacks the data dir after extraction")
+                return "[ish] kernel init failed: rootfs lacks the data dir after extraction"
             }
             if let h = Self.fileMD5((Bundle.main.url(forResource: "alpine-rootfs", withExtension: "zip")?.path) ?? "") {
                 try? h.write(toFile: versionFile, atomically: true, encoding: .utf8)
@@ -332,7 +332,7 @@ enum TrollRuntimeEngine {
                 try fm.moveItem(atPath: dataPath, toPath: backup)
                 try fm.unzipItem(at: zipURL, to: parent)
                 try newHash.write(toFile: versionFile, atomically: true, encoding: .utf8)
-                NSLog("[ish] rootfs 版本更新：重解压完成（旧 rootfs 备份于 .old）")
+                NSLog("[ish] rootfs version update: re-extract done (old rootfs backed up at .old)")
             } catch {
                 // 重解压失败——回滚备份
                 try? fm.removeItem(atPath: dataPath)
@@ -346,7 +346,7 @@ enum TrollRuntimeEngine {
         let rc = dataPath.withCString { cish_boot($0) }
         if rc != 0 {
             state = .failed("cish_boot rc=\(rc)")
-            return "[ish] 内核初始化失败: cish_boot rc=\(rc)"
+            return "[ish] kernel init failed: cish_boot rc=\(rc)"
         }
 
         // v3.7.1：bind mount 默认关闭（v3.7.0 在 cish_boot 自动挂载会污染 meta.db 权限
@@ -387,25 +387,25 @@ enum TrollRuntimeEngine {
             let sedExpr = "s#https://dl-cdn.alpinelinux.org/alpine/v[^/]*#https://\(m)/alpine/v$V#g; s#http://dl-cdn.alpinelinux.org/alpine/v[^/]*#https://\(m)/alpine/v$V#g"
             let pre = "V=$(cut -d. -f1-2 /etc/alpine-release 2>/dev/null); "
                 + "grep -q '\(m)' /etc/apk/repositories 2>/dev/null || sed -i \"\(sedExpr)\"/etc/apk/repositories 2>/dev/null; "
-            onLine?("正在更新软件源索引（\(m)）…")
+            onLine?("Updating package index (\(m))…")
             let upd = exec(pre + "apk update", timeout: 50, onLine: { line in onLine?(line) })
             if upd.exitCode == 0 {
                 usedMirror = m
-                onLine?("软件源就绪：\(m)")
+                onLine?("Package source ready: \(m)")
                 break
             }
             lastErr = upd.output
-            onLine?("\(m) 源不可用，切换下一个镜像…")
+            onLine?("\(m) source unavailable, switching to the next mirror…")
         }
         guard !usedMirror.isEmpty else {
             return (lastErr.isEmpty ? "all mirrors failed" : lastErr, 1, false)
         }
         let add = exec("apk add --no-cache " + pk, timeout: timeout, onLine: { line in
             var stage = ""
-            if line.contains("Downloading") { stage = "下载中… " }
-            else if line.contains("Installing") { stage = "安装中… " }
-            else if line.contains("Fetching") { stage = "拉取包信息… " }
-            else if line.contains("OK:") { stage = "完成✓ " }
+            if line.contains("Downloading") { stage = "Downloading… " }
+            else if line.contains("Installing") { stage = "Installing… " }
+            else if line.contains("Fetching") { stage = "Fetching package info… " }
+            else if line.contains("OK:") { stage = "Done✓ " }
             onLine?(stage + line)
         })
         return add
@@ -414,20 +414,20 @@ enum TrollRuntimeEngine {
     /// v4.3.75：安装失败结构化诊断——AI 可直接转述给用户，替代一坨 apk 日志。
     static func installDiagnose(_ output: String, timedOut: Bool, exitCode: Int32) -> String {
         if timedOut {
-            return "安装超时（解释器装大包/网络慢），可稍后重试或拆分安装"
+            return "Install timed out (interpreter installing a big package/slow network); retry later or split the install"
         }
         let o = output
         if o.contains("unable to select package") || o.contains("No such package") {
-            return "Alpine 仓库没有这个包（可能不是 Alpine 包名）；请确认包名或用 tool.install 指定 name/source"
+            return "Not in the Alpine repo (may not be an Alpine package name); confirm the name or use tool.install with name/source"
         }
         if o.contains("SSL routines") || o.contains("unexpected eof") || o.contains("Permission denied")
             || o.contains("IO ERROR") || o.contains("fetch ") {
-            return "网络/软件源异常（已自动切国内镜像源），稍后重试"
+            return "Network/package-source issue (auto-switched to a domestic mirror), retry later"
         }
         if o.contains("ERROR:") {
-            return "apk 安装报错（已自动切镜像源），完整日志已返回可按需排查"
+            return "apk install error (mirror auto-switched); full log returned for troubleshooting"
         }
-        return "安装失败 exit=\(exitCode)，完整日志已返回可按需排查"
+        return "Install failed exit=\(exitCode); full log returned for troubleshooting"
     }
 
     /// 执行命令。返回 (输出, 退出码, 是否超时)。未 boot 时自动尝试 boot，失败返回错误串。
@@ -672,24 +672,24 @@ enum TrollRuntimeEngine {
             if norm.contains("/alpine-rootfs/") { continue }   // rootfs 自身落盘，Alpine 命令里无意义
             // 详细诊断：定位桥到底在哪一步断（命中/不存在/超限/读取失败）
             if !fm.fileExists(atPath: norm) {
-                ShellDiag.log("autoBridge HIT: \(norm) 存在=false → 跳过")
+                ShellDiag.log("autoBridge HIT: \(norm) exists=false → skipped")
                 continue
             }
             // v3.6.19c: 仅桥接 regular file（目录/symlink/设备不桥），杜绝目录 token 误读浪费。
             if (try? fm.attributesOfItem(atPath: norm)[.type]) as? FileAttributeType != .typeRegular {
-                ShellDiag.log("autoBridge HIT: \(norm) 非regular file(目录?) → 跳过")
+                ShellDiag.log("autoBridge HIT: \(norm) not a regular file (dir?) → skipped")
                 continue
             }
             guard let size = (try? fm.attributesOfItem(atPath: norm)[.size]) as? Int else {
-                ShellDiag.log("autoBridge HIT: \(norm) stat失败 → 跳过")
+                ShellDiag.log("autoBridge HIT: \(norm) stat failed → skipped")
                 continue
             }
             if size <= 0 || size > maxBytes {
-                ShellDiag.log("autoBridge HIT: \(norm) size=\(size)B 超限(>\(maxBytes)) → 跳过")
+                ShellDiag.log("autoBridge HIT: \(norm) size=\(size)B over limit(>\(maxBytes)) → skipped")
                 continue
             }
             guard let data = try? Data(contentsOf: URL(fileURLWithPath: norm)) else {
-                ShellDiag.log("autoBridge HIT: \(norm) size=\(size)B 读取失败 → 跳过")
+                ShellDiag.log("autoBridge HIT: \(norm) size=\(size)B read failed → skipped")
                 continue
             }
             counter += 1
@@ -708,9 +708,9 @@ enum TrollRuntimeEngine {
         if counter > 0 {
             ShellDiag.log("autoBridge: bridged \(counter) file(s), stdin=\(stdinData.count)B; files=[\(pending.map { $0.1 }.joined(separator: ","))]")
         } else if !seen.isEmpty {
-            ShellDiag.log("autoBridge: 命中 \(seen.count) 个 iOS 路径但全部跳过(见上)")
+            ShellDiag.log("autoBridge: hit \(seen.count) iOS paths but all skipped (see above)")
         } else {
-            ShellDiag.log("autoBridge: 未命中任何 iOS 路径 → 命令原样执行: \(String(command.prefix(80)))")
+            ShellDiag.log("autoBridge: no iOS paths matched → command runs as-is: \(String(command.prefix(80)))")
         }
         return (result, prefix, stdinData)
     }

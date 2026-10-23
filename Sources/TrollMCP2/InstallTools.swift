@@ -79,7 +79,7 @@ final class ToolInstallTool: MCPTool {
                 let isPy = pkg.hasPrefix("py3-") || Self.pythonHints.contains(name)
                 let (ok, note) = smokeTest(name, importMode: isPy)
                 return ["ok": true, "tool": name, "status": ok ? "installed" : "installed_unverified", "source": "alpine_apk", "package": pkg,
-                        "hint": "apk add \(pkg) done (" + note + "). Just call `\(name) <args>` — runs in the unified env (TrollRuntime) with auto-bind direct read of iOS paths (e.g. \(name) /var/mobile/xxx 自动改 /ios_mobile/xxx）；缺依赖时首次调用会自动补齐。若冒烟异常：先 `\(name) --help` 看用法；仍无输出用文件重定向验证（`\(name) ... > /tmp/x; cat /tmp/x`）"]
+                        "hint": "apk add \(pkg) done (" + note + "). Just call `\(name) <args>` — runs in the unified env (TrollRuntime) with auto-bind direct read of iOS paths (e.g. \(name) /var/mobile/xxx auto-rewritten to /ios_mobile/xxx); missing deps auto-filled on first call. If the smoke test fails: first `\(name) --help` for usage; still no output, verify with file redirection (`\(name) ... > /tmp/x; cat /tmp/x`)]"
             }
             InstallationRegistry.shared.finish(ok: false, summary: TrollRuntimeEngine.installDiagnose(apk.output, timedOut: apk.timedOut, exitCode: apk.exitCode))
             lastApkErr = apk.output
@@ -141,7 +141,7 @@ final class ToolInstallTool: MCPTool {
 
         // 5. 兜底指引
         return ["ok": false, "tool": name, "status": "not_found",
-                "hint": "Not an apk package (tried \(apkCandidates(for: name).joined(separator: "/"))). Options: ① tool.install profile:re (reverse-eng toolchain batch); ② provide a source repo URL 走 CI 交叉编译（原生 iOS 二进制）；③ shell.exec('apk search \(name)') 找近似包名；④ 自写工具 inject load_dylib"]
+                "hint": "Not an apk package (tried \(apkCandidates(for: name).joined(separator: "/"))). Options: ① tool.install profile:re (reverse-eng toolchain batch); ② provide a source repo URL for CI cross-compile (native iOS binaries); ③ shell.exec('apk search \(name)') to find similar package names; ④ write a custom tool with inject load_dylib]
     }
 
     /// Alpine 候选包名：映射名 → 原名 → py3-xxx（Python 包在 Alpine 多为 py3- 前缀）
@@ -158,10 +158,10 @@ final class ToolInstallTool: MCPTool {
                 let out = (r["stdout"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 let exit = r["exit_code"] as? Int ?? 1
                 if exit == 0 && out.contains("IMPORT_OK") {
-                    return (true, "Alpine python smoke `import \(safe)` OK (" + String(out.prefix(60)) + ") — unified-env python3 (Alpine）——apk 包直接可见可用")
+                    return (true, "Alpine python smoke `import \(safe)` OK (" + String(out.prefix(60)) + ") — unified-env python3 (Alpine) — apk packages directly visible and usable)
                 }
                 let errNote = out.isEmpty ? "no output" : String(out.prefix(80))
-                return (false, "Alpine python `import \(safe)` failed (exit \(exit): " + errNote + ") — the package may not be installed into unified-env python3, 或 C 扩展在解释器跑不动——重计算用显式 py3-native（原生 numpy/pandas 已内置），轻量装包用 apk py3-xxx")
+                return (false, "Alpine python `import \(safe)` failed (exit \(exit): " + errNote + ") — the package may not be installed into unified-env python3, or a C extension doesn't run in the interpreter — for heavy compute use explicit py3-native (native numpy/pandas bundled), for light packages use apk py3-xxx)
             } catch {
                 return (false, "Alpine python `import \(safe)` smoke-test error: \(error)")
             }

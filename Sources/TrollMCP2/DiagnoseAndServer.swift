@@ -198,23 +198,23 @@ final class DiagnoseCrashTool: MCPTool {
             analysis["stack_top10"] = stack
 
             // 根因判断
-            var rootCause = "未知"
+            var rootCause = "unknown"
             if let term = analysis["termination_reason"] as? String {
-                if term.contains("CODESIGNING") { rootCause = "签名失效" }
-                else if term.contains("DYLD") { rootCause = "动态库加载failed" }
-                else if term.contains("0xdead10cc") { rootCause = "后台挂起时持有文件锁" }
+                if term.contains("CODESIGNING") { rootCause = "Signing invalid" }
+                else if term.contains("DYLD") { rootCause = "Dynamic library load failed" }
+                else if term.contains("0xdead10cc") { rootCause = "Held a file lock while suspended in the background" }
             }
-            if analysis["dyld_error"] != nil { rootCause = "dyld 依赖缺失或符号未找到" }
-            if analysis["signature_issue"] != nil { rootCause = "代码签名问题" }
+            if analysis["dyld_error"] != nil { rootCause = "dyld dependency missing or symbol not found" }
+            if analysis["signature_issue"] != nil { rootCause = "Code signing issue" }
             analysis["root_cause"] = rootCause
 
             // 修复建议
             switch rootCause {
-            case "签名失效":
+            case "Signing invalid":
                 analysis["fix"] = "reinstall via TrollStore, or re-sign main binary with ldid -S"
-            case "动态库加载failed", "dyld 依赖缺失或符号未找到":
+            case "Dynamic library load failed", "dyld dependency missing or symbol not found":
                 analysis["fix"] = "check injected dylib dependencies (otool -L), confirm all dependencies exist on device"
-            case "后台挂起时持有文件锁":
+            case "Held a file lock while suspended in the background":
                 analysis["fix"] = "close file handles and DB connections before App goes background"
             default:
                 analysis["fix"] = "read full crash log and stack trace to locate the exact code"
@@ -404,9 +404,9 @@ final class ServerStartTool: MCPTool {
             "port": LocalServerManager.shared.port,
             "base_url": "http://127.0.0.1:\(LocalServerManager.shared.port)",
             "endpoints": [
-                "/health — 健康检查",
-                "/tools — 列出所有可用工具",
-                "/api/{tool_name}?param=value — 调用工具"
+                "/health — health check",
+                "/tools — list all available tools",
+                "/api/{tool_name}?param=value — call a tool"
             ]
         ]
     }

@@ -268,7 +268,7 @@ final class VpnManager {
             } else {
                 VpnManager.vpnlog("confirmConnected TIMEOUT status=\(status.rawValue) retryLeft=\(retryLeft)")
                 // 没真连上：状态仍是 disconnected/invalid → 系统批准窗没弹/隧道没起（TrollStore 环境限制）
-                completion("VPN 启动未生效：系统未弹「允许」窗或隧道未连接（TrollStore 环境限制），请改用「本地代理」抓包（WiFi 手动代理 127.0.0.1:18180）")
+                completion("VPN didn't activate: no system 'Allow' prompt or the tunnel didn't connect (TrollStore env limit); use 'local proxy' for capture instead (WiFi manual proxy 127.0.0.1:18180)")
             }
         }
     }

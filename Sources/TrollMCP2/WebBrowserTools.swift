@@ -215,9 +215,9 @@ final class BrowserExecTool: MCPTool {
         parameters: [
             "command": "Subcommand: status / navigate / screenshot / snapshot / text / click / type / form_fields / fill_form / submit / scroll / wait / wait_for / adblock / clear",
             "url": "URL (for navigate)",
-            "fresh": "true=忽略缓存强制拉新 (for navigate, optional)",
+            "fresh": "true=ignore cache and force refresh (for navigate, optional)",
             "enabled": "true/false (for adblock)",
-            "kinds": "cache,cookies,storage 或 all (for clear)",
+            "kinds": "cache,cookies,storage or all (for clear)",
             "idx": "Element index (for click/type)",
             "text": "Text to input (for type)",
             "selector": "CSS selector (for wait_for)"

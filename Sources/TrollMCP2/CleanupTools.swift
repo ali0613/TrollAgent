@@ -34,7 +34,7 @@ final class CleanupScanner {
         } else {
             items.append(CleanupItem(id: "cache", label: "clean caches and temp files",
                                      detail: "No cache to clean (0 B)",
-                                     bytes: 0, risk: .safe, affected: "无影响"))
+                                     bytes: 0, risk: .safe, affected: "No effect"))
         }
 
         // 2. 钥匙串 (警告——清登录态）
@@ -48,15 +48,15 @@ final class CleanupScanner {
                                  bytes: 0, risk: .warn, affected: "Ad identifier changes, game user-acquisition/ad tracking may reset"))
 
         // 4. 数据容器 (危险——整体重置，可恢复）
-        items.append(CleanupItem(id: "container", label: "刷新数据容器 (重置 App 数据，可恢复)",
-                                 detail: "容器改名备份 → 杀进程 → 系统重建空容器；备份可 restore 恢复",
-                                 bytes: 0, risk: .danger, affected: "清空所有本地数据 (含未上传存档)，备份保留可恢复"))
+        items.append(CleanupItem(id: "container", label: "Reset data container (reset app data, restorable)",
+                                 detail: "Rename container as backup → kill the process → system rebuilds an empty container; restorable from backup",
+                                 bytes: 0, risk: .danger, affected: "Wipes all local data (incl. unsynced saves); backup kept, restorable"))
 
         // 5. 标识符 (只读提示）
         let idfv = UIDevice.current.identifierForVendor?.uuidString ?? "N/A"
-        items.append(CleanupItem(id: "idfv", label: "标识符 (IDFV)",
-                                 detail: "系统 \(idfv.prefix(8))…；无公开刷新 API，删除 App 后由系统决定",
-                                 bytes: 0, risk: .safe, affected: "只读信息，不执行"))
+        items.append(CleanupItem(id: "idfv", label: "Identifier (IDFV)",
+                                 detail: "System \(idfv.prefix(8))…; no public refresh API, decided by the system after deleting the app",
+                                 bytes: 0, risk: .safe, affected: "Read-only info, no action"))
 
         return items
     }

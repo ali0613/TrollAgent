@@ -197,7 +197,7 @@ final class WebSearchTool: MCPTool {
             .replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
         let safeQ = String(queries.joined(separator: "_").replacingOccurrences(of: " ", with: "-").prefix(30))
         let name = "web-\(date)-\(safeQ).md"
-        var md = "# 搜索结果：\(queries.joined(separator: " | "))\n\n"
+        var md = "# Search results: \(queries.joined(separator: " | "))\n\n"
         for (i, r) in results.prefix(10).enumerated() {
             md += "\(i + 1). [\(r["title"] ?? "")](\(r["url"] ?? ""))\n   \(r["snippet"] ?? "")\n"
         }
@@ -207,7 +207,7 @@ final class WebSearchTool: MCPTool {
     }
 
     /// v4.3.26：来源分级说明——AI 看到 unknown 小站应交叉验证，不直接采信
-    private static let sourceNote = "source_type 分级：official=官方/权威站点（优先采信）；third_party=媒体/知名社区/百科（可参考，但与官方文档冲突时以官方为准）；unknown=未知名小站/个人页（可信度低，勿直接采信，需交叉验证）。"
+    private static let sourceNote = "source_type grading: official=official/authoritative sites (prefer); third_party=media/known communities/wikis (referenc参考，但与官方文档冲突时以官方为准）；unknown=未知名小站/个人页（可信度低，勿直接采信，需交叉验证）。"
 
     /// v4.3.26：按域名分级搜索结果来源——official / third_party / unknown
     private static func sourceType(for urlString: String) -> String {

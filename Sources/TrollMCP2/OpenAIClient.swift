@@ -162,17 +162,17 @@ final class OpenAIClient {
         if !compactSource.isEmpty {
             summarize(compactSource) { [weak self] summary in
                 guard let self = self else {
-                    completion(.failure(NSError(domain: "OpenAIClient", code: -999, userInfo: [NSLocalizedDescriptionKey: "请求已取消"])))
+                    completion(.failure(NSError(domain: "OpenAIClient", code: -999, userInfo: [NSLocalizedDescriptionKey: "Request cancelled"])))
                     return
                 }
                 // v4.3.72：摘要期间用户点了停止 → 不再发主请求
                 if self.cancelled {
-                    completion(.failure(NSError(domain: "OpenAIClient", code: -999, userInfo: [NSLocalizedDescriptionKey: "请求已取消"])))
+                    completion(.failure(NSError(domain: "OpenAIClient", code: -999, userInfo: [NSLocalizedDescriptionKey: "Request cancelled"])))
                     return
                 }
                 var msgs = messages
                 if let s = summary, !s.isEmpty,
-                   let idx = msgs.firstIndex(where: { $0.role == "system" && $0.content.hasPrefix("[System] 已省略") }) {
+                   let idx = msgs.firstIndex(where: { $0.role == "system" && $0.content.hasPrefix("[System] earliest") }) {
                     msgs[idx] = ChatMessage(role: "system", content: "[Long-conversation summary, model-generated]\n" + s)
                 }
                 self.sendInner(messages: msgs, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: completion)
@@ -226,9 +226,9 @@ final class OpenAIClient {
             start = 5
         }
         if start > 0 {
-            NetworkLog.shared.log("\(config.name): 使用已记忆的兼容级别 \(start) (\(levelName(start)))")
+            NetworkLog.shared.log("\(config.name): using remembered compat level \(start) (\(levelName(start)))")
         } else {
-            NetworkLog.shared.log("\(config.name): 发起请求 (级别 0 完整载荷)")
+            NetworkLog.shared.log("\(config.name): sending request (level 0 full payload)")
         }
         // v2.9.88：请求全链路耗时可视化 —— 在外层包一层 completion，
         // 无论OK/failed/降级多少次，最终只上报一次总耗时 (首字节→流式→工具调用全含在内）。
@@ -239,12 +239,12 @@ final class OpenAIClient {
             switch result {
             case .success:
                 let secs = String(format: "%.1f", Double(el) / 1000.0)
-                NetworkLog.shared.log("\(self.config.name) 请求done (\(el)ms)")
-                onStatus?("响应done · 总耗时 \(secs)s (含降级重试)")
+                NetworkLog.shared.log("\(self.config.name) request done (\(el)ms)")
+                onStatus?("Response done · total \(secs)s (incl. fallback retries)")
                 ModelStore.shared.breaker(for: self.config.id).recordSuccess(usedHalfOpenPermit: self.usedHalfOpenPermit)
                 UsageRecorder.shared.end(config: self.config, ok: true, elapsedMs: el)
             case .failure(let e):
-                NetworkLog.shared.log("\(self.config.name) 请求failed (\(el)ms): \(e.localizedDescription)")
+                NetworkLog.shared.log("\(self.config.name) request failed (\(el)ms): \(e.localizedDescription)")
                 ModelStore.shared.breaker(for: self.config.id).recordFailure(usedHalfOpenPermit: self.usedHalfOpenPermit)
                 UsageRecorder.shared.end(config: self.config, ok: false, elapsedMs: el, error: e.localizedDescription)
             }
@@ -267,9 +267,9 @@ final class OpenAIClient {
         // v2.9.87：总预算检查——降级链整体超时直接failed，不再无限串行等
         if Date() > overallDeadline {
             let el = Int(Date().timeIntervalSince(requestStart) * 1000)
-            NetworkLog.shared.log("\(config.name) 多级降级总预算耗尽 (\(Int(overallBudget))s，\(el)ms)")
+            NetworkLog.shared.log("\(config.name) multi-level fallback budget exhausted (\(Int(overallBudget))s, \(el)ms)")
             completion(.failure(NSError(domain: "OpenAIClient", code: -1001,
-                userInfo: [NSLocalizedDescriptionKey: "请求超时：已按 6 个兼容级别逐级尝试仍无响应 (total \(Int(overallBudget)) 秒)。可能是中转站负载过高或模型名错误，请稍后重试或检查模型配置。"])))
+                userInfo: [NSLocalizedDescriptionKey: "Request timeout: tried all 6 compat levels, still no response (total \(Int(overallBudget))s). 可能是中转站负载过高或模型名错误，请稍后重试或检查模型配置。"])))
             return
         }
         if config.apiProtocol == "Anthropic Messages" {
@@ -327,15 +327,15 @@ final class OpenAIClient {
         // 记录发送的载荷摘要 (不含 apiKey），便于排查
         NetworkLog.shared.log("\(config.name) L\(level) \(levelName(level)) → POST \(endpoint), fields: \(body.keys.sorted().joined(separator: ","))")
         if isFirst {
-            onStatus?("正在等待模型响应…")
+            onStatus?("Waiting for model response…")
         } else {
-            onStatus?("请求被拒绝，正在尝试简化参数 (级别 \(level)/\(maxLevel))…")
+            onStatus?("Request rejected, trying simplified params (level \(level)/\(maxLevel))…")
         }
 
         let task = session.dataTask(with: request) { data, response, error in
             if self.cancelled {
                 completion(.failure(NSError(domain: "OpenAIClient", code: -999,
-                    userInfo: [NSLocalizedDescriptionKey: "请求已取消"])))
+                    userInfo: [NSLocalizedDescriptionKey: "Request cancelled"])))
                 return
             }
             if let error = error {
@@ -350,8 +350,8 @@ final class OpenAIClient {
                     let next = self.nextLevel(after: level, hasTools: tools != nil && !(tools?.isEmpty ?? true), avoidL5: avoidL5)
                     if next <= self.maxLevel {
                         let remain = max(0, Int(self.overallDeadline.timeIntervalSinceNow))
-                        NetworkLog.shared.log("\(self.config.name) L\(level) 请求超时 → 自动降级到 L\(next) (\(self.levelName(next)))")
-                        onStatus?("请求超时，正在尝试简化参数 (级别 \(next)/\(self.maxLevel))· 总预算剩余 \(remain)s…")
+                        NetworkLog.shared.log("\(self.config.name) L\(level) request timeout → auto-fallback to L\(next) (\(self.levelName(next)))")
+                        onStatus?("Request timeout, trying simplified params (level \(next)/\(self.maxLevel))· budget left \(remain)s…")
                         self.attempt(level: next, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                         return
                     }
@@ -394,16 +394,16 @@ final class OpenAIClient {
                     self.didAutoEscalateReasoning = true
                     let saved = self.currentReasoningLevel
                     self.currentReasoningLevel = 4   // v4.3.40：升到极限档 max (破甲站支持, 思考最多)
-                    NetworkLog.shared.log("\(self.config.name): 低/中档响应无思考痕迹 (reasoning_tokens=\(reasoningTokens))，自动升为 max 重试")
-                    onStatus?("该中转低/中档未触发思考，已自动升为最高档重试…")
+                    NetworkLog.shared.log("\(self.config.name): low/mid-tier response had no reasoning trace (reasoning_tokens=\(reasoningTokens)), auto-动升为 max 重试")
+                    onStatus?("Low/mid tier didn't trigger reasoning, auto-upgraded to the highest tier and retrying…")
                     self.attempt(level: level, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                     self.currentReasoningLevel = saved
                     return
                 }
                 if level != self.currentCompatLevel {
                     let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
-                    NetworkLog.shared.log("\(self.config.name) 级别 \(level) (\(self.levelName(level)))试探OK (\(el)ms)，已记忆该级别，发送完整请求")
-                    NetworkLog.lastCompatNote = "模型「\(self.config.name)」当前兼容级别: \(level) (\(self.levelName(level)))"
+                    NetworkLog.shared.log("\(self.config.name) level \(level) (\(self.levelName(level))) probe OK (\(el)ms)，已记忆该级别，发送完整请求")
+                    NetworkLog.lastCompatNote = "Model «\(self.config.name)» current compat level: \(level) (\(self.levelName(level)))"
                     self.persist(level: level)
                     self.currentCompatLevel = level;  // v6.0.30: 立刻更新内存里的兼容级别，避免递归时反复进试探分支死循环
                     // 试探成功，发完整用户请求
@@ -722,7 +722,7 @@ final class OpenAIClient {
                 guard let self = self else { return }
                 if self.cancelled {
                     completion(.failure(NSError(domain: "OpenAIClient", code: -999,
-                        userInfo: [NSLocalizedDescriptionKey: "请求已取消"])))
+                        userInfo: [NSLocalizedDescriptionKey: "Request cancelled"])))
                     return
                 }
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -1061,7 +1061,7 @@ final class OpenAIClient {
         let task = session.dataTask(with: request) { data, response, error in
             if self.cancelled {
                 completion(.failure(NSError(domain: "OpenAIClient", code: -999,
-                    userInfo: [NSLocalizedDescriptionKey: "请求已取消"])))
+                    userInfo: [NSLocalizedDescriptionKey: "Request cancelled"])))
                 return
             }
             if let error = error {
@@ -1432,7 +1432,7 @@ final class OpenAIClient {
                     let saved = self.currentReasoningLevel
                     self.currentReasoningLevel = 3   // v4.3.37：升到最高档 max
                     NetworkLog.shared.log("\(self.config.name): Responses 流式低/中档无思考 (reasoning_tokens=\(respReasoningTokens))，切非流式以 max 重试")
-                    onStatus?("该中转低/中档未触发思考，已自动升为最高档重试…")
+                    onStatus?("Low/mid tier didn't trigger reasoning, auto-upgraded to the highest tier and retrying…")
                     self.performResponses(messages: messages, tools: tools, onStatus: onStatus, onThinking: onThinking, completion: guardedCompletion)
                     self.currentReasoningLevel = saved
                     return

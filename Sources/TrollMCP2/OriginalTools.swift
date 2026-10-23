@@ -68,7 +68,7 @@ final class AutomationStore: ObservableObject {
         var t = task
         t.enabled = enabled
         update(t)
-        AuditLog.shared.log("automation.set_enabled", detail: "\(task.name) \(enabled ? "启用" : "停用")")
+        AuditLog.shared.log("automation.set_enabled", detail: "\(task.name) \(enabled ? "enabled" : "disabled")")
     }
 
     // MARK: - 真实调度
@@ -172,7 +172,7 @@ final class InjectionRemoveTool: MCPTool {
                 removedFile = true
             }
         }
-        AuditLog.shared.log("injection.remove", detail: "\(bid) dylib已删=\(removedFile)")
+        AuditLog.shared.log("injection.remove", detail: "\(bid) dylib deleted=\(removedFile)")
         var merged = result
         merged["dylib_removed"] = removedFile
         return merged
@@ -220,7 +220,7 @@ final class ModelAuthenticationTool: MCPTool {
         if config.apiKey.count > 8 {
             masked = String(config.apiKey.prefix(4)) + "****" + String(config.apiKey.suffix(4))
         } else {
-            masked = config.apiKey.isEmpty ? "(空)" : "****"
+            masked = config.apiKey.isEmpty ? "(empty)" : "****"
         }
         return [
             "authMethod": config.authMethod,

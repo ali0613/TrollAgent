@@ -957,7 +957,7 @@ struct APIKeyRecoverySheet: View {
     }
 
     private func masked(_ c: ModelConfig) -> String {
-        guard !c.apiKey.isEmpty else { return "(空)" }
+        guard !c.apiKey.isEmpty else { return "(empty)" }
         if revealed == c.id { return c.apiKey }
         if c.apiKey.count > 8 {
             return String(c.apiKey.prefix(4)) + "****" + String(c.apiKey.suffix(4))

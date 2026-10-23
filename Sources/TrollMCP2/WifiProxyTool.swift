@@ -22,9 +22,9 @@ final class WifiProxyExecTool: MCPTool {
             "message": "human-readable result",
             "runtime": "CFNetworkCopySystemProxySettings runtime snapshot"
         ],
-        verified: false, category: "net", uiSummary: "WiFi 系统代理查询/应急开关（iOS 无官方代理设置 API，主用 status 诊断）",
+        verified: false, category: "net", uiSummary: "WiFi system proxy query / emergency toggle (iOS has no official proxy-setting API; primarily diagnose with status)",
         requiresTrollStore: true,
-        prerequisites: ["主线抓包请用 vpn.capture（P1 hev 转发，不断网）", "set/clear 为手改 plist，configd 可能覆盖，仅应急"]
+        prerequisites: ["For primary capture use vpn.capture (P1 hev forwarding, no disconnect)", "set/clear manually edit the plist; configd may override, emergency only"]
     )
 
     private let plistPath = "/var/preferences/SystemConfiguration/preferences.plist"

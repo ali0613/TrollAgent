@@ -433,7 +433,7 @@ final class GitHubAccountStore: ObservableObject {
                 }
                 let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
                 if status == 204 {
-                    NetworkLog.shared.log("触发线上编译 \(self.repoOwner)/\(self.repoName) tweak=\(tweak) (HTTP 204)")
+                    NetworkLog.shared.log("Triggered online build \(self.repoOwner)/\(self.repoName) tweak=\(tweak) (HTTP 204)")
                     self.fetchRuns { _ in }
                     completion(true, L10n.t("i18n_827", tweak))
                 } else if status == 404 {

@@ -370,7 +370,7 @@ struct ChatView: View {
                         subtitle: L10n.t("home_analyze_apps_sub"),
                         colors: [.tmCyan, .blue]
                     ) {
-                        runQuickPrompt("帮我分析一下本机已安装的应用，列出缓存占用最大的几个")
+                        runQuickPrompt("Analyze the installed apps on this device and list the ones using the most cache")
                     }
                     QuickActionCard(
                         icon: "memorychip",
@@ -378,7 +378,7 @@ struct ChatView: View {
                         subtitle: L10n.t("home_check_device_sub"),
                         colors: [.green, .tmTeal]
                     ) {
-                        runQuickPrompt("检查一下本机设备和内存情况")
+                        runQuickPrompt("Check this device's hardware and memory status")
                     }
                 }
                 .padding(.horizontal, 20)
@@ -402,34 +402,34 @@ struct ChatView: View {
 
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                     miniCard("hammer.fill", L10n.t("home_quick_compile"), L10n.t("home_quick_compile_sub"), [.orange, .tmBrown], promptId: "developer") {
-                        runQuickPrompt("帮我在 GitHub 上编译一个测试 tweak（HelloWorld），完成后把 dylib 下载到工作区")
+                        runQuickPrompt("Compile a test tweak (HelloWorld) on GitHub, then download the dylib to the workspace")
                     }
                     miniCard("syringe.fill", L10n.t("home_quick_inject"), L10n.t("home_quick_inject_sub"), [.green, .tmTeal], promptId: "reverse") {
-                        runQuickPrompt("列出本机已安装的应用，选一个测试 dylib 注入并验证加载状态")
+                        runQuickPrompt("List installed apps, pick one to test dylib injection and verify its load state")
                     }
                     miniCard("memorychip.fill", L10n.t("home_quick_memory"), L10n.t("home_quick_memory_sub"), [.purple, .tmIndigo], promptId: "gamehacker") {
-                        runQuickPrompt("检查内存修改工具（MemoryTweak）是否就绪，并说明用法")
+                        runQuickPrompt("Check whether the memory-modification tool (MemoryTweak) is ready and explain its usage")
                     }
                     miniCard("cursorarrow.click.2", L10n.t("home_quick_ui"), L10n.t("home_quick_ui_sub"), [.tmCyan, .blue], promptId: "uicontrol") {
-                        runQuickPrompt("给小红书注入控制代理（ControlAgent），然后读取它的界面树")
+                        runQuickPrompt("Inject ControlAgent into Xiaohongshu, then read its UI tree")
                     }
                     miniCard("stethoscope", L10n.t("home_quick_env"), L10n.t("home_quick_env_sub"), [.tmCyan, .teal], promptId: "qa") {
-                        runQuickPrompt("全面检查本机环境：TrollStore、注入工具链、Entitlements 与网络连通性，输出体检报告")
+                        runQuickPrompt("Do a full environment check: TrollStore, injection toolchain, Entitlements and network connectivity, output a health report")
                     }
                     miniCard("antenna.radiowaves.left.and.right", L10n.t("home_quick_capture"), L10n.t("home_quick_capture_sub"), [.orange, .red], promptId: "pentester") {
-                        runQuickPrompt("对小红书做一次网络抓包分析，列出请求清单和可疑字段")
+                        runQuickPrompt("Packet-capture Xiaohongshu once, list the request log and suspicious fields")
                     }
                     miniCard("trash.circle.fill", L10n.t("home_quick_clean"), L10n.t("home_quick_clean_sub"), [.purple, .blue], promptId: "privacy") {
-                        runQuickPrompt("扫描本机应用缓存，帮我清理缓存最大的几个 App（先备份再清理）")
+                        runQuickPrompt("Scan app caches on this device and clean the biggest ones (back up before cleaning)")
                     }
                     miniCard("globe", L10n.t("home_quick_browser"), L10n.t("home_quick_browser_sub"), [.red, .orange], promptId: "default") {
-                        runQuickPrompt("打开内置浏览器访问 bing.com，告诉我页面上有什么")
+                        runQuickPrompt("Open the built-in browser at bing.com and tell me what's on the page")
                     }
                     miniCard("bolt.fill", L10n.t("home_quick_automation"), L10n.t("home_quick_automation_sub"), [.blue, .purple], promptId: "default") {
-                        runQuickPrompt("帮我创建一个自动化任务：每 5 分钟执行一次 ping，失败时提醒我")
+                        runQuickPrompt("Create an automation task: ping every 5 minutes and alert me on failure")
                     }
-                    miniCard("wrench.and.screwdriver.fill", "开发环境监测", "检测工具链安装状态与版本", [.green, .blue], promptId: "developer") {
-                        runQuickPrompt("检查当前开发环境：python3/git/vim/curl 版本，哪些已装哪些没装")
+                    miniCard("wrench.and.screwdriver.fill", "Dev Environment Monitor", "Check toolchain install state and versions", [.green, .blue], promptId: "developer") {
+                        runQuickPrompt("Check the current dev environment: python3/git/vim/curl versions, which are installed and which aren't")
                     }
                 }
                 .padding(.horizontal, 20)

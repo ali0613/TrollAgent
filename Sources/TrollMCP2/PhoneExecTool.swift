@@ -41,8 +41,8 @@ final class PhoneExecTool: MCPTool {
         let delay = max(params["delay_seconds"] as? Int ?? 60, 1)
         // 用本地通知提醒用户打电话
         let content = UNMutableNotificationContent()
-        content.title = "打电话提醒"
-        content.body = "现在打给 \(number)"
+        content.title = "Call reminder"
+        content.body = "Call \(number) now"
         content.sound = .default
         let id = UUID().uuidString
         let req = UNNotificationRequest(identifier: id,
