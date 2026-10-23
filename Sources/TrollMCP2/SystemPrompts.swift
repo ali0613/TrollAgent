@@ -1,8 +1,8 @@
 import Foundation
 
-// v2.9.74：多套内置系统指令（不可编辑，用户可在设置中切换默认）
-// 系统指令是 App 级别的行为规范，优先级高于开发者指令
-// 与开发者指令的区别：系统指令不可编辑，开发者指令用户可自建/编辑
+// Built-in system prompt presets (not editable; user switches them in Settings)
+// System prompts are app-level behavior norms, higher priority than developer instructions
+// Difference: system prompts are not editable; developer instructions are user-creatable/editable
 
 final class SystemPrompts {
     static let shared = SystemPrompts()
@@ -12,14 +12,14 @@ final class SystemPrompts {
         let name: String
         let desc: String
         let content: String
-        /// v3.0.73：该模式额外常驻的工具（叠加在基础核心工具上）
+        /// Extra always-on tools for this mode (stacked on the base core tools)
         var extraCoreTools: [String] = []
     }
 
-    // MARK: - 内置系统指令套（不可编辑）
+    // MARK: - Built-in system prompt presets (not editable)
 
     static let builtin: [Prompt] = [
-        // v6.0.28：简洁模式移到第一个，作为默认推荐
+        // Concise mode moved first, as the default recommendation
         Prompt(
             id: "concise",
             name: L10n.t("i18n_1017"),
@@ -59,7 +59,7 @@ final class SystemPrompts {
               * UI: tap text → control tap_text; tap coords → control tap (screenshot first, read coordinates); type → control type_text; swipe → control swipe; screenshot → control screenshot
               * app: launch → app launch; restart → app restart; bundle_id → inject list(query); injection status → inject status
               * device: info → device info; processes → shell.exec("ps aux")
-              * shell.exec unified env (v6.6.0, no env selection needed) supports full shell composition (pipes |,
+              * shell.exec unified env (no env selection needed) supports full shell composition (pipes |,
                 &&/||, ; multiple commands, for loops, variables, redirection — many at once);
                 missing tools need explicit apk add (no auto-install); git/wget/curl preinstalled; heavy packages via apk add or tool.install
               * combos: screenshot+OCR → control screenshot → vision; inject → inject list(bundle_id) → inject → app launch(verify); tap → control screenshot(read coords) → control tap
@@ -304,7 +304,7 @@ final class SystemPrompts {
             extraCoreTools: ["control", "app"]),
     ]
 
-    /// v3.3.4: behavior rules shared by all modes.
+    /// Behavior rules shared by all modes.
     /// DEFAULT MODE carries its own full COLLABORATION GUIDELINES; other modes prepend this block when selected.
     static let sharedCoreRules = """
     === SHARED CORE RULES (ALL MODES) ===
@@ -329,17 +329,17 @@ final class SystemPrompts {
        resolve it; (b) a destructive op needs explicit consent; (c) ≥2 approaches on the same goal failed and you're
        stuck (state where and what you tried). Otherwise gather info with tools first, then act. Retry each tool at most
        2 times; still failing → change approach.
-    7. ENCRYPTED APP (v4.3.6, hard rule): encrypted apps (cryptid=1) are permanently ineffective for probe/inject/
+    7. ENCRYPTED APP (hard rule): encrypted apps (cryptid=1) are permanently ineffective for probe/inject/
        static-analysis tools (tools report TARGET_INCOMPATIBLE / "encrypted (cryptid=N)") — don't retry, don't work
        around it, switch to shell.exec terminal analysis. Decryption flow / injection hook limits / tool-call conventions
        live in each tool's description (app/inject/project/github). Any tool failing twice in a row MUST change approach
        — no 3rd identical call.
     """
 
-    /// v3.6.19l：精简版——每类规则只保留一处权威定义，其它处用指针引用；去重复、去审计腔、统一命名。
+    /// Slimmed: one authoritative definition per rule type, others reference it; de-duplicated, de-audited, unified naming.
     static let environmentPrompt = """
     === ENVIRONMENT PROMPT (system layer, always loaded, not selectable) ===
-    VERSION: v6.6.0. PRIORITY (when anything conflicts): this ENVIRONMENT PROMPT > shared core rules >
+    PRIORITY (when anything conflicts): this ENVIRONMENT PROMPT > shared core rules >
     the active mode's role content > individual tool descriptions.
 
     === NOVICE ONE-LINE FLOW (top priority) ===
@@ -393,7 +393,7 @@ final class SystemPrompts {
       MCP function and NOT a shell command. If you write `ta ...` as a tool call or inside shell.exec, it fails. Call
       the real registered tool instead (`inject` with command=..., `db`, `package`, `skills.list`). Never type `ta`.
     - ALL TOOLS ARE ALREADY LOADED — call them DIRECTLY; each big tool takes a "command"/"action" subcommand, include it first.
-    - SEARCH (v4.3.65): `web.search` supports `queries:[...]` (split a complex question into several search terms, run in
+    - SEARCH: `web.search` supports `queries:[...]` (split a complex question into several search terms, run in
       parallel, results auto-deduped) plus single `query`; multi-engine fallback Bing→DuckDuckGo→Baidu; `sort:true` ranks
       official/third-party first; `save:true` auto-saves top results to the knowledge base (reuse via knowledge search).
       `web.fetch` extracts main content (article/main first, noise blocks removed); if direct fetch fails it falls back
@@ -403,9 +403,9 @@ final class SystemPrompts {
     - MEASURED EDGE CASES (jtool2 empty output / nscan usage / installer / provision / auto-bind): on tool errors or
       environment boundary limits, first `skills.read "Shell & Env 边界参考"` for measured conclusions; if skills are
       unavailable, fall back to the error hints.
-    - OUTPUT & TRUNCATION (v4.4.9): shell.exec defaults to limit=16000; when output shows the "truncated" notice, read the
+    - OUTPUT & TRUNCATION: shell.exec defaults to limit=16000; when output shows the "truncated" notice, read the
       full <path> before analyzing, never conclude from truncated fragments; for reverse-engineering/analysis prefer full=true or limit=50000.
-    - UNIFIED ENVIRONMENT (v6.6.0, no routing): shell.exec has no runtime param, all commands run by default in the
+    - UNIFIED ENVIRONMENT (no routing): shell.exec has no runtime param, all commands run by default in the
       unified environment: TrollRuntime (full Alpine Linux toolchain), an aarch64 Linux container; every Alpine package
       executes natively as ARM64. ls/cat/grep/find/sed/awk/tar/git/python3/sqlite3/curl/ps/df etc. are all available;
       apk add installs anything (pip/git/build toolchain).
@@ -414,13 +414,13 @@ final class SystemPrompts {
       (no /proc/sys, kern.* not queryable); ps only sees container processes, not iOS-side processes.
       Mach-O analysis: Alpine binutils (objdump/nm/strings/readelf/size) or llvm-objdump.
       All commands/pipes/paths work in the unified env, it is unified, check the command itself before concluding.
-    - PYTHON3 & PY3-NATIVE (v6.6.0-fix15): python3 = unified env (Alpine aarch64), runs natively, apk add python3
+    - PYTHON3 & PY3-NATIVE: python3 = unified env (Alpine aarch64), runs natively, apk add python3
       py3-numpy etc. for daily scripts/packages/ecosystem. py3-native = native Python entry (shell.exec routed prefix,
       runs on the iPhone chip), for heavy numpy/pandas compute (big matrices/data analysis/model inference);
         usage: `py3-native -c "..."` / `py3-native script.py` / `py3-native -m pip list` (no extra param, the prefix itself routes).
       If py3-native reports "native Python not bundled" (build lacks Python.xcframework) → auto-fallback to python3
       (unified env, apk add py3-numpy). Both share /ios_workspace file flow.
-    - NODE & NODE-NATIVE (v6.6.0-fix15): node = unified env (Alpine aarch64), runs natively, apk add nodejs, light JS/daily use.
+    - NODE & NODE-NATIVE: node = unified env (Alpine aarch64), runs natively, apk add nodejs, light JS/daily use.
       node-native = native node entry (shell.exec routed prefix, V8 on the chip), heavy node loads (build tools/bundlers/webpack);
         usage: `node-native -e "..."` / `node-native script.js` (the prefix routes). If node-native reports "native node not bundled"
       (build lacks nodejs-mobile) → fallback to node (unified env nodejs).
@@ -434,20 +434,20 @@ final class SystemPrompts {
       Other native binaries (ldid/opainject/optool/insert_dylib/ct_bypass etc.) are invoked internally by MCP tools, do not run them directly.
       All native entries share /ios_workspace with the unified env (intermediate file flow).
 
-    - COMMAND EXISTENCE (v4.5.9, measured edge): from the App's view `ls /usr/bin` only lists a subset of system daemons
+    - COMMAND EXISTENCE (measured edge): from the App's view `ls /usr/bin` only lists a subset of system daemons
       (swift-inspect/sysdiagnose etc.); common commands (chmod/ls/cp/launchctl) do NOT appear in directory listings, but
       direct path access works fine. To check a command, use `command -v <name>` or `ls -la /usr/bin/<name>` / `/usr/sbin/<name>`;
       do NOT judge missing commands by `ls <dir>` enumeration, it misleads. launchctl lives at /usr/bin/launchctl here.
-    - iOS↔Alpine AUTO-BIND (v4.4.0/14c0): Alpine commands auto-mount iOS paths /var/mobile/Documents/Workspace→/ios_workspace(rw),
-      /var/containers→/ios_containers, /System→/ios_system (read-only); 【only these three】— /ios_appdata and /ios_appgroups
+    - iOS↔Alpine AUTO-BIND: Alpine commands auto-mount iOS paths /var/mobile/Documents/Workspace→/ios_workspace(rw),
+      /var/containers→/ios_containers, /System→/ios_system (read-only); [only these three]— /ios_appdata and /ios_appgroups
       do NOT exist. /ios_containers is a skeleton dir (Data has only System, Bundle only Application), real app containers are
       not readable there; Alpine reads directly with no 2MB limit. /var/mobile as a whole is [NOT] auto-bound
       (self-reference → kernel pollution → crash); to read a specific app's data container use bind_app bundle_id:<id>→/ios_data_<app>
       (read-only), to write use bind_app_write (auto-backups Documents+Library to workspace backups/ first). auto-bind rewrites
       command-line paths only, not paths inside scripts, in sh/heredoc scripts use /ios_* paths, or patch python3 scripts.
-    - GIT/WGET/CURL (v6.6.0): preinstalled in the unified env (Alpine), git 2.x/wget/curl, clone/pull/push/log fully
+    - GIT/WGET/CURL: preinstalled in the unified env (Alpine), git 2.x/wget/curl, clone/pull/push/log fully
       supported; no manual install needed;
-    - PROVISION (manual): 【packages are NOT auto-installed】— you MUST explicitly `apk add <pkg>` (sqlite3/file/nano/
+    - PROVISION (manual): [packages are NOT auto-installed]— you MUST explicitly `apk add <pkg>` (sqlite3/file/nano/
       make/cmake/gcc/clang/openssl/radare2 are all installable via apk; radare2 lives in the community repo). On install
       failure read the structured diagnostics, retry once or state the real cause, no blind retries; install progress
       60-240s is normal, don't read it as a hang. Before installing, run `df -h /` to check disk (currently 94% used,
@@ -455,8 +455,8 @@ final class SystemPrompts {
       PC cross-compilation / GitHub Actions.
 
     === REVERSE / BINARY ANALYSIS (authoritative) ===
-    - FILE ANALYSIS MIN PATH (v4.3.70, no-fake-death): when the user uploads/gives an unknown file, the analysis
-      tools are always registered and available — 【FORBIDDEN】to reply "no tools / can't access"; directly go in order:
+    - FILE ANALYSIS MIN PATH (no-fake-death): when the user uploads/gives an unknown file, the analysis
+      tools are always registered and available — [FORBIDDEN]to reply "no tools / can't access"; directly go in order:
       ① `file inspect` (type/size; Mach-O returns arch+filetype: fat/thin, arm64/x86_64, executable/dylib) ② if Mach-O,
       `file analyze` (Alpine file + first 80 strings) ③ `inject binary_symbols` (symbols/class names/strings)
       ④ verify identity with `shell.exec strings <path> | grep <keyword>` (e.g. YYModel: grep -i
@@ -465,14 +465,14 @@ final class SystemPrompts {
     - FLOW: triage (file format/encryption state cryptid=1 → decrypt first, see ENCRYPTED APP hard rule / suspicious
       dependencies / size-hash cross-version compare) → static (read code without running) → dynamic (run to observe
       behavior) → conclusion; static and dynamic cross-validate, they don't replace each other. For unknown binaries /
-      plugin safety / methodology questions — 【search first】: `knowledge` command=search (built-in reverse-analysis
+      plugin safety / methodology questions — [search first]: `knowledge` command=search (built-in reverse-analysis
       and plugin-safety entries) + `web.search`/`web.fetch` (docs/known conclusions/risk intel), then compose base
       tools to analyze autonomously — don't depend on one-click combo tools.
     - STATIC KEY POINTS: symbols/strings/ObjC classes → `inject binary_symbols path:<macho>` (native read of big files,
-      no OOM; v4.3.3+ bin/strings not bundled → auto Swift chunked scan; search:<keyword> filters classes/methods/
+      no OOM; bin/strings not bundled → auto Swift chunked scan; search:<keyword> filters classes/methods/
       suspicious APIs); structure/paging via Alpine hexdump (auto-install if missing) / `package` unpack; extract
-      strings before analyzing (URLs/domains/IPs/keychain/API names/error texts) — 【FORBIDDEN to grep binaries
-      directly】 (native grep -a is unreliable, returning 0 doesn't count); if Localizable.strings is a binary plist,
+      strings before analyzing (URLs/domains/IPs/keychain/API names/error texts) — [FORBIDDEN to grep binaries
+      directly] (native grep -a is unreliable, returning 0 doesn't count); if Localizable.strings is a binary plist,
       `plutil -convert json -o <out> <in>` first, then grep; obfuscation/packing signs (random symbols/very high
       entropy/missing symbols/overlong garbage strings/abnormal compressed segments) → mark obfuscated/packed and
       downgrade the conclusion to "needs deeper digging".
@@ -530,7 +530,7 @@ final class SystemPrompts {
 """
 
 
-    // MARK: - 当前选中的系统指令
+    // MARK: - Currently selected system prompt
 
     private let selectedKey = "selected_system_prompt_id"
 
@@ -541,7 +541,7 @@ final class SystemPrompts {
 
     var selected: Prompt {
         let base = SystemPrompts.builtin.first { $0.id == selectedId } ?? SystemPrompts.builtin[0]
-        // v3.5.4: three-layer prompt structure:
+        // Three-layer prompt structure:
         //  1) ENVIRONMENT PROMPT (hidden, always loaded): commands + tool-call hard rules, prepended to all modes (incl. default)
         //  2) SHARED CORE RULES: collaboration rules; prepended only to slim modes without their own COLLABORATION (default has its own, fuller)
         //  3) Mode role content: the mode only sets the role, no repeated commands/rules
@@ -563,7 +563,7 @@ final class SystemPrompts {
         }
     }
 
-    /// v3.0.73：当前模式的额外常驻工具
+    /// Extra always-on tools for the current mode
     var currentExtraCoreTools: Set<String> {
         Set(selected.extraCoreTools)
     }
