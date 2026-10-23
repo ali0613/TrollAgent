@@ -132,19 +132,19 @@ struct OnboardingView: View {
     // MARK: - 页 2：能力
     private var capabilityPage: some View {
         VStack(spacing: 20) {
-            Text("统一环境，AI 帮你操作")
+            Text(L10n.t("i18n_587"))
                 .font(.title2)
                 .fontWeight(.bold)
                 .padding(.top, 10)
 
             ScrollView {
                 VStack(spacing: 12) {
-                    capRow("hammer.fill", "全栈工具，文件/App/注入/终端", [.orange, .tmBrown])
-                    capRow("syringe.fill", "智能注入，控制任意 App", [.green, .tmTeal])
-                    capRow("cursorarrow.click.2", "语义化操作，说点就点", [.tmCyan, .blue])
-                    capRow("text.viewfinder", "OCR 识别，自动读屏", [.purple, .tmIndigo])
-                    capRow("terminal", "完整 Linux 终端，跑脚本装包", [.gray, .secondary])
-                    capRow("brain", "AI 自我进化，自动学习", [.pink, .tmCyan])
+                    capRow("hammer.fill", L10n.t("i18n_588"), [.orange, .tmBrown])
+                    capRow("syringe.fill", L10n.t("i18n_589"), [.green, .tmTeal])
+                    capRow("cursorarrow.click.2", L10n.t("i18n_590"), [.tmCyan, .blue])
+                    capRow("text.viewfinder", L10n.t("i18n_591"), [.purple, .tmIndigo])
+                    capRow("terminal", L10n.t("i18n_592"), [.gray, .secondary])
+                    capRow("brain", L10n.t("i18n_593"), [.pink, .tmCyan])
                 }
                 .padding(.horizontal, 28)
             }

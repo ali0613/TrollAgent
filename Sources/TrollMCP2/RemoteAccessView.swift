@@ -7,7 +7,7 @@ struct RemoteAccessView: View {
 
     var body: some View {
         Form {
-            Section(header: Text("主动连接")) {
+            Section(header: Text(L10n.t("i18n_396"))) {
                 NavigationLink(destination: SSHSettingsView()) {
                     HStack(spacing: 12) {
                         Image(systemName: "arrow.up.forward.circle.fill")
@@ -15,9 +15,9 @@ struct RemoteAccessView: View {
                             .foregroundColor(.tmCyan)
                             .frame(width: 32)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("SSH 远程连接")
+                            Text(L10n.t("page_ssh"))
                                 .foregroundColor(.primary)
-                            Text(sshHost.isEmpty ? "未配置" : sshHost)
+                            Text(sshHost.isEmpty ? L10n.t("not_configured") : sshHost)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -25,7 +25,7 @@ struct RemoteAccessView: View {
                 }
             }
 
-            Section(header: Text("被远程控制")) {
+            Section(header: Text(L10n.t("i18n_397"))) {
                 NavigationLink(destination: RemoteTerminalView()) {
                     HStack(spacing: 12) {
                         Image(systemName: "arrow.down.left.circle.fill")
@@ -33,9 +33,9 @@ struct RemoteAccessView: View {
                             .foregroundColor(.green)
                             .frame(width: 32)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("远程终端服务")
+                            Text(L10n.t("i18n_398"))
                                 .foregroundColor(.primary)
-                            Text(terminalRunning ? "运行中 :\(RemoteTerminalServer.shared.port)" : "未启动")
+                            Text(terminalRunning ? L10n.t("i18n_399", RemoteTerminalServer.shared.port) : L10n.t("i18n_400"))
                                 .font(.caption)
                                 .foregroundColor(terminalRunning ? .green : .secondary)
                         }
@@ -43,7 +43,7 @@ struct RemoteAccessView: View {
                 }
             }
         }
-        .navigationTitle("远程访问")
+        .navigationTitle(L10n.t("i18n_401"))
         .onAppear {
             terminalRunning = RemoteTerminalServer.shared.isRunning
         }

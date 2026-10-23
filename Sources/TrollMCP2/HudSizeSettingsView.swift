@@ -35,7 +35,7 @@ struct HudSizeSettingsView: View {
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.pink)
 
-            Text("调整后自动重启悬浮，新尺寸立即生效")
+            Text(L10n.t("i18n_585"))
                 .font(.footnote)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -43,7 +43,7 @@ struct HudSizeSettingsView: View {
             Spacer()
         }
         .padding(.top, 24)
-        .navigationTitle("悬浮尺寸")
+        .navigationTitle(L10n.t("i18n_586"))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

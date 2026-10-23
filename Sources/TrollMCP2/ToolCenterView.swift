@@ -7,15 +7,15 @@ import SwiftUI
 
 enum ToolLayer: String, CaseIterable {
     // v6.6.0-fix33: 三层重构——封装工具（MCP）/ 原生工具（iOS 芯片直跑命令）/ Alpine 工具（Linux 沙箱命令）
-    case packaged = "封装工具"
-    case native = "原生工具"
-    case alpine = "Alpine 工具"
+    case packaged = L10n.t("i18n_49")
+    case native = L10n.t("i18n_50")
+    case alpine = L10n.t("i18n_669")
 
     var subtitle: String {
         switch self {
-        case .packaged: return "注册的大工具（ToolRegistry——AI 可直接调用的封装能力）"
-        case .native: return "iOS 芯片直跑：sqlite3/plutil/jtool2/py3-native/node-native + 注入链"
-        case .alpine: return "Linux 沙箱工具链：busybox 全套 + apk 可装任意工具"
+        case .packaged: return L10n.t("i18n_51")
+        case .native: return L10n.t("i18n_670")
+        case .alpine: return L10n.t("i18n_671")
         }
     }
 
@@ -44,39 +44,39 @@ struct ToolCenterView: View {
     // v6.6.0-fix33: 原生工具命令清单（shell.exec 内可用——iOS 芯片直跑）
     private let nativeCommands: [(String, String)] = [
         // iOS 系统自带
-        ("sqlite3", "SQLite 数据库（iOS 系统自带）"),
-        ("plutil", "plist 读写（iOS 系统自带）"),
-        ("ta", "文件属性（iOS 系统自带）"),
+        ("sqlite3", L10n.t("i18n_672")),
+        ("plutil", L10n.t("i18n_673")),
+        ("ta", L10n.t("i18n_54")),
         // bin/ 内置
-        ("jtool2", "Mach-O 解析（签名/权限/元数据）"),
-        ("py3-native", "原生 Python 3.14（芯片直跑 numpy/pandas）"),
-        ("node-native", "原生 Node.js（芯片直跑重负载 JS）"),
-        ("git.py", "Git 封装（纯 Python——rootfs 缺失兜底）"),
-        ("nscan.py", "网络扫描脚本"),
+        ("jtool2", L10n.t("i18n_55")),
+        ("py3-native", L10n.t("i18n_674")),
+        ("node-native", L10n.t("i18n_56")),
+        ("git.py", L10n.t("i18n_675")),
+        ("nscan.py", L10n.t("i18n_57")),
         // 注入链工具（Resources/bin）
-        ("ldid", "签名工具（伪签/entitlements）"),
-        ("insert_dylib", "dylib 注入"),
-        ("optool", "Mach-O 操作"),
-        ("ct_bypass", "代码签名绕过"),
-        ("opainject", "TrollStore 注入"),
-        ("install_name_tool", "dylib 路径修改"),
-        ("chown", "更改属主（iOS 系统）"),
-        ("cp", "复制（iOS 系统）"),
-        ("mkdir", "建目录（iOS 系统）"),
-        ("mv", "移动（iOS 系统）"),
-        ("rm", "删除（iOS 系统）"),
+        ("ldid", L10n.t("i18n_676")),
+        ("insert_dylib", L10n.t("i18n_677")),
+        ("optool", L10n.t("i18n_678")),
+        ("ct_bypass", L10n.t("i18n_58")),
+        ("opainject", L10n.t("i18n_679")),
+        ("install_name_tool", L10n.t("i18n_680")),
+        ("chown", L10n.t("i18n_59")),
+        ("cp", L10n.t("i18n_60")),
+        ("mkdir", L10n.t("i18n_61")),
+        ("mv", L10n.t("i18n_62")),
+        ("rm", L10n.t("i18n_63")),
     ]
 
     // v6.6.0-fix33: Alpine 工具命令清单（常用——完整 busybox 全套 + apk 可装）
     private let alpineCommands: [(String, String)] = [
-        ("ls/cp/mv/rm/mkdir/cat/head/tail/wc", "文件操作"),
-        ("find/grep/sed/awk/sort/uniq/tr", "文本处理"),
-        ("tar/unzip/gzip/xz", "压缩解压"),
-        ("ps/top/df/du/date/uname/whoami/id", "系统信息"),
-        ("curl/wget/ping/nc/ssh", "网络"),
-        ("apk", "装任意工具（apk add <包名>）"),
-        ("sh/bash/python3/nodejs/gcc/make/git", "编程环境"),
-        ("vi/nano/echo/printf", "文本编辑/输出"),
+        ("ls/cp/mv/rm/mkdir/cat/head/tail/wc", L10n.t("i18n_64")),
+        ("find/grep/sed/awk/sort/uniq/tr", L10n.t("i18n_65")),
+        ("tar/unzip/gzip/xz", L10n.t("i18n_66")),
+        ("ps/top/df/du/date/uname/whoami/id", L10n.t("i18n_67")),
+        ("curl/wget/ping/nc/ssh", L10n.t("i18n_68")),
+        ("apk", L10n.t("i18n_69")),
+        ("sh/bash/python3/nodejs/gcc/make/git", L10n.t("i18n_70")),
+        ("vi/nano/echo/printf", L10n.t("i18n_71")),
     ]
 
     private func passesFilter(_ def: ToolDefinition) -> Bool {
@@ -101,7 +101,7 @@ struct ToolCenterView: View {
                     let family = def.name.contains(".") ? String(def.name.split(separator: ".").first ?? "") : def.name
                     var branch: String? = nil
                     if def.name == "shell.exec" {
-                        branch = "统一环境执行（iOS 原生命令 + Alpine 工具链）"
+                        branch = L10n.t("i18n_73")
                     }
                     byFamily[family, default: []].append(ToolRowItem(def: def, branch: branch, isReal: true))
                 }
@@ -114,14 +114,14 @@ struct ToolCenterView: View {
                     if !searchText.isEmpty && !cmd.localizedCaseInsensitiveContains(searchText) && !desc.localizedCaseInsensitiveContains(searchText) { continue }
                     nativeRows.append(ToolRowItem(def: ToolDefinition(name: cmd, summary: desc), branch: nil))
                 }
-                if !nativeRows.isEmpty { families.append(("原生命令", nativeRows)) }
+                if !nativeRows.isEmpty { families.append((L10n.t("i18n_74"), nativeRows)) }
             case .alpine:
                 var alpineRows: [ToolRowItem] = []
                 for (cmd, desc) in alpineCommands {
                     if !searchText.isEmpty && !cmd.localizedCaseInsensitiveContains(searchText) && !desc.localizedCaseInsensitiveContains(searchText) { continue }
                     alpineRows.append(ToolRowItem(def: ToolDefinition(name: cmd, summary: desc), branch: nil))
                 }
-                if !alpineRows.isEmpty { families.append(("Alpine 命令", alpineRows)) }
+                if !alpineRows.isEmpty { families.append((L10n.t("i18n_681"), alpineRows)) }
             }
             if !families.isEmpty {
                 result.append((layer, families))
@@ -134,9 +134,9 @@ struct ToolCenterView: View {
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("工具分三层")
+                        Text(L10n.t("i18n_75"))
                             .font(.headline)
-                        Text("封装工具 = 注册的大工具（AI 直接调用——✓ 已验证 = 真机实测过）；原生工具 = iOS 芯片直跑命令；Alpine 工具 = Linux 沙箱工具链。")
+                        Text(L10n.t("i18n_76"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -150,9 +150,9 @@ struct ToolCenterView: View {
                             Image(systemName: "hand.raised.fill")
                                 .foregroundColor(.red)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("系统权限")
+                                Text(L10n.t("i18n_682"))
                                     .foregroundColor(.primary)
-                                Text("通知/位置/通讯录/日历/快捷指令")
+                                Text(L10n.t("i18n_169"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -167,9 +167,9 @@ struct ToolCenterView: View {
                             Image(systemName: "bolt.fill")
                                 .foregroundColor(.yellow)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("自动化")
+                                Text(L10n.t("home_quick_automation"))
                                     .foregroundColor(.primary)
-                                Text("任务 · 历史 · 重试")
+                                Text(L10n.t("i18n_170"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -187,7 +187,7 @@ struct ToolCenterView: View {
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(.secondary)
                             .font(.system(size: 14))
-                        TextField("搜索工具...", text: $searchText)
+                        TextField(L10n.t("i18n_168"), text: $searchText)
                             .font(.subheadline)
                         if !searchText.isEmpty {
                             Button(action: { searchText = "" }) {
@@ -196,7 +196,7 @@ struct ToolCenterView: View {
                             }
                         }
                     }
-                    Toggle("仅真机验证", isOn: $showOnlyReal)
+                    Toggle(L10n.t("i18n_119"), isOn: $showOnlyReal)
                         .accentColor(.tmCyan)
                 }
 
@@ -227,18 +227,18 @@ struct ToolCenterView: View {
     var body: some View {
         if inSheet {
             NavigationView { toolList }
-                .navigationTitle("工具中心（\(registry.toolCount)）")
+                .navigationTitle(L10n.t("i18n_80", registry.toolCount))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("完成") { presentationMode.wrappedValue.dismiss() }
+                        Button(L10n.t("done")) { presentationMode.wrappedValue.dismiss() }
                     }
                 }
                 .navigationViewStyle(.stack)
         } else {
             // v7.0.4: 导航 push——无内层 NavigationView（标题与外层"设置"导航栏同高），无"完成"按钮（返回按钮足够）
             toolList
-                .navigationTitle("工具中心（\(registry.toolCount)）")
+                .navigationTitle(L10n.t("i18n_80", registry.toolCount))
                 .navigationBarTitleDisplayMode(.inline)
         }
     }
@@ -270,7 +270,7 @@ private struct ToolRow: View {
                         .clipShape(Capsule())
                 }
                 if !isReal {
-                    badge("占位", .orange)
+                    badge(L10n.t("i18n_118"), .orange)
                 }
                 if def.verified {
                     Text("✅")
@@ -280,7 +280,7 @@ private struct ToolRow: View {
                     badge("TrollStore", .purple)
                 }
                 if def.requiresJailbreak {
-                    badge("越狱", .orange)
+                    badge(L10n.t("i18n_117"), .orange)
                 }
             }
             if def.displaySummary.count > 0 {

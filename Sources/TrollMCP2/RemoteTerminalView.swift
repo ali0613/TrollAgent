@@ -13,55 +13,55 @@ struct RemoteTerminalView: View {
 
     var body: some View {
         Form {
-            Section(header: Text("服务"), footer: Text(running ? "服务运行中：0.0.0.0:\(portText)。已自动开启后台保活，切后台仍在线；被系统杀进程后仍会断线。" : "启动后监听 0.0.0.0:\(portText)，局域网与公网（经 N1 转发）均可访问；开启服务将自动启动后台保活。")) {
-                Toggle("远程终端服务", isOn: $running)
+            Section(header: Text(L10n.t("i18n_93")), footer: Text(running ? L10n.t("i18n_94", portText) : L10n.t("i18n_95", portText))) {
+                Toggle(L10n.t("i18n_398"), isOn: $running)
                     .onChange(of: running) { on in
                         if on {
                             RemoteTerminalServer.shared.token = token.trimmingCharacters(in: .whitespacesAndNewlines)
                             RemoteTerminalServer.shared.port = Int(portText) ?? 8790
                             RemoteTerminalServer.shared.allowDangerous = allowDangerous
                             let ok = RemoteTerminalServer.shared.start()
-                            toast = ok ? "已启动 :\(RemoteTerminalServer.shared.port)" : "启动失败（端口占用？）"
+                            toast = ok ? L10n.t("i18n_97", RemoteTerminalServer.shared.port) : L10n.t("i18n_98")
                         } else {
                             RemoteTerminalServer.shared.stop()
-                            toast = "已停止"
+                            toast = L10n.t("i18n_313")
                         }
                     }
-                TextField("访问令牌（token，必填）", text: $token)
+                TextField(L10n.t("i18n_100"), text: $token)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
-                TextField("端口（默认 8790）", text: $portText)
+                TextField(L10n.t("i18n_101"), text: $portText)
                     .keyboardType(.numberPad)
             }
 
-            Section(header: Text("本机地址")) {
+            Section(header: Text(L10n.t("i18n_102"))) {
                 HStack {
-                    Text("局域网 IP")
+                    Text(L10n.t("i18n_103"))
                     Spacer()
-                    Text(lanIP.isEmpty ? "获取失败" : lanIP)
+                    Text(lanIP.isEmpty ? L10n.t("i18n_104") : lanIP)
                         .foregroundColor(.secondary)
                 }
                 HStack {
-                    Text("服务地址")
+                    Text(L10n.t("i18n_105"))
                     Spacer()
                     Text("http://\(lanIP):\(portText)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
-                Button("复制局域网地址") {
+                Button(L10n.t("i18n_106")) {
                     UIPasteboard.general.string = "http://\(lanIP):\(portText)"
-                    toast = "已复制"
+                    toast = L10n.t("relay_card_copied")
                 }
             }
 
-            Section(header: Text("N1 公网映射")) {   // v6.1.5-14ax：教程型灰色介绍已移除
-                Label("N1 只做端口转发，无需装任何服务", systemImage: "arrow.triangle.branch")
+            Section(header: Text(L10n.t("i18n_107"))) {   // v6.1.5-14ax：教程型灰色介绍已移除
+                Label(L10n.t("i18n_108"), systemImage: "arrow.triangle.branch")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
 
-            Section(header: Text("危险工具授权"), footer: Text("默认只允许只读诊断工具（状态/文件浏览/日志/审计/注入状态查询）。开启后允许注入、删除、写入、启动 App、抓包等危险工具被远程调用——仅在你完全信任的私网映射下开启。")) {
-                Toggle("允许远程执行危险工具", isOn: $allowDangerous)
+            Section(header: Text(L10n.t("i18n_109")), footer: Text(L10n.t("i18n_110"))) {
+                Toggle(L10n.t("i18n_111"), isOn: $allowDangerous)
                     .tint(.red)
                     .onChange(of: allowDangerous) { v in
                         RemoteTerminalServer.shared.allowDangerous = v
@@ -72,7 +72,7 @@ struct RemoteTerminalView: View {
                 Section { Text(toast).font(.caption).foregroundColor(.secondary) }
             }
         }
-        .navigationTitle("远程终端")
+        .navigationTitle(L10n.t("i18n_112"))
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             // 保存

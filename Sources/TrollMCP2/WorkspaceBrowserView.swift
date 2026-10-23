@@ -33,26 +33,26 @@ struct WorkspaceBrowserView: View {
 
     /// v2.9.292：已知目录的中文用途说明（给人看的）
     static let dirNotes: [String: String] = [
-        "audit": "审计日志",
-        "control_shots": "远程控制截图",
-        "crash": "崩溃日志",
-        "decrypted": "解密(砸壳)产物",
-        "downloads": "下载文件",
-        "duplicates": "重复文件",
-        "knowledge": "知识库",
-        "logs": "运行日志",
-        "macros": "宏/脚本",
-        "network_capture": "抓包数据",
-        "plugins": "插件",
-        "projects": "编译项目",
-        "reports": "分析报告",
-        "uploads": "用户上传附件",
-        "screenshots": "截图",
-        "tweaks": "注入插件(dylib)",
-        "tool_spill": "工具大输出",
-        "backup": "备份",
-        "tmp": "临时文件",
-        "deb": "deb 包缓存"
+        "audit": L10n.t("i18n_408"),
+        "control_shots": L10n.t("i18n_409"),
+        "crash": L10n.t("row_crash"),
+        "decrypted": L10n.t("i18n_410"),
+        "downloads": L10n.t("i18n_411"),
+        "duplicates": L10n.t("i18n_412"),
+        "knowledge": L10n.t("i18n_413"),
+        "logs": L10n.t("i18n_545"),
+        "macros": L10n.t("i18n_415"),
+        "network_capture": L10n.t("i18n_416"),
+        "plugins": L10n.t("i18n_417"),
+        "projects": L10n.t("i18n_418"),
+        "reports": L10n.t("i18n_419"),
+        "uploads": L10n.t("i18n_420"),
+        "screenshots": L10n.t("i18n_421"),
+        "tweaks": L10n.t("i18n_422"),
+        "tool_spill": L10n.t("i18n_423"),
+        "backup": L10n.t("i18n_424"),
+        "tmp": L10n.t("i18n_425"),
+        "deb": L10n.t("i18n_639")
     ]
 
     /// v3.0.90：目录备注——先精确匹配，再模糊匹配（动态名字）
@@ -60,11 +60,11 @@ struct WorkspaceBrowserView: View {
         // 精确匹配
         if let note = dirNotes[name] { return note }
         // 模糊匹配（动态前缀）
-        if name.hasPrefix("replace_tmp_") { return "替换临时文件（注入用）" }
-        if name.hasPrefix("crash_repro_") { return "崩溃复现" }
-        if name.hasPrefix("static_inject") { return "静态注入临时目录" }
-        if name.hasSuffix(".db") { return "数据库文件" }
-        if name.hasSuffix(".plist") { return "配置文件" }
+        if name.hasPrefix("replace_tmp_") { return L10n.t("i18n_426") }
+        if name.hasPrefix("crash_repro_") { return L10n.t("i18n_427") }
+        if name.hasPrefix("static_inject") { return L10n.t("i18n_428") }
+        if name.hasSuffix(".db") { return L10n.t("i18n_429") }
+        if name.hasSuffix(".plist") { return L10n.t("i18n_430") }
         return nil
     }
 
@@ -83,7 +83,7 @@ struct WorkspaceBrowserView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                TextField("搜索文件名", text: $query)
+                TextField(L10n.t("i18n_431"), text: $query)
                     .font(.subheadline)
                     .autocorrectionDisabled()
                 if !query.isEmpty {
@@ -170,12 +170,12 @@ struct WorkspaceBrowserView: View {
                             .padding(.vertical, 2)
                         }
                         .contextMenu {
-                            Button { copyPath(item.path) } label: { Label("复制路径", systemImage: "doc.on.doc") }
+                            Button { copyPath(item.path) } label: { Label(L10n.t("i18n_432"), systemImage: "doc.on.doc") }
                             if !item.isDir {
                                 // v4.3.44：文件分享走 QuickLook 中间层（menuShare 低版本分支设 binding）
                                 SharePresenter.menuShare(url: URL(fileURLWithPath: item.path))
                             }
-                            Button(role: .destructive) { confirmDelete = item } label: { Label("删除", systemImage: "trash") }
+                            Button(role: .destructive) { confirmDelete = item } label: { Label(L10n.t("ui_195"), systemImage: "trash") }
                         }
                     }
                 }
@@ -188,7 +188,7 @@ struct WorkspaceBrowserView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button { showNewFolder = true } label: { Label("新建", systemImage: "folder.badge.plus") }
+                Button { showNewFolder = true } label: { Label(L10n.t("btn_new"), systemImage: "folder.badge.plus") }
             }
         }
         .onAppear { reload() }
@@ -197,40 +197,40 @@ struct WorkspaceBrowserView: View {
              FilePreviewView(item: item) 
         }
         // v3.0.82: 用 SharePresenter 替代 ShareSheet——修复从 sheet 里再弹 sheet 闪退
-        .alert("删除确认", isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } })) {
-            Button("取消", role: .cancel) { confirmDelete = nil }
-            Button("删除", role: .destructive) {
+        .alert(L10n.t("i18n_433"), isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } })) {
+            Button(L10n.t("ui_40"), role: .cancel) { confirmDelete = nil }
+            Button(L10n.t("ui_195"), role: .destructive) {
                 if let item = confirmDelete {
                     do {
                         try FileManager.default.removeItem(atPath: item.path)
-                        toast = "已删除 \(item.name)"
+                        toast = L10n.t("i18n_434", item.name)
                     } catch {
-                        toast = "删除失败：\(error.localizedDescription)"
+                        toast = L10n.t("i18n_435", error.localizedDescription)
                     }
                     confirmDelete = nil
                     reload()
                 }
             }
         } message: {
-            Text("确定删除 \(confirmDelete?.name ?? "")？此操作不可恢复。")
+            Text(L10n.t("i18n_436", confirmDelete?.name ?? ""))
         }
-        .alert("新建文件夹", isPresented: $showNewFolder) {
-            TextField("名称", text: $newFolderName)
-            Button("创建") {
+        .alert(L10n.t("i18n_437"), isPresented: $showNewFolder) {
+            TextField(L10n.t("i18n_221"), text: $newFolderName)
+            Button(L10n.t("i18n_438")) {
                 let name = newFolderName.trimmingCharacters(in: .whitespaces)
                 if !name.isEmpty {
                     let dir = currentPath + "/" + name
                     do {
                         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-                        toast = "已创建 \(name)"
+                        toast = L10n.t("i18n_439", name)
                     } catch {
-                        toast = "创建失败：\(error.localizedDescription)"
+                        toast = L10n.t("i18n_440", error.localizedDescription)
                     }
                     newFolderName = ""
                     reload()
                 }
             }
-            Button("取消", role: .cancel) { newFolderName = "" }
+            Button(L10n.t("ui_40"), role: .cancel) { newFolderName = "" }
         }
         // v4.3.41：文件分享统一走系统分享页（SharePresenter.present）
         .overlay(alignment: .bottom) {
@@ -333,7 +333,7 @@ struct WorkspaceBrowserView: View {
 
     private func copyPath(_ path: String) {
         UIPasteboard.general.string = path
-        toast = "已复制路径"
+        toast = L10n.t("i18n_441")
     }
 
     private func iconName(_ item: FileItem) -> String {
@@ -393,7 +393,7 @@ struct FilePreviewView: View {
         Group {
             switch mode {
             case .loading:
-                ProgressView("读取中…")
+                ProgressView(L10n.t("i18n_442"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .text:
                 ScrollView {
@@ -426,7 +426,7 @@ struct FilePreviewView: View {
                     Text(L10n.t("ui_167", bytesLabel(item.size)))
                         .font(.footnote)
                         .foregroundColor(.secondary)
-                    Button("仍要读取") { loadText(force: true) }
+                    Button(L10n.t("i18n_443")) { loadText(force: true) }
                         .buttonStyle(.borderedProminent)
                 }
             }
@@ -435,7 +435,7 @@ struct FilePreviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button { UIPasteboard.general.string = item.path } label: { Label("复制路径", systemImage: "doc.on.doc") }
+                Button { UIPasteboard.general.string = item.path } label: { Label(L10n.t("i18n_432"), systemImage: "doc.on.doc") }
             }
         }
         .onAppear { load() }
@@ -452,7 +452,7 @@ struct FilePreviewView: View {
                 mode = .image
                 return
             }
-            text = "图片加载失败（格式或尺寸不支持）：\(item.name)"
+            text = L10n.t("i18n_444", item.name)
             mode = .binary
             return
         }
@@ -486,7 +486,7 @@ struct FilePreviewView: View {
         } else {
             guard let data = FileManager.default.contents(atPath: item.path) else {
                 mode = .binary
-                text = "无法读取文件"
+                text = L10n.t("i18n_445")
                 return
             }
             render(data)
@@ -501,7 +501,7 @@ struct FilePreviewView: View {
         } || sample.isEmpty
         let ext = (item.name as NSString).pathExtension.lowercased()
         if isText {
-            var s = String(data: data, encoding: .utf8) ?? "（非 UTF-8，按二进制显示）"
+            var s = String(data: data, encoding: .utf8) ?? L10n.t("i18n_446")
             if ext == "plist" {
                 if let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) {
                     s = pretty(plist)
@@ -526,7 +526,7 @@ struct FilePreviewView: View {
                 lines[lines.count - 1] += String(format: "%02x ", byte)
                 if i % 16 == 15 { lines.append("") }
             }
-            text = "文件大小：\(bytesLabel(data.count))\n\n" + lines.joined(separator: "\n")
+            text = L10n.t("i18n_447", bytesLabel(data.count)) + lines.joined(separator: "\n")
             mode = .binary
         }
     }

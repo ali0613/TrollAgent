@@ -209,7 +209,7 @@ final class UpdateManager: ObservableObject {
                 self.perform(plistURL) { data2, status2, error2 in
                     DispatchQueue.main.async {
                         if error2 == nil, status2 == 200, let v = data2.flatMap({ self.parseVersion(from: $0) }) {
-                            self.applyVersion(v, currentVersion: currentVersion, source: "镜像", completion: completion)
+                            self.applyVersion(v, currentVersion: currentVersion, source: L10n.t("i18n_449"), completion: completion)
                         } else {
                             // plist 读不到就用 run 标题里的 vX.Y.Z 回退
                             let v = self.extractVersion(from: title)
@@ -217,7 +217,7 @@ final class UpdateManager: ObservableObject {
                                 self.tryMirror(index: index + 1, mirrors: mirrors, parts: parts,
                                                currentVersion: currentVersion, completion: completion)
                             } else {
-                                self.applyVersion(v, currentVersion: currentVersion, source: "镜像", completion: completion)
+                                self.applyVersion(v, currentVersion: currentVersion, source: L10n.t("i18n_449"), completion: completion)
                             }
                         }
                     }
@@ -228,7 +228,7 @@ final class UpdateManager: ObservableObject {
 
     private func finishCheckFail(completion: ((Bool) -> Void)?) {
         isChecking = false
-        errorMessage = "检查更新失败：GitHub 与备用源均不可达（可能被墙）。可在「更新镜像源」里配置可用镜像。"
+        errorMessage = L10n.t("i18n_450")
         completion?(false)
     }
 
@@ -308,7 +308,7 @@ final class UpdateManager: ObservableObject {
             if newer {
                 self.downloadAndInstall()
             } else if self.errorMessage == nil {
-                self.errorMessage = "已是最新版本 v\(currentVersion)"
+                self.errorMessage = L10n.t("i18n_451", currentVersion)
             }
         }
     }
@@ -318,7 +318,7 @@ final class UpdateManager: ObservableObject {
     /// 下载链：GitHub artifact(直连) → 滚动 Release(latest, 直连) → 各镜像前缀 × (artifact / Release)
     func downloadAndInstall() {
         guard let version = latestVersion else {
-            errorMessage = "请先检查更新"
+            errorMessage = L10n.t("i18n_452")
             return
         }
         isDownloading = true
@@ -339,7 +339,7 @@ final class UpdateManager: ObservableObject {
     private func attemptDownload(_ attempts: [(url: String, isArtifact: Bool)], index: Int, version: String) {
         guard index < attempts.count else {
             isDownloading = false
-            errorMessage = "所有下载源都失败了（GitHub 可能被墙，可在「更新镜像源」配置可用镜像）"
+            errorMessage = L10n.t("i18n_453")
             return
         }
         let attempt = attempts[index]
@@ -432,16 +432,16 @@ final class UpdateManager: ObservableObject {
                 // v4.3.39：已自动安装 → 红点熄灭
                 hasUpdateRedDot = false
                 var suffix = ""
-                if code == 184 { suffix = " (子二进制加密, 非致命)" }
+                if code == 184 { suffix = L10n.t("i18n_455") }
                 else if code == 182 { suffix = " (developer mode)" }
-                installMessage = "已自动安装 v\(latestVersion ?? "")\(suffix)"
+                installMessage = L10n.t("i18n_456", latestVersion ?? "", suffix)
                 return
             }
             // 2) 静默安装失败 → 降级分享菜单(用户手动选 TrollStore 打开)。分享 UI 必须主线程
             DispatchQueue.main.async {
                 SharePresenter.present([url]) { [weak self] completed, error in
                     if let error = error {
-                        self?.errorMessage = "静默安装失败(exit \(code)), 分享调起也失败: \(error.localizedDescription)"
+                        self?.errorMessage = L10n.t("i18n_457", code, error.localizedDescription)
                     }
                 }
             }
@@ -451,7 +451,7 @@ final class UpdateManager: ObservableObject {
         DispatchQueue.main.async {
             SharePresenter.present([url]) { [weak self] completed, error in
                 if let error = error {
-                    self?.errorMessage = "安装调起失败: \(error.localizedDescription)"
+                    self?.errorMessage = L10n.t("i18n_458", error.localizedDescription)
                 }
             }
         }

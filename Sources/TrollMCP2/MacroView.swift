@@ -28,11 +28,11 @@ struct MacroView: View {
                     .listStyle(InsetGroupedListStyle())
                 }
             }
-            .navigationTitle(L10n.t("ui_183", "操作宏"))
+            .navigationTitle(L10n.t("ui_183", L10n.t("ui_183")))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(L10n.t("ui_177", "关闭")) {
+                    Button(L10n.t("ui_177", L10n.t("ui_177"))) {
                         pm.wrappedValue.dismiss()
                         ui.macroPresented = false
                     }
@@ -56,17 +56,17 @@ struct MacroView: View {
             }, alignment: .top)
         }
         .onAppear { refresh() }
-        .alert(L10n.t("ui_184", "新建宏"), isPresented: $showNewName) {
-            TextField(L10n.t("ui_185", "宏名称（如 每日打卡）"), text: $newName)
-            Button(L10n.t("ui_48", "开始录制")) {
+        .alert(L10n.t("ui_184", L10n.t("ui_184")), isPresented: $showNewName) {
+            TextField(L10n.t("ui_185", L10n.t("ui_185")), text: $newName)
+            Button(L10n.t("ui_48", L10n.t("i18n_475"))) {
                 let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !name.isEmpty else { showToast(L10n.t("ui_186", "名称不能为空")); return }
+                guard !name.isEmpty else { showToast(L10n.t("ui_186", L10n.t("ui_186"))); return }
                 MacroRecorder.shared.start(name: name)
                 newName = ""
-                showToast("🎬 " + L10n.t("ui_187", "开始录制：去聊天让 AI 操作，完成后回来点「停止」或喊 AI 调 macro.stop"))
+                showToast("🎬 " + L10n.t("ui_187", L10n.t("ui_187")))
                 refresh()
             }
-            Button(L10n.t("ui_40", "取消"), role: .cancel) { newName = "" }
+            Button(L10n.t("ui_40", L10n.t("ui_40")), role: .cancel) { newName = "" }
         }
     }
 
@@ -81,7 +81,7 @@ struct MacroView: View {
                 showToast(msg)
                 refresh()
             } label: {
-                Text(L10n.t("ui_189", "停止并保存"))
+                Text(L10n.t("ui_189", L10n.t("ui_189")))
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
@@ -102,9 +102,9 @@ struct MacroView: View {
             Image(systemName: "play.rectangle.on.rectangle")
                 .font(.system(size: 44))
                 .foregroundColor(.tmCyan.opacity(0.6))
-            Text(L10n.t("ui_190", "还没有宏"))
+            Text(L10n.t("ui_190", L10n.t("ui_190")))
                 .font(.headline)
-            Text(L10n.t("ui_191", "点右上角「录制」新建：让 AI 操作一遍（点/滑/输入），自动录成宏，以后一键回放"))
+            Text(L10n.t("ui_191", L10n.t("ui_191")))
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -112,7 +112,7 @@ struct MacroView: View {
             Button {
                 showNewName = true
             } label: {
-                Text("🎬 " + L10n.t("ui_192", "录制新宏"))
+                Text("🎬 " + L10n.t("ui_192", L10n.t("ui_192")))
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
@@ -135,11 +135,11 @@ struct MacroView: View {
                 Text(name)
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Text("\(count) " + L10n.t("ui_193", "步"))
+                Text("\(count) " + L10n.t("ui_193", L10n.t("ui_193")))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            Text(L10n.t("ui_194", "创建于") + " " + Self.dateStr(created))
+            Text(L10n.t("ui_194", L10n.t("ui_194")) + " " + Self.dateStr(created))
                 .font(.caption2)
                 .foregroundColor(.secondary)
             HStack(spacing: 10) {
@@ -147,10 +147,10 @@ struct MacroView: View {
                 runButton(name, loop: 5, label: "▶ 5")
                 Button {
                     let ok = MacroStore.delete(name)
-                    showToast(ok ? L10n.t("ui_195", "删除") + " ✓" : L10n.t("ui_195", "删除") + " ✗")
+                    showToast(ok ? L10n.t("ui_195", L10n.t("ui_195")) + " ✓" : L10n.t("ui_195", L10n.t("ui_195")) + " ✗")
                     refresh()
                 } label: {
-                    Label(L10n.t("ui_195", "删除"), systemImage: "trash")
+                    Label(L10n.t("ui_195", L10n.t("ui_195")), systemImage: "trash")
                         .font(.caption)
                 }
                 Spacer()
@@ -189,7 +189,7 @@ struct MacroView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 ui.macroPresented = true
                 refresh()
-                showToast(out["message"] as? String ?? "完成")
+                showToast(out["message"] as? String ?? L10n.t("done"))
             }
         }
     }

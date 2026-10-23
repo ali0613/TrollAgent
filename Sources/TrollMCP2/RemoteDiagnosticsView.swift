@@ -10,22 +10,22 @@ struct RemoteDiagnosticsView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("启用远程诊断", isOn: $agent.enabled)
+                Toggle(L10n.t("i18n_487"), isOn: $agent.enabled)
                     .onChange(of: agent.enabled) { _ in agent.save() }
-                TextField("服务器地址（https://你的域名:8766）", text: $agent.serverURL)
+                TextField(L10n.t("i18n_488"), text: $agent.serverURL)
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .onChange(of: agent.serverURL) { _ in agent.save() }
-                TextField("访问令牌（token）", text: $agent.token)
+                TextField(L10n.t("i18n_489"), text: $agent.token)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .onChange(of: agent.token) { _ in agent.save() }
             }
 
-            Section(header: Text("设备标识")) {
+            Section(header: Text(L10n.t("i18n_490"))) {
                 HStack {
-                    Text("设备 ID")
+                    Text(L10n.t("i18n_642"))
                     Spacer()
                     Text(agent.deviceID)
                         .font(.caption2)
@@ -33,37 +33,37 @@ struct RemoteDiagnosticsView: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.trailing)
                 }
-                Button("复制设备 ID") {
+                Button(L10n.t("i18n_491")) {
                     UIPasteboard.general.string = agent.deviceID
-                    testResult = "已复制"
+                    testResult = L10n.t("relay_card_copied")
                 }
             }
 
             Section {
-                Button(testing ? "连接中…" : "测试连接") {
+                Button(testing ? L10n.t("i18n_492") : L10n.t("i18n_493")) {
                     testConnection()
                 }
                 .disabled(testing || agent.serverURL.isEmpty || agent.token.isEmpty)
                 if let testResult = testResult {
                     Text(testResult)
                         .font(.caption)
-                        .foregroundColor(testResult.hasPrefix("连接成功") || testResult == "已复制" ? .green : .red)
+                        .foregroundColor(testResult.hasPrefix(L10n.t("i18n_494")) || testResult == L10n.t("relay_card_copied") ? .green : .red)
                 }
                 HStack {
-                    Text("已执行远程指令")
+                    Text(L10n.t("i18n_495"))
                     Spacer()
                     Text("\(agent.executedCount)")
                         .foregroundColor(.secondary)
                 }
             }
 
-            Section(header: Text("安全边界"), footer: Text("远程通道只允许执行只读诊断白名单（设备信息/文件浏览/注入状态/日志查询等）。注入、删除、写入、启动 App、网络抓包等危险操作一律拒绝，绝不支持远程触发。")) {
-                Label("只读白名单，无危险操作", systemImage: "checkmark.shield.fill")
+            Section(header: Text(L10n.t("i18n_496")), footer: Text(L10n.t("i18n_497"))) {
+                Label(L10n.t("i18n_498"), systemImage: "checkmark.shield.fill")
                     .foregroundColor(.green)
                     .font(.caption)
             }
         }
-        .navigationTitle("远程诊断")
+        .navigationTitle(L10n.t("i18n_499"))
         .navigationBarTitleDisplayMode(.inline)
     }
 

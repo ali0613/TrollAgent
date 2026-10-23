@@ -11,13 +11,13 @@ struct NetworkDebugView: View {
 
     private func levelName(_ level: Int) -> String {
         switch level {
-        case 0: return "完整载荷"
-        case 1: return "互换token参数名"
-        case 2: return "去掉tool_choice"
-        case 3: return "去掉tools纯对话"
-        case 4: return "最小载荷"
-        case 5: return "Responses API+工具"
-        default: return "未知(\(level))"
+        case 0: return L10n.t("i18n_476")
+        case 1: return L10n.t("i18n_477")
+        case 2: return L10n.t("i18n_640")
+        case 3: return L10n.t("i18n_478")
+        case 4: return L10n.t("i18n_479")
+        case 5: return L10n.t("i18n_641")
+        default: return L10n.t("i18n_480", level)
         }
     }
 
@@ -31,7 +31,7 @@ struct NetworkDebugView: View {
             )
 
             // 兼容级别说明
-            CardSectionHeader(icon: "list.number", title: "兼容级别说明", color: .orange)
+            CardSectionHeader(icon: "list.number", title: L10n.t("i18n_481"), color: .orange)
             CardBox {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(L10n.t("ui_3"))
@@ -55,7 +55,7 @@ struct NetworkDebugView: View {
             }
 
             // 各模型当前级别
-            CardSectionHeader(icon: "memorychip", title: "各模型当前级别")
+            CardSectionHeader(icon: "memorychip", title: L10n.t("i18n_482"))
             CardBox {
                 VStack(alignment: .leading, spacing: 10) {
                     if models.configs.isEmpty {
@@ -84,7 +84,7 @@ struct NetworkDebugView: View {
                     Button(action: resetLevels) {
                         HStack {
                             Spacer()
-                            Label("重置全部兼容级别（重新从完整载荷试探）", systemImage: "arrow.counterclockwise")
+                            Label(L10n.t("i18n_483"), systemImage: "arrow.counterclockwise")
                                 .font(.caption)
                                 .foregroundColor(.orange)
                             Spacer()
@@ -95,14 +95,14 @@ struct NetworkDebugView: View {
 
             // 最近请求日志
             HStack {
-                CardSectionHeader(icon: "clock.arrow.circlepath", title: "最近请求日志", color: .orange)
+                CardSectionHeader(icon: "clock.arrow.circlepath", title: L10n.t("i18n_484"), color: .orange)
                 Spacer()
                 Button {
                     newestFirst.toggle()
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: newestFirst ? "clock.fill" : "clock.arrow.circlepath")
-                        Text(newestFirst ? "最新" : "最早").font(.caption)
+                        Text(newestFirst ? L10n.t("i18n_127") : L10n.t("i18n_128")).font(.caption)
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -121,7 +121,7 @@ struct NetworkDebugView: View {
                     ForEach(Array(displayed.enumerated()), id: \.offset) { _, line in
                         Text(line)
                             .font(.system(.caption2, design: .monospaced))
-                            .foregroundColor(line.contains("失败") ? .red : .secondary)
+                            .foregroundColor(line.contains(L10n.t("i18n_485")) ? .red : .secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -136,6 +136,6 @@ struct NetworkDebugView: View {
             models.configs[i].compatLevel = 0
         }
         models.save()
-        NetworkLog.shared.log("已手动重置全部兼容级别")
+        NetworkLog.shared.log(L10n.t("i18n_486"))
     }
 }

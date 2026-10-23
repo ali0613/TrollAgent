@@ -35,11 +35,11 @@ struct ControlCenterView: View {
                 .padding()
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle(L10n.t("ui_172", "AI 控制中心"))
+            .navigationTitle(L10n.t("ui_172", L10n.t("ui_172")))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(L10n.t("ui_177", "关闭")) {
+                    Button(L10n.t("ui_177", L10n.t("ui_177"))) {
                         session.reset()
                         ui.controlPresented = false
                     }
@@ -115,7 +115,7 @@ struct ControlCenterView: View {
 
     private var stepsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.t("ui_173", "执行计划"))
+            Text(L10n.t("ui_173", L10n.t("ui_173")))
                 .font(.subheadline.weight(.semibold))
             ForEach(Array(session.steps.enumerated()), id: \.element.id) { i, step in
                 HStack(alignment: .top, spacing: 10) {
@@ -143,7 +143,7 @@ struct ControlCenterView: View {
 
     private var logsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.t("ui_174", "执行日志"))
+            Text(L10n.t("ui_174", L10n.t("ui_174")))
                 .font(.subheadline.weight(.semibold))
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(session.logs.suffix(80)) { log in
@@ -185,7 +185,7 @@ struct ControlCenterView: View {
 
     private func resultSection(_ r: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.t("ui_175", "执行结果"))
+            Text(L10n.t("ui_175", L10n.t("ui_175")))
                 .font(.subheadline.weight(.semibold))
             Text(r)
                 .font(.subheadline)
@@ -199,7 +199,7 @@ struct ControlCenterView: View {
 
     private func screenshotSection(_ path: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.t("ui_176", "现场截图"))
+            Text(L10n.t("ui_176", L10n.t("ui_176")))
                 .font(.subheadline.weight(.semibold))
             if let img = UIImage(contentsOfFile: path) {
                 Image(uiImage: img)

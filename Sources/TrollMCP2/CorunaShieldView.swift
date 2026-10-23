@@ -49,14 +49,14 @@ struct CorunaShieldView: View {
                         .padding(.top, 40)
                         
                         VStack(spacing: 8) {
-                            Text(shieldEnabled ? (isSafe ? "防护中" : "检测到威胁") : "防护已关闭")
+                            Text(shieldEnabled ? (isSafe ? L10n.t("i18n_505") : L10n.t("i18n_506")) : L10n.t("i18n_507"))
                                 .font(.largeTitle)
                                 .fontWeight(.bold)
                                 .foregroundColor(isSafe ? Color(red: 0.1, green: 0.5, blue: 0.3) : .red)
                             
                             Text(shieldEnabled 
-                                ? (isSafe ? "正在实时监控恶意网站" : "已拦截可疑访问")
-                                : "点击下方开关开启防护")
+                                ? (isSafe ? L10n.t("i18n_508") : L10n.t("i18n_509"))
+                                : L10n.t("i18n_510"))
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
@@ -64,9 +64,9 @@ struct CorunaShieldView: View {
                     
                     // 统计卡片
                     HStack(spacing: 16) {
-                        StatCard(title: "已拦截", value: "\(blockedCount)", unit: "次", icon: "hand.raised.fill", color: .orange)
-                        StatCard(title: "防护状态", value: shieldEnabled ? "ON" : "OFF", unit: "", icon: "shield.fill", color: shieldEnabled ? .green : .gray)
-                        StatCard(title: "受影响版本", value: "17.2", unit: "以下", icon: "iphone", color: .blue)
+                        StatCard(title: L10n.t("i18n_511"), value: "\(blockedCount)", unit: L10n.t("i18n_512"), icon: "hand.raised.fill", color: .orange)
+                        StatCard(title: L10n.t("i18n_513"), value: shieldEnabled ? "ON" : "OFF", unit: "", icon: "shield.fill", color: shieldEnabled ? .green : .gray)
+                        StatCard(title: L10n.t("i18n_514"), value: "17.2", unit: L10n.t("i18n_515"), icon: "iphone", color: .blue)
                     }
                     .padding(.horizontal)
                     
@@ -79,7 +79,7 @@ struct CorunaShieldView: View {
                         HStack {
                             Image(systemName: shieldEnabled ? "power.circle.fill" : "power.circle")
                                 .font(.title2)
-                            Text(shieldEnabled ? "关闭防护" : "开启防护")
+                            Text(shieldEnabled ? L10n.t("i18n_516") : L10n.t("i18n_517"))
                                 .font(.headline)
                         }
                         .foregroundColor(.white)
@@ -94,32 +94,32 @@ struct CorunaShieldView: View {
                     
                     // 防御措施卡片
                     VStack(alignment: .leading, spacing: 16) {
-                        Text("防御措施")
+                        Text(L10n.t("i18n_518"))
                             .font(.headline)
                             .foregroundColor(.primary)
                             .padding(.horizontal)
                         
                         VStack(spacing: 12) {
-                            DefenseRow(icon: "globe", title: "恶意网站检测", desc: "拦截已知 Coruna 利用站点", enabled: shieldEnabled)
-                            DefenseRow(icon: "safari", title: "Safari 行为监控", desc: "检测异常进程行为和内存操作", enabled: shieldEnabled)
-                            DefenseRow(icon: "doc.text.magnifyingglass", title: "IOC 规则库", desc: "14 个文件哈希 + 6 条网络规则", enabled: shieldEnabled)
-                            DefenseRow(icon: "lock.shield", title: "内核防护", desc: "监控 IOSurface 异常调用", enabled: shieldEnabled)
+                            DefenseRow(icon: "globe", title: L10n.t("i18n_519"), desc: L10n.t("i18n_520"), enabled: shieldEnabled)
+                            DefenseRow(icon: "safari", title: L10n.t("i18n_644"), desc: L10n.t("i18n_521"), enabled: shieldEnabled)
+                            DefenseRow(icon: "doc.text.magnifyingglass", title: L10n.t("i18n_645"), desc: L10n.t("i18n_522"), enabled: shieldEnabled)
+                            DefenseRow(icon: "lock.shield", title: L10n.t("i18n_523"), desc: L10n.t("i18n_646"), enabled: shieldEnabled)
                         }
                         .padding(.horizontal)
                     }
                     
                     // 漏洞说明
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("关于 Coruna 漏洞")
+                        Text(L10n.t("i18n_647"))
                             .font(.headline)
                             .foregroundColor(.primary)
                             .padding(.horizontal)
                         
                         VStack(alignment: .leading, spacing: 8) {
-                            InfoRow(label: "覆盖版本", value: "iOS 13.0 - 17.2.1")
-                            InfoRow(label: "漏洞数量", value: "5 条利用链 + 23 个漏洞")
-                            InfoRow(label: "攻击方式", value: "网页零点击")
-                            InfoRow(label: "你的设备", value: "iOS 16.3 ✅ 受影响")
+                            InfoRow(label: L10n.t("i18n_524"), value: "iOS 13.0 - 17.2.1")
+                            InfoRow(label: L10n.t("i18n_525"), value: L10n.t("i18n_526"))
+                            InfoRow(label: L10n.t("i18n_527"), value: L10n.t("i18n_528"))
+                            InfoRow(label: L10n.t("i18n_529"), value: L10n.t("i18n_648"))
                         }
                         .padding()
                         .background(Color(.systemBackground))
@@ -130,7 +130,7 @@ struct CorunaShieldView: View {
                     
                     // Web 注入工具入口
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Web 注入工具")
+                        Text(L10n.t("i18n_530"))
                             .font(.headline)
                             .foregroundColor(.primary)
                             .padding(.horizontal)
@@ -143,10 +143,10 @@ struct CorunaShieldView: View {
                                     .frame(width: 40)
 
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("网页端漏洞利用")
+                                    Text(L10n.t("i18n_531"))
                                         .font(.body)
                                         .foregroundColor(.primary)
-                                    Text("一键注入 dylib 到任意 App")
+                                    Text(L10n.t("i18n_649"))
                                         .font(.caption)
                                         .foregroundColor(.secondary)
                                 }
@@ -166,7 +166,7 @@ struct CorunaShieldView: View {
                     }
 
                     // 底部
-                    Text("基于 Google Threat Intelligence IOCs")
+                    Text(L10n.t("i18n_650"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding(.bottom, 40)

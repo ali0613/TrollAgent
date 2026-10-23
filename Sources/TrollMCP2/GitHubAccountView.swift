@@ -20,7 +20,7 @@ struct GitHubAccountView: View {
             runsSection
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("GitHub 账号")
+        .navigationTitle(L10n.t("row_github"))
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showAdd) {
             AddGitHubAccountView()
@@ -44,7 +44,7 @@ struct GitHubAccountView: View {
     }
 
     @ViewBuilder private var currentAccountSection: some View {
-        Section(header: SettingSectionHeader(title: "当前账号")) {
+        Section(header: SettingSectionHeader(title: L10n.t("i18n_337"))) {
             if let acct = store.activeAccount {
                 HStack(spacing: 12) {
                     AvatarView(login: acct.login, url: acct.avatarURL)
@@ -69,8 +69,8 @@ struct GitHubAccountView: View {
             }
 
             SettingRowButton(
-                title: store.activeAccount == nil ? "登录 GitHub 账号" : "添加 / 切换账号",
-                subtitle: "使用 Personal Access Token（PAT）",
+                title: store.activeAccount == nil ? L10n.t("i18n_623") : L10n.t("i18n_338"),
+                subtitle: L10n.t("i18n_624"),
                 icon: "person.badge.plus",
                 color: .blue
             ) { showAdd = true }
@@ -79,7 +79,7 @@ struct GitHubAccountView: View {
 
     @ViewBuilder private var savedAccountsSection: some View {
         if !store.accounts.isEmpty {
-            Section(header: SettingSectionHeader(title: "已保存账号（点击切换 · 长按删除）")) {
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_339"))) {
                 ForEach(store.accounts) { acct in
                     accountRow(acct)
                 }
@@ -90,7 +90,7 @@ struct GitHubAccountView: View {
     private func accountRow(_ acct: GitHubAccount) -> some View {
         Button {
             store.switchTo(acct.login)
-            toast = "已切换为 @\(acct.login)"
+            toast = L10n.t("i18n_340", acct.login)
         } label: {
             HStack(spacing: 12) {
                 AvatarView(login: acct.login, url: acct.avatarURL)
@@ -111,33 +111,33 @@ struct GitHubAccountView: View {
         .contextMenu {
             Button {
                 store.remove(acct.login)
-                toast = "已删除 @\(acct.login)"
+                toast = L10n.t("i18n_341", acct.login)
             } label: {
-                Label("删除账号", systemImage: "trash")
+                Label(L10n.t("i18n_342"), systemImage: "trash")
             }
         }
     }
 
     @ViewBuilder private var buildSection: some View {
-        Section(header: SettingSectionHeader(title: "线上编译（GitHub Actions）")) {
-            TextField("tweak 目录名（如 CompileProbe）", text: $tweakName)
+        Section(header: SettingSectionHeader(title: L10n.t("i18n_625"))) {
+            TextField(L10n.t("i18n_626"), text: $tweakName)
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
                 .font(.system(.body, design: .monospaced))
 
             SettingRowButton(
-                title: "触发线上编译",
-                subtitle: store.activeAccount == nil ? "请先登录账号" : "\(store.repoOwner)/\(store.repoName) · workflow=\(store.workflowId)",
+                title: L10n.t("i18n_343"),
+                subtitle: store.activeAccount == nil ? L10n.t("i18n_344") : "\(store.repoOwner)/\(store.repoName) · workflow=\(store.workflowId)",
                 icon: "hammer.fill",
                 color: .orange
             ) {
                 guard store.activeAccount != nil else {
-                    toast = "请先登录 GitHub 账号"; return
+                    toast = L10n.t("i18n_627"); return
                 }
-                busyMessage = "正在触发 \(tweakName) 编译…"
+                busyMessage = L10n.t("i18n_345", tweakName)
                 store.triggerBuild(tweak: tweakName) { ok, msg in
                     busyMessage = nil
-                    toast = ok ? msg : (msg ?? "触发失败")
+                    toast = ok ? msg : (msg ?? L10n.t("i18n_346"))
                     if ok { store.fetchRuns { _ in } }
                 }
             }
@@ -171,12 +171,12 @@ struct GitHubAccountView: View {
     }
 
     @ViewBuilder private var runsSection: some View {
-        Section(header: SettingSectionHeader(title: "最近编译记录")) {
+        Section(header: SettingSectionHeader(title: L10n.t("i18n_347"))) {
             if store.runs.isEmpty {
                 HStack {
                     Text(L10n.t("ui_92")).font(.caption).foregroundColor(.secondary)
                     Spacer()
-                    Button("刷新") {
+                    Button(L10n.t("refresh")) {
                         store.fetchRuns { _ in }
                     }
                     .font(.caption)
@@ -192,7 +192,7 @@ struct GitHubAccountView: View {
                         }
                     }
                 }
-                Button("刷新状态") {
+                Button(L10n.t("i18n_348")) {
                     store.fetchRuns { _ in }
                 }
                 .font(.footnote)
@@ -274,14 +274,14 @@ struct AddGitHubAccountView: View {
                 webLoginSection
                 patLoginSection
             }
-            .navigationTitle("登录 GitHub")
+            .navigationTitle(L10n.t("i18n_628"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if loading {
                         ProgressView().scaleEffect(0.8)
                     } else {
-                        Button("手动登录") {
+                        Button(L10n.t("i18n_349")) {
                             login()
                         }
                         .disabled(token.isEmpty)
@@ -306,11 +306,11 @@ struct AddGitHubAccountView: View {
     }
 
     @ViewBuilder private var webLoginSection: some View {
-        Section(header: SettingSectionHeader(title: "网页登录（推荐）")) {
+        Section(header: SettingSectionHeader(title: L10n.t("i18n_350"))) {
             if deviceStep == 0 {
                 SettingRowButton(
-                    title: "在浏览器中登录",
-                    subtitle: store.clientID.isEmpty ? "✅ 使用内置默认 Client ID（可直接登录）" : "Client ID: \(store.clientID)",
+                    title: L10n.t("i18n_351"),
+                    subtitle: store.clientID.isEmpty ? L10n.t("i18n_352") : "Client ID: \(store.clientID)",
                     icon: "safari.fill",
                     color: .black
                 ) {
@@ -333,7 +333,7 @@ struct AddGitHubAccountView: View {
                     Text(L10n.t("ui_43"))
                         .font(.caption).foregroundColor(.secondary)
                     SettingRowButton(
-                        title: "再次打开授权页",
+                        title: L10n.t("i18n_353"),
                         subtitle: dc.verification_uri,
                         icon: "safari",
                         color: .blue
@@ -354,7 +354,7 @@ struct AddGitHubAccountView: View {
     }
 
     @ViewBuilder private var patLoginSection: some View {
-        Section(header: SettingSectionHeader(title: "手动 Token（备选）")) {
+        Section(header: SettingSectionHeader(title: L10n.t("i18n_354"))) {
             SecureField("ghp_…", text: $token)
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
@@ -387,13 +387,13 @@ struct AddGitHubAccountView: View {
                             presentationMode.wrappedValue.dismiss()
                         }
                     } else {
-                        errorMsg = msg ?? "授权失败"
+                        errorMsg = msg ?? L10n.t("i18n_355")
                         deviceStep = 0
                         showSafari = false   // 失败也自动关掉浏览器
                     }
                 }
             } else {
-                errorMsg = err ?? "设备码获取失败"
+                errorMsg = err ?? L10n.t("i18n_356")
             }
         }
     }
@@ -444,12 +444,12 @@ struct GitHubRepoSettingsView: View {
 
     var body: some View {
         Form {
-            Section(header: SettingSectionHeader(title: "OAuth App（网页登录用）")) {
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_629"))) {
                 TextField("OAuth App Client ID", text: $store.clientID)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
                     .font(.system(.body, design: .monospaced))
-                Button("恢复默认 Client ID（清空自定义值）") {
+                Button(L10n.t("i18n_357")) {
                     store.restoreDefaultClientID()
                     saved = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
@@ -458,23 +458,23 @@ struct GitHubRepoSettingsView: View {
                 }
             }
 
-            Section(header: SettingSectionHeader(title: "目标仓库")) {
-                TextField("仓库 Owner（用户名）", text: $store.repoOwner)
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_358"))) {
+                TextField(L10n.t("i18n_359"), text: $store.repoOwner)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                TextField("仓库名", text: $store.repoName)
+                TextField(L10n.t("i18n_360"), text: $store.repoName)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                TextField("workflow 文件名", text: $store.workflowId)
+                TextField(L10n.t("i18n_630"), text: $store.workflowId)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                TextField("分支", text: $store.branch)
+                TextField(L10n.t("i18n_361"), text: $store.branch)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
             }
 
             Section {
-                Button("保存") {
+                Button(L10n.t("save")) {
                     store.persistNow()
                     saved = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
@@ -482,12 +482,12 @@ struct GitHubRepoSettingsView: View {
                     }
                 }
                 if saved {
-                    Text(store.clientID.isEmpty ? "已保存 ✓ 已恢复内置默认 Client ID，可直接登录" : "已保存 ✓")
+                    Text(store.clientID.isEmpty ? L10n.t("i18n_362") : L10n.t("i18n_363"))
                         .font(.footnote).foregroundColor(.green)
                 }
             }
         }
-        .navigationTitle("仓库设置")
+        .navigationTitle(L10n.t("i18n_364"))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

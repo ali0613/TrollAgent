@@ -34,7 +34,7 @@ struct AuditLogView: View {
                 Text(L10n.t("ui_135")).tag(0)
                 Text(L10n.t("ui_29")).tag(1)
                 Text(L10n.t("ui_75")).tag(2)
-                Text("崩溃").tag(3)
+                Text(L10n.t("i18n_121")).tag(3)
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, 16)
@@ -72,7 +72,7 @@ struct AuditLogView: View {
             if let p = exportPath, p.hasPrefix("/") {
                 return Alert(title: Text(L10n.t("ui_45")),
                              message: Text(p),
-                             primaryButton: .default(Text("分享")) {
+                             primaryButton: .default(Text(L10n.t("share"))) {
                                  pendingSharePath = p
                              },
                              secondaryButton: .cancel(Text(L10n.t("ui_44"))))
@@ -101,7 +101,7 @@ struct AuditLogView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "checkmark.shield")
                             .foregroundColor(.green)
-                        Text("没有崩溃记录")
+                        Text(L10n.t("i18n_122"))
                             .foregroundColor(.secondary)
                     }
                     .padding(.vertical, 20)
@@ -125,10 +125,10 @@ struct AuditLogView: View {
     private var sortBar: some View {
         HStack(spacing: 8) {
             Menu {
-                Button("按时间排序") { sortBy = .time }
-                Button("按状态排序") { sortBy = .status }
-                Button("按耗时排序") { sortBy = .elapsed }
-                Button("按类别排序") { sortBy = .category }
+                Button(L10n.t("i18n_123")) { sortBy = .time }
+                Button(L10n.t("i18n_124")) { sortBy = .status }
+                Button(L10n.t("i18n_125")) { sortBy = .elapsed }
+                Button(L10n.t("i18n_126")) { sortBy = .category }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "arrow.up.arrow.down.circle")
@@ -145,7 +145,7 @@ struct AuditLogView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: sortOrder == .newest ? "clock.fill" : "clock.arrow.circlepath")
-                    Text(sortOrder == .newest ? "最新" : "最早").font(.caption)
+                    Text(sortOrder == .newest ? L10n.t("i18n_127") : L10n.t("i18n_128")).font(.caption)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -161,10 +161,10 @@ struct AuditLogView: View {
 
     private var sortByTitle: String {
         switch sortBy {
-        case .time: return "时间"
-        case .status: return "状态"
-        case .elapsed: return "耗时"
-        case .category: return "类别"
+        case .time: return L10n.t("i18n_129")
+        case .status: return L10n.t("ui_110")
+        case .elapsed: return L10n.t("i18n_130")
+        case .category: return L10n.t("i18n_131")
         }
     }
 
@@ -231,7 +231,7 @@ struct AuditLogView: View {
                                         }
                                     }
                                     HStack(spacing: 6) {
-                                        Text(status == .success ? "执行成功" : "执行失败")
+                                        Text(status == .success ? L10n.t("i18n_132") : L10n.t("i18n_133"))
                                             .font(.caption2)
                                             .fontWeight(.semibold)
                                             .foregroundColor(status == .success ? .green : .red)
@@ -301,7 +301,7 @@ struct AuditLogView: View {
         let summary = log.healthSummary(limit: 40)
         let dist = log.codeDistribution()
         return List {
-            Section(header: SettingSectionHeader(title: "错误码分布（env=环境 / target=目标 / param=参数 / tool=工具自身）")) {
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_135"))) {
                 if dist.isEmpty {
                     Text(L10n.t("ui_82")).font(.footnote).foregroundColor(.secondary)
                 } else {
@@ -323,7 +323,7 @@ struct AuditLogView: View {
                     }
                 }
             }
-            Section(header: SettingSectionHeader(title: "工具健康度排行（按失败次数）")) {
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_136"))) {
                 if summary.isEmpty {
                     Text(L10n.t("ui_84")).font(.footnote).foregroundColor(.secondary)
                 } else {
@@ -376,7 +376,7 @@ struct AuditLogView: View {
     // MARK: Tab3 文件日志（按天滚动，读当天）
     private var fileLogView: some View {
         ScrollView {
-            Text(fileLogText.isEmpty ? "暂无文件日志" : fileLogText)
+            Text(fileLogText.isEmpty ? L10n.t("i18n_137") : fileLogText)
                 .font(.system(.caption2, design: .monospaced))
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -390,7 +390,7 @@ struct AuditLogView: View {
             .appendingPathComponent("Logs", isDirectory: true)
         let df = DateFormatter(); df.dateFormat = "yyyyMMdd"
         let file = logsDir.appendingPathComponent("audit-\(df.string(from: Date())).log")
-        fileLogText = (try? String(contentsOf: file, encoding: .utf8)) ?? "（今天暂无文件日志）"
+        fileLogText = (try? String(contentsOf: file, encoding: .utf8)) ?? L10n.t("i18n_138")
     }
 
     private func codeColor(_ code: String) -> Color {
@@ -419,7 +419,7 @@ struct AuditLogView: View {
             showExportAlert = true
             AuditLog.shared.log("audit.export", detail: url.path)
         } catch {
-            exportPath = "导出失败：\(error.localizedDescription)"
+            exportPath = L10n.t("i18n_139", error.localizedDescription)
             showExportAlert = true
         }
     }
@@ -456,10 +456,10 @@ struct BuildView: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: "编译模式")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_140"))) {
                     SettingRowButton(
-                        title: "生成编译令牌",
-                        subtitle: "用于验证本地编译请求",
+                        title: L10n.t("i18n_141"),
+                        subtitle: L10n.t("i18n_142"),
                         icon: "key.fill",
                         color: .orange
                     ) {
@@ -477,10 +477,10 @@ struct BuildView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: "项目模板")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_143"))) {
                     SettingRowButton(
-                        title: "生成 Tweak 项目模板",
-                        subtitle: "在工作区创建 MyTweak 模板",
+                        title: L10n.t("i18n_594"),
+                        subtitle: L10n.t("i18n_595"),
                         icon: "doc.badge.plus",
                         color: .blue
                     ) {
@@ -488,7 +488,7 @@ struct BuildView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: "说明")) {
+                Section(header: SettingSectionHeader(title: L10n.t("ui_132"))) {
                     Text(L10n.t("ui_125"))
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -496,7 +496,7 @@ struct BuildView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("编译")
+            .navigationTitle(L10n.t("i18n_144"))
         }
         .navigationViewStyle(.stack)
     }
@@ -515,16 +515,16 @@ struct SystemCapabilitiesView: View {
             .padding(.vertical, 8)
 
             List {
-                Section(header: SettingSectionHeader(title: "系统能力")) {
-                    capRow("通讯录搜索", "contacts.search", "person.crop.circle", .blue)
-                    capRow("日历事件", "calendar.list", "calendar", .red)
-                    capRow("提醒事项", "reminder.create", "checkmark.square", .green)
-                    capRow("定位", "location.get", "location", .tmIndigo)
-                    capRow("本地通知", "notification.send", "bell", .orange)
-                    capRow("扫码识别", "scan.qr", "qrcode.viewfinder", .purple)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_145"))) {
+                    capRow(L10n.t("i18n_146"), "contacts.search", "person.crop.circle", .blue)
+                    capRow(L10n.t("i18n_147"), "calendar.list", "calendar", .red)
+                    capRow(L10n.t("i18n_148"), "reminder.create", "checkmark.square", .green)
+                    capRow(L10n.t("i18n_149"), "location.get", "location", .tmIndigo)
+                    capRow(L10n.t("i18n_150"), "notification.send", "bell", .orange)
+                    capRow(L10n.t("i18n_151"), "scan.qr", "qrcode.viewfinder", .purple)
                                     }
 
-                Section(header: SettingSectionHeader(title: "说明")) {
+                Section(header: SettingSectionHeader(title: L10n.t("ui_132"))) {
                     Text(L10n.t("ui_143"))
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -623,25 +623,25 @@ struct ToolPermissionPoliciesView: View {
 
     /// category 显示中文名
     private let categoryNames: [String: String] = [
-        "injection": "🔌 注入",
-        "app_control": "📱 App 控制",
-        "ui_control": "👆 UI 操作",
-        "device": "🎭 设备/伪装",
-        "filesystem": "📁 文件系统",
+        "injection": L10n.t("i18n_152"),
+        "app_control": L10n.t("i18n_596"),
+        "ui_control": L10n.t("i18n_597"),
+        "device": L10n.t("i18n_153"),
+        "filesystem": L10n.t("i18n_154"),
         "shell": "💻 Shell",
-        "browser": "🌐 浏览器",
-        "build": "🔨 编译/构建",
-        "backup": "💾 备份",
-        "cleanup": "🧹 清理",
-        "macro": "🎬 宏",
-        "knowledge": "🧠 知识/记忆",
-        "system": "⚙️ 系统能力",
-        "diagnose": "🔍 诊断/日志",
-        "analysis": "📊 静态分析",
-        "automation": "⏰ 自动化/定时",
-        "skills": "📚 技能",
-        "debug": "🐛 调试",
-        "misc": "📦 其他",
+        "browser": L10n.t("i18n_155"),
+        "build": L10n.t("i18n_156"),
+        "backup": L10n.t("i18n_157"),
+        "cleanup": L10n.t("i18n_158"),
+        "macro": L10n.t("i18n_159"),
+        "knowledge": L10n.t("i18n_160"),
+        "system": L10n.t("i18n_161"),
+        "diagnose": L10n.t("i18n_162"),
+        "analysis": L10n.t("i18n_163"),
+        "automation": L10n.t("i18n_164"),
+        "skills": L10n.t("i18n_165"),
+        "debug": L10n.t("i18n_166"),
+        "misc": L10n.t("i18n_167"),
     ]
 
     /// 固定 category 排序
@@ -685,7 +685,7 @@ struct ToolPermissionPoliciesView: View {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                     .font(.system(size: 14))
-                TextField("搜索工具...", text: $searchText)
+                TextField(L10n.t("i18n_168"), text: $searchText)
                     .font(.subheadline)
                 if !searchText.isEmpty {
                     Button(action: { searchText = "" }) {
@@ -708,9 +708,9 @@ struct ToolPermissionPoliciesView: View {
                             Image(systemName: "hand.raised.fill")
                                 .foregroundColor(.red)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("系统权限")
+                                Text(L10n.t("i18n_682"))
                                     .foregroundColor(.primary)
-                                Text("通知/位置/通讯录/日历/快捷指令")
+                                Text(L10n.t("i18n_169"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -725,9 +725,9 @@ struct ToolPermissionPoliciesView: View {
                             Image(systemName: "bolt.fill")
                                 .foregroundColor(.yellow)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("自动化")
+                                Text(L10n.t("home_quick_automation"))
                                     .foregroundColor(.primary)
-                                Text("任务 · 历史 · 重试")
+                                Text(L10n.t("i18n_170"))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -739,7 +739,7 @@ struct ToolPermissionPoliciesView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: "策略")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_171"))) {
                     // v2.9.31：工具按需加载——初始请求只带常驻核心（标★），其余靠搜索加载；
                     // v2.9.32：去掉授权弹窗，AI 搜索到工具即自动放行本会话。
                     // v2.9.36：去掉开关——勾选不再影响速度与放行，此页改为只读清单。
@@ -749,16 +749,16 @@ struct ToolPermissionPoliciesView: View {
                 }
 
                 // v2.9.23：并入原"本机工具审计"的过滤
-                Section(header: SettingSectionHeader(title: "过滤")) {
-                    Toggle("仅显示真实实现", isOn: $showOnlyReal)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_172"))) {
+                    Toggle(L10n.t("i18n_173"), isOn: $showOnlyReal)
                         .accentColor(.tmCyan)
                     Text(L10n.t("ui_17"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
 
-                Section(header: SettingSectionHeader(title: "工具总数（\(filtered.count)）")) {
-                    Text("按类别分组，共 \(groupedByCategory.count) 类")
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_174", filtered.count))) {
+                    Text(L10n.t("i18n_175", groupedByCategory.count))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -775,7 +775,7 @@ struct ToolPermissionPoliciesView: View {
                                             .foregroundColor(.blue)
                                         + Text(def.name)
                                             .font(.system(.body, design: .monospaced))
-                                        Text(realTools.contains(def.name) ? "真实" : "占位")
+                                        Text(realTools.contains(def.name) ? L10n.t("i18n_176") : L10n.t("i18n_118"))
                                             .font(.caption2)
                                             .fontWeight(.medium)
                                             .padding(.horizontal, 6)
@@ -785,7 +785,7 @@ struct ToolPermissionPoliciesView: View {
                                             .cornerRadius(4)
                                         // v2.9.252: 真机 HTTP 实测通过的工具加 ✅已检验 徽标
                                         if def.verified {
-                                            Text("✅已检验")
+                                            Text(L10n.t("i18n_177"))
                                                 .font(.caption2)
                                                 .fontWeight(.medium)
                                                 .padding(.horizontal, 6)
@@ -854,19 +854,19 @@ struct DataManagementView: View {
             .padding(.vertical, 8)
 
             List {
-                Section(header: SettingSectionHeader(title: "工作区")) {
-                    LabeledRow(label: "路径", value: Workspace.root.path)
+                Section(header: SettingSectionHeader(title: L10n.t("page_workspace"))) {
+                    LabeledRow(label: L10n.t("i18n_178"), value: Workspace.root.path)
                     SettingRowButton(
-                        title: "在会话工具中打开",
-                        subtitle: "使用 artifact.* 读写",
+                        title: L10n.t("i18n_179"),
+                        subtitle: L10n.t("i18n_598"),
                         icon: "folder",
                         color: .blue
                     ) {
                         AuditLog.shared.log("data.open_workspace", detail: Workspace.root.path)
                     }
                     SettingRowButton(
-                        title: "清空工作区",
-                        subtitle: "删除 Documents/Workspace 下所有文件",
+                        title: L10n.t("i18n_180"),
+                        subtitle: L10n.t("i18n_599"),
                         icon: "trash",
                         color: .red
                     ) {
@@ -876,7 +876,7 @@ struct DataManagementView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: "文件")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_181"))) {
                     ForEach(files) { item in
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
@@ -897,10 +897,10 @@ struct DataManagementView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: "导入")) {
+                Section(header: SettingSectionHeader(title: L10n.t("ui_48"))) {
                     SettingRowButton(
-                        title: "导入文件到工作区",
-                        subtitle: "选择外部文件复制到工作区",
+                        title: L10n.t("i18n_182"),
+                        subtitle: L10n.t("i18n_183"),
                         icon: "doc.badge.plus",
                         color: .green
                     ) {
@@ -1008,13 +1008,13 @@ struct DeveloperInstructionsView: View {
                 // 破甲测试说明卡
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
-                        Label("破甲测试专用", systemImage: "hammer.fill")
+                        Label(L10n.t("i18n_184"), systemImage: "hammer.fill")
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.orange)
-                        Text("这里的模型破甲提示词会作为补充提示词注入 AI，适合做破甲、越狱、注入、绕过等高级测试任务。")
+                        Text(L10n.t("i18n_185"))
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        Text("选「开发者模式」系统指令 + 这里的破甲提示词 = 最强的破甲测试组合。")
+                        Text(L10n.t("i18n_186"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -1064,20 +1064,20 @@ struct DeveloperInstructionsView: View {
                         // 点开关按钮直接 toggle，点其他地方用 contextMenu 编辑
                         .contextMenu {
                             Button(action: { copyItem(item) }) {
-                                Label("复制内容", systemImage: "doc.on.doc")
+                                Label(L10n.t("i18n_187"), systemImage: "doc.on.doc")
                             }
                             Button(action: {
                                 editing = DevInstrEditorPayload(name: item.name, content: item.content)
                             }) {
-                                Label("编辑", systemImage: "pencil")
+                                Label(L10n.t("btn_edit"), systemImage: "pencil")
                             }
                             Button(action: { remove(item) }) {
-                                Label("删除", systemImage: "trash")
+                                Label(L10n.t("ui_195"), systemImage: "trash")
                             }
                         }
                     }
                     Section {
-                        Text("所有开启的指令都会合并后注入 AI 请求。系统指令先注入，破甲指令后注入。")
+                        Text(L10n.t("i18n_188"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -1107,7 +1107,7 @@ struct DeveloperInstructionsView: View {
             let t = ln.trimmingCharacters(in: .whitespaces)
             if !t.isEmpty && !t.hasPrefix("#") { return String(t.prefix(60)) }
         }
-        return c.isEmpty ? "（空指令）" : String(c.prefix(60))
+        return c.isEmpty ? L10n.t("i18n_189") : String(c.prefix(60))
     }
 
     private func reload() {
@@ -1166,12 +1166,12 @@ struct DevInstructionEditorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 6) {
-                        SettingSectionHeader(title: "指令名称")
-                        TextField("如：我的工程规范", text: $title)
+                        SettingSectionHeader(title: L10n.t("i18n_191"))
+                        TextField(L10n.t("i18n_192"), text: $title)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                     }
                     VStack(alignment: .leading, spacing: 6) {
-                        SettingSectionHeader(title: "指令内容（Markdown）")
+                        SettingSectionHeader(title: L10n.t("i18n_600"))
                         TextEditor(text: $content)
                             .frame(minHeight: 520)
                             .font(.system(.body, design: .monospaced))
@@ -1182,12 +1182,12 @@ struct DevInstructionEditorView: View {
                             .cornerRadius(10)
                     }
                     VStack(alignment: .leading, spacing: 6) {
-                        SettingSectionHeader(title: "说明")
+                        SettingSectionHeader(title: L10n.t("ui_132"))
                         Text(L10n.t("ui_145"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                         // v3.3.0：隐藏标记说明——标记内的内容只给用户看，不注入 AI
-                        Text("用 <!--用户可见--> ... <!--/用户可见--> 包住的段落只显示给你，不会注入 AI 请求（适合放“为什么有效”这类说明）")
+                        Text(L10n.t("i18n_193"))
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
@@ -1207,11 +1207,11 @@ struct DevInstructionEditorView: View {
                 // 键盘弹出时底部留白，确保能滚到末尾
                 .padding(.bottom, keyboardHeight > 0 ? keyboardHeight + 16 : 24)
             }
-            .navigationTitle(mode == .create ? "新建指令" : "编辑指令")
+            .navigationTitle(mode == .create ? L10n.t("i18n_194") : L10n.t("i18n_195"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("取消") { presentationMode.wrappedValue.dismiss() }
+                    Button(L10n.t("ui_40")) { presentationMode.wrappedValue.dismiss() }
                 }
                 // v2.9.24：编辑时一键复制当前内容
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -1219,7 +1219,7 @@ struct DevInstructionEditorView: View {
                         Button(action: copyContent) {
                             Image(systemName: "doc.on.doc")
                         }
-                        Button("保存") { save() }
+                        Button(L10n.t("save")) { save() }
                     }
                 }
             }
@@ -1286,9 +1286,9 @@ struct KnowledgeBaseView: View {
             .padding(.vertical, 8)
 
             List {
-                Section(header: SettingSectionHeader(title: "来源")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_196"))) {
                     SettingRowButton(
-                        title: "导入文件",
+                        title: L10n.t("i18n_197"),
                         subtitle: "Markdown / TXT / JSON / PDF",
                         icon: "doc.badge.plus",
                         color: .blue
@@ -1296,8 +1296,8 @@ struct KnowledgeBaseView: View {
                         showingImporter = true
                     }
                     SettingRowButton(
-                        title: "从工作区导入",
-                        subtitle: "使用 workspace 目录内的文件",
+                        title: L10n.t("i18n_198"),
+                        subtitle: L10n.t("i18n_601"),
                         icon: "folder.badge.plus",
                         color: .green
                     ) {
@@ -1305,7 +1305,7 @@ struct KnowledgeBaseView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: "已导入")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_199"))) {
                     if files.isEmpty {
                         Text(L10n.t("ui_89"))
                             .foregroundColor(.secondary)
@@ -1330,7 +1330,7 @@ struct KnowledgeBaseView: View {
                     Button {
                         showingClearConfirm = true
                     } label: {
-                        Label("清空全部", systemImage: "trash")
+                        Label(L10n.t("i18n_200"), systemImage: "trash")
                             .foregroundColor(.red)
                     }
                     .disabled(files.isEmpty)
@@ -1347,11 +1347,11 @@ struct KnowledgeBaseView: View {
                     refresh()
                 }
             }
-            .confirmationDialog("确定清空全部已导入文件？", isPresented: $showingClearConfirm, titleVisibility: .visible) {
-                Button("清空全部", role: .destructive) {
+            .confirmationDialog(L10n.t("i18n_201"), isPresented: $showingClearConfirm, titleVisibility: .visible) {
+                Button(L10n.t("i18n_200"), role: .destructive) {
                     clearAll()
                 }
-                Button("取消", role: .cancel) {}
+                Button(L10n.t("ui_40"), role: .cancel) {}
             }
             .onAppear(perform: refresh)
         }
@@ -1426,13 +1426,13 @@ struct WebhooksView: View {
             .padding(.vertical, 8)
 
             List {
-                Section(header: SettingSectionHeader(title: "端点")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_202"))) {
                     editorRow("URL", text: $url, placeholder: "https://example.com/webhook")
-                    editorRow("Secret", text: $secret, placeholder: "可选签名密钥")
-                    editorRow("事件", text: $events, placeholder: "audit,tool_call")
+                    editorRow("Secret", text: $secret, placeholder: L10n.t("i18n_203"))
+                    editorRow(L10n.t("i18n_204"), text: $events, placeholder: "audit,tool_call")
                 }
 
-                Section(header: SettingSectionHeader(title: "操作")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_205"))) {
                     Button(action: save) {
                         HStack {
                             Image(systemName: "checkmark.circle")
@@ -1451,7 +1451,7 @@ struct WebhooksView: View {
                 }
 
                 if !status.isEmpty {
-                    Section(header: SettingSectionHeader(title: "状态")) {
+                    Section(header: SettingSectionHeader(title: L10n.t("ui_110"))) {
                         Text(status)
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -1476,12 +1476,12 @@ struct WebhooksView: View {
 
     private func save() {
         UserDefaults.standard.set(["url": url, "secret": secret, "events": events], forKey: "trollmcp2.webhook")
-        status = "已保存"
+        status = L10n.t("i18n_206")
     }
 
     private func test() {
         guard let target = URL(string: url), !url.isEmpty else {
-            status = "URL 无效"
+            status = L10n.t("i18n_602")
             return
         }
         var req = URLRequest(url: target, timeoutInterval: 15)
@@ -1492,11 +1492,11 @@ struct WebhooksView: View {
         URLSession.shared.dataTask(with: req) { _, response, error in
             DispatchQueue.main.async {
                 if let error = error {
-                    status = "失败: \(error.localizedDescription)"
+                    status = L10n.t("i18n_207", error.localizedDescription)
                 } else if let http = response as? HTTPURLResponse {
                     status = "HTTP \(http.statusCode)"
                 } else {
-                    status = "已发送"
+                    status = L10n.t("i18n_208")
                 }
             }
         }.resume()
@@ -1581,7 +1581,7 @@ struct AgentsAndSkillsView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: "说明")) {
+                Section(header: SettingSectionHeader(title: L10n.t("ui_132"))) {
                     Text(L10n.t("ui_67"))
                         .font(.caption)
                         .foregroundColor(.secondary)

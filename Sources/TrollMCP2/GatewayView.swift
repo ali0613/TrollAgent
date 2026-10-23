@@ -12,7 +12,7 @@ struct GatewayView: View {
                         .keyboardType(.URL)
                         .autocapitalization(.none)
                     HStack {
-                        Button(gateway.isConnected ? "断开" : "连接") {
+                        Button(gateway.isConnected ? L10n.t("i18n_238") : L10n.t("i18n_239")) {
                             if gateway.isConnected {
                                 gateway.disconnect()
                             } else {
@@ -23,10 +23,10 @@ struct GatewayView: View {
                     }
                 }
                 Section(header: Text(L10n.t("ui_110"))) {
-                    LabeledRow(label: "连接", value: gateway.isConnected ? "已连接 ✅" : "未连接 ❌")
-                    LabeledRow(label: "URL", value: gateway.serverURL.isEmpty ? "(未设置)" : gateway.serverURL)
+                    LabeledRow(label: L10n.t("i18n_239"), value: gateway.isConnected ? L10n.t("i18n_240") : L10n.t("i18n_241"))
+                    LabeledRow(label: "URL", value: gateway.serverURL.isEmpty ? L10n.t("i18n_242") : gateway.serverURL)
                     if let err = gateway.lastError {
-                        LabeledRow(label: "错误", value: err)
+                        LabeledRow(label: L10n.t("i18n_243"), value: err)
                     }
                 }
                 Section(header: Text(L10n.t("ui_132"))) {
@@ -35,7 +35,7 @@ struct GatewayView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle("网关")
+            .navigationTitle(L10n.t("i18n_244"))
             .onAppear { urlInput = gateway.serverURL }
         }
         .navigationViewStyle(.stack)
@@ -56,7 +56,7 @@ struct AutomationView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle("自动化")
+            .navigationTitle(L10n.t("home_quick_automation"))
         }
         .navigationViewStyle(.stack)
     }

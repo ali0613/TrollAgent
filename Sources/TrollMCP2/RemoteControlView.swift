@@ -90,7 +90,7 @@ struct RemoteControlView: View {
                             Text(L10n.t("ui_114"))
                                 .font(.subheadline)
                                 .fontWeight(.semibold)
-                            Text(keepAliveOn ? "目标 App 切后台不挂起，4789 持续在线" : "远程控制时建议开启，防止目标 App 被系统挂起")
+                            Text(keepAliveOn ? L10n.t("i18n_251") : L10n.t("i18n_252"))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -112,50 +112,50 @@ struct RemoteControlView: View {
             CardSectionHeader(icon: "sparkles", title: L10n.t("page_remote_sub"))
             CardBox {
                 VStack(alignment: .leading, spacing: 10) {
-                    capabilityRow("tree", "读取完整 UI 树（frame / 文字 / 类型 / 无障碍信息）")
-                    capabilityRow("camera", "实时截图")
-                    capabilityRow("hand.tap", "模拟点击 / 滑动 / 输入文字")
-                    capabilityRow("keyboard", "模拟按键（Home / 返回 / 回车）")
-                    capabilityRow("checkmark.circle", "通用 UIKit API，不依赖具体 App")
+                    capabilityRow("tree", L10n.t("i18n_253"))
+                    capabilityRow("camera", L10n.t("i18n_254"))
+                    capabilityRow("hand.tap", L10n.t("i18n_255"))
+                    capabilityRow("keyboard", L10n.t("i18n_256"))
+                    capabilityRow("checkmark.circle", L10n.t("i18n_608"))
                 }
             }
 
             // 使用流程
-            CardSectionHeader(icon: "list.number", title: "使用流程")
+            CardSectionHeader(icon: "list.number", title: L10n.t("i18n_257"))
             CardBox {
                 VStack(alignment: .leading, spacing: 12) {
-                    stepView(1, "在聊天中让 AI 注入：\"给小红书注入控制代理\"")
-                    stepView(2, "AI 调用 control.inject(bundle_id) 注入 ControlAgent.dylib")
-                    stepView(3, "手动启动目标 App（注入后需重启）")
-                    stepView(4, "AI 调用 control.status 确认连接")
-                    stepView(5, "AI 自动读取 UI 树 → 决定操作 → 点击/输入/滑动")
+                    stepView(1, L10n.t("i18n_300"))
+                    stepView(2, L10n.t("i18n_609"))
+                    stepView(3, L10n.t("i18n_259"))
+                    stepView(4, L10n.t("i18n_610"))
+                    stepView(5, L10n.t("i18n_260"))
                 }
             }
 
             // 工具列表
-            CardSectionHeader(icon: "wrench.and.screwdriver", title: "工具列表")
+            CardSectionHeader(icon: "wrench.and.screwdriver", title: L10n.t("i18n_261"))
             CardBox {
                 VStack(alignment: .leading, spacing: 8) {
-                    toolRow("control.inject", "注入 ControlAgent 到目标 App")
-                    toolRow("control.status", "检查连接状态")
-                    toolRow("control.ui_tree", "读取 UI 树")
-                    toolRow("control.screenshot", "截图保存到工作区")
-                    toolRow("control.tap", "模拟点击 (x, y)")
-                    toolRow("control.swipe", "模拟滑动 (x1,y1 → x2,y2)")
-                    toolRow("control.type", "输入文字")
-                    toolRow("control.key", "模拟按键 (home/back/enter)")
+                    toolRow("control.inject", L10n.t("i18n_611"))
+                    toolRow("control.status", L10n.t("i18n_262"))
+                    toolRow("control.ui_tree", L10n.t("i18n_612"))
+                    toolRow("control.screenshot", L10n.t("i18n_263"))
+                    toolRow("control.tap", L10n.t("i18n_264"))
+                    toolRow("control.swipe", L10n.t("i18n_613"))
+                    toolRow("control.type", L10n.t("i18n_265"))
+                    toolRow("control.key", L10n.t("i18n_614"))
                 }
             }
 
             // 注意事项
-            CardSectionHeader(icon: "exclamationmark.triangle", title: "注意事项", color: .orange)
+            CardSectionHeader(icon: "exclamationmark.triangle", title: L10n.t("about_notes"), color: .orange)
             CardBox {
                 VStack(alignment: .leading, spacing: 6) {
-                    noteRow("只监听 localhost (127.0.0.1:4789)，不暴露到网络")
-                    noteRow("注入后必须重启目标 App，ControlAgent 才会启动")
-                    noteRow("一次只能控制一个前台 App")
-                    noteRow("需要 TrollStore 开启\"编辑 Entitlements\"并卸载重装")
-                    noteRow("UI 树限制 500 节点、深度 12 层")
+                    noteRow(L10n.t("i18n_615"))
+                    noteRow(L10n.t("i18n_616"))
+                    noteRow(L10n.t("i18n_266"))
+                    noteRow(L10n.t("i18n_2"))
+                    noteRow(L10n.t("i18n_618"))
                 }
             }
         }

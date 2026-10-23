@@ -10,8 +10,8 @@ struct CleanupCenterView: View {
 
     var body: some View {
         AppBrowserContainer(
-            title: "清理中心",
-            subtitle: "缓存 · 钥匙串 · 广告符 · 数据容器 · AI 清理",
+            title: L10n.t("i18n_24"),
+            subtitle: L10n.t("i18n_461"),
             icon: "sparkles.rectangle.stack",
             defaultCategory: .user,
             onTap: { app in
@@ -19,7 +19,7 @@ struct CleanupCenterView: View {
                 showCleanup = true
             }
         )
-        .navigationTitle("清理中心")
+        .navigationTitle(L10n.t("i18n_24"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -35,7 +35,7 @@ struct CleanupCenterView: View {
                     AppCleanupView(bundleId: app.bundleId, name: app.name)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {
-                                Button("完成") { showCleanup = false }
+                                Button(L10n.t("done")) { showCleanup = false }
                             }
                         }
             }
@@ -69,7 +69,7 @@ struct AppCleanupView: View {
                     Button {
                         scan()
                     } label: {
-                        Label("开始扫描", systemImage: "magnifyingglass")
+                        Label(L10n.t("i18n_462"), systemImage: "magnifyingglass")
                             .font(.headline)
                             .padding(.horizontal, 28).padding(.vertical, 10)
                             .background(Color.tmCyan)
@@ -80,7 +80,7 @@ struct AppCleanupView: View {
                 Spacer()
             } else if scanning {
                 Spacer()
-                ProgressView("扫描中…").font(.footnote)
+                ProgressView(L10n.t("i18n_463")).font(.footnote)
                 Spacer()
             } else if scanFailed {
                 Spacer()
@@ -92,7 +92,7 @@ struct AppCleanupView: View {
                     Text(L10n.t("ui_162"))
                         .font(.footnote).foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
-                    Button("重试") { scan() }
+                    Button(L10n.t("btn_retry")) { scan() }
                         .font(.headline)
                         .padding(.horizontal, 24).padding(.vertical, 8)
                         .background(Color.tmCyan).foregroundColor(.white)
@@ -101,7 +101,7 @@ struct AppCleanupView: View {
                 Spacer()
             } else {
                 List {
-                    Section(header: SettingSectionHeader(title: "可清理项（勾选要执行的）")) {
+                    Section(header: SettingSectionHeader(title: L10n.t("i18n_464"))) {
                         ForEach(items, id: \.id) { item in
                             HStack(spacing: 12) {
                                 Image(systemName: iconName(item.risk))
@@ -140,7 +140,7 @@ struct AppCleanupView: View {
                     }
                     Section {
                         Button {
-                            if selected.isEmpty { toast = "请先勾选要清理的项" }
+                            if selected.isEmpty { toast = L10n.t("i18n_465") }
                             else { runCleanup() }
                         } label: {
                             HStack {
@@ -148,7 +148,7 @@ struct AppCleanupView: View {
                                 if running {
                                     ProgressView().tint(.white)
                                 } else {
-                                    Label("一键清理（\(selected.count) 项）", systemImage: "trash.fill")
+                                    Label(L10n.t("i18n_466", selected.count), systemImage: "trash.fill")
                                 }
                                 Spacer()
                             }
@@ -170,7 +170,7 @@ struct AppCleanupView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if !items.isEmpty {
-                    Button("重新扫描") { scan() }
+                    Button(L10n.t("i18n_467")) { scan() }
                 } else {
                     EmptyView()
                 }
@@ -207,10 +207,10 @@ struct AppCleanupView: View {
                 scanning = false
                 if result.isEmpty {
                     scanFailed = true
-                    toast = "未找到 App 或容器不可访问"
+                    toast = L10n.t("i18n_468")
                 } else {
                     selected = Set(result.filter { $0.risk == .safe && $0.id != "idfv" }.map { $0.id })
-                    toast = "扫描完成：\(result.count) 项"
+                    toast = L10n.t("i18n_469", result.count)
                 }
             }
         }
@@ -218,14 +218,14 @@ struct AppCleanupView: View {
 
     private func toggle(_ item: CleanupItem) {
         guard item.id != "idfv" else {
-            toast = "标识符为只读信息，不可执行"
+            toast = L10n.t("i18n_470")
             return
         }
         if item.risk == .danger {
             if selected.contains(item.id) { selected.remove(item.id) }
             else {
                 selected.insert(item.id)
-                toast = "已勾选危险项：将重置全部数据（自动备份可恢复）"
+                toast = L10n.t("i18n_471")
             }
             return
         }
@@ -242,7 +242,7 @@ struct AppCleanupView: View {
                 running = false
                 let failed = results.filter { ($0["ok"] as? Bool) != true }.count
                 let okCount = results.count - failed
-                toast = "清理完成：\(okCount) 成功 / \(failed) 失败"
+                toast = L10n.t("i18n_472", okCount, failed)
                 // 刷新状态
                 let fresh = CleanupScanner.scan(bundleId: bundleId)
                 items = fresh
@@ -252,7 +252,7 @@ struct AppCleanupView: View {
     }
 
     private func riskBadge(_ risk: CleanupItem.Risk) -> some View {
-        Text(risk == .safe ? "安全" : (risk == .warn ? "警告" : "危险"))
+        Text(risk == .safe ? L10n.t("sec_security") : (risk == .warn ? L10n.t("i18n_473") : L10n.t("i18n_474")))
             .font(.system(size: 10, weight: .bold))
             .padding(.horizontal, 6).padding(.vertical, 1)
             .background(colorFor(risk).opacity(0.15))

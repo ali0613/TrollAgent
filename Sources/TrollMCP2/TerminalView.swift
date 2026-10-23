@@ -42,7 +42,7 @@ struct TerminalView: View {
                     Text("$")
                         .foregroundColor(.green)
                         .font(.system(.body, design: .monospaced))
-                    TextField("输入命令…", text: $input)
+                    TextField(L10n.t("i18n_87"), text: $input)
                         .font(.system(.body, design: .monospaced))
                         .foregroundColor(.white)
                         .autocorrectionDisabled()
@@ -56,20 +56,20 @@ struct TerminalView: View {
                 .padding(10)
                 .background(Color(white: 0.13))
             }
-            .navigationTitle("终端")
+            .navigationTitle(L10n.t("i18n_120"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("关闭") { presentationMode.wrappedValue.dismiss() }
+                    Button(L10n.t("ui_177")) { presentationMode.wrappedValue.dismiss() }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("清屏") { lines.removeAll() }
+                    Button(L10n.t("i18n_88")) { lines.removeAll() }
                 }
             }
         }
         .onAppear {
-            lines.append(TermLine(text: "TrollAgent 统一环境终端（TrollRuntime/Alpine）", isCmd: false, isError: false))
-            lines.append(TermLine(text: "输入命令回车执行 · 自动超时 30s · 支持管道/&&/;/循环", isCmd: false, isError: false))
+            lines.append(TermLine(text: L10n.t("i18n_684"), isCmd: false, isError: false))
+            lines.append(TermLine(text: L10n.t("i18n_89"), isCmd: false, isError: false))
             focused = true
         }
     }
@@ -85,14 +85,14 @@ struct TerminalView: View {
             let r = TrollRuntimeEngine.exec(cmd, timeout: 30)
             DispatchQueue.main.async {
                 busy = false
-                let out = r.output.isEmpty ? (r.exitCode == 0 ? "" : "(无输出)") : r.output
+                let out = r.output.isEmpty ? (r.exitCode == 0 ? "" : L10n.t("i18n_90")) : r.output
                 if !out.isEmpty {
                     // 长输出截断到最后 3000 字符（终端显示）
-                    let trimmed = out.count > 3000 ? String(out.suffix(3000)) + "\n…[输出过长已截断]" : out
+                    let trimmed = out.count > 3000 ? String(out.suffix(3000)) + L10n.t("i18n_685") : out
                     lines.append(TermLine(text: trimmed, isCmd: false, isError: r.exitCode != 0))
                 }
                 if r.timedOut {
-                    lines.append(TermLine(text: "⏱ 超时（30s）——命令可能挂起", isCmd: false, isError: true))
+                    lines.append(TermLine(text: L10n.t("i18n_92"), isCmd: false, isError: true))
                 }
                 focused = true
             }

@@ -142,7 +142,7 @@ struct SystemPromptsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 11, weight: .semibold))
-                    Text(isExpanded ? "收起内容" : "查看内容")
+                    Text(isExpanded ? L10n.t("i18n_245") : L10n.t("i18n_246"))
                         .font(.caption)
                 }
                 .foregroundColor(.tmCyan)
@@ -163,7 +163,7 @@ struct SystemPromptsView: View {
     // 说明卡
     private var explainCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("系统指令 vs 模型破甲提示词", systemImage: "info.circle.fill")
+            Label(L10n.t("i18n_247"), systemImage: "info.circle.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundColor(.tmCyan)
             Text(L10n.t("ui_14"))
@@ -179,13 +179,13 @@ struct SystemPromptsView: View {
             Divider()
                 .padding(.vertical, 4)
 
-            Label("模型破甲提示词 = 破甲测试专用", systemImage: "hammer.fill")
+            Label(L10n.t("i18n_248"), systemImage: "hammer.fill")
                 .font(.subheadline.weight(.semibold))
                 .foregroundColor(.orange)
-            Text("选择「开发者模式」可以让 AI 执行破甲、越狱、注入、绕过等高级测试任务，适合做 App 破解和安全测试。")
+            Text(L10n.t("i18n_249"))
                 .font(.caption)
                 .foregroundColor(.secondary)
-            Text("其他模式（逆向、渗透、游戏修改等）也都有各自的专业提示词，直接选对应模式即可。")
+            Text(L10n.t("i18n_250"))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }

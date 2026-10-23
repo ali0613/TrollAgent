@@ -56,7 +56,7 @@ struct FakeDeviceView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(L10n.t("ui_15"))
                             .font(.headline)
-                        Picker("目标 App", selection: $selectedAppId) {
+                        Picker(L10n.t("i18n_643"), selection: $selectedAppId) {
                             Text(L10n.t("ui_134")).tag("")
                             ForEach(apps, id: \.bundleId) { app in
                                 Text("\(app.name) (\(app.bundleId))").tag(app.bundleId)
@@ -72,7 +72,7 @@ struct FakeDeviceView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(L10n.t("ui_16"))
                             .font(.headline)
-                        Picker("机型", selection: $selectedModel) {
+                        Picker(L10n.t("i18n_500"), selection: $selectedModel) {
                             Text(L10n.t("ui_134")).tag("")
                             ForEach(db.devices, id: \.identifier) { pair in
                                 Text(pair.spec.name).tag(pair.identifier)
@@ -105,7 +105,7 @@ struct FakeDeviceView: View {
                         Button {
                             apply()
                         } label: {
-                            Label("应用伪装", systemImage: "wand.and.stars")
+                            Label(L10n.t("i18n_501"), systemImage: "wand.and.stars")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
                         }
@@ -119,7 +119,7 @@ struct FakeDeviceView: View {
                         Button {
                             restore()
                         } label: {
-                            Label("还原", systemImage: "arrow.uturn.backward")
+                            Label(L10n.t("i18n_502"), systemImage: "arrow.uturn.backward")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
                         }
@@ -155,7 +155,7 @@ struct FakeDeviceView: View {
                 .padding(16)
             }
         }
-        .navigationTitle("设备伪装")
+        .navigationTitle(L10n.t("row_device_fake"))
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -179,13 +179,13 @@ struct FakeDeviceView: View {
                 DispatchQueue.main.async {
                     busy = false
                     resultOK = status == "faked"
-                    resultText = resultOK ? "✅ 伪装已应用：\(note)" : "❌ \(r)"
+                    resultText = resultOK ? L10n.t("i18n_503", note) : "❌ \(r)"
                 }
             } catch {
                 DispatchQueue.main.async {
                     busy = false
                     resultOK = false
-                    resultText = "❌ 失败：\(error.localizedDescription)"
+                    resultText = L10n.t("i18n_278", error.localizedDescription)
                 }
             }
         }
@@ -201,13 +201,13 @@ struct FakeDeviceView: View {
                 DispatchQueue.main.async {
                     busy = false
                     resultOK = status == "restored"
-                    resultText = resultOK ? "✅ 已还原真实设备信息" : "❌ \(r)"
+                    resultText = resultOK ? L10n.t("i18n_504") : "❌ \(r)"
                 }
             } catch {
                 DispatchQueue.main.async {
                     busy = false
                     resultOK = false
-                    resultText = "❌ 失败：\(error.localizedDescription)"
+                    resultText = L10n.t("i18n_278", error.localizedDescription)
                 }
             }
         }

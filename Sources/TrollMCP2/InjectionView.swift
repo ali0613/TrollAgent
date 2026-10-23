@@ -107,9 +107,9 @@ struct InjectionView: View {
             if showRescue {
                 VStack(spacing: 8) {
                     HStack(spacing: 8) {
-                        rescueButton(title: "全机扫描", icon: "magnifyingglass", color: .blue, action: { runRescue("scan") })
-                        rescueButton(title: "一键全恢复", icon: "arrow.uturn.backward.circle", color: .orange, action: { confirmRescue("recover_all") })
-                        rescueButton(title: "清理残留", icon: "sparkles", color: .red, action: { confirmRescue("cleanup") })
+                        rescueButton(title: L10n.t("i18n_267"), icon: "magnifyingglass", color: .blue, action: { runRescue("scan") })
+                        rescueButton(title: L10n.t("inject_restore_all"), icon: "arrow.uturn.backward.circle", color: .orange, action: { confirmRescue("recover_all") })
+                        rescueButton(title: L10n.t("inject_cleanup_residual"), icon: "sparkles", color: .red, action: { confirmRescue("cleanup") })
                     }
                     if let msg = rescueMessage {
                         Text(msg)
@@ -166,8 +166,8 @@ struct InjectionView: View {
         .alert(isPresented: $rescueAlert) {
             Alert(title: Text(L10n.t("ui_115")),
                   message: Text(pendingRescue == "recover_all"
-                                ? "将扫描并自动恢复所有存在注入痕迹/损坏二进制的 App（还原到注入前状态）。确定继续？"
-                                : "将删除注入标记、孤儿备份与 Frameworks 内非系统 dylib。确定继续？"),
+                                ? L10n.t("i18n_268")
+                                : L10n.t("i18n_269")),
                   primaryButton: .destructive(Text(L10n.t("ui_63"))) {
                       if let p = pendingRescue { runRescue(p) }
                   },
@@ -190,10 +190,10 @@ struct InjectionView: View {
     private func badgeText(_ f: ScanFinding?) -> String {
         guard let f = f else { return "" }
         var parts: [String] = []
-        if f.damaged { parts.append("⚠️ 损坏") }
-        if f.hasBackup { parts.append("有备份") }
-        if f.assetCount > 0 { parts.append("\(f.assetCount) 注入资产") }
-        if f.modifiedCount > 0 { parts.append("\(f.modifiedCount) 改动") }
+        if f.damaged { parts.append(L10n.t("i18n_270")) }
+        if f.hasBackup { parts.append(L10n.t("i18n_271")) }
+        if f.assetCount > 0 { parts.append(L10n.t("i18n_272", f.assetCount)) }
+        if f.modifiedCount > 0 { parts.append(L10n.t("i18n_273", f.modifiedCount)) }
         return parts.isEmpty ? f.bundleId : parts.joined(separator: " · ")
     }
 
@@ -210,18 +210,18 @@ struct InjectionView: View {
                     let restored = kind == "restore"
                         && (((r["status"] as? String) == "reverted") || !((r["restored_from_backup"] as? [String]) ?? []).isEmpty)
                     if kind == "restore" {
-                        rescueMessage = restored ? "✅ \(f.name) 已恢复" : "⚠️ \(f.name)：\(r["hint"] ?? "未确认恢复")"
+                        rescueMessage = restored ? L10n.t("i18n_274", f.name) : "⚠️ \(f.name)：\(r["hint"] ?? "未确认恢复")"
                     } else {
                         let cleaned = r["cleaned_count"] as? Int ?? 0
                         let errors = r["errors"] as? [String] ?? []
-                        rescueMessage = errors.isEmpty ? "✅ \(f.name) 已清理 \(cleaned) 项" : "⚠️ \(f.name) 清理 \(cleaned) 项，\(errors.count) 个错误"
+                        rescueMessage = errors.isEmpty ? L10n.t("i18n_275", f.name, cleaned) : L10n.t("i18n_276", f.name, cleaned, errors.count)
                     }
                     scanFindings.removeAll { $0.bundleId == f.bundleId }
                 }
             } catch {
                 DispatchQueue.main.async {
                     rescueBusy = false
-                    rescueMessage = "❌ \(f.name) 失败：\(error.localizedDescription)"
+                    rescueMessage = L10n.t("i18n_277", f.name, error.localizedDescription)
                 }
             }
         }
@@ -263,7 +263,7 @@ struct InjectionView: View {
                 }
             } catch {
                 DispatchQueue.main.async {
-                    rescueMessage = "❌ 失败：\(error.localizedDescription)"
+                    rescueMessage = L10n.t("i18n_278", error.localizedDescription)
                     rescueBusy = false
                 }
                 return
@@ -288,15 +288,15 @@ struct InjectionView: View {
                         }
                     }
                     scanFindings = list
-                    rescueMessage = "🔍 扫描完成：\(count) 个需恢复的 App（点击列表可单独恢复/清理）"
+                    rescueMessage = L10n.t("i18n_279", count)
                 case "recover_all":
                     let restored = result["restored_count"] as? Int ?? 0
                     let failed = result["failed_count"] as? Int ?? 0
-                    rescueMessage = failed == 0 ? "✅ 一键恢复完成：还原 \(restored) 个 App" : "⚠️ 还原 \(restored) 个，\(failed) 个失败：\(result["failed"] ?? "")"
+                    rescueMessage = failed == 0 ? L10n.t("i18n_280", restored) : L10n.t("i18n_281", restored, failed, result["failed"] ?? "")
                 default:
                     let cleaned = result["cleaned_count"] as? Int ?? 0
                     let errors = result["errors"] as? [String] ?? []
-                    rescueMessage = errors.isEmpty ? "✅ 清理完成：\(cleaned) 项残留已清理" : "⚠️ 清理 \(cleaned) 项，\(errors.count) 个错误：\(errors.joined(separator: "; "))"
+                    rescueMessage = errors.isEmpty ? L10n.t("i18n_282", cleaned) : L10n.t("i18n_283", cleaned, errors.count, errors.joined(separator: "; "))
                 }
                 AuditLog.shared.log("rescue.ui", detail: "\(kind) \(rescueMessage ?? "")")
                 rescueBusy = false
@@ -361,21 +361,21 @@ struct AppDetailView: View {
     var body: some View {
         
             List {
-                Section(header: SettingSectionHeader(title: "应用信息")) {
-                    LabeledRow(label: "名称", value: app.name)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_284"))) {
+                    LabeledRow(label: L10n.t("i18n_221"), value: app.name)
                     LabeledRow(label: "Bundle ID", value: app.bundleId)
-                    LabeledRow(label: "路径", value: app.path)
+                    LabeledRow(label: L10n.t("i18n_178"), value: app.path)
                     if let container = AppCatalog.lookupContainer(bundleId: app.bundleId) {
-                        LabeledRow(label: "容器", value: container)
+                        LabeledRow(label: L10n.t("i18n_285"), value: container)
                     }
                 }
                 // v2.9.21：手动注入 / 移除操作区
-                Section(header: SettingSectionHeader(title: "注入操作")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_286"))) {
                     HStack(spacing: 8) {
                         Image(systemName: injected ? "checkmark.circle.fill" : "circle.dashed")
                             .font(.system(size: 17))
                             .foregroundColor(injected ? .green : .secondary)
-                        Text(injected ? "已注入" : "未注入")
+                        Text(injected ? L10n.t("i18n_287") : L10n.t("i18n_288"))
                             .font(.body)
                         Spacer()
                     }
@@ -408,7 +408,7 @@ struct AppDetailView: View {
                     }
                     .disabled(busy)
                 }
-                Section(header: SettingSectionHeader(title: "注入工具链")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_289"))) {
                     ForEach(InjectionManager.shared.availableBinaries(), id: \.self) { bin in
                         HStack(spacing: 12) {
                             ZStack {
@@ -427,7 +427,7 @@ struct AppDetailView: View {
                     }
                 }
                 if !entries.isEmpty {
-                    Section(header: SettingSectionHeader(title: "检查结果")) {
+                    Section(header: SettingSectionHeader(title: L10n.t("i18n_290"))) {
                         ForEach(entries) { e in
                             LabeledRow(label: e.key, value: e.value)
                         }
@@ -436,7 +436,7 @@ struct AppDetailView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle(app.name)
-            .toolbar { Button("关闭") { presentationMode.wrappedValue.dismiss() } }
+            .toolbar { Button(L10n.t("ui_177")) { presentationMode.wrappedValue.dismiss() } }
         
     }
 
@@ -451,14 +451,14 @@ struct AppDetailView: View {
             } catch {
                 let msg = (error as? MCPError)?.description ?? error.localizedDescription
                 DispatchQueue.main.async {
-                    actionMessage = "❌ 注入失败：\(msg)"
+                    actionMessage = L10n.t("i18n_291", msg)
                     busy = false
                 }
                 return
             }
             DispatchQueue.main.async {
                 let ok = (result["injected"] as? Bool) ?? false
-                actionMessage = ok ? "✅ 注入成功" : "⚠️ 注入未确认（见检查结果）"
+                actionMessage = ok ? L10n.t("i18n_292") : L10n.t("i18n_293")
                 inspectResult = InjectionManager.shared.inspect(app.bundleId)
                 busy = false
             }
@@ -476,14 +476,14 @@ struct AppDetailView: View {
             } catch {
                 let msg = (error as? MCPError)?.description ?? error.localizedDescription
                 DispatchQueue.main.async {
-                    actionMessage = "❌ 移除失败：\(msg)"
+                    actionMessage = L10n.t("i18n_294", msg)
                     busy = false
                 }
                 return
             }
             DispatchQueue.main.async {
                 let ok = ((result["injected"] as? Bool) ?? true) == false
-                actionMessage = ok ? "✅ 已还原" : "⚠️ 还原未确认"
+                actionMessage = ok ? L10n.t("i18n_295") : L10n.t("i18n_296")
                 inspectResult = InjectionManager.shared.inspect(app.bundleId)
                 busy = false
             }
@@ -501,14 +501,14 @@ struct AppDetailView: View {
             } catch {
                 let msg = (error as? MCPError)?.description ?? error.localizedDescription
                 DispatchQueue.main.async {
-                    actionMessage = "❌ 恢复失败：\(msg)"
+                    actionMessage = L10n.t("i18n_297", msg)
                     busy = false
                 }
                 return
             }
             DispatchQueue.main.async {
                 let restored = ((result["status"] as? String) == "reverted") || !((result["restored_from_backup"] as? [String]) ?? []).isEmpty
-                actionMessage = restored ? "✅ 已从备份恢复" : "⚠️ 未发现可用备份（可能本来就未注入）"
+                actionMessage = restored ? L10n.t("i18n_298") : L10n.t("i18n_299")
                 inspectResult = InjectionManager.shared.inspect(app.bundleId)
                 busy = false
             }

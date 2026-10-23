@@ -29,7 +29,7 @@ struct VpnCaptureView: View {
                     .padding(.top, 10)
 
                     Button(action: { vpnActive ? stopAll() : connectVpn() }) {
-                        Text(vpnActive ? "停止抓包" : "开始抓包")
+                        Text(vpnActive ? L10n.t("i18n_301") : L10n.t("i18n_302"))
                             .font(.headline)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -52,10 +52,10 @@ struct VpnCaptureView: View {
             Section {
                 // 流量抓取 = 抓包总开关（连接/断开 VPN）
                 moduleCard(
-                    title: "流量抓取",
+                    title: L10n.t("i18n_303"),
                     icon: "arrow.down.doc.fill",
                     color: .green,
-                    desc: "抓取 HTTP/HTTPS 请求数据并保存在抓包记录中",
+                    desc: L10n.t("i18n_304"),
                     trailing: AnyView(
                         Toggle("", isOn: Binding(
                             get: { vpnActive },
@@ -66,13 +66,13 @@ struct VpnCaptureView: View {
                 )
                 // CA 证书：状态 + 点击生成
                 moduleCard(
-                    title: "CA 证书",
+                    title: L10n.t("i18n_619"),
                     icon: "checkmark.shield.fill",
                     color: .green,
-                    desc: caExists ? "CA 证书已安装并信任" : "未生成，点击生成并安装",
+                    desc: caExists ? L10n.t("i18n_305") : L10n.t("i18n_306"),
                     trailing: AnyView(
                         Button(action: shareCert) {
-                            Text(caExists ? "已配置" : "未配置")
+                            Text(caExists ? L10n.t("i18n_307") : L10n.t("not_configured"))
                                 .font(.subheadline)
                                 .foregroundColor(caExists ? .green : .secondary)
                         }
@@ -80,14 +80,14 @@ struct VpnCaptureView: View {
                 )
                 // 抓包记录：数量 + 点击展开
                 moduleCard(
-                    title: "抓包记录",
+                    title: L10n.t("i18n_308"),
                     icon: "doc.text.fill",
                     color: .blue,
-                    desc: "查看已捕获的 HTTP/HTTPS 请求",
+                    desc: L10n.t("i18n_620"),
                     trailing: AnyView(
                         Button(action: { showLogs = true }) {
                             HStack(spacing: 4) {
-                                Text("\(logFiles.count) 个文件")
+                                Text(L10n.t("i18n_309", logFiles.count))
                                     .font(.subheadline)
                                     .foregroundColor(logFiles.isEmpty ? .secondary : .blue)
                                 Image(systemName: "chevron.right")
@@ -111,10 +111,10 @@ struct VpnCaptureView: View {
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundColor(.orange)
                         }
-                        Text(localProxyOn ? "停止本地代理" : "启动本地代理")
+                        Text(localProxyOn ? L10n.t("i18n_310") : L10n.t("i18n_311"))
                             .foregroundColor(.primary)
                         Spacer()
-                        Text(localProxyOn ? "运行中" : "已停止")
+                        Text(localProxyOn ? L10n.t("i18n_312") : L10n.t("i18n_313"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -122,30 +122,30 @@ struct VpnCaptureView: View {
             }
 
             // 使用步骤（保留功能指引）
-            Section(header: SettingSectionHeader(title: "使用步骤")) {
-                stepRow(1, "生成证书", "自动用 Safari 打开下载描述文件")
-                stepRow(2, "安装", "设置 → 已下载描述文件 → 安装")
-                stepRow(3, "信任", "通用 → 证书信任设置 → 打开完全信任")
-                stepRow(4, "连接", "VPN，或本地代理 + WiFi 手动代理 127.0.0.1:18180")
-                stepRow(5, "使用", "正常用目标 App，日志写入 Workspace/network_capture/mitm/")
+            Section(header: SettingSectionHeader(title: L10n.t("i18n_314"))) {
+                stepRow(1, L10n.t("i18n_315"), L10n.t("i18n_316"))
+                stepRow(2, L10n.t("btn_install"), L10n.t("i18n_317"))
+                stepRow(3, L10n.t("i18n_318"), L10n.t("i18n_319"))
+                stepRow(4, L10n.t("i18n_239"), L10n.t("i18n_621"))
+                stepRow(5, L10n.t("i18n_320"), L10n.t("i18n_622"))
             }
 
             if !notice.isEmpty {
-                Section(header: SettingSectionHeader(title: "提示")) {
+                Section(header: SettingSectionHeader(title: L10n.t("warning"))) {
                     Text(notice)
                         .font(.caption)
                         .foregroundColor(.orange)
                 }
             }
         }
-        .navigationTitle("抓包 VPN")
+        .navigationTitle(L10n.t("i18n_662"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { refresh() }
         .sheet(isPresented: $showLogs) {
             NavigationView {
                 List {
                     if logFiles.isEmpty {
-                        Text("暂无抓包记录")
+                        Text(L10n.t("i18n_321"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     } else {
@@ -154,11 +154,11 @@ struct VpnCaptureView: View {
                         }
                     }
                 }
-                .navigationTitle("抓包记录（\(logFiles.count)）")
+                .navigationTitle(L10n.t("i18n_322", logFiles.count))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("完成") { showLogs = false }
+                        Button(L10n.t("done")) { showLogs = false }
                     }
                 }
             }
@@ -230,10 +230,10 @@ struct VpnCaptureView: View {
     }
 
     private func statusHint() -> String {
-        if vpnStatusText == "connected" { return "已连接 · 系统流量走 MITM 代理" }
-        if vpnStatusText == "connecting" { return "正在连接…" }
-        if localProxyOn { return "本地代理运行中 · WiFi 手动代理生效" }
-        return "已断开，点击开始抓包"
+        if vpnStatusText == "connected" { return L10n.t("i18n_323") }
+        if vpnStatusText == "connecting" { return L10n.t("i18n_324") }
+        if localProxyOn { return L10n.t("i18n_325") }
+        return L10n.t("i18n_326")
     }
 
     private func stopAll() {
@@ -258,12 +258,12 @@ struct VpnCaptureView: View {
 
     private func connectVpn() {
         // v3.5.16h：点按钮立刻给反馈，不再静默等——避免"点了没反应"的错觉
-        notice = "正在连接 VPN，请在系统弹窗点「允许」…"
+        notice = L10n.t("i18n_328")
         VpnManager.shared.startVpn { err in
             if let e = err {
-                notice = "VPN 启动失败：\(e)\n可用「本地代理」代替（WiFi 手动代理）"
+                notice = L10n.t("i18n_329", e)
             } else {
-                notice = "VPN 已连接（等待系统弹窗允许）"
+                notice = L10n.t("i18n_330")
             }
             refresh()
         }
@@ -274,14 +274,14 @@ struct VpnCaptureView: View {
             VpnManager.shared.stopLocalProxy()
         } else {
             _ = VpnManager.shared.startLocalProxy()
-            notice = "本地代理已启动：127.0.0.1:18180\n去 设置→WiFi→当前网络→配置代理→手动，填 127.0.0.1 和 18180"
+            notice = L10n.t("i18n_331")
         }
         refresh()
     }
 
     private func shareCert() {
         guard let path = VpnManager.shared.generateMobileConfig() else {
-            notice = "证书生成失败"
+            notice = L10n.t("i18n_332")
             return
         }
         refresh()
@@ -292,9 +292,9 @@ struct VpnCaptureView: View {
         let url = URL(string: "http://127.0.0.1:18080/TrollAgentCA.mobileconfig")!
         UIApplication.shared.open(url, options: [:]) { ok in
             if !ok {
-                notice = "打开 Safari 失败，请手动用「文件」App 打开：\(path)"
+                notice = L10n.t("i18n_335", path)
             } else {
-                notice = "已在 Safari 打开下载页\n① 点「允许」下载描述文件\n② 到 设置 → 已下载描述文件 → 安装\n③ 设置 → 通用 → 关于本机 → 证书信任设置 → 打开完全信任"
+                notice = L10n.t("i18n_336")
             }
         }
     }
