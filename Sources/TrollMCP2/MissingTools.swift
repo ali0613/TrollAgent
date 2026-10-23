@@ -588,7 +588,7 @@ final class KnowledgeStore {
 Overall flow: triage → static (read code without running) → dynamic (observe runtime behavior) → conclusion. Cross-validate static and dynamic findings.
 
 ## 0 Triage (classify first, don't rush into code)
-- Format identification: use \`file\` / check header magic — Mach-O (64-bit magic 0xFEEDFACF) / ELF / ipa / deb / text.
+- Format identification: use `file` / check header magic — Mach-O (64-bit magic 0xFEEDFACF) / ELF / ipa / deb / text.
 - Encryption state: cryptid=1 means an encrypted binary; all static tools are ineffective — decrypt (crack the shell) before analysis.
 - Dependencies/architecture: read LC_LOAD_DYLIB from the Mach-O load commands. Abnormal dependencies (a pure-JSON library linked against WebKit/Metal/Network) are a strong signal of repackaging/tampering.
 - Hash + size: SHA256 + file size for cross-version comparison.
