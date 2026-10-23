@@ -969,7 +969,7 @@ final class ProbeInspectTool: MCPTool {
             "limit": "Max classes to return (default 30, max 100)",
             "cleanup": "Remove ProbeAgent after query (default false)"
         ],
-        prerequisites: ["[This tool is ineffective on encrypted apps (cryptid=1)] — on TARGET_INCOMPATIBLE / 'encrypted (cryptid=1)' don't retry, first app command=decrypt 砸壳 + replace_decrypted 后再分析", "必须先 inject enable ProbeAgent 注入探针(前置): 对加密 App 无法注入(见 inject prerequisites)"]
+        prerequisites: ["[This tool is ineffective on encrypted apps (cryptid=1)] — on TARGET_INCOMPATIBLE / 'encrypted (cryptid=1)' don't retry, first app command=decrypt to crack the shell + replace_decrypted, then analyze, "must inject enable ProbeAgent first (prerequisite): can't inject into encrypted apps (see inject prerequisites)"]
     )
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
@@ -1436,7 +1436,7 @@ final class KeychainWipeTool: MCPTool {
             "errors": errors,
             "hint": failed > 0
                 ? "Some entries need system-level keychain permission (this app hasn't declared that group)."
-                : "已清理目标 App 钥匙串条目 (登录态将被重置)"
+                : "Cleared the target app's keychain items (login state will be reset)"
         ]
     }
 }

@@ -167,7 +167,7 @@ final class ShellExecTool: MCPTool {
             if let guardMsg = ShellExecTool.alpineIOSPathGuard(boundCmd) {
                 return ["command": trimmed, "exit_code": 1,
                         "stdout": guardMsg,
-                        "hint": "This command runs in the unified env (TrollRuntime) but the iOS path isn't readable (only Workspace/Containers/System three dirs are bound, files have no 2MB limit). Fix: ① copy to Workspace first: `cp <file> /var/mobile/Documents/Workspace/`，再走 Alpine /ios_workspace 直读分析；②读 App 数据容器用 bind_app bundle_id:<id>（只读）→ /ios_data_<app>；③对二进制用 file analyze / binary.symbols。"]
+                        "hint": "This command runs in the unified env (TrollRuntime) but the iOS path isn't readable (only Workspace/Containers/System three dirs are bound, files have no 2MB limit). Fix: ① copy to Workspace first: `cp <file> /var/mobile/Documents/Workspace/`, then read it via Alpine /ios_workspace; ② for app data containers use bind_app bundle_id:<id> (read-only) → /ios_data_<app>; ③ for binaries use file analyze / binary.symbols."]
             }
             let (output, exitCode, timedOut) = TrollRuntimeEngine.exec(boundCmd, timeout: timeout)
             // v6.6.0: Alpine 工具裁剪（幂等）——统一后原生覆盖极少，不影响主环境工具链
@@ -184,7 +184,7 @@ final class ShellExecTool: MCPTool {
                 "exit_code": finalExit,
                 "stdout": stdout,
                 "cwd": TrollRuntimeEngine.cwd,
-                "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Unified environment (Alpine Linux — TrollRuntime). Missing tools are auto-installed via apk add and retried一次。"
+                "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Unified environment (Alpine Linux — TrollRuntime). Missing tools auto-install via apk add and retry once."
             ]
             if finalTimed { result["timed_out"] = true }
             AuditLog.shared.log("shell.exec (alpine auto)", detail: String(trimmed.prefix(100)))
@@ -308,7 +308,7 @@ final class ShellExecTool: MCPTool {
             "exit_code": rExit,
             "stdout": stdout,
             "cwd": newPwd,
-            "hint": provNote + "Alpine Linux environment: full command set (ls/cat/grep/find/tar/curl/python...), apk add to install packages." iOS 路径自动 bind 直读。cd remembers directory."
+            "hint": provNote + "Alpine Linux environment: full command set (ls/cat/grep/find/tar/curl/python...), apk add to install packages. iOS paths auto-bind for direct reads. cd remembers the directory."
         ]
         if rTimed {
             result["timed_out"] = true
@@ -497,7 +497,7 @@ final class ShellExecTool: MCPTool {
         }
         guard !blocked.isEmpty else { return nil }
         return "This command runs in Alpine but references iOS files Alpine can't read (check added to prevent false-zero results):\n" + blocked.joined(separator: "\n") +
-               "\nFix: ① confirm the path is within auto-bind scope (/var/mobile/Documents/Workspace, /var/containers, /System); ② app data container paths (/var/mobile/Containers/...）不要用 Alpine，直接用 iOS 原生命令（ls/cat/du/df）；③ 其他路径先 cp 到 Workspace 再走 Alpine 分析。"
+               "\nFix: ① confirm the path is within auto-bind scope (/var/mobile/Documents/Workspace, /var/containers, /System); ② app data container paths (/var/mobile/Containers/...) — don't use Alpine, use native iOS commands directly (ls/cat/du/df); ③ for other paths cp to Workspace first, then analyze in Alpine."
     }
     
     /// 按管道/分号/逻辑符拆分命令 (尊重引号），返回 [(命令段, 连接符)]，连接符: | ; && ||
@@ -1340,9 +1340,9 @@ final class ShellExecTool: MCPTool {
         }
         var out = "\(target): ❌ not installed (no native \(target) on iOS)"
         if target == "git" || target == "vim" || target == "curl" || target == "wget" {
-            out += "\nInstall hint: use tool.install to install manually (unified env apk add \(target) — v6.5.2 ships ca-certificates in rootfs/curl/git，缺则 apk add）。"
+            out += "\nInstall hint: use tool.install to install manually (unified env apk add \(target) — v6.5.2 ships ca-certificates in rootfs/curl/git; if missing, apk add)."
         } else {
-            out += "\n安装提示：用 tool.install 安装，或统一环境里 apk add \(target)。"
+            out += "\nInstall hint: use tool.install, or apk add \(target) in the unified env."
         }
         return ["command": seg, "exit_code": 1, "stdout": out, "note": "Probe result from the filesystem (command body not executed, avoiding interpreter high-CPU kills by the system）"]
     }
@@ -1547,14 +1547,14 @@ final class ShellExecTool: MCPTool {
                 out = "0"
             }
         } else {
-            let truncated = matchedLines.count > 200 ? Array(matchedLines.prefix(200)) + ["... (total \(totalCount) 行匹配，已截断)"] : matchedLines
+            let truncated = matchedLines.count > 200 ? Array(matchedLines.prefix(200)) + ["... (total \(totalCount) lines matched, truncated)"] : matchedLines
             out = truncated.joined(separator: "\n")
         }
         return [
             "command": command,
             "exit_code": 0,
             "stdout": out,
-            "hint": "iOS native grep: -i/-r/-l/-c/-n/-v as standard; default matches literal bytes (can search binaries like cdhash/CodeDirectory), -E enables regex; -a automatic (binary printable). No longer silently fails on binary UTF-8 decode输出空。"
+            "hint": "iOS native grep: -i/-r/-l/-c/-n/-v as standard; default matches literal bytes (can search binaries like cdhash/CodeDirectory), -E enables regex; -a automatic (binary printable). No longer silently fails with empty output on binary UTF-8 decode."
         ]
     }
     
@@ -1889,7 +1889,7 @@ final class ShellExecTool: MCPTool {
         if rows.count > 200 {
             let full = rows.joined(separator: "\n")
             let spill = ToolRegistry.spillLarge("sqlite3", full)
-            rows = Array(rows.prefix(200)) + ["... (结果共 \(rows.count - 2) 行，已截断到 200)", "完整结果: \(spill)", "提示：请加 LIMIT 控制行数，例如 SELECT ... LIMIT 5000"]
+            rows = Array(rows.prefix(200)) + ["... (\(rows.count - 2) result rows total, truncated to 200)", "Full result: \(spill)", "Tip: add LIMIT to control row count, e.g. SELECT ... LIMIT 5000"]
         }
 
         return [
@@ -1934,7 +1934,7 @@ final class ShellExecTool: MCPTool {
             lines.append(String(format: "%5d  %5d  %@", pid, ppid, comm))
         }
         if count > n {
-            lines.append("... (total \(count) 个进程，显示前 \(n) 个)")
+            lines.append("... (total \(count) processes, showing first \(n)")
         }
         return [
             "command": command,

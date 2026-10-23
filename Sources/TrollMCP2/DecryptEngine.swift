@@ -595,7 +595,7 @@ enum DecryptEngine {
         guard pid > 0 else {
             return DecryptResult(ok: false, errorCode: "target",
                                  errorReason: "Target app launch failed (open -b + launchd SubmitAndStart both ineffective)",
-                                 nextStep: "手动打开目标 App 后再执行砸壳", pid: 0, launchErrors: launchErrors)
+                                 nextStep: "Open the target app manually, then run the decrypt", pid: 0, launchErrors: launchErrors)
         }
         Thread.sleep(forTimeInterval: 5.0)
 
@@ -688,7 +688,7 @@ enum DecryptEngine {
         guard (dec["connected"] as? Bool) == true else {
             return DecryptResult(ok: false, errorCode: "tool",
                                  errorReason: "/decrypt no response: \(dec["error"] ?? "")",
-                                 nextStep: "检查 ControlAgent 版本 (需 ≥ v2.9.186 的 /decrypt 端点)",
+                                 nextStep: "Check the ControlAgent version (needs the /decrypt endpoint, ≥ v2.9.186)",
                                  pid: pid, launchErrors: launchErrors)
         }
         let results = (dec["results"] as? [[String: Any]]) ?? []
@@ -820,7 +820,7 @@ enum ZipStorer {
             if zcode == 0, FileManager.default.fileExists(atPath: zipPath) {
                 return true
             }
-            NSLog("[ZipStorer] 系统 zip failed(\(zcode)): \(zout) 回退 ZipStorer")
+            NSLog("[ZipStorer] system zip failed(\(zcode)): \(zout) falling back to ZipStorer")
         } else {
             try? "zip_exists=0".write(toFile: "/var/mobile/Documents/Workspace/zip_diag.log", atomically: true, encoding: .utf8)
         }

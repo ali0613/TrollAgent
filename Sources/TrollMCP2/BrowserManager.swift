@@ -500,12 +500,12 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
         let js = """
         (function(){
           var e=document.querySelector('[data-browser-idx="\(idx)"]');
-          if(!e)return 'ERR: 元素 '+\(idx)+' 不存在（页面可能已变化，请重新 snapshot）';
+          if(!e)return 'ERR: element '+\(idx)+' not found (page may have changed, re-snapshot)';
           var form=e.closest('form');
-          if(form){form.requestSubmit();return '已提交表单 (form submit)';}
+          if(form){form.requestSubmit();return 'Form submitted (form submit)';}
           var ev=new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true});
           e.dispatchEvent(ev);
-          return '已发送回车键 (Enter)';
+          return 'Enter key sent';
         })();
         """
         let r = evalSync(js)
@@ -710,7 +710,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
         if Thread.isMainThread {
             return "ERR: evalSync can't be called on the main thread (blocks UI), use async evaluateJavaScript"
         }
-        var result = "ERR: 执行超时"
+        var result = "ERR: execution timeout"
         let sem = DispatchSemaphore(value: 0)
         DispatchQueue.main.async {
             wv.evaluateJavaScript(js) { obj, err in
@@ -781,7 +781,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     func snapshot(query: String? = nil) -> [String: Any] {
         guard ensureWebView() else { return ["ok": false, "error": "Browser initialization timeout"] }
         FloatingBrowser.shared.show()
-        beginAction("扫描页面可交互元素…")
+        beginAction("Scanning interactive elements…")
         let json = evalSync(Self.highlightScript)
         endAction()
         lastSnapshot = json
@@ -828,9 +828,9 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     /// v2.9.80：点击前先确保标记存在（修蓝框关闭后必失败 bug）；点击时目标蓝色闪烁，用户能看到 AI 点了哪里
     func clickElement(_ idx: Int) -> String {
         FloatingBrowser.shared.show()
-        beginAction("点击元素 #\(idx)…")
+        beginAction("Clicking element #\(idx)…")
         ensureMarked()
-        let js = "(function(){var e=document.querySelector('[data-browser-idx=\\\"\(idx)\\\"]');if(!e)return 'ERR: 元素 '+\(idx)+' 不存在（页面可能已变化，请重新 snapshot）';var t=(e.innerText||e.value||'').trim().slice(0,40);var orig=e.style.outline;e.style.outline='3px solid rgba(0,200,255,1)';e.style.outlineOffset='2px';setTimeout(function(){e.style.outline=orig;},900);e.click();return '已点击 '+e.tagName+' '+JSON.stringify(t);})();"
+        let js = "(function(){var e=document.querySelector('[data-browser-idx=\\\"\(idx)\\\"]');if(!e)return 'ERR: element '+\(idx)+' not found (page may have changed, re-snapshot)';var t=(e.innerText||e.value||'').trim().slice(0,40);var orig=e.style.outline;e.style.outline='3px solid rgba(0,200,255,1)';e.style.outlineOffset='2px';setTimeout(function(){e.style.outline=orig;},900);e.click();return 'Clicked '+e.tagName+' '+JSON.stringify(t);})();"
         let r = evalSync(js)
         if !r.hasPrefix("ERR") {
             _ = evalSync(Self.highlightScript)   // 点击后页面可能变化，刷新编号
@@ -842,20 +842,20 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     /// 填表（按快照 idx + 文本）
     func typeText(_ idx: Int, _ text: String) -> String {
         FloatingBrowser.shared.show()
-        beginAction("向元素 #\(idx) 输入文本…")
+        beginAction("Typing into element #\(idx)…")
         ensureMarked()
         let t = JSONString(text)
         let js = """
         (function(){
           var e=document.querySelector('[data-browser-idx="\(idx)"]');
-          if(!e)return 'ERR: 元素 '+\(idx)+' 不存在（页面可能已变化，请重新 snapshot）';
+          if(!e)return 'ERR: element '+\(idx)+' not found (page may have changed, re-snapshot)';
           e.focus();
           var proto=e instanceof HTMLTextAreaElement?window.HTMLTextAreaElement.prototype:(e instanceof HTMLInputElement?window.HTMLInputElement.prototype:null);
           if(proto){var setter=Object.getOwnPropertyDescriptor(proto,'value').set;setter.call(e,\(t));}
           else{e.value=\(t);}
           e.dispatchEvent(new Event('input',{bubbles:true}));
           e.dispatchEvent(new Event('change',{bubbles:true}));
-          return '已输入: '+\(t);
+          return 'Typed: '+\(t);
         })();
         """
         let r = evalSync(js)
@@ -866,7 +866,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     /// 执行任意 JS（AI 调用时自动浮现悬浮窗）
     func evaluate(_ js: String) -> String {
         FloatingBrowser.shared.show()
-        beginAction("执行 JavaScript…")
+        beginAction("Running JavaScript…")
         let r = evalSync(js)
         endAction()
         return r
@@ -926,7 +926,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        pageTitle = "加载失败"
+        pageTitle = "Load failed"
         DispatchQueue.main.async {
             self.isLoading = false
             self.currentAction = ""
@@ -935,7 +935,7 @@ final class BrowserManager: NSObject, ObservableObject, WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        pageTitle = "无法访问"
+        pageTitle = "Cannot access"
         currentURL = webView.url?.absoluteString ?? currentURL
         DispatchQueue.main.async {
             self.isLoading = false

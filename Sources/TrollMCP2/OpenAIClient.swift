@@ -197,7 +197,7 @@ final class OpenAIClient {
             let el = Int(Date().timeIntervalSince(requestStart) * 1000)
             NetworkLog.shared.log("\(config.name) circuit-broken, request rejected (\(el)ms)")
             completion(.failure(NSError(domain: "OpenAIClient", code: -503,
-                userInfo: [NSLocalizedDescriptionKey: "Provider «\(config.name)» circuit-broken (too many consecutive failures, requests paused to avoid hanging). Reset it on the model-management page, 或约 60 秒后自动恢复探测。"])))
+                userInfo: [NSLocalizedDescriptionKey: "Provider «\(config.name)» circuit-broken (too many consecutive failures, requests paused to avoid hanging). Reset it on the model-management page, or auto-recovery probing resumes in ~60s."])))
             return
         }
         UsageRecorder.shared.begin(messages: messages)
@@ -269,7 +269,7 @@ final class OpenAIClient {
             let el = Int(Date().timeIntervalSince(requestStart) * 1000)
             NetworkLog.shared.log("\(config.name) multi-level fallback budget exhausted (\(Int(overallBudget))s, \(el)ms)")
             completion(.failure(NSError(domain: "OpenAIClient", code: -1001,
-                userInfo: [NSLocalizedDescriptionKey: "Request timeout: tried all 6 compat levels, still no response (total \(Int(overallBudget))s). 可能是中转站负载过高或模型名错误，请稍后重试或检查模型配置。"])))
+                userInfo: [NSLocalizedDescriptionKey: "Request timeout: tried all 6 compat levels, still no response (total \(Int(overallBudget))s). The relay may be overloaded or the model name wrong — retry later or check the model config."])))
             return
         }
         if config.apiProtocol == "Anthropic Messages" {
@@ -302,7 +302,7 @@ final class OpenAIClient {
         let base = config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let endpoint = "/chat/completions"
         guard let url = URL(string: base + endpoint) else {
-            completion(.failure(NSError(domain: "OpenAIClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "无效的 baseURL"])))
+            completion(.failure(NSError(domain: "OpenAIClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid baseURL"])))
             return
         }
 
@@ -394,7 +394,7 @@ final class OpenAIClient {
                     self.didAutoEscalateReasoning = true
                     let saved = self.currentReasoningLevel
                     self.currentReasoningLevel = 4   // v4.3.40：升到极限档 max (破甲站支持, 思考最多)
-                    NetworkLog.shared.log("\(self.config.name): low/mid-tier response had no reasoning trace (reasoning_tokens=\(reasoningTokens)), auto-动升为 max 重试")
+                    NetworkLog.shared.log("\(self.config.name): low/mid-tier response had no reasoning trace (reasoning_tokens=\(reasoningTokens)), auto-upgraded to max and retrying")
                     onStatus?("Low/mid tier didn't trigger reasoning, auto-upgraded to the highest tier and retrying…")
                     self.attempt(level: level, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                     self.currentReasoningLevel = saved
@@ -402,7 +402,7 @@ final class OpenAIClient {
                 }
                 if level != self.currentCompatLevel {
                     let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
-                    NetworkLog.shared.log("\(self.config.name) level \(level) (\(self.levelName(level))) probe OK (\(el)ms)，已记忆该级别，发送完整请求")
+                    NetworkLog.shared.log("\(self.config.name) level \(level) (\(self.levelName(level))) probe OK (\(el)ms), remembered this level, sending full request")
                     NetworkLog.lastCompatNote = "Model «\(self.config.name)» current compat level: \(level) (\(self.levelName(level)))"
                     self.persist(level: level)
                     self.currentCompatLevel = level;  // v6.0.30: 立刻更新内存里的兼容级别，避免递归时反复进试探分支死循环
@@ -418,7 +418,7 @@ final class OpenAIClient {
             let retryable = self.isRetryable(status: status, errorPayload: errorPayload)
             let failMsg = errorPayload ?? raw
             let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
-            NetworkLog.shared.log("\(self.config.name) L\(level) failed (HTTP \(status)，耗时 \(el)ms): \(String(failMsg.prefix(200)))")
+            NetworkLog.shared.log("\(self.config.name) L\(level) failed (HTTP \(status), took \(el)ms): \(String(failMsg.prefix(200)))")
 
             // v2.9.299：模型非视觉 (VLM）错误——剥离全部图片后同级别重试一次
             let lowerErr = (errorPayload ?? "").lowercased()
@@ -429,11 +429,11 @@ final class OpenAIClient {
                 for i in stripped.indices {
                     if !(stripped[i].imageDataURLs ?? []).isEmpty {
                         stripped[i].imageDataURLs = nil
-                        stripped[i].content += "\n[📎 图片已自动移除：当前模型不支持看图 (非视觉模型)]"
+                        stripped[i].content += "\n[📎 image auto-removed: current model can't see images (non-vision model)]"
                     }
                 }
-                NetworkLog.shared.log("\(self.config.name): 模型非视觉，剥离图片后重试 L\(level)")
-                onStatus?("当前模型不支持看图，已自动移除图片重试…")
+                NetworkLog.shared.log("\(self.config.name): model is non-vision, stripped images and retrying L\(level)")
+                onStatus?("Current model can't see images, auto-removed them and retrying…")
                 self.attempt(level: level, isFirst: false, messages: stripped, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                 return
             }
@@ -441,7 +441,7 @@ final class OpenAIClient {
             if retryable {
                 let next = self.nextLevel(after: level, hasTools: tools != nil && !(tools?.isEmpty ?? true), avoidL5: avoidL5)
                 if next <= self.maxLevel {
-                    NetworkLog.shared.log("\(self.config.name) 自动降级 → 级别 \(next) (\(self.levelName(next)))")
+                    NetworkLog.shared.log("\(self.config.name) auto-fallback → level \(next) (\(self.levelName(next)))")
                     self.attempt(level: next, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                     return
                 }
@@ -489,14 +489,10 @@ final class OpenAIClient {
             body["reasoning_effort"] = reasoningEffortName()
             // v3.1.74：思考/回复语言跟随 App 设置 (设置 → 语言），不再硬编码中文
             // v3.1.33 曾强制简体中文思考；现在按 LanguageManager.shared.language 动态下发
-            // v3.5.11：追加"先解说后执行"指令（对齐 Codex/Claude Code 一次流式先思考后行动）——
-            // 要求模型在调用任何工具前，先在回复正文 content 里写一两句解说，再发 tool_calls。
-            var instr = LanguageManager.shared.isZh
+            // Language instruction follows the App setting (Settings → Language); no narrate-before-execute requirement.
+            let instr = LanguageManager.shared.isZh
                 ? "你的思考过程 (reasoning/thinking)请始终使用简体中文输出。最终回复也使用简体中文，除非用户明确要求其他语言。"
                 : "Always think and reply in English unless the user explicitly asks for another language."
-            instr += LanguageManager.shared.isZh
-                ? "\n重要：在你调用任何工具之前，必须先在回复正文（content，不要放进 reasoning）里用一两句自然语言向用户说明你正要做什么、为什么。写完解说后再调用工具。"
-                : "\nIMPORTANT: Before calling any tool, you MUST first write one or two sentences in the reply content (not in reasoning) explaining what you are about to do and why. Then call the tool."
             body["instructions"] = instr
         }
         if let tools = tools, !tools.isEmpty {
@@ -532,13 +528,13 @@ final class OpenAIClient {
 
     private func levelName(_ level: Int) -> String {
         switch level {
-        case 0: return "完整载荷"
-        case 1: return "互换token参数名"
-        case 2: return "去掉tool_choice"
-        case 3: return "去掉tools纯对话"
-        case 4: return "最小载荷"
-        case 5: return "Responses API+工具"
-        default: return "未知"
+        case 0: return "Full payload"
+        case 1: return "Swap token param names"
+        case 2: return "Drop tool_choice"
+        case 3: return "Drop tools, pure chat"
+        case 4: return "Minimal payload"
+        case 5: return "Responses API + tools"
+        default: return "Unknown"
         }
     }
 
@@ -672,7 +668,7 @@ final class OpenAIClient {
     private func performResponses(messages: [ChatMessage], tools: [[String: Any]]?, onStatus: ((String) -> Void)?, onThinking: ((String) -> Void)? = nil, completion: @escaping (Result<ChatResult, Error>) -> Void) {
         let base = config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + "/responses") else {
-            completion(.failure(NSError(domain: "OpenAIClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "无效的 baseURL"])))
+            completion(.failure(NSError(domain: "OpenAIClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid baseURL"])))
             return
         }
 
@@ -713,9 +709,9 @@ final class OpenAIClient {
 
             NetworkLog.shared.log("\(config.name) L5 Responses API+tools → POST /responses, fields: \(body.keys.sorted().joined(separator: ","))")
             if attempt > 0 {
-                onStatus?("正在重试 Responses API (第 \(attempt + 1)/3 次)…")
+                onStatus?("Retrying Responses API (attempt \(attempt + 1)/3)…")
             } else {
-                onStatus?("正在通过 Responses API 请求 (保留工具调用)…")
+                onStatus?("Requesting via Responses API (keeping tool calls)…")
             }
 
             let task = session.dataTask(with: request) { [weak self] data, response, error in
@@ -730,7 +726,7 @@ final class OpenAIClient {
                 // 1) 网络错误
                 if let error = error {
                     let nsErr = error as NSError
-                    NetworkLog.shared.log("\(self.config.name) L5 网络错误: \(nsErr.localizedDescription)")
+                    NetworkLog.shared.log("\(self.config.name) L5 network error: \(nsErr.localizedDescription)")
                     if attempt < 2 && shouldRetry(nsErr, status) {
                         let delay = Double(1 << attempt)
                         DispatchQueue.global().asyncAfter(deadline: .now() + delay) { fire(attempt: attempt + 1) }
@@ -999,7 +995,7 @@ final class OpenAIClient {
     private func performAnthropic(messages: [ChatMessage], tools: [[String: Any]]? = nil, completion: @escaping (Result<ChatResult, Error>) -> Void) {
         let base = config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + "/messages") else {
-            completion(.failure(NSError(domain: "OpenAIClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "无效的 baseURL"])))
+            completion(.failure(NSError(domain: "OpenAIClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid baseURL"])))
             return
         }
         var request = URLRequest(url: url, timeoutInterval: 30)
@@ -1253,7 +1249,7 @@ final class OpenAIClient {
                                         completion: @escaping (Result<ChatResult, Error>) -> Void) {
         let base = config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + "/responses") else {
-            completion(.failure(NSError(domain: "OpenAIClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "无效的 baseURL"])))
+            completion(.failure(NSError(domain: "OpenAIClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid baseURL"])))
             return
         }
 

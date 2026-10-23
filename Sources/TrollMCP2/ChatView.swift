@@ -618,7 +618,7 @@ struct ChatView: View {
                 ChatChip(label: L10n.t("i18n_1086", thinkEnabled ? L10n.t("i18n_1088") : L10n.t("i18n_1089")), action: {
                     thinkEnabled.toggle()
                 }, accent: thinkEnabled, icon: "lightbulb").frame(height: 36)
-                ChatChip(label: L10n.t("i18n_1087", smartSearch ? "开" : "关"), action: {
+                ChatChip(label: L10n.t("i18n_1087", smartSearch ? "On" : "Off"), action: {
                     smartSearch.toggle()
                 }, accent: smartSearch, icon: "magnifyingglass").frame(height: 36)
                 QuickTabButton(icon: "bolt", label: L10n.t("i18n_1038")) {

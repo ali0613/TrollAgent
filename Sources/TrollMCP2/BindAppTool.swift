@@ -34,7 +34,7 @@ final class BindAppTool: MCPTool {
             "mode": "read_only",
             "mount_path": m,
             "host_path": h,
-            "hint": "Read-only mount. In the unified env shell.exec / python3, use \(m) to read this app's data (e.g. \(m)/Documents, \(m)/Library/Preferences)。只读，写不进去。",
+            "hint": "Read-only mount. In the unified env shell.exec / python3, use \(m) to read this app's data (e.g. \(m)/Documents, \(m)/Library/Preferences). Read-only, can't write into it.",
         ]
     }
 }

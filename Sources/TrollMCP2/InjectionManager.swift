@@ -403,9 +403,9 @@ final class InjectionManager {
         diag += "[no-resign direct inject] opainject \(ok2 ? "OK" : "failed"): " + io2.replacingOccurrences(of: "\n", with: " ").suffix(180) + "\n"
         if ok2 { return (ic2, io2) }
         // v3.0.62：智能failed归因——不是干巴巴的错误，告诉用户为什么failed+怎么办
-        var reason = "未知"
+        var reason = "unknown"
         var advice = ""
-        if diag.contains("team=(空)") {
+        if diag.contains("team=(empty)") {
             reason = "Target app has no Team ID (common for Apple system apps)"
             advice = "System app signatures have no Team ID field, ct_bypass can't match. Memory injection isn't supported for these apps."
         } else if diag.contains("Failed to read process memory") || diag.contains("__LINKEDIT not found") {
@@ -1262,7 +1262,7 @@ final class InjectionManager {
                 score += 10; reasons.append("Large file (\(size/1024/1024)MB)")
             }
             if lazySDK.contains(where: { lower.contains($0) }) {
-                score -= 50; reasons.append("第三方SDK(懒加载)")
+                score -= 50; reasons.append("Third-party SDK (lazy-loaded)")
             }
             return (score, reasons)
         }
@@ -1529,7 +1529,7 @@ final class InjectionManager {
                 // v3.0.65：闪退Auto rollback——selfcheck failed (App 启动后 25s 内进程消失）= dylib 导致崩溃，自动 disable 回滚
                 do {
                     _ = try self.disable(bundleId: bundleId, desist: true)
-                    selfcheckNote = "selfcheck: 25s内未探测到进程 (疑似闪退)→ 已Auto rollback注入。建议：换 target=\(nextTargets.joined(separator: "/"))；若全failed，app.decrypt 砸壳主二进制"
+                    selfcheckNote = "selfcheck: no process detected within 25s (suspected crash) → auto-rolled back injection. Suggestion: try target=\(nextTargets.joined(separator: "/")); if all fail, app.decrypt to crack the main binary"
                     AuditLog.shared.log("injection.auto_rollback", detail: "\(bundleId) → \(targetMachO): \(selfcheckNote)")
                 } catch {
                     selfcheckNote = "selfcheck: no process detected within 25s (suspected crash), auto-rollback failed: \(error.localizedDescription). Suggestion: manual injection.disable"
@@ -1590,7 +1590,7 @@ final class InjectionManager {
             "persisted": persisted,
             "weak_reference": weakReference,
             "selfcheck": ["app_alive": selfcheckAlive, "note": selfcheckNote],
-            "risk_warning": sensitive ? "⚠️ 目标 App 为敏感应用 (支付/银行/系统类)。已自动选择 Frameworks 内未加密 Mach-O 注入，未修改主二进制；如有异常立即调用 injection.restore 或 rescue.recover_all 恢复。" : nil,
+            "risk_warning": sensitive ? "⚠️ Target app is sensitive (payment/banking/system). Auto-selected an unencrypted Mach-O under Frameworks/, main binary untouched; if anything looks wrong call injection.restore or rescue.recover_all immediately." : nil,
             "hint": "Injection target: unencrypted Mach-O in Frameworks/ (TrollFools-style, no main binary mod). Backup at \(backup). Restore anytime via injection.restore.",
             "status": injected ? "injected" : "injection_failed"
         ]
@@ -1789,7 +1789,7 @@ final class InjectionManager {
         }
         return [
             "exit_code": Int(code),
-            "id_output": output.isEmpty ? "(空输出)" : output,
+            "id_output": output.isEmpty ? "(empty output)" : output,
             "is_root": output.contains("uid=0(root)"),
             "note": "Child process real identity after persona spawn. uid!=0 = persona not effective."
         ]
@@ -1841,8 +1841,8 @@ final class InjectionManager {
             "injected_dylibs": assets,
             "hasBackup": !modified.isEmpty,
             "hint": injected
-                ? "已注入；用 inject inspect bundle_id:\(bundleId) 看加载明细"
-                : "未注入；需要时用 injection.enable bundle_id:\(bundleId)"
+                ? "Injected; use inject inspect bundle_id:\(bundleId) for load details"
+                : "Not injected; use injection.enable bundle_id:\(bundleId) when needed"
         ]
     }
 

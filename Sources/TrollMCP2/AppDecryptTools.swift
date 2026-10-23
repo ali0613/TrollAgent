@@ -395,7 +395,7 @@ final class AppInjectPackageTool: MCPTool {
             "new_bundle_id": "New bundle id (required, e.g. com.trollagent.jinx)",
             "new_name": "Display name (optional)",
             "auto_install": "Whether to install via TrollStore (default true)"
-        ], verified: true, category: "app_control", prerequisites: ["ipa and dylib paths must exist (confirm with shell.exec ls first)", "new_bundle_id 不要与已装 App 冲突", "TrollStore 已安装(trollstorehelper 可用)"])
+        ], verified: true, category: "app_control", prerequisites: ["ipa and dylib paths must exist (confirm with shell.exec ls first)", "new_bundle_id must not conflict with an installed app", "TrollStore installed (trollstorehelper available)"])
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
         guard let ipaPath = params["ipa_path"] as? String, !ipaPath.isEmpty else { throw MCPError.invalidParams("ipa_path required") }

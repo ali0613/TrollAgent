@@ -53,7 +53,7 @@ final class ControlSession: ObservableObject {
         targetApp = target
         targetBundleId = bundleId
         steps = plan.map { ControlStep(title: $0) }
-        logs = [ControlLog(kind: .info, text: "Control started · target: \(target)\(bundleId.isEmpty ? "" : " (\(bundleId))") · 计划 \(plan.count) 步")]
+        logs = [ControlLog(kind: .info, text: "Control started · target: \(target)\(bundleId.isEmpty ? "" : " (\(bundleId))") · plan \(plan.count) steps")]
         finalResult = nil
         lastScreenshotPath = nil
         isActive = true

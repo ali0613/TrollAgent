@@ -180,7 +180,7 @@ final class ToolInstallTool: MCPTool {
                 }
             } catch { }
         }
-        return (false, "Smoke `\(name) --version/-v/--help/-h` all failed — the tool may be installed but not invocable, or has no version/help flag; first try `\(name) --help` 看真实用法")
+        return (false, "Smoke `\(name) --version/-v/--help/-h` all failed — the tool may be installed but not invocable, or has no version/help flag; first try `\(name) --help` for the real usage")
     }
 
     private func apkCandidates(for name: String) -> [String] {

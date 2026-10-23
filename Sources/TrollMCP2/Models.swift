@@ -1408,7 +1408,7 @@ final class ConversationStore: ObservableObject {
             let missing = required.filter { params[$0] == nil }
             if !missing.isEmpty && self.paramCorrectionCount < 2 {
                 self.paramCorrectionCount += 1
-                self.pendingParamCorrection = "你要调用的工具 \(call.name) 缺少必填参数: \(missing.joined(separator: "、"))。请补齐这些参数后再调用该工具，不要用同样方式反复重试同一个缺参调用。"
+                self.pendingParamCorrection = "The tool \(call.name) you want to call is missing required params: \(missing.joined(separator: ", ")). Fill them in and call again; don't keep retrying the same missing-param call in the same way."
                 self.trailStep(.done(.note, "Missing tool params blocked", detail: "\(call.name) missing: \(missing.joined(separator: ", "))", ok: false))
                 // v3.5.6 审计修正：纠正重跑前，必须先清掉刚挂上但未执行的 toolCalls——
                 // 否则会话里留下"assistant 带 toolCalls 却无 tool 结果"的非法历史序列，
@@ -1485,7 +1485,7 @@ final class ConversationStore: ObservableObject {
             // 撑爆上下文导致后续请求巨慢。截断后加提示，模型可调用带分页/过滤参数的工具获取完整数据。
             let content: String
             if rawContent.count > 8000 {
-                content = rawContent.prefix(8000) + "\n... [工具结果已截断，total \(rawContent.count) 字符。如需完整数据，请调用该工具时使用 limit/filter/query 等参数缩小范围。]"
+                content = rawContent.prefix(8000) + "\n... [tool result truncated, total \(rawContent.count) chars. For full data, call the tool with params like limit/filter/query to narrow the range.]"
             } else {
                 content = rawContent
             }
@@ -1608,9 +1608,9 @@ final class ConversationStore: ObservableObject {
         #endif
         var appVer = ""
         if let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String { appVer = v }
-        var parts = ["[当前环境] 设备: \(device)\(os.isEmpty ? "" : " · \(os)")"]
+        var parts = ["[Current env] device: \(device)\(os.isEmpty ? "" : " · \(os)")"]
         if !appVer.isEmpty { parts.append("App: TrollAgent \(appVer)") }
-        parts.append("工作区: \(Workspace.root.path)")
+        parts.append("Workspace: \(Workspace.root.path)")
         if let idx = ConversationStore.shared.selectedIndex,
            idx < ConversationStore.shared.conversations.count {
             parts.append("Current conversation: \(ConversationStore.shared.conversations[idx].title)")
@@ -1639,7 +1639,7 @@ final class ConversationStore: ObservableObject {
             var nm = m
             let toolName = m.toolName ?? "tool"
             let head = String(m.content.prefix(500))
-            nm.content = "[工具结果已修剪: \(toolName)，原\(m.content.count)字符，以下为头部]\n\(head)\n…如需完整结果请重新调用该工具并带 limit=20000 或 full=true"
+            nm.content = "[Tool result trimmed: \(toolName), original \(m.content.count) chars, head below]\n\(head)\n…for the full result re-call the tool with limit=20000 or full=true"
             all[i] = nm
         }
         // v2.9.87：预算预留 30% 给 tools schema + 系统/开发者指令 + 请求开销。
@@ -1685,7 +1685,7 @@ final class ConversationStore: ObservableObject {
                             toolNames.insert(c.name)
                         }
                     }
-                    if topics.count < 8, idx % 4 == 0 { topics.append("工具调用") }
+                    if topics.count < 8, idx % 4 == 0 { topics.append("Tool calls") }
                     continue
                 }
                 if m.role == "user" || m.role == "assistant" {
@@ -1784,7 +1784,7 @@ final class ConversationStore: ObservableObject {
             clean = String(clean[..<r.lowerBound])
         }
         let trimmed = clean.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return "📎 文件" }
+        if trimmed.isEmpty { return "📎 File" }
         let line = trimmed.components(separatedBy: .newlines).first ?? trimmed
         return String(line.prefix(30))
     }
@@ -1901,9 +1901,9 @@ enum CircuitState: String {
     case closed = "closed", open = "open", halfOpen = "half_open"
     var label: String {
         switch self {
-        case .closed: return "正常"
-        case .open: return "已熔断"
-        case .halfOpen: return "探测中"
+        case .closed: return "Normal"
+        case .open: return "Open (tripped)"
+        case .halfOpen: return "Probing"
         }
     }
 }

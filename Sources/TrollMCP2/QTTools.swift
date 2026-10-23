@@ -357,7 +357,7 @@ final class InjectionDiagnoseTool: MCPTool {
         let backupLegacy = mainBinary + ".bak_macho"
         let hasBackup = FileManager.default.fileExists(atPath: backupNew) || FileManager.default.fileExists(atPath: backupLegacy)
         diagnosis["backup_exists"] = hasBackup
-        diagnosis["backup_format"] = FileManager.default.fileExists(atPath: backupNew) ? "troll-fools.bak" : (FileManager.default.fileExists(atPath: backupLegacy) ? "bak_macho(旧)" : "无")
+        diagnosis["backup_format"] = FileManager.default.fileExists(atPath: backupNew) ? "troll-fools.bak" : (FileManager.default.fileExists(atPath: backupLegacy) ? "bak_macho (legacy)" : "none")
 
         // 6b. v2.9.89：可注入目标 Mach-O 列表 (对齐 TrollFools 策略——Frameworks 内未加密优先）
         let injectable = InjectionManager.shared.collectInjectableMachOs(target)
@@ -379,7 +379,7 @@ final class InjectionDiagnoseTool: MCPTool {
             fixes.append("Encrypted App Store apps can't be injected directly; decrypt with app.decrypt first, or use a supported target app")
         }
         if protectedCount > 0 {
-            diagnosis["note"] = "⚠️ \(protectedCount) Mach-O files have encrypted segments (cryptid=1), injection would break them, auto-skipped; injection targets the unencrypted \(injectable.first.map { ($0 as NSString).lastPathComponent } ?? "无")"
+            diagnosis["note"] = "⚠️ \(protectedCount) Mach-O files have encrypted segments (cryptid=1), injection would break them, auto-skipped; injection targets the unencrypted \(injectable.first.map { ($0 as NSString).lastPathComponent } ?? "none")"
         }
 
         // 7. 检查注入工具链

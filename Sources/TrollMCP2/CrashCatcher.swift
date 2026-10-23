@@ -230,7 +230,7 @@ struct CrashLogView: View {
                         .padding(.vertical, 8)
                     }
                 } else {
-                    Section(header: Text(L10n.t("i18n_859", paths.count, newestFirst ? "最新在前" : "最早在前"))) {
+                    Section(header: Text(L10n.t("i18n_859", paths.count, newestFirst ? "Newest first" : "Oldest first"))) {
                         let displayed = newestFirst ? paths : Array(paths.reversed())
                         ForEach(displayed, id: \.self) { p in
                         Button {

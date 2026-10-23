@@ -117,11 +117,11 @@ final class DeviceProbe: ObservableObject {
             tfpDetail = "No task_for_pid-allow, process-level ops limited"
         }
         checks.append(Check(label: "task_for_pid permission", passed: ent.taskForPidAllow || taskForPid, detail: tfpDetail, infoOnly: false))
-        checks.append(Check(label: "App container arbitrary read/write", passed: containerWrite, detail: containerWrite ? "AppDataContainers 权限生效，可写任意 App 沙盒" : "无法写入其他 App 容器 (缺 entitlement)", infoOnly: false))
+        checks.append(Check(label: "App container arbitrary read/write", passed: containerWrite, detail: containerWrite ? "AppDataContainers permission active, can write any app sandbox" : "can't write other app containers (missing entitlement)", infoOnly: false))
         for (name, ok) in injectionBinaries.sorted(by: { $0.key < $1.key }) {
             checks.append(Check(label: "Injection binary \(name)", passed: ok, detail: ok ? "Bundled and executable" : "Missing or not executable", infoOnly: false))
         }
-        checks.append(Check(label: "amfid bypass (inferred)", passed: amfidBypassInferred, detail: amfidBypassInferred ? "ct_bypass 重签名 + 注入工具 + 容器读写 均ready，dylib 注入链路可工作" : "条件不足，unsigned dylib 可能无法加载", infoOnly: false))
+        checks.append(Check(label: "amfid bypass (inferred)", passed: amfidBypassInferred, detail: amfidBypassInferred ? "ct_bypass re-sign + injection tools + container r/w all ready, dylib injection chain works" : "conditions insufficient, unsigned dylib may fail to load", infoOnly: false))
 
         // v2.9.156：ready 不再依赖 taskForPid——静态injected (insert_dylib+ct_bypass 重签名）
         // 与进程端口无关；TrollStore 非越狱拿不到其他进程端口是常态，不应导致"环境异常"
@@ -137,7 +137,7 @@ final class DeviceProbe: ObservableObject {
         // 避免污染进程 LS 状态导致分享面板崩溃；报告 appCount 为 -1 时显示"未知"
         let appCount = AppCatalog.cachedCount()
         let workspaceSize = Self.workspaceSize()
-        let batteryLevel = UIDevice.current.isBatteryMonitoringEnabled ? "\(Int(UIDevice.current.batteryLevel * 100))%" : "未知"
+        let batteryLevel = UIDevice.current.isBatteryMonitoringEnabled ? "\(Int(UIDevice.current.batteryLevel * 100))%" : "unknown"
         if !UIDevice.current.isBatteryMonitoringEnabled { UIDevice.current.isBatteryMonitoringEnabled = true }
 
         let report = Report(
@@ -260,9 +260,9 @@ final class DeviceProbe: ObservableObject {
         let gt = readOwnEntitlement("get-task-allow")
         var parts: [String] = []
         parts.append("no-sandbox: \(ns ? "yes" : "no")")
-        parts.append("platform-app: \(pa ? "有" : "无")")
-        parts.append("task_for_pid: \(tf ? "有" : "无")")
-        parts.append("get-task-allow: \(gt ? "有" : "无")")
+        parts.append("platform-app: \(pa ? "yes" : "no")")
+        parts.append("task_for_pid: \(tf ? "yes" : "no")")
+        parts.append("get-task-allow: \(gt ? "yes" : "no")")
         return EntitlementSnapshot(
             noSandbox: ns, platformApplication: pa,
             taskForPidAllow: tf, getTaskAllow: gt,

@@ -179,7 +179,7 @@ final class ScreenCapture {
         }
         // 3) 明确降级 (不再触发 ReplayKit 系统崩溃）
         DispatchQueue.main.async {
-            completion(false, "screen recording unavailable on this device: ReplayKit system-level crash in iOS 16.3 sideload env (CFRetain SIGTRAP confirmed, uncatchable). Do: 1. inject target App 并重启后，用 control.screenshot 截屏；2. 或直接用 ui_tree / ui.tap 读取与操作界面。")
+            completion(false, "screen recording unavailable on this device: ReplayKit system-level crash in iOS 16.3 sideload env (CFRetain SIGTRAP confirmed, uncatchable). Do: 1. inject the target app and restart, then capture with control.screenshot; 2. or use ui_tree / ui.tap directly to read and operate the UI.")
         }
     }
 }

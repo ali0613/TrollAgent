@@ -68,10 +68,10 @@ final class FailureKnowledgeBase {
 
     // v1 种子（15 条，仅空库时插入）
     private let v1Patterns: [(String, String, String, String)] = [
-        ("Operation not permitted", "Permission", "TrollStore 'Edit Entitlements' not enabled; sideloaded apps lack root write permission", "Enable 'Edit Entitlements' in TrollStore, then uninstall/reinstall (over-盖安装不会重新应用)"),
+        ("Operation not permitted", "Permission", "TrollStore 'Edit Entitlements' not enabled; sideloaded apps lack root write permission", "Enable 'Edit Entitlements' in TrollStore, then uninstall/reinstall (overwriting the install won't re-apply it)"),
         ("bin-setuid=0", "Permission", "Injection tools lack the setuid root bit", "Confirm TrollStore applied setuid to bin/ tools, uninstall/reinstall the app"),
         ("Failed to parse plist", "Signing", "ldid failed to parse the entitlements plist", "Check the entitlements file format, or re-sign with ct_bypass"),
-        ("link edit information does not fill", "Mach-O", "install_name_tool can't handle the __LINKEDIT segment", "Non-blocking error, ct_bypass 已done签名，注入仍可OK"),
+        ("link edit information does not fill", "Mach-O", "install_name_tool can't handle the __LINKEDIT segment", "Non-blocking error, ct_bypass signing done, injection still OK"),
         ("Library not loaded", "Dependency", "A dylib dependency's dynamic library doesn't exist", "Check deps with otool -L, confirm all dependencies exist on the target device"),
         ("code signature invalid", "Signing", "Code signature invalid", "Re-sign with ldid -S, or reinstall via TrollStore"),
         ("dyld: Symbol not found", "Dependency", "The dylib references a symbol that doesn't exist", "Check the SDK version the dylib was built with, ensure iOS compatibility"),
@@ -86,20 +86,20 @@ final class FailureKnowledgeBase {
 
     // v2 种子（v4.3.66 追加，覆盖游戏/注入/系统崩溃/环境）
     private let v2Patterns: [(String, String, String, String)] = [
-        ("Image not found", "Dependency", "dylib @rpath/@executable_path wrong or file not bundled", "Use otool -L to see actual load paths, confirm dylib 已在目标 App 内且路径正确"),
+        ("Image not found", "Dependency", "dylib @rpath/@executable_path wrong or file not bundled", "Use otool -L to see actual load paths, confirm the dylib is inside the target app and the path is right"),
         ("EXC_BAD_ACCESS", "Crash", "Accessing freed/null/invalid memory (incl. wrong hook edits)", "Check hook offsets and function signatures, confirm patches/pointers aren't PAC-protected, locate with diagnose"),
-        ("Segmentation fault", "崩溃", "非法内存访问（多为注入 dylib 或静态补丁错误）", "核对 RVA/偏移与目标版本是否一致，回滚 .bak_macho 重试"),
+        ("Segmentation fault", "Crash", "Illegal memory access (usually an injected dylib or wrong static patch)", "Verify RVA/offsets match the target version, roll back .bak_macho and retry"),
         ("Permission denied", "Permission", "Target path read-only or not running as root", "Confirm TrollStore 'Edit Entitlements' is on and setuid is applied; Bundle dir needs root write"),
-        ("No space left on device", "存储", "沙盒空间已满", "用 workspace.cleanup 清旧文件/日志，或在系统设置清理 App 存储"),
-        ("Connection refused", "网络", "目标端口无服务/代理未起", "确认 server 已 start、端口正确；本地代理/抓包工具要先启动"),
-        ("Could not inspect the application package", "安装", "IPA 包结构不完整或非有效 App 包", "用 package.unpack 检查包结构，确认 Info.plist 与主二进制齐全"),
-        ("0x8badf00d", "崩溃", "启动被系统看门狗杀死（启动耗时过长，常见注入太重）", "减少启动期加载的 dylib/检查项，把重活延后到启动后"),
-        ("0xdead10cc", "崩溃", "系统判定 App 占用/挂死（多为后台锁/IO 卡死）", "排查主线程阻塞、全量序列化大文件，检查是否有死循环"),
-        ("candidate should have a different linkedit", "Mach-O", "静态注入改 __LINKEDIT 时与原签名冲突", "注入后必须 ldid 重签；优先使用注入器自带的签名流程"),
-        ("Unsupported iOS version", "巨魔", "TrollStore 在该系统不被支持（17.0.1+/16.7 已修补）", "核对支持版本表；不支持版本改用越狱或其他签名方案"),
-        ("apk: command not found", "TrollRuntime", "环境内 apk 索引未更新或异常", "先 apk update；确认在统一环境（TrollRuntime/Alpine）内执行，不是目标 App 环境"),
+        ("No space left on device", "Storage", "Sandbox is full", "Clear old files/logs with workspace.cleanup, or clean app storage in system settings"),
+        ("Connection refused", "Network", "No service on the target port / proxy not started", "Confirm the server started and the port is right; start the local proxy/capture tool first"),
+        ("Could not inspect the application package", "Install", "IPA structure incomplete or not a valid app package", "Check the package structure with package.unpack, confirm Info.plist and the main binary are complete"),
+        ("0x8badf00d", "Crash", "Killed by the system watchdog on launch (startup too slow, usually heavy injection)", "Reduce dylibs/checks loaded at startup, defer heavy work until after launch"),
+        ("0xdead10cc", "Crash", "System judged the app as stuck/held (usually background locks/IO stall)", "Investigate main-thread blocking, full serialization of large files, dead loops"),
+        ("candidate should have a different linkedit", "Mach-O", "Static injection conflicts with the original signature when changing __LINKEDIT", "Must ldid re-sign after injection; 优先使用注入器自带的签名流程"),
+        ("Unsupported iOS version", "TrollStore", "TrollStore unsupported on this system (17.0.1+/16.7 patched)", "Check the support table; for unsupported versions use jailbreak or another signing route"),
+        ("apk: command not found", "TrollRuntime", "apk index stale or broken in the env", "Run apk update first; confirm you're in the unified env (TrollRuntime/Alpine), not the target app's environment"),
         ("Illegal instruction", "TrollRuntime", "Interpreter doesn't implement this instruction (common with Node.js etc.)", "Use a lighter/older build, or run via SSH to a PC/cloud"),
-        ("address already in use", "网络", "本地服务端口被占用", "server.status 看占用，换端口或先 stop 旧实例"),
+        ("address already in use", "Network", "Local service port in use", "Check occupancy via server.status, change the port or stop the old instance"),
     ]
 
     private func seedBuiltinPatterns() {
@@ -213,7 +213,7 @@ final class KnowledgeBaseTool: MCPTool {
                   let fix = params["fix"] as? String else {
                 throw MCPError.invalidParams("add requires keyword, cause, fix")
             }
-            let category = params["category"] as? String ?? "自定义"
+            let category = params["category"] as? String ?? "custom"
             FailureKnowledgeBase.shared.addPattern(keyword: kw, category: category, cause: cause, fix: fix)
             return ["added": true, "keyword": kw]
         }

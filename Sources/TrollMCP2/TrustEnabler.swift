@@ -243,7 +243,7 @@ enum TrustEnabler {
             if r == pid { break }
             if DispatchTime.now() > deadline {
                 kill(pid, SIGKILL); waitpid(pid, &status, 0)
-                NSLog("TrustEnabler: kfd_helper 超时被终止 — 看 /var/mobile/Documents/kfd_helper.log 定位卡点")
+                NSLog("TrustEnabler: kfd_helper timed out and was killed — check /var/mobile/Documents/kfd_helper.log to pinpoint the stall")
                 return false
             }
             usleep(200_000)
@@ -279,7 +279,7 @@ enum TrustEnabler {
             NSLog("TrustEnabler: jbclient_trust_file_by_path(%@)=%d", path, rc)
             return rc == 0
         }
-        NSLog("TrustEnabler: libjailbreak.dylib not found — 越狱信任注入不可用")
+        NSLog("TrustEnabler: libjailbreak.dylib not found — jailbreak trust injection unavailable")
         return false
     }
 }
