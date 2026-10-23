@@ -38,9 +38,9 @@ final class LanguageManager: ObservableObject {
 }
 
 enum L10n {
-    static func t(_ key: String) -> String {
-        let lang = LanguageManager.shared.language.rawValue
-        let table: [String: [String: String]] = [
+    // v7.0.4.x：字典一次性构造（static let）——旧实现每次调用都重建 950+ 条大字典，
+    // ChatView 首屏渲染反复调用 → 启动期内存压力（pmap_enter resource shortage）→ EXC_BREAKPOINT 闪退（fad36a5 实证）
+    private static let table: [String: [String: String]] = [
             // ===== 通用 =====
             "settings": ["zh": "设置", "en": "Settings"],
             "back": ["zh": "返回", "en": "Back"],
@@ -1408,6 +1408,10 @@ enum L10n {
             "i18n_1196": ["zh": "\\n…[输出过长已截断]", "en": "⏎…[output too long, truncated]"],
             "i18n_1197": ["zh": "已复制", "en": "Copied"],
         ]
+    }
+
+    static func t(_ key: String) -> String {
+        let lang = LanguageManager.shared.language.rawValue
         return table[key]?[lang] ?? key
     }
 
