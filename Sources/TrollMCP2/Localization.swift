@@ -38,1376 +38,1385 @@ final class LanguageManager: ObservableObject {
 }
 
 enum L10n {
-    // v7.0.4.x：字典一次性构造（static let）——旧实现每次调用都重建 950+ 条大字典，
-    // ChatView 首屏渲染反复调用 → 启动期内存压力（pmap_enter resource shortage）→ EXC_BREAKPOINT 闪退（fad36a5 实证）
-    private static let table: [String: [String: String]] = [
+    // v7.0.4.x：词典仅构建一次并缓存（运行时）。旧实现每次调用都重建 950+ 条大字典，
+    // ChatView 首屏渲染反复调用 → 启动期内存压力（pmap_enter resource shortage）→ EXC_BREAKPOINT 闪退（fad36a5 实证）。
+    // 用 static var + 逐条赋值懒构建，而非 static let 巨型字面量：static let 会把 2000+ 字符串
+    // 常量折叠进全局初始化函数，-c release(-O) 下 swiftc 优化器对该巨型表达式做常量传播/
+    // 内存提升会指数级变慢 → CI Build IPA 编译挂起（11f5901 两次卡死实证）。
+    private static var _table: [String: [String: String]]?
+
+    private static var table: [String: [String: String]] {
+        if let t = _table { return t }
+        var tbl: [String: [String: String]] = [:]
             // ===== 通用 =====
-            "settings": ["zh": "设置", "en": "Settings"],
-            "back": ["zh": "返回", "en": "Back"],
-            "done": ["zh": "完成", "en": "Done"],
-            "cancel": ["zh": "取消", "en": "Cancel"],
-            "save": ["zh": "保存", "en": "Save"],
-            "close": ["zh": "关闭", "en": "Close"],
-            "delete": ["zh": "删除", "en": "Delete"],
-            "copy": ["zh": "复制", "en": "Copy"],
-            "share": ["zh": "分享", "en": "Share"],
-            "version": ["zh": "版本", "en": "Version"],
-            "row_crash": ["zh": "崩溃日志", "en": "Crash Log"],
-            "language": ["zh": "语言", "en": "Language"],
-            "search": ["zh": "搜索", "en": "Search"],
-            "refresh": ["zh": "刷新", "en": "Refresh"],
-            "confirm": ["zh": "确定", "en": "OK"],
-            "warning": ["zh": "提示", "en": "Notice"],
-            "enabled": ["zh": "已开启", "en": "On"],
-            "disabled": ["zh": "已关闭", "en": "Off"],
+            tbl["settings"] = ["zh": "设置", "en": "Settings"]
+            tbl["back"] = ["zh": "返回", "en": "Back"]
+            tbl["done"] = ["zh": "完成", "en": "Done"]
+            tbl["cancel"] = ["zh": "取消", "en": "Cancel"]
+            tbl["save"] = ["zh": "保存", "en": "Save"]
+            tbl["close"] = ["zh": "关闭", "en": "Close"]
+            tbl["delete"] = ["zh": "删除", "en": "Delete"]
+            tbl["copy"] = ["zh": "复制", "en": "Copy"]
+            tbl["share"] = ["zh": "分享", "en": "Share"]
+            tbl["version"] = ["zh": "版本", "en": "Version"]
+            tbl["row_crash"] = ["zh": "崩溃日志", "en": "Crash Log"]
+            tbl["language"] = ["zh": "语言", "en": "Language"]
+            tbl["search"] = ["zh": "搜索", "en": "Search"]
+            tbl["refresh"] = ["zh": "刷新", "en": "Refresh"]
+            tbl["confirm"] = ["zh": "确定", "en": "OK"]
+            tbl["warning"] = ["zh": "提示", "en": "Notice"]
+            tbl["enabled"] = ["zh": "已开启", "en": "On"]
+            tbl["disabled"] = ["zh": "已关闭", "en": "Off"]
             // v2.9.79：聊天框模型条
-            "current_model": ["zh": "当前模型", "en": "Model"],
-            "not_configured": ["zh": "未配置", "en": "Not set"],
+            tbl["current_model"] = ["zh": "当前模型", "en": "Model"]
+            tbl["not_configured"] = ["zh": "未配置", "en": "Not set"]
             // v2.9.82：任务完成通知
-            "task_notify": ["zh": "任务完成通知", "en": "Task Notification"],
-            "task_notify_sub": ["zh": "AI 执行完成/失败时，后台发本地通知", "en": "Notify when AI finishes or fails in background"],
+            tbl["task_notify"] = ["zh": "任务完成通知", "en": "Task Notification"]
+            tbl["task_notify_sub"] = ["zh": "AI 执行完成/失败时，后台发本地通知", "en": "Notify when AI finishes or fails in background"]
             // v2.9.85：推荐中转站卡片
-            "relay_card_title": ["zh": "推荐中转站 · 作者自用", "en": "Recommended Relay · Author's Pick"],
-            "relay_card_body": ["zh": "价格极低，作者本人就在用。这不是合作广告——通过链接注册会为作者增加 Token 额度，用于持续开发与更新更多功能。感谢支持！", "en": "Extremely low pricing, and it's the relay the author personally uses. This is not a sponsored ad — registering via the link adds tokens for the author to keep developing and shipping new features. Thanks for your support!"],
-            "relay_card_copy": ["zh": "复制链接", "en": "Copy Link"],
-            "relay_card_copied": ["zh": "已复制", "en": "Copied"],
+            tbl["relay_card_title"] = ["zh": "推荐中转站 · 作者自用", "en": "Recommended Relay · Author's Pick"]
+            tbl["relay_card_body"] = ["zh": "价格极低，作者本人就在用。这不是合作广告——通过链接注册会为作者增加 Token 额度，用于持续开发与更新更多功能。感谢支持！", "en": "Extremely low pricing, and it's the relay the author personally uses. This is not a sponsored ad — registering via the link adds tokens for the author to keep developing and shipping new features. Thanks for your support!"]
+            tbl["relay_card_copy"] = ["zh": "复制链接", "en": "Copy Link"]
+            tbl["relay_card_copied"] = ["zh": "已复制", "en": "Copied"]
             // v4.3.27：推荐破甲站卡片（作者自用 · 可复制链接）
-            "armor_card_title": ["zh": "推荐破甲站 · 作者自用", "en": "Recommended ArmorBreak Station · Author's Pick"],
-            "armor_card_body": ["zh": "价格极低，作者本人就在用。通过链接注册会为作者增加 Token 额度，用于持续开发与更新更多功能。感谢支持！", "en": "Extremely low pricing, and it's the station the author personally uses. Registering via the link adds tokens for the author to keep developing and shipping new features. Thanks for your support!"],
+            tbl["armor_card_title"] = ["zh": "推荐破甲站 · 作者自用", "en": "Recommended ArmorBreak Station · Author's Pick"]
+            tbl["armor_card_body"] = ["zh": "价格极低，作者本人就在用。通过链接注册会为作者增加 Token 额度，用于持续开发与更新更多功能。感谢支持！", "en": "Extremely low pricing, and it's the station the author personally uses. Registering via the link adds tokens for the author to keep developing and shipping new features. Thanks for your support!"]
             // v2.9.86：关于作者
-            "about_title": ["zh": "关于作者", "en": "About Author"],
-            "about_subtitle": ["zh": "ZeenAE · 独立开发者", "en": "ZeenAE · Independent Developer"],
-            "about_bio": ["zh": "一个喜欢折腾 iOS 的独立开发者 🛠️ 相信“手机上就该能搞定一切”。TrollAgent 把注入、线上编译、测试、自动化这些原本要电脑 + 越狱才能做的事，全部搬进一台不越狱、只装 TrollStore 的 iPhone 里。持续迭代中，你的每次使用都是这个项目继续更新的动力 💪", "en": "An indie developer who loves tinkering with iOS 🛠️ and believes everything should be doable on a phone. TrollAgent brings injection, cloud builds, testing and automation — things that used to need a computer and a jailbreak — into one non-jailbroken iPhone with TrollStore. Iterating constantly; every use of yours keeps this project alive 💪"],
-            "about_thanks": ["zh": "开源致谢", "en": "Open Source Credits"],
-            "about_thanks_intro": ["zh": "感谢以下开源项目与作者：", "en": "Thanks to these open-source projects & authors:"],
-            "about_thanks_all": ["zh": "以及所有开源社区的贡献者", "en": "and every open-source contributor"],
-            "about_safety": ["zh": "安全说明", "en": "Security"],
-            "about_safety_rows": ["zh": "🔒 所有操作均在本机完成，不收集、不上传任何个人信息。|🔑 API Key 仅保存在本机文稿目录（Documents），请求只发往你自己配置的服务器地址。|🎯 注入与内存操作只作用于你明确指定的 App，每次注入前自动备份原文件。|🛡️ 内置应急恢复：注入失败或 App 闪退时，可一键还原所有注入。|🌐 网络抓包仅在本机运行，不向第三方传输任何数据。", "en": "🔒 All operations run locally; no personal data is collected or uploaded.|🔑 API keys stay in the app's local Documents folder; requests go only to servers you configure.|🎯 Injection & memory operations target only apps you explicitly choose; original files are backed up before injection.|🛡️ Emergency recovery built in: one-click rollback if injection fails or app crashes.|🌐 Packet capture runs locally; no data is sent to third parties."],
-            "about_notes": ["zh": "注意事项", "en": "Notes"],
-            "about_note_rows": ["zh": "⚠️ 注入前请备份重要数据；目标 App 更新后可能需要重新注入。|⚠️ 部分操作需在 TrollStore 开启「编辑 Entitlements」后重装 App 生效。|⚠️ iOS 17.0+ 设备的注入方式与 16 不同，部分功能可能受限。|⚠️ 网游修改有封号风险，请仅在单机或测试环境使用。|⚠️ 内存搜索与修改可能导致 App 闪退，建议先存盘再操作。|⚠️ 请仅在你有权操作的设备与 App 上使用，勿用于盗版、破解或任何违法用途。", "en": "⚠️ Back up important data before injecting; app updates may require re-injection.|⚠️ Some operations need “Edit Entitlements” in TrollStore, then reinstalling the app.|⚠️ iOS 17.0+ uses a different injection method; some features may be limited.|⚠️ Online game modifications carry a ban risk; use only on offline or test environments.|⚠️ Memory search & modification may crash the app; save progress before you start.|⚠️ Use only on devices & apps you own. Not for piracy, cracking or illegal purposes."],
-            "about_disclaimer": ["zh": "免责声明", "en": "Disclaimer"],
-            "about_disclaimer_rows": ["zh": "🚫 本项目为个人开源项目，与任何商业公司、品牌无隶属或合作关系。|🚫 作者不对因使用本工具造成的任何直接或间接损失（包括但不限于数据丢失、设备损坏、账号封禁）负责。|🚫 页面中的第三方链接（如推荐的中转站）仅供参考，作者与其无利益合作。|🚫 本工具仅供学习与研究使用，使用者需自行承担使用本工具的一切法律责任。", "en": "🚫 This is a personal open-source project with no affiliation to any company or brand.|🚫 The author is not liable for any direct or indirect loss (including data loss, device damage, account bans) from using this tool.|🚫 Third-party links (e.g. the recommended relay) are for reference only; no business partnership.|🚫 This tool is for educational & research purposes only. Users bear all legal responsibility for their use."],
-            "about_sponsor": ["zh": "赞助支持", "en": "Sponsor"],
-            "about_sponsor_body": ["zh": "如果 TrollAgent 帮到了你，欢迎请作者喝杯咖啡 ☕（完全自愿，量力而行）", "en": "If TrollAgent helps you, feel free to buy the author a coffee ☕ (purely voluntary)"],
-            "about_feedback": ["zh": "Bug 与功能反馈", "en": "Bug & Feature Requests"],
-            "about_feedback_body": ["zh": "遇到问题或有好点子？点下方按钮复制反馈信息（版本 + 设备），附上截图发给作者 📮", "en": "Found a bug or have an idea? Tap below to copy your feedback info (version + device), attach screenshots and send to the author 📮"],
-            "about_copy_feedback": ["zh": "复制反馈信息", "en": "Copy Feedback Info"],
-            "about_copied": ["zh": "已复制，去粘贴吧", "en": "Copied"],
+            tbl["about_title"] = ["zh": "关于作者", "en": "About Author"]
+            tbl["about_subtitle"] = ["zh": "ZeenAE · 独立开发者", "en": "ZeenAE · Independent Developer"]
+            tbl["about_bio"] = ["zh": "一个喜欢折腾 iOS 的独立开发者 🛠️ 相信“手机上就该能搞定一切”。TrollAgent 把注入、线上编译、测试、自动化这些原本要电脑 + 越狱才能做的事，全部搬进一台不越狱、只装 TrollStore 的 iPhone 里。持续迭代中，你的每次使用都是这个项目继续更新的动力 💪", "en": "An indie developer who loves tinkering with iOS 🛠️ and believes everything should be doable on a phone. TrollAgent brings injection, cloud builds, testing and automation — things that used to need a computer and a jailbreak — into one non-jailbroken iPhone with TrollStore. Iterating constantly; every use of yours keeps this project alive 💪"]
+            tbl["about_thanks"] = ["zh": "开源致谢", "en": "Open Source Credits"]
+            tbl["about_thanks_intro"] = ["zh": "感谢以下开源项目与作者：", "en": "Thanks to these open-source projects & authors:"]
+            tbl["about_thanks_all"] = ["zh": "以及所有开源社区的贡献者", "en": "and every open-source contributor"]
+            tbl["about_safety"] = ["zh": "安全说明", "en": "Security"]
+            tbl["about_safety_rows"] = ["zh": "🔒 所有操作均在本机完成，不收集、不上传任何个人信息。|🔑 API Key 仅保存在本机文稿目录（Documents），请求只发往你自己配置的服务器地址。|🎯 注入与内存操作只作用于你明确指定的 App，每次注入前自动备份原文件。|🛡️ 内置应急恢复：注入失败或 App 闪退时，可一键还原所有注入。|🌐 网络抓包仅在本机运行，不向第三方传输任何数据。", "en": "🔒 All operations run locally; no personal data is collected or uploaded.|🔑 API keys stay in the app's local Documents folder; requests go only to servers you configure.|🎯 Injection & memory operations target only apps you explicitly choose; original files are backed up before injection.|🛡️ Emergency recovery built in: one-click rollback if injection fails or app crashes.|🌐 Packet capture runs locally; no data is sent to third parties."]
+            tbl["about_notes"] = ["zh": "注意事项", "en": "Notes"]
+            tbl["about_note_rows"] = ["zh": "⚠️ 注入前请备份重要数据；目标 App 更新后可能需要重新注入。|⚠️ 部分操作需在 TrollStore 开启「编辑 Entitlements」后重装 App 生效。|⚠️ iOS 17.0+ 设备的注入方式与 16 不同，部分功能可能受限。|⚠️ 网游修改有封号风险，请仅在单机或测试环境使用。|⚠️ 内存搜索与修改可能导致 App 闪退，建议先存盘再操作。|⚠️ 请仅在你有权操作的设备与 App 上使用，勿用于盗版、破解或任何违法用途。", "en": "⚠️ Back up important data before injecting; app updates may require re-injection.|⚠️ Some operations need “Edit Entitlements” in TrollStore, then reinstalling the app.|⚠️ iOS 17.0+ uses a different injection method; some features may be limited.|⚠️ Online game modifications carry a ban risk; use only on offline or test environments.|⚠️ Memory search & modification may crash the app; save progress before you start.|⚠️ Use only on devices & apps you own. Not for piracy, cracking or illegal purposes."]
+            tbl["about_disclaimer"] = ["zh": "免责声明", "en": "Disclaimer"]
+            tbl["about_disclaimer_rows"] = ["zh": "🚫 本项目为个人开源项目，与任何商业公司、品牌无隶属或合作关系。|🚫 作者不对因使用本工具造成的任何直接或间接损失（包括但不限于数据丢失、设备损坏、账号封禁）负责。|🚫 页面中的第三方链接（如推荐的中转站）仅供参考，作者与其无利益合作。|🚫 本工具仅供学习与研究使用，使用者需自行承担使用本工具的一切法律责任。", "en": "🚫 This is a personal open-source project with no affiliation to any company or brand.|🚫 The author is not liable for any direct or indirect loss (including data loss, device damage, account bans) from using this tool.|🚫 Third-party links (e.g. the recommended relay) are for reference only; no business partnership.|🚫 This tool is for educational & research purposes only. Users bear all legal responsibility for their use."]
+            tbl["about_sponsor"] = ["zh": "赞助支持", "en": "Sponsor"]
+            tbl["about_sponsor_body"] = ["zh": "如果 TrollAgent 帮到了你，欢迎请作者喝杯咖啡 ☕（完全自愿，量力而行）", "en": "If TrollAgent helps you, feel free to buy the author a coffee ☕ (purely voluntary)"]
+            tbl["about_feedback"] = ["zh": "Bug 与功能反馈", "en": "Bug & Feature Requests"]
+            tbl["about_feedback_body"] = ["zh": "遇到问题或有好点子？点下方按钮复制反馈信息（版本 + 设备），附上截图发给作者 📮", "en": "Found a bug or have an idea? Tap below to copy your feedback info (version + device), attach screenshots and send to the author 📮"]
+            tbl["about_copy_feedback"] = ["zh": "复制反馈信息", "en": "Copy Feedback Info"]
+            tbl["about_copied"] = ["zh": "已复制，去粘贴吧", "en": "Copied"]
 
             // ===== 首页 =====
-            "home_greeting": ["zh": "你好，我是 TrollAgent 坦克版 🔥", "en": "Hi, I'm TrollAgent Tank Edition 🔥"],
-            "home_subtitle": ["zh": "TrollStore 上的 AI 坦克车\n分析 · 注入 · 编译 · 控制\n统一环境 TrollRuntime · Alpine 完整工具链\npy3/node 芯片直跑", "en": "AI tank on TrollStore\nAnalyze · Inject · Build · Control\nUnified TrollRuntime · Full Alpine toolchain\npy3/node native acceleration"],
-            "home_analyze_apps": ["zh": "分析我的应用", "en": "Analyze My Apps"],
-            "home_analyze_apps_sub": ["zh": "扫描缓存、注入状态与已安装应用", "en": "Scan caches, injection state & installed apps"],
-            "home_check_device": ["zh": "检查设备与内存", "en": "Check Device & Memory"],
-            "home_check_device_sub": ["zh": "设备信息、可用容量与环境检测", "en": "Device info, storage & environment probe"],
-            "home_empty_title": ["zh": "尚未配置模型", "en": "No model configured"],
-            "home_empty_sub": ["zh": "请先在设置中添加 API 配置", "en": "Add an API config in Settings first"],
-            "home_thinking": ["zh": "正在思考", "en": "Thinking"],
-            "home_running_tool": ["zh": "正在执行工具", "en": "Running tool"],
-            "home_round": ["zh": "第 {n}/{total} 轮", "en": "Round {n}/{total}"],
+            tbl["home_greeting"] = ["zh": "你好，我是 TrollAgent 坦克版 🔥", "en": "Hi, I'm TrollAgent Tank Edition 🔥"]
+            tbl["home_subtitle"] = ["zh": "TrollStore 上的 AI 坦克车\n分析 · 注入 · 编译 · 控制\n统一环境 TrollRuntime · Alpine 完整工具链\npy3/node 芯片直跑", "en": "AI tank on TrollStore\nAnalyze · Inject · Build · Control\nUnified TrollRuntime · Full Alpine toolchain\npy3/node native acceleration"]
+            tbl["home_analyze_apps"] = ["zh": "分析我的应用", "en": "Analyze My Apps"]
+            tbl["home_analyze_apps_sub"] = ["zh": "扫描缓存、注入状态与已安装应用", "en": "Scan caches, injection state & installed apps"]
+            tbl["home_check_device"] = ["zh": "检查设备与内存", "en": "Check Device & Memory"]
+            tbl["home_check_device_sub"] = ["zh": "设备信息、可用容量与环境检测", "en": "Device info, storage & environment probe"]
+            tbl["home_empty_title"] = ["zh": "尚未配置模型", "en": "No model configured"]
+            tbl["home_empty_sub"] = ["zh": "请先在设置中添加 API 配置", "en": "Add an API config in Settings first"]
+            tbl["home_thinking"] = ["zh": "正在思考", "en": "Thinking"]
+            tbl["home_running_tool"] = ["zh": "正在执行工具", "en": "Running tool"]
+            tbl["home_round"] = ["zh": "第 {n}/{total} 轮", "en": "Round {n}/{total}"]
             // v2.9.78：首页快速引导区
-            "home_quick_title": ["zh": "快速开始", "en": "Quick Start"],
-            "home_quick_sub": ["zh": "点击卡片直接体验 · 也可输入自己的指令", "en": "Tap a card to try, or type your own"],
-            "home_quick_compile": ["zh": "线上编译", "en": "Cloud Build"],
-            "home_quick_compile_sub": ["zh": "GitHub 编译 tweak / IPA", "en": "Build tweak / IPA on GitHub"],
-            "home_quick_inject": ["zh": "注入测试", "en": "Injection Test"],
-            "home_quick_inject_sub": ["zh": "给 App 注入 dylib 并验证", "en": "Inject & verify a dylib"],
-            "home_quick_memory": ["zh": "内存修改", "en": "Memory Tweak"],
-            "home_quick_memory_sub": ["zh": "H5GG 式搜索与修改", "en": "H5GG-style search & patch"],
-            "home_quick_ui": ["zh": "UI 控制", "en": "UI Control"],
-            "home_quick_ui_sub": ["zh": "控制任意 App 界面", "en": "Drive any app's UI"],
-            "home_quick_browser": ["zh": "内置浏览器", "en": "Built-in Browser"],
-            "home_quick_browser_sub": ["zh": "网页操作与抓取", "en": "Browse & scrape pages"],
-            "home_quick_automation": ["zh": "自动化", "en": "Automation"],
-            "home_quick_automation_sub": ["zh": "定时任务与重试", "en": "Scheduled tasks & retries"],
-            "home_quick_env": ["zh": "环境体检", "en": "Env Check"],
-            "home_quick_env_sub": ["zh": "TrollStore 与注入链", "en": "TrollStore & injection"],
-            "home_quick_capture": ["zh": "网络抓包", "en": "Packet Capture"],
-            "home_quick_capture_sub": ["zh": "HTTP 请求分析", "en": "HTTP analysis"],
-            "home_quick_clean": ["zh": "应用清理", "en": "App Cleanup"],
-            "home_quick_clean_sub": ["zh": "缓存扫描与备份", "en": "Cache scan & backup"],
-            "drawer_ready_short": ["zh": "环境就绪", "en": "Environment Ready"],
+            tbl["home_quick_title"] = ["zh": "快速开始", "en": "Quick Start"]
+            tbl["home_quick_sub"] = ["zh": "点击卡片直接体验 · 也可输入自己的指令", "en": "Tap a card to try, or type your own"]
+            tbl["home_quick_compile"] = ["zh": "线上编译", "en": "Cloud Build"]
+            tbl["home_quick_compile_sub"] = ["zh": "GitHub 编译 tweak / IPA", "en": "Build tweak / IPA on GitHub"]
+            tbl["home_quick_inject"] = ["zh": "注入测试", "en": "Injection Test"]
+            tbl["home_quick_inject_sub"] = ["zh": "给 App 注入 dylib 并验证", "en": "Inject & verify a dylib"]
+            tbl["home_quick_memory"] = ["zh": "内存修改", "en": "Memory Tweak"]
+            tbl["home_quick_memory_sub"] = ["zh": "H5GG 式搜索与修改", "en": "H5GG-style search & patch"]
+            tbl["home_quick_ui"] = ["zh": "UI 控制", "en": "UI Control"]
+            tbl["home_quick_ui_sub"] = ["zh": "控制任意 App 界面", "en": "Drive any app's UI"]
+            tbl["home_quick_browser"] = ["zh": "内置浏览器", "en": "Built-in Browser"]
+            tbl["home_quick_browser_sub"] = ["zh": "网页操作与抓取", "en": "Browse & scrape pages"]
+            tbl["home_quick_automation"] = ["zh": "自动化", "en": "Automation"]
+            tbl["home_quick_automation_sub"] = ["zh": "定时任务与重试", "en": "Scheduled tasks & retries"]
+            tbl["home_quick_env"] = ["zh": "环境体检", "en": "Env Check"]
+            tbl["home_quick_env_sub"] = ["zh": "TrollStore 与注入链", "en": "TrollStore & injection"]
+            tbl["home_quick_capture"] = ["zh": "网络抓包", "en": "Packet Capture"]
+            tbl["home_quick_capture_sub"] = ["zh": "HTTP 请求分析", "en": "HTTP analysis"]
+            tbl["home_quick_clean"] = ["zh": "应用清理", "en": "App Cleanup"]
+            tbl["home_quick_clean_sub"] = ["zh": "缓存扫描与备份", "en": "Cache scan & backup"]
+            tbl["drawer_ready_short"] = ["zh": "环境就绪", "en": "Environment Ready"]
 
             // ===== 新手引导（v2.9.78）=====
-            "ob_skip": ["zh": "跳过", "en": "Skip"],
-            "ob_next": ["zh": "下一步", "en": "Next"],
-            "ob_done": ["zh": "开始使用", "en": "Get Started"],
-            "ob_welcome_title": ["zh": "欢迎使用 TrollAgent 坦克版", "en": "Welcome to TrollAgent Tank Edition"],
-            "ob_welcome_sub": ["zh": "TrollStore 上的 AI 实验与 QA 工作台：一句话描述目标，AI 自动完成诊断、操作、验证与报告。统一环境 TrollRuntime（Alpine 完整工具链），缺工具自动 apk 安装，py3/node 芯片直跑，可离线分析二进制。", "en": "An AI lab for TrollStore: describe a goal, and AI handles diagnosis, actions, verification and reporting. Unified TrollRuntime (full Alpine toolchain), missing tools auto-installed via apk, py3/node native acceleration, offline binary analysis."],
-            "ob_cap_title": ["zh": "它能做什么", "en": "What it can do"],
-            "ob_cap1": ["zh": "线上编译 tweak / IPA 并下载注入", "en": "Cloud-build tweaks / IPAs, download & inject"],
-            "ob_cap2": ["zh": "H5GG 式内存搜索与修改", "en": "H5GG-style memory search & patch"],
-            "ob_cap3": ["zh": "读取界面树、点击输入，控制任意 App", "en": "Read UI tree, tap & type to drive any app"],
-            "ob_cap4": ["zh": "内置浏览器、审计、自动化与知识库", "en": "Built-in browser, audit, automation & KB"],
-            "ob_start_title": ["zh": "开始使用", "en": "Get Started"],
-            "ob_start_sub": ["zh": "选择下方快捷卡片立即体验；模型 API 随时可在「设置 → 模型 API」中配置。", "en": "Tap a quick card to start right away; model API can be configured anytime under Settings → Model API."],
+            tbl["ob_skip"] = ["zh": "跳过", "en": "Skip"]
+            tbl["ob_next"] = ["zh": "下一步", "en": "Next"]
+            tbl["ob_done"] = ["zh": "开始使用", "en": "Get Started"]
+            tbl["ob_welcome_title"] = ["zh": "欢迎使用 TrollAgent 坦克版", "en": "Welcome to TrollAgent Tank Edition"]
+            tbl["ob_welcome_sub"] = ["zh": "TrollStore 上的 AI 实验与 QA 工作台：一句话描述目标，AI 自动完成诊断、操作、验证与报告。统一环境 TrollRuntime（Alpine 完整工具链），缺工具自动 apk 安装，py3/node 芯片直跑，可离线分析二进制。", "en": "An AI lab for TrollStore: describe a goal, and AI handles diagnosis, actions, verification and reporting. Unified TrollRuntime (full Alpine toolchain), missing tools auto-installed via apk, py3/node native acceleration, offline binary analysis."]
+            tbl["ob_cap_title"] = ["zh": "它能做什么", "en": "What it can do"]
+            tbl["ob_cap1"] = ["zh": "线上编译 tweak / IPA 并下载注入", "en": "Cloud-build tweaks / IPAs, download & inject"]
+            tbl["ob_cap2"] = ["zh": "H5GG 式内存搜索与修改", "en": "H5GG-style memory search & patch"]
+            tbl["ob_cap3"] = ["zh": "读取界面树、点击输入，控制任意 App", "en": "Read UI tree, tap & type to drive any app"]
+            tbl["ob_cap4"] = ["zh": "内置浏览器、审计、自动化与知识库", "en": "Built-in browser, audit, automation & KB"]
+            tbl["ob_start_title"] = ["zh": "开始使用", "en": "Get Started"]
+            tbl["ob_start_sub"] = ["zh": "选择下方快捷卡片立即体验；模型 API 随时可在「设置 → 模型 API」中配置。", "en": "Tap a quick card to start right away; model API can be configured anytime under Settings → Model API."]
 
             // ===== 抽屉 =====
-            "drawer_title": ["zh": "对话", "en": "Chats"],
-            "drawer_search": ["zh": "搜索对话内容...", "en": "Search conversations..."],
-            "drawer_count": ["zh": "{n} 个本机对话", "en": "{n} conversations"],
-            "drawer_delete": ["zh": "删除对话", "en": "Delete Chat"],
-            "drawer_ready": ["zh": "就绪 · 可注入", "en": "Ready · Injectable"],
-            "drawer_env_limited": ["zh": "环境受限 · 点按查看", "en": "Limited · Tap to view"],
-            "drawer_probe": ["zh": "点按检测本机", "en": "Tap to probe"],
+            tbl["drawer_title"] = ["zh": "对话", "en": "Chats"]
+            tbl["drawer_search"] = ["zh": "搜索对话内容...", "en": "Search conversations..."]
+            tbl["drawer_count"] = ["zh": "{n} 个本机对话", "en": "{n} conversations"]
+            tbl["drawer_delete"] = ["zh": "删除对话", "en": "Delete Chat"]
+            tbl["drawer_ready"] = ["zh": "就绪 · 可注入", "en": "Ready · Injectable"]
+            tbl["drawer_env_limited"] = ["zh": "环境受限 · 点按查看", "en": "Limited · Tap to view"]
+            tbl["drawer_probe"] = ["zh": "点按检测本机", "en": "Tap to probe"]
 
             // ===== 设置分组 =====
-            "sec_models": ["zh": "模型", "en": "Models"],
-            "sec_control": ["zh": "控制", "en": "Control"],
-            "sec_build": ["zh": "线上编译", "en": "Cloud Build"],
-            "sec_core": ["zh": "核心功能", "en": "Core"],
-            "sec_dev": ["zh": "开发者选项", "en": "Developer"],
-            "row_keepalive": ["zh": "后台常驻", "en": "Background Keep-Alive"],
-            "row_keepalive_sub": ["zh": "静音保活 + 周期刷新，AI 长任务/等待结果时不被挂起", "en": "Silent audio keep-alive + BG refresh, stay alive during AI tasks"],
-            "sec_security": ["zh": "安全", "en": "Security"],
-            "sec_about": ["zh": "关于", "en": "About"],
+            tbl["sec_models"] = ["zh": "模型", "en": "Models"]
+            tbl["sec_control"] = ["zh": "控制", "en": "Control"]
+            tbl["sec_build"] = ["zh": "线上编译", "en": "Cloud Build"]
+            tbl["sec_core"] = ["zh": "核心功能", "en": "Core"]
+            tbl["sec_dev"] = ["zh": "开发者选项", "en": "Developer"]
+            tbl["row_keepalive"] = ["zh": "后台常驻", "en": "Background Keep-Alive"]
+            tbl["row_keepalive_sub"] = ["zh": "静音保活 + 周期刷新，AI 长任务/等待结果时不被挂起", "en": "Silent audio keep-alive + BG refresh, stay alive during AI tasks"]
+            tbl["sec_security"] = ["zh": "安全", "en": "Security"]
+            tbl["sec_about"] = ["zh": "关于", "en": "About"]
 
             // ===== 设置行 =====
-            "row_model_api": ["zh": "模型 API", "en": "Model API"],
-            "row_data": ["zh": "数据管理", "en": "Data Management"],
-            "row_dev_instructions": ["zh": "模型破甲提示词", "en": "Breakout Instructions"],
-            "row_sys_prompts": ["zh": "系统指令", "en": "System Prompts"],
-            "row_inject": ["zh": "注入与自动化", "en": "Injection & Automation"],
-            "row_inject_sub": ["zh": "全应用 · 策略 · 自动化", "en": "Apps · Policy · Automation"],
-            "row_remote": ["zh": "远程控制", "en": "Remote Control"],
-            "row_remote_sub": ["zh": "AI 控制任意 App UI", "en": "AI controls any app UI"],
-            "row_github": ["zh": "GitHub 账号", "en": "GitHub Account"],
-            "row_downloads": ["zh": "下载管理", "en": "Downloads"],
-            "row_dev_mode": ["zh": "开发者模式", "en": "Developer Mode"],
-            "row_permissions": ["zh": "权限与自动化", "en": "Permissions & Automation"],
-            "row_automation": ["zh": "自动化中心", "en": "Automation Center"],
-            "row_tool_policy": ["zh": "工具权限策略", "en": "Tool Permissions"],
-            "row_transcripts": ["zh": "会话记录", "en": "Transcripts"],
-            "row_ssh": ["zh": "SSH 远程连接", "en": "SSH Remote"],
-            "row_search": ["zh": "内置智能搜索", "en": "Smart Search"],
-            "row_browser": ["zh": "内置浏览器", "en": "Built-in Browser"],
-            "row_gateway": ["zh": "Gateway 设置", "en": "Gateway Settings"],
-            "row_agents": ["zh": "Agents 与 Skills", "en": "Agents & Skills"],
-            "row_kb": ["zh": "本机知识库", "en": "Knowledge Base"],
-            "row_webhooks": ["zh": "Webhooks", "en": "Webhooks"],
-            "row_icon_theme": ["zh": "图标主题", "en": "Icon Theme"],
-            "row_device_fake": ["zh": "设备伪装", "en": "Device Spoof"],
-            "row_audit": ["zh": "本机工具审计", "en": "Tool Audit"],
-            "row_workspace": ["zh": "工作区文件", "en": "Workspace Files"],
-            "row_apikeys": ["zh": "API Key 管理", "en": "API Keys"],
-            "row_env": ["zh": "本机环境检测", "en": "Environment Check"],
-            "row_netlog": ["zh": "网络兼容日志", "en": "Network Log"],
-            "row_check_update": ["zh": "检查更新", "en": "Check Update"],
-            "row_lang": ["zh": "语言 / Language", "en": "Language / 语言"],
+            tbl["row_model_api"] = ["zh": "模型 API", "en": "Model API"]
+            tbl["row_data"] = ["zh": "数据管理", "en": "Data Management"]
+            tbl["row_dev_instructions"] = ["zh": "模型破甲提示词", "en": "Breakout Instructions"]
+            tbl["row_sys_prompts"] = ["zh": "系统指令", "en": "System Prompts"]
+            tbl["row_inject"] = ["zh": "注入与自动化", "en": "Injection & Automation"]
+            tbl["row_inject_sub"] = ["zh": "全应用 · 策略 · 自动化", "en": "Apps · Policy · Automation"]
+            tbl["row_remote"] = ["zh": "远程控制", "en": "Remote Control"]
+            tbl["row_remote_sub"] = ["zh": "AI 控制任意 App UI", "en": "AI controls any app UI"]
+            tbl["row_github"] = ["zh": "GitHub 账号", "en": "GitHub Account"]
+            tbl["row_downloads"] = ["zh": "下载管理", "en": "Downloads"]
+            tbl["row_dev_mode"] = ["zh": "开发者模式", "en": "Developer Mode"]
+            tbl["row_permissions"] = ["zh": "权限与自动化", "en": "Permissions & Automation"]
+            tbl["row_automation"] = ["zh": "自动化中心", "en": "Automation Center"]
+            tbl["row_tool_policy"] = ["zh": "工具权限策略", "en": "Tool Permissions"]
+            tbl["row_transcripts"] = ["zh": "会话记录", "en": "Transcripts"]
+            tbl["row_ssh"] = ["zh": "SSH 远程连接", "en": "SSH Remote"]
+            tbl["row_search"] = ["zh": "内置智能搜索", "en": "Smart Search"]
+            tbl["row_browser"] = ["zh": "内置浏览器", "en": "Built-in Browser"]
+            tbl["row_gateway"] = ["zh": "Gateway 设置", "en": "Gateway Settings"]
+            tbl["row_agents"] = ["zh": "Agents 与 Skills", "en": "Agents & Skills"]
+            tbl["row_kb"] = ["zh": "本机知识库", "en": "Knowledge Base"]
+            tbl["row_webhooks"] = ["zh": "Webhooks", "en": "Webhooks"]
+            tbl["row_icon_theme"] = ["zh": "图标主题", "en": "Icon Theme"]
+            tbl["row_device_fake"] = ["zh": "设备伪装", "en": "Device Spoof"]
+            tbl["row_audit"] = ["zh": "本机工具审计", "en": "Tool Audit"]
+            tbl["row_workspace"] = ["zh": "工作区文件", "en": "Workspace Files"]
+            tbl["row_apikeys"] = ["zh": "API Key 管理", "en": "API Keys"]
+            tbl["row_env"] = ["zh": "本机环境检测", "en": "Environment Check"]
+            tbl["row_netlog"] = ["zh": "网络兼容日志", "en": "Network Log"]
+            tbl["row_check_update"] = ["zh": "检查更新", "en": "Check Update"]
+            tbl["row_lang"] = ["zh": "语言 / Language", "en": "Language / 语言"]
 
             // ===== 子页面标题 =====
-            "page_remote": ["zh": "远程控制", "en": "Remote Control"],
-            "page_remote_sub": ["zh": "AI 控制任意 App 的 UI：读取界面、点击、输入、滑动", "en": "AI controls any app UI: read, tap, type, swipe"],
-            "page_inject": ["zh": "注入与自动化", "en": "Injection & Automation"],
-            "inject_subtitle": ["zh": "{n} 个应用 · 搜索/分类/版本/索引", "en": "{n} apps · search / category / version / index"],
-            "inject_refresh_hint": ["zh": "点击右上角刷新", "en": "Tap refresh in the top right"],
-            "inject_emergency": ["zh": "🚑 紧急恢复（Residue 式）", "en": "🚑 Emergency Recovery (Residue-style)"],
-            "inject_emergency_tip": ["zh": "App 注入后打不开 → 先「一键全恢复」；仍不行再「清理残留」。不要卸载重装（会丢数据）。", "en": "App won't open after injection? Run 'Restore All' first; if still broken, 'Clean Residuals'. Don't uninstall & reinstall (data loss)."],
-            "inject_restore_all": ["zh": "一键全恢复", "en": "Restore All"],
-            "inject_cleanup_residual": ["zh": "清理残留", "en": "Clean Residuals"],
-            "page_inject_sub": ["zh": "dylib 注入 · 应用列表 · 自动化策略", "en": "dylib injection · apps · automation"],
-            "page_downloads": ["zh": "下载管理", "en": "Downloads"],
-            "page_downloads_sub": ["zh": "线上编译产物 · 勾选删除 · 安装", "en": "Build artifacts · select & delete · install"],
-            "page_audit": ["zh": "本机工具审计", "en": "Tool Audit"],
-            "page_audit_sub": ["zh": "工具调用记录 · 成功/失败 · 导出给 AI", "en": "Tool calls · success/fail · export to AI"],
-            "page_workspace": ["zh": "工作区", "en": "Workspace"],
-            "page_workspace_sub": ["zh": "像文件夹一样点开 · 预览 · 复制路径", "en": "Browse like a folder · preview · copy path"],
-            "page_netlog": ["zh": "网络兼容日志", "en": "Network Log"],
-            "page_netlog_sub": ["zh": "中转站兼容性 · 降级记录", "en": "Relay compatibility & fallback log"],
-            "page_dev_instr": ["zh": "模型破甲提示词", "en": "Breakout Instructions"],
-            "page_dev_instr_sub": ["zh": "编辑 · 复制 · 设置默认 · 注入 AI 行为", "en": "Edit · copy · set default · shape AI behavior"],
-            "page_automation": ["zh": "自动化中心", "en": "Automation Center"],
-            "page_automation_sub": ["zh": "定时任务 · 历史 · 重试", "en": "Scheduled tasks · history · retry"],
-            "page_tool_policy": ["zh": "工具权限策略", "en": "Tool Permissions"],
-            "page_tool_policy_sub": ["zh": "按工具控制 · 真实/占位 · 搜索即授权", "en": "Per-tool control · real/stub · search-to-authorize"],
-            "page_transcripts": ["zh": "会话记录", "en": "Transcripts"],
-            "page_transcripts_sub": ["zh": "完整对话存档 · 导出", "en": "Full chat archive · export"],
-            "page_search": ["zh": "内置智能搜索", "en": "Smart Search"],
-            "page_search_sub": ["zh": "Bing Web 搜索 · 用法说明", "en": "Bing web search · usage"],
-            "page_gateway": ["zh": "Gateway 设置", "en": "Gateway Settings"],
-            "page_gateway_sub": ["zh": "服务端管理 · 远程接入", "en": "Server management · remote access"],
-            "page_agents": ["zh": "Agents 与 Skills", "en": "Agents & Skills"],
-            "page_agents_sub": ["zh": "隔离指令 · 技能 · 工作流", "en": "Isolated prompts · skills · workflows"],
-            "page_kb": ["zh": "本机知识库", "en": "Knowledge Base"],
-            "page_kb_sub": ["zh": "文件导入 · 来源检索 · 问答增强", "en": "Import files · source search · RAG"],
-            "page_webhooks": ["zh": "Webhooks", "en": "Webhooks"],
-            "page_webhooks_sub": ["zh": "HTTPS 事件出口 · 订阅管理", "en": "HTTPS event output · subscriptions"],
-            "page_data": ["zh": "数据管理", "en": "Data Management"],
-            "page_data_sub": ["zh": "App 文稿目录 · 备份与清理", "en": "App Documents · backup & clean"],
-            "page_capabilities": ["zh": "权限与自动化", "en": "Permissions & Automation"],
-            "page_capabilities_sub": ["zh": "系统能力检测 · 权限开关", "en": "System capabilities · permission toggles"],
-            "page_apikeys": ["zh": "API Key 管理", "en": "API Keys"],
-            "page_apikeys_sub": ["zh": "查看 · 显隐 · 恢复", "en": "View · show/hide · recover"],
-            "page_ssh": ["zh": "SSH 远程连接", "en": "SSH Remote"],
-            "page_ssh_sub": ["zh": "Linux 远程命令 · 文件传输", "en": "Remote Linux commands · file transfer"],
-            "page_env": ["zh": "本机环境检测", "en": "Environment Check"],
-            "page_env_sub": ["zh": "TrollStore · 权限 · 注入链路", "en": "TrollStore · permissions · injection chain"],
+            tbl["page_remote"] = ["zh": "远程控制", "en": "Remote Control"]
+            tbl["page_remote_sub"] = ["zh": "AI 控制任意 App 的 UI：读取界面、点击、输入、滑动", "en": "AI controls any app UI: read, tap, type, swipe"]
+            tbl["page_inject"] = ["zh": "注入与自动化", "en": "Injection & Automation"]
+            tbl["inject_subtitle"] = ["zh": "{n} 个应用 · 搜索/分类/版本/索引", "en": "{n} apps · search / category / version / index"]
+            tbl["inject_refresh_hint"] = ["zh": "点击右上角刷新", "en": "Tap refresh in the top right"]
+            tbl["inject_emergency"] = ["zh": "🚑 紧急恢复（Residue 式）", "en": "🚑 Emergency Recovery (Residue-style)"]
+            tbl["inject_emergency_tip"] = ["zh": "App 注入后打不开 → 先「一键全恢复」；仍不行再「清理残留」。不要卸载重装（会丢数据）。", "en": "App won't open after injection? Run 'Restore All' first; if still broken, 'Clean Residuals'. Don't uninstall & reinstall (data loss)."]
+            tbl["inject_restore_all"] = ["zh": "一键全恢复", "en": "Restore All"]
+            tbl["inject_cleanup_residual"] = ["zh": "清理残留", "en": "Clean Residuals"]
+            tbl["page_inject_sub"] = ["zh": "dylib 注入 · 应用列表 · 自动化策略", "en": "dylib injection · apps · automation"]
+            tbl["page_downloads"] = ["zh": "下载管理", "en": "Downloads"]
+            tbl["page_downloads_sub"] = ["zh": "线上编译产物 · 勾选删除 · 安装", "en": "Build artifacts · select & delete · install"]
+            tbl["page_audit"] = ["zh": "本机工具审计", "en": "Tool Audit"]
+            tbl["page_audit_sub"] = ["zh": "工具调用记录 · 成功/失败 · 导出给 AI", "en": "Tool calls · success/fail · export to AI"]
+            tbl["page_workspace"] = ["zh": "工作区", "en": "Workspace"]
+            tbl["page_workspace_sub"] = ["zh": "像文件夹一样点开 · 预览 · 复制路径", "en": "Browse like a folder · preview · copy path"]
+            tbl["page_netlog"] = ["zh": "网络兼容日志", "en": "Network Log"]
+            tbl["page_netlog_sub"] = ["zh": "中转站兼容性 · 降级记录", "en": "Relay compatibility & fallback log"]
+            tbl["page_dev_instr"] = ["zh": "模型破甲提示词", "en": "Breakout Instructions"]
+            tbl["page_dev_instr_sub"] = ["zh": "编辑 · 复制 · 设置默认 · 注入 AI 行为", "en": "Edit · copy · set default · shape AI behavior"]
+            tbl["page_automation"] = ["zh": "自动化中心", "en": "Automation Center"]
+            tbl["page_automation_sub"] = ["zh": "定时任务 · 历史 · 重试", "en": "Scheduled tasks · history · retry"]
+            tbl["page_tool_policy"] = ["zh": "工具权限策略", "en": "Tool Permissions"]
+            tbl["page_tool_policy_sub"] = ["zh": "按工具控制 · 真实/占位 · 搜索即授权", "en": "Per-tool control · real/stub · search-to-authorize"]
+            tbl["page_transcripts"] = ["zh": "会话记录", "en": "Transcripts"]
+            tbl["page_transcripts_sub"] = ["zh": "完整对话存档 · 导出", "en": "Full chat archive · export"]
+            tbl["page_search"] = ["zh": "内置智能搜索", "en": "Smart Search"]
+            tbl["page_search_sub"] = ["zh": "Bing Web 搜索 · 用法说明", "en": "Bing web search · usage"]
+            tbl["page_gateway"] = ["zh": "Gateway 设置", "en": "Gateway Settings"]
+            tbl["page_gateway_sub"] = ["zh": "服务端管理 · 远程接入", "en": "Server management · remote access"]
+            tbl["page_agents"] = ["zh": "Agents 与 Skills", "en": "Agents & Skills"]
+            tbl["page_agents_sub"] = ["zh": "隔离指令 · 技能 · 工作流", "en": "Isolated prompts · skills · workflows"]
+            tbl["page_kb"] = ["zh": "本机知识库", "en": "Knowledge Base"]
+            tbl["page_kb_sub"] = ["zh": "文件导入 · 来源检索 · 问答增强", "en": "Import files · source search · RAG"]
+            tbl["page_webhooks"] = ["zh": "Webhooks", "en": "Webhooks"]
+            tbl["page_webhooks_sub"] = ["zh": "HTTPS 事件出口 · 订阅管理", "en": "HTTPS event output · subscriptions"]
+            tbl["page_data"] = ["zh": "数据管理", "en": "Data Management"]
+            tbl["page_data_sub"] = ["zh": "App 文稿目录 · 备份与清理", "en": "App Documents · backup & clean"]
+            tbl["page_capabilities"] = ["zh": "权限与自动化", "en": "Permissions & Automation"]
+            tbl["page_capabilities_sub"] = ["zh": "系统能力检测 · 权限开关", "en": "System capabilities · permission toggles"]
+            tbl["page_apikeys"] = ["zh": "API Key 管理", "en": "API Keys"]
+            tbl["page_apikeys_sub"] = ["zh": "查看 · 显隐 · 恢复", "en": "View · show/hide · recover"]
+            tbl["page_ssh"] = ["zh": "SSH 远程连接", "en": "SSH Remote"]
+            tbl["page_ssh_sub"] = ["zh": "Linux 远程命令 · 文件传输", "en": "Remote Linux commands · file transfer"]
+            tbl["page_env"] = ["zh": "本机环境检测", "en": "Environment Check"]
+            tbl["page_env_sub"] = ["zh": "TrollStore · 权限 · 注入链路", "en": "TrollStore · permissions · injection chain"]
 
             // ===== 常用按钮 =====
-            "btn_install": ["zh": "安装", "en": "Install"],
-            "btn_export": ["zh": "导出", "en": "Export"],
-            "btn_import": ["zh": "导入", "en": "Import"],
-            "btn_new": ["zh": "新建", "en": "New"],
-            "btn_edit": ["zh": "编辑", "en": "Edit"],
-            "btn_retry": ["zh": "重试", "en": "Retry"],
-            "btn_stop": ["zh": "停止", "en": "Stop"],
-            "btn_test": ["zh": "测试", "en": "Test"],
-            "btn_clear": ["zh": "清空", "en": "Clear"],
-            "btn_save_config": ["zh": "保存配置", "en": "Save Config"],
-            "btn_check_connection": ["zh": "检查连接", "en": "Check Connection"],
-            "status_connected": ["zh": "已连接", "en": "Connected"],
-            "status_disconnected": ["zh": "未连接", "en": "Disconnected"],
-            "status_checking": ["zh": "检查中...", "en": "Checking..."],
-            "ui_148": ["zh": "原因：%@", "en": "Reason: %@"],
-            "ui_149": ["zh": "建议：%@", "en": "Suggestion: %@"],
-            "ui_150": ["zh": "%@ 失败", "en": "%@ failed"],
-            "ui_151": ["zh": "成功 %@", "en": "Success %@"],
-            "ui_152": ["zh": "·均耗 %@ms", "en": "· avg %@ms"],
-            "ui_153": ["zh": "主导错误 %@", "en": "Top error %@"],
-            "ui_154": ["zh": "最近失败：%@", "en": "Latest failure: %@"],
-            "ui_155": ["zh": "%d 个", "en": "%d apps"],
-            "ui_156": ["zh": "%d 次 · 成功 %d", "en": "%d runs · %d OK"],
-            "ui_157": ["zh": "第 %d/%d 轮", "en": "Round %d/%d"],
-            "ui_158": ["zh": "执行过程（%d 步）", "en": "Execution (%d steps)"],
-            "ui_159": ["zh": "型号标识 %@ · %@ · %@ · %@", "en": "Model %@ · %@ · %@ · %@"],
-            "ui_160": ["zh": "扫描 %@ 的可清理项", "en": "Scanning %@ for cleanables"],
-            "ui_161": ["zh": "无法扫描 %@", "en": "Cannot scan %@"],
-            "ui_162": ["zh": "未找到该 App 或数据容器不可访问\n（TrollStore 需开启 AppDataContainers 权限）", "en": "App not found or container inaccessible\n(TrollStore needs AppDataContainers entitlement)"],
-            "ui_163": ["zh": "可用 %@ / 总 %@", "en": "Free %@ / total %@"],
-            "ui_164": ["zh": "%d 个", "en": "%d apps"],
-            "ui_165": ["zh": "级别 %d", "en": "Level %d"],
-            "ui_166": ["zh": "线上编译产物会保存在\nDocuments/Workspace/downloads/", "en": "Online build artifacts are saved in\nDocuments/Workspace/downloads/"],
-            "ui_167": ["zh": "文件过大（%@），仅显示前 64KB", "en": "File too large (%@), showing first 64KB only"],
-            "ui_168": ["zh": "%d 元素", "en": "%d elements"],
-            "ui_169": ["zh": "✅ 已切换到「%@」，主屏幕图标稍后更新", "en": "✅ Switched to “%@”, home icon updates shortly"],
-            "ui_170": ["zh": "名称: %@\n模型: %@\n接口: %@\n\n确认导入并立即使用？", "en": "Name: %@\nModel: %@\nBase URL: %@\n\nImport and use now?"],
-            "ui_171": ["zh": "已选 %d", "en": "Selected %d"],
-            "ui_0": ["zh": "AI 可用 browser.snapshot", "en": "AI can use browser.snapshot"],
-            "ui_1": ["zh": "AI 用 browser.* 控制", "en": "AI controls via browser.*"],
-            "ui_2": ["zh": "Agents 通过 agents.json 配置，放入 KnowledgeBase 目录即可加载。", "en": "Agents are configured via agents.json; place it in the KnowledgeBase folder to load."],
-            "ui_3": ["zh": "App 会在请求被中转站拒绝或超时时自动逐级简化请求参数（降级），成功后记住可用级别。级别 5 走 Responses API（Codex 同款端点），可保留工具调用；级别 ≥3 表示仅可纯对话。", "en": "The app auto-degrades request params step by step when the relay rejects or times out; the working level is remembered. Level 5 uses the Responses API (Codex endpoint) and keeps tool calls; levels >=3 mean chat-only."],
-            "ui_4": ["zh": "App 内置行为规范 · 不可编辑 · 切换立即生效", "en": "Built-in behavior rules · read-only · takes effect immediately"],
-            "ui_5": ["zh": "App 注入后打不开 → 先「一键全恢复」；仍不行再「清理残留」。不要卸载重装（会丢数据）。", "en": "If an app won't open after injection → try 'Restore All' first; then 'Clean Residuals'. Don't uninstall & reinstall (loses data)."],
-            "ui_6": ["zh": "Gateway 服务端运行在 Mac/Linux/NAS 上，通过 WebSocket 配对。连接后可远程调用手机工具、下发定时任务。", "en": "Gateway runs on Mac/Linux/NAS, paired over WebSocket. Once connected you can call phone tools remotely and schedule tasks."],
-            "ui_7": ["zh": "Max Tokens：单次回复最多生成的 token 数（输出上限，不限制上下文）。", "en": "Max Tokens: max output tokens per reply (output cap, does not limit context)."],
-            "ui_8": ["zh": "TrollAgent 自身也会同步保活，切后台继续执行远程控制任务", "en": "TrollAgent keeps itself alive too, continuing remote-control tasks in background"],
-            "ui_9": ["zh": "TrollStore 已安装 · 清理能力可用", "en": "TrollStore installed · cleanup available"],
-            "ui_10": ["zh": "github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) 生成，勾选 repo 与 workflow 权限。", "en": "Generate at github.com → Settings → Developer settings → Personal access tokens → Tokens (classic), check repo & workflow scopes."],
-            "ui_11": ["zh": "v2.9.79：双引擎检索——Bing 优先，失败自动回退 DuckDuckGo（均免 Key）。AI 可先用 web.search 拿标题/链接/摘要，再用 web.fetch 抓取网页原文深入阅读，回答时效性问题更准确。", "en": "v2.9.79: dual-engine search — Bing first, auto-fallback to DuckDuckGo (no key needed). AI can get titles/links/summaries via web.search, then read the full page with web.fetch for time-sensitive answers."],
-            "ui_12": ["zh": "• 两者同时生效，系统指令先注入，破甲指令后注入", "en": "• Both apply; system prompt is injected first, breakout instructions after"],
-            "ui_13": ["zh": "• 模型破甲提示词：用户可自建/编辑，作为补充规范，专门用于破甲/越狱/注入测试", "en": "• Breakout instructions: user-created/edited, supplemental rules for breakout/jailbreak/injection testing"],
-            "ui_14": ["zh": "• 系统指令：App 内置，不可编辑，优先级最高，控制 AI 的基本行为模式", "en": "• System prompt: built-in, read-only, highest priority, controls AI base behavior"],
-            "ui_15": ["zh": "① 选择目标 App", "en": "① Pick target App"],
-            "ui_16": ["zh": "② 选择伪装机型", "en": "② Pick fake device model"],
-            "ui_17": ["zh": "「真实」= 有实际执行逻辑；「占位」= 仅注册了接口、未接入真实功能。", "en": "'Real' = has actual logic; 'Stub' = interface registered only, no real function yet."],
-            "ui_18": ["zh": "上下文预算：发送给模型的上下文 token 上限。会话超出时自动裁剪最早的历史消息（保留最近对话），避免长会话请求过大变慢或超时。", "en": "Context budget: max context tokens sent to the model. When exceeded, the oldest messages are auto-trimmed (keeping recent chat) to avoid slow/oversized requests."],
-            "ui_19": ["zh": "专业释放设备存储空间", "en": "Pro storage cleanup"],
-            "ui_20": ["zh": "主机地址", "en": "Host"],
-            "ui_21": ["zh": "主页", "en": "Home"],
-            "ui_22": ["zh": "仅用于本轮请求，本机准备", "en": "This round only, prepared locally"],
-            "ui_23": ["zh": "仓库与 workflow 设置", "en": "Repo & workflow settings"],
-            "ui_24": ["zh": "使用说明", "en": "Usage"],
-            "ui_25": ["zh": "供应商快速配置", "en": "Quick provider presets"],
-            "ui_26": ["zh": "保存修改", "en": "Save changes"],
-            "ui_27": ["zh": "保存并测试连接", "en": "Save & test connection"],
-            "ui_28": ["zh": "保存配置", "en": "Save config"],
-            "ui_29": ["zh": "健康度", "en": "Health"],
-            "ui_30": ["zh": "全部成功", "en": "All OK"],
-            "ui_31": ["zh": "切换中…", "en": "Switching…"],
-            "ui_32": ["zh": "初始请求只加载常驻核心工具（标 ★，无需搜索），其余工具由 AI 用「工具搜索」按需加载，搜索命中即自动放行本会话、无弹窗。常驻核心始终可用，无需在此配置。", "en": "Initial requests only load the resident core tools (marked ★, no search needed); other tools are loaded on demand by AI via 'tool search', auto-authorized for this session on hit. Resident cores are always available."],
-            "ui_33": ["zh": "删除", "en": "Delete"],
-            "ui_34": ["zh": "删除所选", "en": "Delete selected"],
-            "ui_35": ["zh": "加载中…", "en": "Loading…"],
-            "ui_36": ["zh": "单独恢复（还原注入前）", "en": "Restore this app (pre-injection)"],
-            "ui_37": ["zh": "单独清理残留", "en": "Clean residuals"],
-            "ui_38": ["zh": "原理：默认内存注入——App 运行时用 opainject 加载 ConfigHook.dylib（设备伪装已并入 ConfigHook），读取 fake_device.json 替换 UIDevice 返回的机型/名称/系统版本。不改任何文件、零残留，App 重启即还原；恢复 = 点还原（杀进程重启）。部分 App 通过 sysctl 读硬件标识，无法被 UIDevice 层覆盖。", "en": "How it works: memory injection by default — loads ConfigHook.dylib (device disguise merged into ConfigHook) via opainject at runtime, reads fake_device.json to override model/name/system version returned by UIDevice. No files changed, zero residue, restored on app restart; restore = tap restore (kills & relaunches). Apps reading hardware IDs via sysctl cannot be covered at UIDevice layer."],
-            "ui_39": ["zh": "发送测试事件", "en": "Send test event"],
-            "ui_40": ["zh": "取消", "en": "Cancel"],
-            "ui_41": ["zh": "只读", "en": "Read-only"],
-            "ui_42": ["zh": "启用注入", "en": "Enable injection"],
-            "ui_43": ["zh": "在授权页粘贴验证码并确认，成功后 App 会自动关闭浏览器并完成登录，无需手动操作。", "en": "Paste the code on the auth page and confirm; the app auto-closes the browser and completes login."],
-            "ui_44": ["zh": "好", "en": "OK"],
-            "ui_45": ["zh": "审计记录已导出", "en": "Audit log exported"],
-            "ui_46": ["zh": "密码", "en": "Password"],
-            "ui_47": ["zh": "密钥仅保存在本机 UserDefaults，不会上传。恢复到新设备需重新输入。", "en": "Keys are stored locally in UserDefaults only; re-enter them after restoring to a new device."],
-            "ui_48": ["zh": "导入", "en": "Import"],
-            "ui_49": ["zh": "导入模型配置？", "en": "Import model config?"],
-            "ui_50": ["zh": "尚未添加模型配置", "en": "No model configs yet"],
-            "ui_51": ["zh": "工具结果", "en": "Tool result"],
-            "ui_52": ["zh": "已保存到本机", "en": "Saved locally"],
-            "ui_53": ["zh": "已内置默认 Client ID，新手无需改动（留空 = 使用内置默认，删空保存也会自动恢复）。高级用户可覆盖为自己注册的 OAuth App：github.com → Settings → Developer settings → OAuth Apps → New OAuth App（勾选 Enable Device Flow），复制 Client ID 填入。", "en": "Built-in default Client ID included; beginners can leave it empty (empty = use the default, deleting and saving also restores it). Advanced users can override with their own OAuth App: github.com → Settings → Developer settings → OAuth Apps → New OAuth App (enable Device Flow), fill in the Client ID."],
-            "ui_54": ["zh": "已用", "en": "Used"],
-            "ui_55": ["zh": "帮我搜一下 2026 年最新的 iPhone 发布消息", "en": "Search for the latest 2026 iPhone announcements"],
-            "ui_56": ["zh": "常驻", "en": "Resident"],
-            "ui_57": ["zh": "彻底移除", "en": "Remove fully"],
-            "ui_58": ["zh": "快速清理", "en": "Quick clean"],
-            "ui_59": ["zh": "思考过程", "en": "Thinking"],
-            "ui_60": ["zh": "总览", "en": "Overview"],
-            "ui_61": ["zh": "恢复备份（.troll-fools.bak）", "en": "Restore backup (.troll-fools.bak)"],
-            "ui_62": ["zh": "打开", "en": "Open"],
-            "ui_63": ["zh": "执行", "en": "Run"],
-            "ui_64": ["zh": "执行中…", "en": "Running…"],
-            "ui_65": ["zh": "批准执行", "en": "Approve"],
-            "ui_66": ["zh": "技能是预置的工作流指令。保存后 AI 可用 skills.list 发现、skills.read 读取并按指令执行。", "en": "Skills are preset workflow instructions. After saving, AI can discover via skills.list, read via skills.read and follow them."],
-            "ui_67": ["zh": "技能是预置的工作流指令：AI 可用 skills.list 发现、skills.read 读取并执行。可在本页启用/停用/删除，或点 + 新建。", "en": "Skills are preset workflow instructions: AI can discover via skills.list, read and execute via skills.read. Enable/disable/delete here, or tap + to create."],
-            "ui_68": ["zh": "拒绝", "en": "Reject"],
-            "ui_69": ["zh": "按供应商", "en": "By provider"],
-            "ui_70": ["zh": "按需", "en": "On demand"],
-            "ui_71": ["zh": "授权页已打开，验证码已自动复制到剪贴板", "en": "Auth page opened; code copied to clipboard"],
-            "ui_72": ["zh": "提速提示：Max Tokens 是输出上限，值越大模型单次生成越长、等待越久。日常对话 2048 已够用；若回复慢，可调低 Max Tokens 或上下文预算。", "en": "Tip: Max Tokens is the output cap — larger values make each generation longer and slower. 2048 is enough for daily chat; if replies are slow, lower Max Tokens or the context budget."],
-            "ui_73": ["zh": "搜索词会发送到 Bing / DuckDuckGo，用于返回检索结果。不会上传对话历史。", "en": "Search terms are sent to Bing / DuckDuckGo for results. Chat history is not uploaded."],
-            "ui_74": ["zh": "收起键盘", "en": "Dismiss keyboard"],
-            "ui_75": ["zh": "文件日志", "en": "File logs"],
-            "ui_76": ["zh": "暂无 Gateway 服务端，点右上角 + 添加", "en": "No Gateway yet, tap + to add"],
-            "ui_77": ["zh": "暂无下载", "en": "No downloads"],
-            "ui_78": ["zh": "暂无任务", "en": "No tasks"],
-            "ui_79": ["zh": "暂无助手角色，点右上角 + 新建", "en": "No assistant roles yet, tap + to create"],
-            "ui_80": ["zh": "暂无历史会话记录", "en": "No session history"],
-            "ui_81": ["zh": "暂无启用的自动化任务", "en": "No enabled automation tasks"],
-            "ui_82": ["zh": "暂无失败记录", "en": "No failure records"],
-            "ui_83": ["zh": "暂无审计日志", "en": "No audit logs"],
-            "ui_84": ["zh": "暂无工具调用记录", "en": "No tool call records"],
-            "ui_85": ["zh": "暂无待批准操作", "en": "No pending approvals"],
-            "ui_86": ["zh": "暂无执行记录", "en": "No execution records"],
-            "ui_87": ["zh": "暂无技能，点右上角 + 新建", "en": "No skills yet, tap + to create"],
-            "ui_88": ["zh": "暂无模型配置", "en": "No model configs"],
-            "ui_89": ["zh": "暂无知识库文件", "en": "No knowledge base files"],
-            "ui_90": ["zh": "暂无自动化任务", "en": "No automation tasks"],
-            "ui_91": ["zh": "暂无自定义 Agent", "en": "No custom Agents"],
-            "ui_92": ["zh": "暂无记录", "en": "No records"],
-            "ui_93": ["zh": "暂无记录。发起一次对话后，这里会显示每次请求的载荷级别与结果。", "en": "No records yet. After a chat, each request's level and result appears here."],
-            "ui_94": ["zh": "暂无运行中的任务", "en": "No running tasks"],
-            "ui_95": ["zh": "暂无附件", "en": "No attachments"],
-            "ui_96": ["zh": "最近请求（最多 30 条）", "en": "Recent requests (max 30)"],
-            "ui_97": ["zh": "服务端", "en": "Server"],
-            "ui_98": ["zh": "未登录", "en": "Not logged in"],
-            "ui_99": ["zh": "机制", "en": "How it works"],
-            "ui_100": ["zh": "模型配置导入", "en": "Import model config"],
-            "ui_101": ["zh": "正在检测本机环境…", "en": "Checking device environment…"],
-            "ui_102": ["zh": "此目录为空", "en": "This folder is empty"],
-            "ui_103": ["zh": "应用设备伪装并重启 App…", "en": "Applying device disguise & restarting App…"],
-            "ui_104": ["zh": "注入 ControlAgent v4（安全版）", "en": "Inject ControlAgent v4 (safe)"],
-            "ui_105": ["zh": "测试接口延迟", "en": "Test latency"],
-            "ui_106": ["zh": "添加内容", "en": "Add content"],
-            "ui_107": ["zh": "清空", "en": "Clear"],
-            "ui_108": ["zh": "温度", "en": "Temperature"],
-            "ui_109": ["zh": "点右上角刷新获取上游模型列表", "en": "Tap refresh (top-right) to fetch upstream models"],
-            "ui_110": ["zh": "状态", "en": "Status"],
-            "ui_111": ["zh": "环境自检", "en": "Environment check"],
-            "ui_112": ["zh": "用户名", "en": "Username"],
-            "ui_113": ["zh": "登录成功 ✓", "en": "Logged in ✓"],
-            "ui_114": ["zh": "真后台保活", "en": "True background keep-alive"],
-            "ui_115": ["zh": "确认执行", "en": "Confirm"],
-            "ui_116": ["zh": "禁用注入", "en": "Disable injection"],
-            "ui_117": ["zh": "私钥路径", "en": "Private key path"],
-            "ui_118": ["zh": "移除注入（还原）", "en": "Remove injection (restore)"],
-            "ui_119": ["zh": "端口", "en": "Port"],
-            "ui_120": ["zh": "等待授权…", "en": "Waiting for auth…"],
-            "ui_121": ["zh": "系统清理", "en": "System cleanup"],
-            "ui_122": ["zh": "线上编译在指定仓库的 Actions 中运行。仓库须包含 build-tweak workflow，且当前账号对该仓库有写权限。授权新账号成功后，Owner 会自动填入该账号（若此前仍是默认值）。", "en": "Online builds run in the Actions of the chosen repo. The repo must contain the build-tweak workflow and your account needs write access. After authorizing a new account, Owner auto-fills to that account (if it was still the default)."],
-            "ui_123": ["zh": "缓存 · 钥匙串 · 广告符 · 数据容器 · 标识符", "en": "Caches · Keychain · IDFA · Containers · Identifiers"],
-            "ui_124": ["zh": "缓存占用", "en": "Cache usage"],
-            "ui_125": ["zh": "编译模式允许在 iPhone 上编译 dylib。需要已注入 TMBuildAgent.dylib 到 TrollMCP。编译令牌用于验证编译请求。", "en": "Build mode compiles dylibs on iPhone. Requires TMBuildAgent.dylib injected into TrollMCP. The build token is used to verify build requests."],
-            "ui_126": ["zh": "自动化中心支持脚本执行、定时任务（cron）、事件触发。通过 MCP 工具 automation.* 和 cron.fire 驱动。", "en": "Automation hub supports script execution, cron jobs and event triggers, driven by the automation.* and cron.fire MCP tools."],
-            "ui_127": ["zh": "自动化任务", "en": "Automation tasks"],
-            "ui_128": ["zh": "获取上游模型列表", "en": "Fetch upstream models"],
-            "ui_129": ["zh": "蓝框", "en": "Blue box"],
-            "ui_130": ["zh": "触发中…", "en": "Triggering…"],
-            "ui_131": ["zh": "认证方式（二选一）", "en": "Auth method (pick one)"],
-            "ui_132": ["zh": "说明", "en": "Info"],
-            "ui_133": ["zh": "说明：TrollStore 安装的 App 同样支持动态图标切换（CFBundleAlternateIcons）。若切换后桌面图标未变，请重启一次桌面（锁屏重开）。", "en": "Note: TrollStore apps also support dynamic icon switching (CFBundleAlternateIcons). If the home-screen icon does not change after switching, restart the springboard once (lock & unlock)."],
-            "ui_134": ["zh": "请选择", "en": "Please select"],
-            "ui_135": ["zh": "调用记录", "en": "Call log"],
-            "ui_136": ["zh": "还没有模型破甲提示词，点右上角 + 新建。", "en": "No breakout instructions yet, tap + to create."],
-            "ui_137": ["zh": "连接信息", "en": "Connection"],
-            "ui_138": ["zh": "适用于 OpenAI、DeepSeek OpenAI 格式和多数兼容网关。Base URL 通常以 /v1 结尾。", "en": "Works with OpenAI, DeepSeek OpenAI-format and most compatible gateways. Base URL usually ends with /v1."],
-            "ui_139": ["zh": "选择图标主题，立即生效（无需重新安装）", "en": "Pick an icon theme, applies immediately (no reinstall needed)"],
-            "ui_140": ["zh": "配置后，AI 可通过 ssh.exec 工具在远程 Linux 服务器执行命令，通过 ssh.scp 传输文件。适用于线上编译、服务器管理、文件同步等场景。", "en": "After setup, AI can run commands on a remote Linux server via ssh.exec and transfer files via ssh.scp. Great for online builds, server management, file sync."],
-            "ui_141": ["zh": "重新检测", "en": "Re-check"],
-            "ui_142": ["zh": "零配置：点下方按钮，App 内置浏览器打开 GitHub 授权页，登录授权后自动完成，无需复制 Token、无需注册任何东西。任意 GitHub 账号都能用。", "en": "Zero config: tap the button below, the built-in browser opens the GitHub auth page; login & authorize and it's done — no token copying, nothing to register. Any GitHub account works."],
-            "ui_143": ["zh": "首次调用系统能力时会请求对应权限。未授权的工具调用将返回错误信息。", "en": "System capabilities request permission on first use. Unauthorized tool calls return an error."],
-            "ui_144": ["zh": "默认", "en": "Default"],
-            "ui_145": ["zh": "默认指令会注入 AI 请求。可写：工程约定、代码风格、工具使用偏好、回复格式要求等。", "en": "Default instructions are injected into every AI request. You can write: project conventions, code style, tool usage preferences, reply format requirements, etc."],
-            "ui_146": ["zh": "默认指令（标「默认」）会在每次 AI 请求时作为 system 消息注入，AI 将遵循其中的约定。长按指令可设默认/编辑/删除。", "en": "Default instructions (marked 'Default') are injected as system messages in every AI request and AI follows them. Long-press a instruction to set default / edit / delete."],
-            "ui_147": ["zh": "🚑 紧急恢复（Residue 式）", "en": "🚑 Emergency restore (Residue-style)"],
+            tbl["btn_install"] = ["zh": "安装", "en": "Install"]
+            tbl["btn_export"] = ["zh": "导出", "en": "Export"]
+            tbl["btn_import"] = ["zh": "导入", "en": "Import"]
+            tbl["btn_new"] = ["zh": "新建", "en": "New"]
+            tbl["btn_edit"] = ["zh": "编辑", "en": "Edit"]
+            tbl["btn_retry"] = ["zh": "重试", "en": "Retry"]
+            tbl["btn_stop"] = ["zh": "停止", "en": "Stop"]
+            tbl["btn_test"] = ["zh": "测试", "en": "Test"]
+            tbl["btn_clear"] = ["zh": "清空", "en": "Clear"]
+            tbl["btn_save_config"] = ["zh": "保存配置", "en": "Save Config"]
+            tbl["btn_check_connection"] = ["zh": "检查连接", "en": "Check Connection"]
+            tbl["status_connected"] = ["zh": "已连接", "en": "Connected"]
+            tbl["status_disconnected"] = ["zh": "未连接", "en": "Disconnected"]
+            tbl["status_checking"] = ["zh": "检查中...", "en": "Checking..."]
+            tbl["ui_148"] = ["zh": "原因：%@", "en": "Reason: %@"]
+            tbl["ui_149"] = ["zh": "建议：%@", "en": "Suggestion: %@"]
+            tbl["ui_150"] = ["zh": "%@ 失败", "en": "%@ failed"]
+            tbl["ui_151"] = ["zh": "成功 %@", "en": "Success %@"]
+            tbl["ui_152"] = ["zh": "·均耗 %@ms", "en": "· avg %@ms"]
+            tbl["ui_153"] = ["zh": "主导错误 %@", "en": "Top error %@"]
+            tbl["ui_154"] = ["zh": "最近失败：%@", "en": "Latest failure: %@"]
+            tbl["ui_155"] = ["zh": "%d 个", "en": "%d apps"]
+            tbl["ui_156"] = ["zh": "%d 次 · 成功 %d", "en": "%d runs · %d OK"]
+            tbl["ui_157"] = ["zh": "第 %d/%d 轮", "en": "Round %d/%d"]
+            tbl["ui_158"] = ["zh": "执行过程（%d 步）", "en": "Execution (%d steps)"]
+            tbl["ui_159"] = ["zh": "型号标识 %@ · %@ · %@ · %@", "en": "Model %@ · %@ · %@ · %@"]
+            tbl["ui_160"] = ["zh": "扫描 %@ 的可清理项", "en": "Scanning %@ for cleanables"]
+            tbl["ui_161"] = ["zh": "无法扫描 %@", "en": "Cannot scan %@"]
+            tbl["ui_162"] = ["zh": "未找到该 App 或数据容器不可访问\n（TrollStore 需开启 AppDataContainers 权限）", "en": "App not found or container inaccessible\n(TrollStore needs AppDataContainers entitlement)"]
+            tbl["ui_163"] = ["zh": "可用 %@ / 总 %@", "en": "Free %@ / total %@"]
+            tbl["ui_164"] = ["zh": "%d 个", "en": "%d apps"]
+            tbl["ui_165"] = ["zh": "级别 %d", "en": "Level %d"]
+            tbl["ui_166"] = ["zh": "线上编译产物会保存在\nDocuments/Workspace/downloads/", "en": "Online build artifacts are saved in\nDocuments/Workspace/downloads/"]
+            tbl["ui_167"] = ["zh": "文件过大（%@），仅显示前 64KB", "en": "File too large (%@), showing first 64KB only"]
+            tbl["ui_168"] = ["zh": "%d 元素", "en": "%d elements"]
+            tbl["ui_169"] = ["zh": "✅ 已切换到「%@」，主屏幕图标稍后更新", "en": "✅ Switched to “%@”, home icon updates shortly"]
+            tbl["ui_170"] = ["zh": "名称: %@\n模型: %@\n接口: %@\n\n确认导入并立即使用？", "en": "Name: %@\nModel: %@\nBase URL: %@\n\nImport and use now?"]
+            tbl["ui_171"] = ["zh": "已选 %d", "en": "Selected %d"]
+            tbl["ui_0"] = ["zh": "AI 可用 browser.snapshot", "en": "AI can use browser.snapshot"]
+            tbl["ui_1"] = ["zh": "AI 用 browser.* 控制", "en": "AI controls via browser.*"]
+            tbl["ui_2"] = ["zh": "Agents 通过 agents.json 配置，放入 KnowledgeBase 目录即可加载。", "en": "Agents are configured via agents.json; place it in the KnowledgeBase folder to load."]
+            tbl["ui_3"] = ["zh": "App 会在请求被中转站拒绝或超时时自动逐级简化请求参数（降级），成功后记住可用级别。级别 5 走 Responses API（Codex 同款端点），可保留工具调用；级别 ≥3 表示仅可纯对话。", "en": "The app auto-degrades request params step by step when the relay rejects or times out; the working level is remembered. Level 5 uses the Responses API (Codex endpoint) and keeps tool calls; levels >=3 mean chat-only."]
+            tbl["ui_4"] = ["zh": "App 内置行为规范 · 不可编辑 · 切换立即生效", "en": "Built-in behavior rules · read-only · takes effect immediately"]
+            tbl["ui_5"] = ["zh": "App 注入后打不开 → 先「一键全恢复」；仍不行再「清理残留」。不要卸载重装（会丢数据）。", "en": "If an app won't open after injection → try 'Restore All' first; then 'Clean Residuals'. Don't uninstall & reinstall (loses data)."]
+            tbl["ui_6"] = ["zh": "Gateway 服务端运行在 Mac/Linux/NAS 上，通过 WebSocket 配对。连接后可远程调用手机工具、下发定时任务。", "en": "Gateway runs on Mac/Linux/NAS, paired over WebSocket. Once connected you can call phone tools remotely and schedule tasks."]
+            tbl["ui_7"] = ["zh": "Max Tokens：单次回复最多生成的 token 数（输出上限，不限制上下文）。", "en": "Max Tokens: max output tokens per reply (output cap, does not limit context)."]
+            tbl["ui_8"] = ["zh": "TrollAgent 自身也会同步保活，切后台继续执行远程控制任务", "en": "TrollAgent keeps itself alive too, continuing remote-control tasks in background"]
+            tbl["ui_9"] = ["zh": "TrollStore 已安装 · 清理能力可用", "en": "TrollStore installed · cleanup available"]
+            tbl["ui_10"] = ["zh": "github.com → Settings → Developer settings → Personal access tokens → Tokens (classic) 生成，勾选 repo 与 workflow 权限。", "en": "Generate at github.com → Settings → Developer settings → Personal access tokens → Tokens (classic), check repo & workflow scopes."]
+            tbl["ui_11"] = ["zh": "v2.9.79：双引擎检索——Bing 优先，失败自动回退 DuckDuckGo（均免 Key）。AI 可先用 web.search 拿标题/链接/摘要，再用 web.fetch 抓取网页原文深入阅读，回答时效性问题更准确。", "en": "v2.9.79: dual-engine search — Bing first, auto-fallback to DuckDuckGo (no key needed). AI can get titles/links/summaries via web.search, then read the full page with web.fetch for time-sensitive answers."]
+            tbl["ui_12"] = ["zh": "• 两者同时生效，系统指令先注入，破甲指令后注入", "en": "• Both apply; system prompt is injected first, breakout instructions after"]
+            tbl["ui_13"] = ["zh": "• 模型破甲提示词：用户可自建/编辑，作为补充规范，专门用于破甲/越狱/注入测试", "en": "• Breakout instructions: user-created/edited, supplemental rules for breakout/jailbreak/injection testing"]
+            tbl["ui_14"] = ["zh": "• 系统指令：App 内置，不可编辑，优先级最高，控制 AI 的基本行为模式", "en": "• System prompt: built-in, read-only, highest priority, controls AI base behavior"]
+            tbl["ui_15"] = ["zh": "① 选择目标 App", "en": "① Pick target App"]
+            tbl["ui_16"] = ["zh": "② 选择伪装机型", "en": "② Pick fake device model"]
+            tbl["ui_17"] = ["zh": "「真实」= 有实际执行逻辑；「占位」= 仅注册了接口、未接入真实功能。", "en": "'Real' = has actual logic; 'Stub' = interface registered only, no real function yet."]
+            tbl["ui_18"] = ["zh": "上下文预算：发送给模型的上下文 token 上限。会话超出时自动裁剪最早的历史消息（保留最近对话），避免长会话请求过大变慢或超时。", "en": "Context budget: max context tokens sent to the model. When exceeded, the oldest messages are auto-trimmed (keeping recent chat) to avoid slow/oversized requests."]
+            tbl["ui_19"] = ["zh": "专业释放设备存储空间", "en": "Pro storage cleanup"]
+            tbl["ui_20"] = ["zh": "主机地址", "en": "Host"]
+            tbl["ui_21"] = ["zh": "主页", "en": "Home"]
+            tbl["ui_22"] = ["zh": "仅用于本轮请求，本机准备", "en": "This round only, prepared locally"]
+            tbl["ui_23"] = ["zh": "仓库与 workflow 设置", "en": "Repo & workflow settings"]
+            tbl["ui_24"] = ["zh": "使用说明", "en": "Usage"]
+            tbl["ui_25"] = ["zh": "供应商快速配置", "en": "Quick provider presets"]
+            tbl["ui_26"] = ["zh": "保存修改", "en": "Save changes"]
+            tbl["ui_27"] = ["zh": "保存并测试连接", "en": "Save & test connection"]
+            tbl["ui_28"] = ["zh": "保存配置", "en": "Save config"]
+            tbl["ui_29"] = ["zh": "健康度", "en": "Health"]
+            tbl["ui_30"] = ["zh": "全部成功", "en": "All OK"]
+            tbl["ui_31"] = ["zh": "切换中…", "en": "Switching…"]
+            tbl["ui_32"] = ["zh": "初始请求只加载常驻核心工具（标 ★，无需搜索），其余工具由 AI 用「工具搜索」按需加载，搜索命中即自动放行本会话、无弹窗。常驻核心始终可用，无需在此配置。", "en": "Initial requests only load the resident core tools (marked ★, no search needed); other tools are loaded on demand by AI via 'tool search', auto-authorized for this session on hit. Resident cores are always available."]
+            tbl["ui_33"] = ["zh": "删除", "en": "Delete"]
+            tbl["ui_34"] = ["zh": "删除所选", "en": "Delete selected"]
+            tbl["ui_35"] = ["zh": "加载中…", "en": "Loading…"]
+            tbl["ui_36"] = ["zh": "单独恢复（还原注入前）", "en": "Restore this app (pre-injection)"]
+            tbl["ui_37"] = ["zh": "单独清理残留", "en": "Clean residuals"]
+            tbl["ui_38"] = ["zh": "原理：默认内存注入——App 运行时用 opainject 加载 ConfigHook.dylib（设备伪装已并入 ConfigHook），读取 fake_device.json 替换 UIDevice 返回的机型/名称/系统版本。不改任何文件、零残留，App 重启即还原；恢复 = 点还原（杀进程重启）。部分 App 通过 sysctl 读硬件标识，无法被 UIDevice 层覆盖。", "en": "How it works: memory injection by default — loads ConfigHook.dylib (device disguise merged into ConfigHook) via opainject at runtime, reads fake_device.json to override model/name/system version returned by UIDevice. No files changed, zero residue, restored on app restart; restore = tap restore (kills & relaunches). Apps reading hardware IDs via sysctl cannot be covered at UIDevice layer."]
+            tbl["ui_39"] = ["zh": "发送测试事件", "en": "Send test event"]
+            tbl["ui_40"] = ["zh": "取消", "en": "Cancel"]
+            tbl["ui_41"] = ["zh": "只读", "en": "Read-only"]
+            tbl["ui_42"] = ["zh": "启用注入", "en": "Enable injection"]
+            tbl["ui_43"] = ["zh": "在授权页粘贴验证码并确认，成功后 App 会自动关闭浏览器并完成登录，无需手动操作。", "en": "Paste the code on the auth page and confirm; the app auto-closes the browser and completes login."]
+            tbl["ui_44"] = ["zh": "好", "en": "OK"]
+            tbl["ui_45"] = ["zh": "审计记录已导出", "en": "Audit log exported"]
+            tbl["ui_46"] = ["zh": "密码", "en": "Password"]
+            tbl["ui_47"] = ["zh": "密钥仅保存在本机 UserDefaults，不会上传。恢复到新设备需重新输入。", "en": "Keys are stored locally in UserDefaults only; re-enter them after restoring to a new device."]
+            tbl["ui_48"] = ["zh": "导入", "en": "Import"]
+            tbl["ui_49"] = ["zh": "导入模型配置？", "en": "Import model config?"]
+            tbl["ui_50"] = ["zh": "尚未添加模型配置", "en": "No model configs yet"]
+            tbl["ui_51"] = ["zh": "工具结果", "en": "Tool result"]
+            tbl["ui_52"] = ["zh": "已保存到本机", "en": "Saved locally"]
+            tbl["ui_53"] = ["zh": "已内置默认 Client ID，新手无需改动（留空 = 使用内置默认，删空保存也会自动恢复）。高级用户可覆盖为自己注册的 OAuth App：github.com → Settings → Developer settings → OAuth Apps → New OAuth App（勾选 Enable Device Flow），复制 Client ID 填入。", "en": "Built-in default Client ID included; beginners can leave it empty (empty = use the default, deleting and saving also restores it). Advanced users can override with their own OAuth App: github.com → Settings → Developer settings → OAuth Apps → New OAuth App (enable Device Flow), fill in the Client ID."]
+            tbl["ui_54"] = ["zh": "已用", "en": "Used"]
+            tbl["ui_55"] = ["zh": "帮我搜一下 2026 年最新的 iPhone 发布消息", "en": "Search for the latest 2026 iPhone announcements"]
+            tbl["ui_56"] = ["zh": "常驻", "en": "Resident"]
+            tbl["ui_57"] = ["zh": "彻底移除", "en": "Remove fully"]
+            tbl["ui_58"] = ["zh": "快速清理", "en": "Quick clean"]
+            tbl["ui_59"] = ["zh": "思考过程", "en": "Thinking"]
+            tbl["ui_60"] = ["zh": "总览", "en": "Overview"]
+            tbl["ui_61"] = ["zh": "恢复备份（.troll-fools.bak）", "en": "Restore backup (.troll-fools.bak)"]
+            tbl["ui_62"] = ["zh": "打开", "en": "Open"]
+            tbl["ui_63"] = ["zh": "执行", "en": "Run"]
+            tbl["ui_64"] = ["zh": "执行中…", "en": "Running…"]
+            tbl["ui_65"] = ["zh": "批准执行", "en": "Approve"]
+            tbl["ui_66"] = ["zh": "技能是预置的工作流指令。保存后 AI 可用 skills.list 发现、skills.read 读取并按指令执行。", "en": "Skills are preset workflow instructions. After saving, AI can discover via skills.list, read via skills.read and follow them."]
+            tbl["ui_67"] = ["zh": "技能是预置的工作流指令：AI 可用 skills.list 发现、skills.read 读取并执行。可在本页启用/停用/删除，或点 + 新建。", "en": "Skills are preset workflow instructions: AI can discover via skills.list, read and execute via skills.read. Enable/disable/delete here, or tap + to create."]
+            tbl["ui_68"] = ["zh": "拒绝", "en": "Reject"]
+            tbl["ui_69"] = ["zh": "按供应商", "en": "By provider"]
+            tbl["ui_70"] = ["zh": "按需", "en": "On demand"]
+            tbl["ui_71"] = ["zh": "授权页已打开，验证码已自动复制到剪贴板", "en": "Auth page opened; code copied to clipboard"]
+            tbl["ui_72"] = ["zh": "提速提示：Max Tokens 是输出上限，值越大模型单次生成越长、等待越久。日常对话 2048 已够用；若回复慢，可调低 Max Tokens 或上下文预算。", "en": "Tip: Max Tokens is the output cap — larger values make each generation longer and slower. 2048 is enough for daily chat; if replies are slow, lower Max Tokens or the context budget."]
+            tbl["ui_73"] = ["zh": "搜索词会发送到 Bing / DuckDuckGo，用于返回检索结果。不会上传对话历史。", "en": "Search terms are sent to Bing / DuckDuckGo for results. Chat history is not uploaded."]
+            tbl["ui_74"] = ["zh": "收起键盘", "en": "Dismiss keyboard"]
+            tbl["ui_75"] = ["zh": "文件日志", "en": "File logs"]
+            tbl["ui_76"] = ["zh": "暂无 Gateway 服务端，点右上角 + 添加", "en": "No Gateway yet, tap + to add"]
+            tbl["ui_77"] = ["zh": "暂无下载", "en": "No downloads"]
+            tbl["ui_78"] = ["zh": "暂无任务", "en": "No tasks"]
+            tbl["ui_79"] = ["zh": "暂无助手角色，点右上角 + 新建", "en": "No assistant roles yet, tap + to create"]
+            tbl["ui_80"] = ["zh": "暂无历史会话记录", "en": "No session history"]
+            tbl["ui_81"] = ["zh": "暂无启用的自动化任务", "en": "No enabled automation tasks"]
+            tbl["ui_82"] = ["zh": "暂无失败记录", "en": "No failure records"]
+            tbl["ui_83"] = ["zh": "暂无审计日志", "en": "No audit logs"]
+            tbl["ui_84"] = ["zh": "暂无工具调用记录", "en": "No tool call records"]
+            tbl["ui_85"] = ["zh": "暂无待批准操作", "en": "No pending approvals"]
+            tbl["ui_86"] = ["zh": "暂无执行记录", "en": "No execution records"]
+            tbl["ui_87"] = ["zh": "暂无技能，点右上角 + 新建", "en": "No skills yet, tap + to create"]
+            tbl["ui_88"] = ["zh": "暂无模型配置", "en": "No model configs"]
+            tbl["ui_89"] = ["zh": "暂无知识库文件", "en": "No knowledge base files"]
+            tbl["ui_90"] = ["zh": "暂无自动化任务", "en": "No automation tasks"]
+            tbl["ui_91"] = ["zh": "暂无自定义 Agent", "en": "No custom Agents"]
+            tbl["ui_92"] = ["zh": "暂无记录", "en": "No records"]
+            tbl["ui_93"] = ["zh": "暂无记录。发起一次对话后，这里会显示每次请求的载荷级别与结果。", "en": "No records yet. After a chat, each request's level and result appears here."]
+            tbl["ui_94"] = ["zh": "暂无运行中的任务", "en": "No running tasks"]
+            tbl["ui_95"] = ["zh": "暂无附件", "en": "No attachments"]
+            tbl["ui_96"] = ["zh": "最近请求（最多 30 条）", "en": "Recent requests (max 30)"]
+            tbl["ui_97"] = ["zh": "服务端", "en": "Server"]
+            tbl["ui_98"] = ["zh": "未登录", "en": "Not logged in"]
+            tbl["ui_99"] = ["zh": "机制", "en": "How it works"]
+            tbl["ui_100"] = ["zh": "模型配置导入", "en": "Import model config"]
+            tbl["ui_101"] = ["zh": "正在检测本机环境…", "en": "Checking device environment…"]
+            tbl["ui_102"] = ["zh": "此目录为空", "en": "This folder is empty"]
+            tbl["ui_103"] = ["zh": "应用设备伪装并重启 App…", "en": "Applying device disguise & restarting App…"]
+            tbl["ui_104"] = ["zh": "注入 ControlAgent v4（安全版）", "en": "Inject ControlAgent v4 (safe)"]
+            tbl["ui_105"] = ["zh": "测试接口延迟", "en": "Test latency"]
+            tbl["ui_106"] = ["zh": "添加内容", "en": "Add content"]
+            tbl["ui_107"] = ["zh": "清空", "en": "Clear"]
+            tbl["ui_108"] = ["zh": "温度", "en": "Temperature"]
+            tbl["ui_109"] = ["zh": "点右上角刷新获取上游模型列表", "en": "Tap refresh (top-right) to fetch upstream models"]
+            tbl["ui_110"] = ["zh": "状态", "en": "Status"]
+            tbl["ui_111"] = ["zh": "环境自检", "en": "Environment check"]
+            tbl["ui_112"] = ["zh": "用户名", "en": "Username"]
+            tbl["ui_113"] = ["zh": "登录成功 ✓", "en": "Logged in ✓"]
+            tbl["ui_114"] = ["zh": "真后台保活", "en": "True background keep-alive"]
+            tbl["ui_115"] = ["zh": "确认执行", "en": "Confirm"]
+            tbl["ui_116"] = ["zh": "禁用注入", "en": "Disable injection"]
+            tbl["ui_117"] = ["zh": "私钥路径", "en": "Private key path"]
+            tbl["ui_118"] = ["zh": "移除注入（还原）", "en": "Remove injection (restore)"]
+            tbl["ui_119"] = ["zh": "端口", "en": "Port"]
+            tbl["ui_120"] = ["zh": "等待授权…", "en": "Waiting for auth…"]
+            tbl["ui_121"] = ["zh": "系统清理", "en": "System cleanup"]
+            tbl["ui_122"] = ["zh": "线上编译在指定仓库的 Actions 中运行。仓库须包含 build-tweak workflow，且当前账号对该仓库有写权限。授权新账号成功后，Owner 会自动填入该账号（若此前仍是默认值）。", "en": "Online builds run in the Actions of the chosen repo. The repo must contain the build-tweak workflow and your account needs write access. After authorizing a new account, Owner auto-fills to that account (if it was still the default)."]
+            tbl["ui_123"] = ["zh": "缓存 · 钥匙串 · 广告符 · 数据容器 · 标识符", "en": "Caches · Keychain · IDFA · Containers · Identifiers"]
+            tbl["ui_124"] = ["zh": "缓存占用", "en": "Cache usage"]
+            tbl["ui_125"] = ["zh": "编译模式允许在 iPhone 上编译 dylib。需要已注入 TMBuildAgent.dylib 到 TrollMCP。编译令牌用于验证编译请求。", "en": "Build mode compiles dylibs on iPhone. Requires TMBuildAgent.dylib injected into TrollMCP. The build token is used to verify build requests."]
+            tbl["ui_126"] = ["zh": "自动化中心支持脚本执行、定时任务（cron）、事件触发。通过 MCP 工具 automation.* 和 cron.fire 驱动。", "en": "Automation hub supports script execution, cron jobs and event triggers, driven by the automation.* and cron.fire MCP tools."]
+            tbl["ui_127"] = ["zh": "自动化任务", "en": "Automation tasks"]
+            tbl["ui_128"] = ["zh": "获取上游模型列表", "en": "Fetch upstream models"]
+            tbl["ui_129"] = ["zh": "蓝框", "en": "Blue box"]
+            tbl["ui_130"] = ["zh": "触发中…", "en": "Triggering…"]
+            tbl["ui_131"] = ["zh": "认证方式（二选一）", "en": "Auth method (pick one)"]
+            tbl["ui_132"] = ["zh": "说明", "en": "Info"]
+            tbl["ui_133"] = ["zh": "说明：TrollStore 安装的 App 同样支持动态图标切换（CFBundleAlternateIcons）。若切换后桌面图标未变，请重启一次桌面（锁屏重开）。", "en": "Note: TrollStore apps also support dynamic icon switching (CFBundleAlternateIcons). If the home-screen icon does not change after switching, restart the springboard once (lock & unlock)."]
+            tbl["ui_134"] = ["zh": "请选择", "en": "Please select"]
+            tbl["ui_135"] = ["zh": "调用记录", "en": "Call log"]
+            tbl["ui_136"] = ["zh": "还没有模型破甲提示词，点右上角 + 新建。", "en": "No breakout instructions yet, tap + to create."]
+            tbl["ui_137"] = ["zh": "连接信息", "en": "Connection"]
+            tbl["ui_138"] = ["zh": "适用于 OpenAI、DeepSeek OpenAI 格式和多数兼容网关。Base URL 通常以 /v1 结尾。", "en": "Works with OpenAI, DeepSeek OpenAI-format and most compatible gateways. Base URL usually ends with /v1."]
+            tbl["ui_139"] = ["zh": "选择图标主题，立即生效（无需重新安装）", "en": "Pick an icon theme, applies immediately (no reinstall needed)"]
+            tbl["ui_140"] = ["zh": "配置后，AI 可通过 ssh.exec 工具在远程 Linux 服务器执行命令，通过 ssh.scp 传输文件。适用于线上编译、服务器管理、文件同步等场景。", "en": "After setup, AI can run commands on a remote Linux server via ssh.exec and transfer files via ssh.scp. Great for online builds, server management, file sync."]
+            tbl["ui_141"] = ["zh": "重新检测", "en": "Re-check"]
+            tbl["ui_142"] = ["zh": "零配置：点下方按钮，App 内置浏览器打开 GitHub 授权页，登录授权后自动完成，无需复制 Token、无需注册任何东西。任意 GitHub 账号都能用。", "en": "Zero config: tap the button below, the built-in browser opens the GitHub auth page; login & authorize and it's done — no token copying, nothing to register. Any GitHub account works."]
+            tbl["ui_143"] = ["zh": "首次调用系统能力时会请求对应权限。未授权的工具调用将返回错误信息。", "en": "System capabilities request permission on first use. Unauthorized tool calls return an error."]
+            tbl["ui_144"] = ["zh": "默认", "en": "Default"]
+            tbl["ui_145"] = ["zh": "默认指令会注入 AI 请求。可写：工程约定、代码风格、工具使用偏好、回复格式要求等。", "en": "Default instructions are injected into every AI request. You can write: project conventions, code style, tool usage preferences, reply format requirements, etc."]
+            tbl["ui_146"] = ["zh": "默认指令（标「默认」）会在每次 AI 请求时作为 system 消息注入，AI 将遵循其中的约定。长按指令可设默认/编辑/删除。", "en": "Default instructions (marked 'Default') are injected as system messages in every AI request and AI follows them. Long-press a instruction to set default / edit / delete."]
+            tbl["ui_147"] = ["zh": "🚑 紧急恢复（Residue 式）", "en": "🚑 Emergency restore (Residue-style)"]
             // v2.9.139：AI 控制中心
-            "ui_172": ["zh": "AI 控制中心", "en": "AI Control Center"],
-            "ui_173": ["zh": "执行计划", "en": "Plan"],
-            "ui_174": ["zh": "执行日志", "en": "Execution Log"],
-            "ui_175": ["zh": "执行结果", "en": "Result"],
-            "ui_176": ["zh": "现场截图", "en": "Live Screenshot"],
-            "ui_177": ["zh": "关闭", "en": "Close"],
-            "ui_178": ["zh": "执行中", "en": "Running"],
-            "ui_179": ["zh": "已完成", "en": "Done"],
-            "ui_180": ["zh": "未开始", "en": "Idle"],
-            "ui_181": ["zh": "控制已结束", "en": "Control finished"],
-            "ui_183": ["zh": "操作宏", "en": "Macros"],
-            "ui_184": ["zh": "新建宏", "en": "New Macro"],
-            "ui_185": ["zh": "宏名称（如 每日打卡）", "en": "Macro name (e.g. daily check-in)"],
-            "ui_186": ["zh": "名称不能为空", "en": "Name cannot be empty"],
-            "ui_187": ["zh": "开始录制：去聊天让 AI 操作，完成后回来点「停止」或喊 AI 调 macro.stop", "en": "Recording started: ask AI to operate in chat, then tap Stop or call macro.stop"],
-            "ui_188": ["zh": "录制中", "en": "Recording"],
-            "ui_189": ["zh": "停止并保存", "en": "Stop & Save"],
-            "ui_190": ["zh": "还没有宏", "en": "No macros yet"],
-            "ui_191": ["zh": "点右上角「录制」新建：让 AI 操作一遍（点/滑/输入），自动录成宏，以后一键回放", "en": "Tap record: let AI operate once (tap/swipe/type), it becomes a replayable macro"],
-            "ui_192": ["zh": "录制新宏", "en": "Record New Macro"],
-            "ui_193": ["zh": "步", "en": "steps"],
-            "ui_194": ["zh": "创建于", "en": "Created"],
-            "ui_195": ["zh": "删除", "en": "Delete"],
-            "ui_182": ["zh": "控制会话已结束，可查看结果", "en": "Control session finished, see result below"],
+            tbl["ui_172"] = ["zh": "AI 控制中心", "en": "AI Control Center"]
+            tbl["ui_173"] = ["zh": "执行计划", "en": "Plan"]
+            tbl["ui_174"] = ["zh": "执行日志", "en": "Execution Log"]
+            tbl["ui_175"] = ["zh": "执行结果", "en": "Result"]
+            tbl["ui_176"] = ["zh": "现场截图", "en": "Live Screenshot"]
+            tbl["ui_177"] = ["zh": "关闭", "en": "Close"]
+            tbl["ui_178"] = ["zh": "执行中", "en": "Running"]
+            tbl["ui_179"] = ["zh": "已完成", "en": "Done"]
+            tbl["ui_180"] = ["zh": "未开始", "en": "Idle"]
+            tbl["ui_181"] = ["zh": "控制已结束", "en": "Control finished"]
+            tbl["ui_183"] = ["zh": "操作宏", "en": "Macros"]
+            tbl["ui_184"] = ["zh": "新建宏", "en": "New Macro"]
+            tbl["ui_185"] = ["zh": "宏名称（如 每日打卡）", "en": "Macro name (e.g. daily check-in)"]
+            tbl["ui_186"] = ["zh": "名称不能为空", "en": "Name cannot be empty"]
+            tbl["ui_187"] = ["zh": "开始录制：去聊天让 AI 操作，完成后回来点「停止」或喊 AI 调 macro.stop", "en": "Recording started: ask AI to operate in chat, then tap Stop or call macro.stop"]
+            tbl["ui_188"] = ["zh": "录制中", "en": "Recording"]
+            tbl["ui_189"] = ["zh": "停止并保存", "en": "Stop & Save"]
+            tbl["ui_190"] = ["zh": "还没有宏", "en": "No macros yet"]
+            tbl["ui_191"] = ["zh": "点右上角「录制」新建：让 AI 操作一遍（点/滑/输入），自动录成宏，以后一键回放", "en": "Tap record: let AI operate once (tap/swipe/type), it becomes a replayable macro"]
+            tbl["ui_192"] = ["zh": "录制新宏", "en": "Record New Macro"]
+            tbl["ui_193"] = ["zh": "步", "en": "steps"]
+            tbl["ui_194"] = ["zh": "创建于", "en": "Created"]
+            tbl["ui_195"] = ["zh": "删除", "en": "Delete"]
+            tbl["ui_182"] = ["zh": "控制会话已结束，可查看结果", "en": "Control session finished, see result below"]
 
-            "i18n_1039": ["zh": "指令", "en": "Instructions"],
-            "i18n_197": ["zh": "跳系统指令", "en": "Jump to System Prompts"],
-            "i18n_198": ["zh": "%d 个 · %@", "en": "%d · %@"],
-            "i18n_1073": ["zh": "工具", "en": "Tools"],
-            "i18n_200": ["zh": "工具中心", "en": "Tool Center"],
-            "i18n_201": ["zh": "网络与抓包", "en": "Network & Capture"],
-            "i18n_202": ["zh": "中转站自适应降级记录", "en": "Relay auto-degrade log"],
-            "i18n_203": ["zh": "线上编译 · %@", "en": "Cloud Build · %@"],
-            "i18n_204": ["zh": "线上编译产物 · 勾选删除", "en": "Build artifacts · select & delete"],
-            "i18n_205": ["zh": "计划 · 分色日志 · 现场截图 · 操作宏", "en": "Plan · color-coded log · live screenshot · macros"],
-            "i18n_841": ["zh": "可爱助手", "en": "Cute Assistant"],
-            "i18n_207": ["zh": "桌面悬浮运行中 · 手机桌面显示", "en": "HUD running · shown on home screen"],
-            "i18n_208": ["zh": "桌面悬浮未运行 · 手机桌面隐藏", "en": "HUD stopped · hidden from home screen"],
-            "i18n_209": ["zh": "伪装机型 · 注入生效", "en": "Spoof model · applied via injection"],
-            "i18n_210": ["zh": "完整对话存档", "en": "Full chat archive"],
-            "i18n_610": ["zh": "远程访问", "en": "Remote Access"],
-            "i18n_212": ["zh": "SSH 连接远程服务器 · 远程终端被控制", "en": "SSH remote server · remote terminal control"],
-            "i18n_213": ["zh": "悬浮窗 · AI 可控制 · 蓝框高亮", "en": "Floating window · AI-driven · blue-box highlight"],
-            "i18n_214": ["zh": "隔离指令 · 工作流", "en": "Isolated prompts · workflows"],
-            "i18n_215": ["zh": "文件导入 · 来源检索", "en": "Import files · source search"],
-            "i18n_216": ["zh": "工具与管理", "en": "Tools & Management"],
-            "i18n_217": ["zh": "工具调用 · 成功/失败 · 崩溃日志 · 导出给 AI 查看", "en": "Tool calls · success/fail · crash logs · export to AI"],
-            "i18n_218": ["zh": "点开浏览目录 · 预览 · 复制路径 · 分享", "en": "Browse folders · preview · copy path · share"],
-            "i18n_219": ["zh": "清理中心", "en": "Cleanup Center"],
-            "i18n_220": ["zh": "缓存 · 钥匙串 · 广告符 · 数据容器 · 系统清理", "en": "Caches · keychain · IDFA · containers · system cleanup"],
-            "i18n_221": ["zh": "检测恶意网站 · 拦截利用 · Web 注入", "en": "Detect malicious sites · block exploits · web injection"],
-            "i18n_222": ["zh": "测试系统分享面板（Debug）", "en": "Test system share sheet (Debug)"],
-            "i18n_223": ["zh": "需检查 %d 项", "en": "%d item(s) need attention"],
-            "i18n_224": ["zh": "点击探测", "en": "Tap to probe"],
-            "i18n_225": ["zh": "未登录 · 多账号", "en": "Not logged in · multi-account"],
-            "i18n_226": ["zh": "%d 个账号", "en": "%d account(s)"],
-            "i18n_227": ["zh": "%d 条 · 长按设默认", "en": "%d · long-press to set default"],
-            "i18n_228": ["zh": "正在检查 GitHub 最新构建…", "en": "Checking GitHub for latest build…"],
-            "i18n_229": ["zh": "正在下载 v%@… %d%%", "en": "Downloading v%@… %d%%"],
-            "i18n_230": ["zh": "发现新版本 v%@ · 点此一键更新安装", "en": "v%@ available · tap to update & install"],
-            "i18n_231": ["zh": "已是最新 · 检查源: %@", "en": "Up to date · source: %@"],
-            "i18n_232": ["zh": "已是最新", "en": "Up to date"],
-            "i18n_233": ["zh": "运行中 · 点击右侧开关关闭", "en": "Running · tap toggle to stop"],
-            "i18n_234": ["zh": "未运行 · 点击右侧开关开启", "en": "Stopped · tap toggle to start"],
-            "i18n_235": ["zh": "正在检查更新…", "en": "Checking for updates…"],
-            "i18n_236": ["zh": "正在下载 v%@… %d%%", "en": "Downloading v%@… %d%%"],
-            "i18n_237": ["zh": "发现新版本 v%@ · 点下方按钮更新", "en": "v%@ available · tap the button below to update"],
-            "i18n_238": ["zh": "已是最新版本", "en": "Already up to date"],
-            "i18n_239": ["zh": "更新状态", "en": "Update Status"],
-            "i18n_240": ["zh": "当前版本", "en": "Current Version"],
-            "i18n_241": ["zh": "立即检查更新", "en": "Check for Updates"],
-            "i18n_242": ["zh": "高级设置", "en": "Advanced"],
-            "i18n_243": ["zh": "更新镜像源", "en": "Update Mirrors"],
-            "i18n_244": ["zh": "封装工具", "en": "Wrapper Tools"],
-            "i18n_245": ["zh": "原生工具", "en": "Native Tools"],
-            "i18n_246": ["zh": "注册的大工具（ToolRegistry——AI 可直接调用的封装能力）", "en": "Registered tools (ToolRegistry — wrapper capabilities AI can call directly)"],
-            "i18n_247": ["zh": "有真实实现", "en": "Has real implementation"],
-            "i18n_248": ["zh": "占位/文档", "en": "Stub / doc-only"],
-            "i18n_249": ["zh": "文件属性（iOS 系统自带）", "en": "File attributes (iOS built-in)"],
-            "i18n_250": ["zh": "Mach-O 解析（签名/权限/元数据）", "en": "Mach-O parsing (signature/permissions/metadata)"],
-            "i18n_251": ["zh": "原生 Node.js（芯片直跑重负载 JS）", "en": "Native Node.js (chip-native heavy JS)"],
-            "i18n_252": ["zh": "网络扫描脚本", "en": "Network scan script"],
-            "i18n_253": ["zh": "代码签名绕过", "en": "Code-sign bypass"],
-            "i18n_254": ["zh": "更改属主（iOS 系统）", "en": "Change owner (iOS)"],
-            "i18n_255": ["zh": "复制（iOS 系统）", "en": "Copy (iOS)"],
-            "i18n_256": ["zh": "建目录（iOS 系统）", "en": "Make directory (iOS)"],
-            "i18n_257": ["zh": "移动（iOS 系统）", "en": "Move (iOS)"],
-            "i18n_258": ["zh": "删除（iOS 系统）", "en": "Delete (iOS)"],
-            "i18n_259": ["zh": "文件操作", "en": "File Ops"],
-            "i18n_260": ["zh": "文本处理", "en": "Text Processing"],
-            "i18n_261": ["zh": "压缩解压", "en": "Compress / Extract"],
-            "i18n_262": ["zh": "系统信息", "en": "System Info"],
-            "i18n_263": ["zh": "网络", "en": "Network"],
-            "i18n_264": ["zh": "装任意工具（apk add <包名>）", "en": "Install any tool (apk add <pkg>)"],
-            "i18n_265": ["zh": "编程环境", "en": "Programming Environment"],
-            "i18n_266": ["zh": "文本编辑/输出", "en": "Text edit / output"],
-            "i18n_267": ["zh": "真实实现", "en": "Real implementation"],
-            "i18n_268": ["zh": "统一环境执行（iOS 原生命令 + Alpine 工具链）", "en": "Unified runtime (native iOS cmds + Alpine toolchain)"],
-            "i18n_269": ["zh": "原生命令", "en": "Native commands"],
-            "i18n_270": ["zh": "工具分三层", "en": "Tools in 3 layers"],
-            "i18n_271": ["zh": "封装工具 = 注册的大工具（AI 直接调用——✓ 已验证 = 真机实测过）；原生工具 = iOS 芯片直跑命令；Alpine 工具 = Linux 沙箱工具链。", "en": "Wrapper tools = registered tools (AI calls directly — ✓ verified = tested on device); Native tools = iOS chip-native commands; Alpine tools = Linux sandbox toolchain."],
-            "i18n_366": ["zh": "通知/位置/通讯录/日历/快捷指令", "en": "Notifications/location/contacts/calendar/shortcuts"],
-            "i18n_367": ["zh": "任务 · 历史 · 重试", "en": "Tasks · history · retry"],
-            "i18n_365": ["zh": "搜索工具...", "en": "Search tools..."],
-            "i18n_275": ["zh": "工具中心（%d）", "en": "Tool Center (%d)"],
-            "i18n_276": ["zh": "文件桥", "en": "File Bridge"],
-            "i18n_277": ["zh": "注入管理", "en": "Injection Manager"],
-            "i18n_278": ["zh": "高级探测", "en": "Advanced Probe"],
-            "i18n_341": ["zh": "系统能力", "en": "System Capabilities"],
-            "i18n_280": ["zh": "编译与模型", "en": "Build & Models"],
-            "i18n_281": ["zh": "被引用但未注册", "en": "Referenced but not registered"],
-            "i18n_282": ["zh": "输入命令…", "en": "Type a command…"],
-            "i18n_283": ["zh": "清屏", "en": "Clear Screen"],
-            "i18n_284": ["zh": "输入命令回车执行 · 自动超时 30s · 支持管道/&&/;/循环", "en": "Type a command & hit Enter · 30s auto-timeout · pipes/&&/;/loops OK"],
-            "i18n_285": ["zh": "(无输出)", "en": "(no output)"],
-            "i18n_286": ["zh": "⏎…[输出过长已截断]", "en": "⏎…[output too long, truncated]"],
-            "i18n_287": ["zh": "⏱ 超时（30s）——命令可能挂起", "en": "⏱ Timeout (30s) — command may be hung"],
-            "i18n_288": ["zh": "服务", "en": "Service"],
-            "i18n_289": ["zh": "服务运行中：0.0.0.0:%@。已自动开启后台保活，切后台仍在线；被系统杀进程后仍会断线。", "en": "Service running at 0.0.0.0:%@. Background keep-alive enabled; stays online in background. It will drop if the system kills the process."],
-            "i18n_290": ["zh": "启动后监听 0.0.0.0:%@，局域网与公网（经 N1 转发）均可访问；开启服务将自动启动后台保活。", "en": "Listens on 0.0.0.0:%@ once started; reachable on LAN and public internet (via N1 port forward). Enabling the service also starts background keep-alive."],
-            "i18n_607": ["zh": "远程终端服务", "en": "Remote Terminal Service"],
-            "i18n_292": ["zh": "已启动 :%d", "en": "Started on :%@"],
-            "i18n_293": ["zh": "启动失败（端口占用？）", "en": "Start failed (port in use?)"],
-            "i18n_518": ["zh": "已停止", "en": "Stopped"],
-            "i18n_295": ["zh": "访问令牌（token，必填）", "en": "Access token (required)"],
-            "i18n_296": ["zh": "端口（默认 8790）", "en": "Port (default 8790)"],
-            "i18n_297": ["zh": "本机地址", "en": "Local Address"],
-            "i18n_298": ["zh": "局域网 IP", "en": "LAN IP"],
-            "i18n_299": ["zh": "获取失败", "en": "Failed to get"],
-            "i18n_300": ["zh": "服务地址", "en": "Service Address"],
-            "i18n_301": ["zh": "复制局域网地址", "en": "Copy LAN Address"],
-            "i18n_302": ["zh": "N1 公网映射", "en": "N1 Public Mapping"],
-            "i18n_303": ["zh": "N1 只做端口转发，无需装任何服务", "en": "N1 is a port-forward relay only; no services needed"],
-            "i18n_304": ["zh": "危险工具授权", "en": "Dangerous Tool Authorization"],
-            "i18n_305": ["zh": "默认只允许只读诊断工具（状态/文件浏览/日志/审计/注入状态查询）。开启后允许注入、删除、写入、启动 App、抓包等危险工具被远程调用——仅在你完全信任的私网映射下开启。", "en": "By default only read-only diagnostic tools are allowed (status/file browse/logs/audit/injection status). When enabled, dangerous tools like injection, deletion, writing, launching apps and packet capture can be called remotely — enable only behind a fully trusted private mapping."],
-            "i18n_306": ["zh": "允许远程执行危险工具", "en": "Allow remote execution of dangerous tools"],
-            "i18n_307": ["zh": "远程终端", "en": "Remote Terminal"],
-            "i18n_312": ["zh": "越狱", "en": "Jailbreak"],
-            "i18n_313": ["zh": "占位", "en": "Stub"],
-            "i18n_314": ["zh": "仅真机验证", "en": "Device-verified"],
-            "i18n_315": ["zh": "终端", "en": "Terminal"],
-            "i18n_316": ["zh": "崩溃", "en": "Crash"],
-            "i18n_871": ["zh": "分享", "en": "Share"],
-            "i18n_318": ["zh": "没有崩溃记录", "en": "No crash records"],
-            "i18n_319": ["zh": "按时间排序", "en": "Sort by time"],
-            "i18n_320": ["zh": "按状态排序", "en": "Sort by status"],
-            "i18n_321": ["zh": "按耗时排序", "en": "Sort by duration"],
-            "i18n_322": ["zh": "按类别排序", "en": "Sort by category"],
-            "i18n_856": ["zh": "最新", "en": "Newest"],
-            "i18n_857": ["zh": "最早", "en": "Oldest"],
-            "i18n_325": ["zh": "时间", "en": "Time"],
-            "i18n_326": ["zh": "耗时", "en": "Duration"],
-            "i18n_327": ["zh": "类别", "en": "Category"],
-            "i18n_328": ["zh": "执行成功", "en": "Succeeded"],
-            "i18n_329": ["zh": "执行失败", "en": "Failed"],
-            "i18n_330": ["zh": "哪些工具有问题、为什么", "en": "Which tools fail, and why"],
-            "i18n_331": ["zh": "错误码分布（env=环境 / target=目标 / param=参数 / tool=工具自身）", "en": "Error code breakdown (env / target / param / tool)"],
-            "i18n_332": ["zh": "工具健康度排行（按失败次数）", "en": "Tool health ranking (by failures)"],
-            "i18n_333": ["zh": "暂无文件日志", "en": "No file logs"],
-            "i18n_334": ["zh": "（今天暂无文件日志）", "en": "(No file logs today)"],
-            "i18n_335": ["zh": "导出失败：%@", "en": "Export failed: %@"],
-            "i18n_336": ["zh": "编译模式", "en": "Build Mode"],
-            "i18n_337": ["zh": "生成编译令牌", "en": "Generate Build Token"],
-            "i18n_338": ["zh": "用于验证本地编译请求", "en": "Used to verify local build requests"],
-            "i18n_339": ["zh": "项目模板", "en": "Project Template"],
-            "i18n_340": ["zh": "编译", "en": "Build"],
-            "i18n_342": ["zh": "通讯录搜索", "en": "Contacts Search"],
-            "i18n_343": ["zh": "日历事件", "en": "Calendar Events"],
-            "i18n_344": ["zh": "提醒事项", "en": "Reminders"],
-            "i18n_345": ["zh": "定位", "en": "Location"],
-            "i18n_346": ["zh": "本地通知", "en": "Local Notifications"],
-            "i18n_347": ["zh": "扫码识别", "en": "QR Scan"],
-            "i18n_348": ["zh": "本机工具审计", "en": "Tool Audit"],
-            "i18n_349": ["zh": "🔌 注入", "en": "🔌 Injection"],
-            "i18n_350": ["zh": "🎭 设备/伪装", "en": "🎭 Device/Spoof"],
-            "i18n_351": ["zh": "📁 文件系统", "en": "📁 File System"],
-            "i18n_352": ["zh": "🌐 浏览器", "en": "🌐 Browser"],
-            "i18n_353": ["zh": "🔨 编译/构建", "en": "🔨 Build/Compile"],
-            "i18n_354": ["zh": "💾 备份", "en": "💾 Backup"],
-            "i18n_355": ["zh": "🧹 清理", "en": "🧹 Cleanup"],
-            "i18n_356": ["zh": "🎬 宏", "en": "🎬 Macros"],
-            "i18n_357": ["zh": "🧠 知识/记忆", "en": "🧠 Knowledge/Memory"],
-            "i18n_358": ["zh": "⚙️ 系统能力", "en": "⚙️ System Capabilities"],
-            "i18n_359": ["zh": "🔍 诊断/日志", "en": "🔍 Diagnostics/Logs"],
-            "i18n_360": ["zh": "📊 静态分析", "en": "📊 Static Analysis"],
-            "i18n_361": ["zh": "⏰ 自动化/定时", "en": "⏰ Automation/Schedule"],
-            "i18n_362": ["zh": "📚 技能", "en": "📚 Skills"],
-            "i18n_363": ["zh": "🐛 调试", "en": "🐛 Debug"],
-            "i18n_364": ["zh": "📦 其他", "en": "📦 Other"],
-            "i18n_368": ["zh": "策略", "en": "Policy"],
-            "i18n_369": ["zh": "过滤", "en": "Filter"],
-            "i18n_370": ["zh": "仅显示真实实现", "en": "Show real implementations only"],
-            "i18n_371": ["zh": "工具总数（%d）", "en": "Total tools (%d)"],
-            "i18n_372": ["zh": "按类别分组，共 %d 类", "en": "%d categories"],
-            "i18n_373": ["zh": "真实", "en": "Real"],
-            "i18n_374": ["zh": "✅已检验", "en": "✅ Verified"],
-            "i18n_1040": ["zh": "工作区", "en": "Workspace"],
-            "i18n_948": ["zh": "路径", "en": "Path"],
-            "i18n_377": ["zh": "在会话工具中打开", "en": "Open in session tools"],
-            "i18n_378": ["zh": "清空工作区", "en": "Clear Workspace"],
-            "i18n_1048": ["zh": "文件", "en": "Files"],
-            "i18n_380": ["zh": "导入文件到工作区", "en": "Import file to workspace"],
-            "i18n_381": ["zh": "选择外部文件复制到工作区", "en": "Pick an external file to copy into workspace"],
-            "i18n_382": ["zh": "破甲测试专用", "en": "For breakout testing"],
-            "i18n_383": ["zh": "这里的模型破甲提示词会作为补充提示词注入 AI，适合做破甲、越狱、注入、绕过等高级测试任务。", "en": "These breakout instructions are injected into AI as supplemental prompts — for breakout, jailbreak, injection and bypass testing."],
-            "i18n_384": ["zh": "选「开发者模式」系统指令 + 这里的破甲提示词 = 最强的破甲测试组合。", "en": "Pick the 'Developer Mode' system prompt + breakout instructions here = the strongest breakout testing combo."],
-            "i18n_385": ["zh": "复制内容", "en": "Copy Content"],
-            "i18n_386": ["zh": "编辑", "en": "Edit"],
-            "i18n_387": ["zh": "所有开启的指令都会合并后注入 AI 请求。系统指令先注入，破甲指令后注入。", "en": "All enabled instructions are merged into every AI request. System prompt is injected first, breakout instructions after."],
-            "i18n_388": ["zh": "（空指令）", "en": "(empty instruction)"],
-            "i18n_389": ["zh": "难往下滑", "en": "Hard to scroll"],
-            "i18n_390": ["zh": "指令名称", "en": "Instruction Name"],
-            "i18n_391": ["zh": "如：我的工程规范", "en": "e.g. My engineering conventions"],
-            "i18n_392": ["zh": "用 <!--用户可见--> ... <!--/用户可见--> 包住的段落只显示给你，不会注入 AI 请求（适合放“为什么有效”这类说明）", "en": "Paragraphs wrapped in <!--user-visible--> ... <!--/user-visible--> are shown only to you and are never injected into AI requests (great for 'why it works' notes)."],
-            "i18n_393": ["zh": "新建指令", "en": "New Instruction"],
-            "i18n_394": ["zh": "编辑指令", "en": "Edit Instruction"],
-            "i18n_395": ["zh": "来源", "en": "Source"],
-            "i18n_396": ["zh": "导入文件", "en": "Import File"],
-            "i18n_397": ["zh": "从工作区导入", "en": "Import from Workspace"],
-            "i18n_398": ["zh": "已导入", "en": "Imported"],
-            "i18n_399": ["zh": "清空全部", "en": "Clear All"],
-            "i18n_400": ["zh": "确定清空全部已导入文件？", "en": "Clear all imported files?"],
-            "i18n_961": ["zh": "端点", "en": "Endpoint"],
-            "i18n_402": ["zh": "可选签名密钥", "en": "Optional Signing Key"],
-            "i18n_403": ["zh": "事件", "en": "Events"],
-            "i18n_906": ["zh": "操作", "en": "Actions"],
-            "i18n_405": ["zh": "已保存", "en": "Saved"],
-            "i18n_951": ["zh": "失败: %@", "en": "Failed: %@"],
-            "i18n_407": ["zh": "已发送", "en": "Sent"],
-            "i18n_408": ["zh": "从剪贴板导入", "en": "Import from Clipboard"],
-            "i18n_409": ["zh": "用量统计", "en": "Usage Stats"],
-            "i18n_410": ["zh": "先显示 gpt-4o，很久才变成 5.6", "en": "Shows gpt-4o first, takes a while to become 5.6"],
-            "i18n_411": ["zh": "导入完成：成功 %d 个，失败 %@ 个", "en": "Import done: %d OK, %d failed"],
-            "i18n_412": ["zh": "导入完成：成功 %d 个", "en": "Import done: %d OK"],
-            "i18n_413": ["zh": "无法读取所选文件", "en": "Cannot read the selected file"],
-            "i18n_414": ["zh": "无法访问所选文件", "en": "Cannot access the selected file"],
-            "i18n_415": ["zh": "已取消导入", "en": "Import cancelled"],
-            "i18n_416": ["zh": "剪贴板为空，请先复制模型配置 JSON", "en": "Clipboard is empty — copy a model config JSON first"],
-            "i18n_417": ["zh": " 副本", "en": " Copy"],
-            "i18n_418": ["zh": "测速失败 · %dms", "en": "Speed test failed · %dms"],
-            "i18n_419": ["zh": "标准键:供应商键", "en": "Standard key:provider key"],
-            "i18n_919": ["zh": "名称", "en": "Name"],
-            "i18n_421": ["zh": "模型名", "en": "Model Name"],
-            "i18n_422": ["zh": "鉴权方式", "en": "Auth Method"],
-            "i18n_423": ["zh": "连接测试", "en": "Connection Test"],
-            "i18n_424": ["zh": "添加模型", "en": "Add Model"],
-            "i18n_425": ["zh": "无需鉴权", "en": "No auth needed"],
-            "i18n_426": ["zh": "正在测试...", "en": "Testing..."],
-            "i18n_427": ["zh": "正在获取模型列表...", "en": "Fetching model list..."],
-            "i18n_428": ["zh": "未返回任何模型", "en": "No models returned"],
-            "i18n_429": ["zh": "获取到 %d 个模型", "en": "Got %d models"],
-            "i18n_430": ["zh": "正在测速...", "en": "Speed testing..."],
-            "i18n_431": ["zh": "接口延迟 %dms", "en": "Latency %dms"],
-            "i18n_432": ["zh": "选择模型", "en": "Select Model"],
-            "i18n_433": ["zh": "请求数", "en": "Requests"],
-            "i18n_434": ["zh": "成功率", "en": "Success Rate"],
-            "i18n_435": ["zh": "平均耗时", "en": "Avg Time"],
-            "i18n_436": ["zh": "清除记录", "en": "Clear Records"],
-            "i18n_437": ["zh": "断开", "en": "Disconnect"],
-            "i18n_438": ["zh": "连接", "en": "Connect"],
-            "i18n_439": ["zh": "已连接 ✅", "en": "Connected ✅"],
-            "i18n_440": ["zh": "未连接 ❌", "en": "Disconnected ❌"],
-            "i18n_441": ["zh": "(未设置)", "en": "(not set)"],
-            "i18n_442": ["zh": "错误", "en": "Error"],
-            "i18n_443": ["zh": "网关", "en": "Gateway"],
-            "i18n_444": ["zh": "收起内容", "en": "Collapse"],
-            "i18n_445": ["zh": "查看内容", "en": "View Content"],
-            "i18n_446": ["zh": "系统指令 vs 模型破甲提示词", "en": "System Prompt vs Breakout Instructions"],
-            "i18n_447": ["zh": "模型破甲提示词 = 破甲测试专用", "en": "Breakout instructions = for breakout testing"],
-            "i18n_448": ["zh": "选择「开发者模式」可以让 AI 执行破甲、越狱、注入、绕过等高级测试任务，适合做 App 破解和安全测试。", "en": "Choosing 'Developer Mode' lets AI run breakout, jailbreak, injection and bypass tasks — for app cracking & security testing."],
-            "i18n_449": ["zh": "其他模式（逆向、渗透、游戏修改等）也都有各自的专业提示词，直接选对应模式即可。", "en": "Other modes (reverse engineering, pentest, game modding…) each ship with their own specialized prompts — just pick the mode."],
-            "i18n_450": ["zh": "目标 App 切后台不挂起，4789 持续在线", "en": "Target app stays alive in background, port 4789 keeps online"],
-            "i18n_451": ["zh": "远程控制时建议开启，防止目标 App 被系统挂起", "en": "Recommended during remote control, keeps the target app from being suspended"],
-            "i18n_452": ["zh": "读取完整 UI 树（frame / 文字 / 类型 / 无障碍信息）", "en": "Read full UI tree (frame / text / type / accessibility info)"],
-            "i18n_453": ["zh": "实时截图", "en": "Live screenshot"],
-            "i18n_454": ["zh": "模拟点击 / 滑动 / 输入文字", "en": "Simulate tap / swipe / text input"],
-            "i18n_455": ["zh": "模拟按键（Home / 返回 / 回车）", "en": "Simulate keys (Home / Back / Enter)"],
-            "i18n_456": ["zh": "使用流程", "en": "How to Use"],
-            "i18n_457": ["zh": "在聊天中让 AI 注入：\"给小红书注入控制代理\"", "en": "In chat, ask AI to inject: \"inject control agent into 小红书\""],
-            "i18n_458": ["zh": "手动启动目标 App（注入后需重启）", "en": "Launch the target app manually (restart needed after injection)"],
-            "i18n_459": ["zh": "AI 自动读取 UI 树 → 决定操作 → 点击/输入/滑动", "en": "AI reads UI tree → decides actions → tap/type/swipe"],
-            "i18n_460": ["zh": "工具列表", "en": "Tool List"],
-            "i18n_461": ["zh": "检查连接状态", "en": "Check Connection"],
-            "i18n_462": ["zh": "截图保存到工作区", "en": "Save screenshot to workspace"],
-            "i18n_463": ["zh": "模拟点击 (x, y)", "en": "Simulate tap (x, y)"],
-            "i18n_464": ["zh": "输入文字", "en": "Type Text"],
-            "i18n_465": ["zh": "注意事项", "en": "Notes"],
-            "i18n_466": ["zh": "一次只能控制一个前台 App", "en": "Only one foreground app can be controlled at a time"],
-            "i18n_467": ["zh": "全机扫描", "en": "Scan All"],
-            "i18n_468": ["zh": "一键全恢复", "en": "Restore All"],
-            "i18n_469": ["zh": "清理残留", "en": "Clean Residuals"],
-            "i18n_470": ["zh": "将扫描并自动恢复所有存在注入痕迹/损坏二进制的 App（还原到注入前状态）。确定继续？", "en": "This scans and auto-restores every app with injection traces/corrupted binaries (back to pre-injection state). Continue?"],
-            "i18n_471": ["zh": "将删除注入标记、孤儿备份与 Frameworks 内非系统 dylib。确定继续？", "en": "This removes injection markers, orphan backups and non-system dylibs in Frameworks. Continue?"],
-            "i18n_472": ["zh": "⚠️ 损坏", "en": "⚠️ Corrupted"],
-            "i18n_473": ["zh": "有备份", "en": "Has backup"],
-            "i18n_474": ["zh": "%@ 注入资产", "en": "%d injection assets"],
-            "i18n_475": ["zh": "%@ 改动", "en": "%d changes"],
-            "i18n_476": ["zh": "✅ %@ 已恢复", "en": "✅ %@ restored"],
-            "i18n_477": ["zh": "✅ %@ 已清理 %d 项", "en": "✅ %@ cleaned %d item(s)"],
-            "i18n_478": ["zh": "⚠️ %@ 清理 %d 项，%d 个错误", "en": "⚠️ %@ cleaned %d item(s), %d error(s)"],
-            "i18n_479": ["zh": "❌ %@ 失败：%@", "en": "❌ %@ failed: %@"],
-            "i18n_480": ["zh": "❌ 失败：%@", "en": "❌ Failed: %@"],
-            "i18n_481": ["zh": "🔍 扫描完成：%d 个需恢复的 App（点击列表可单独恢复/清理）", "en": "🔍 Scan done: %d app(s) need restore (tap a row to restore/clean individually)"],
-            "i18n_482": ["zh": "✅ 一键恢复完成：还原 %d 个 App", "en": "✅ Restore-all done: %d app(s) restored"],
-            "i18n_483": ["zh": "⚠️ 还原 %d 个，%@ 个失败：%@", "en": "⚠️ %d restored, %d failed: %@"],
-            "i18n_484": ["zh": "✅ 清理完成：%d 项残留已清理", "en": "✅ Cleanup done: %d residual(s) cleaned"],
-            "i18n_485": ["zh": "⚠️ 清理 %d 项，%d 个错误：%@", "en": "⚠️ %d cleaned, %d error(s): %@"],
-            "i18n_486": ["zh": "应用信息", "en": "App Info"],
-            "i18n_487": ["zh": "容器", "en": "Container"],
-            "i18n_488": ["zh": "注入操作", "en": "Injection"],
-            "i18n_489": ["zh": "已注入", "en": "Injected"],
-            "i18n_490": ["zh": "未注入", "en": "Not injected"],
-            "i18n_491": ["zh": "注入工具链", "en": "Injection Toolchain"],
-            "i18n_492": ["zh": "检查结果", "en": "Check Result"],
-            "i18n_493": ["zh": "❌ 注入失败：%d", "en": "❌ Injection failed: %@"],
-            "i18n_494": ["zh": "✅ 注入成功", "en": "✅ Injection succeeded"],
-            "i18n_495": ["zh": "⚠️ 注入未确认（见检查结果）", "en": "⚠️ Injection unconfirmed (see check result)"],
-            "i18n_496": ["zh": "❌ 移除失败：%d", "en": "❌ Removal failed: %@"],
-            "i18n_497": ["zh": "✅ 已还原", "en": "✅ Restored"],
-            "i18n_498": ["zh": "⚠️ 还原未确认", "en": "⚠️ Restore unconfirmed"],
-            "i18n_499": ["zh": "❌ 恢复失败：%d", "en": "❌ Recovery failed: %@"],
-            "i18n_500": ["zh": "✅ 已从备份恢复", "en": "✅ Restored from backup"],
-            "i18n_501": ["zh": "⚠️ 未发现可用备份（可能本来就未注入）", "en": "⚠️ No backup found (maybe it was never injected)"],
-            "i18n_502": ["zh": "在聊天中让 AI 注入：\"给小红书注入控制代理\"", "en": "In chat, ask AI to inject: \"inject control agent into 小红书\""],
-            "i18n_987": ["zh": "重试", "en": "Retry"],
-            "i18n_504": ["zh": "停止", "en": "Stop"],
-            "i18n_505": ["zh": "停止抓包", "en": "Stop Capture"],
-            "i18n_506": ["zh": "开始抓包", "en": "Start Capture"],
-            "i18n_507": ["zh": "流量抓取", "en": "Traffic Capture"],
-            "i18n_508": ["zh": "抓取 HTTP/HTTPS 请求数据并保存在抓包记录中", "en": "Capture HTTP/HTTPS request data and save to capture logs"],
-            "i18n_509": ["zh": "CA 证书已安装并信任", "en": "CA certificate installed & trusted"],
-            "i18n_510": ["zh": "未生成，点击生成并安装", "en": "Not generated — tap to generate & install"],
-            "i18n_511": ["zh": "已配置", "en": "Configured"],
-            "i18n_1168": ["zh": "未配置", "en": "Not set"],
-            "i18n_513": ["zh": "抓包记录", "en": "Capture Logs"],
-            "i18n_514": ["zh": "%d 个文件", "en": "%d file(s)"],
-            "i18n_515": ["zh": "停止本地代理", "en": "Stop Local Proxy"],
-            "i18n_516": ["zh": "启动本地代理", "en": "Start Local Proxy"],
-            "i18n_975": ["zh": "运行中", "en": "Running"],
-            "i18n_519": ["zh": "使用步骤", "en": "How to Use"],
-            "i18n_520": ["zh": "生成证书", "en": "Generate Certificate"],
-            "i18n_521": ["zh": "自动用 Safari 打开下载描述文件", "en": "Safari opens the profile download automatically"],
-            "i18n_522": ["zh": "安装", "en": "Install"],
-            "i18n_523": ["zh": "设置 → 已下载描述文件 → 安装", "en": "Settings → Downloaded Profiles → Install"],
-            "i18n_524": ["zh": "信任", "en": "Trust"],
-            "i18n_525": ["zh": "通用 → 证书信任设置 → 打开完全信任", "en": "General → Certificate Trust Settings → Enable Full Trust"],
-            "i18n_526": ["zh": "使用", "en": "Use"],
-            "i18n_527": ["zh": "提示", "en": "Notice"],
-            "i18n_528": ["zh": "暂无抓包记录", "en": "No capture logs yet"],
-            "i18n_529": ["zh": "抓包记录（%d）", "en": "Capture Logs (%d)"],
-            "i18n_530": ["zh": "已连接 · 系统流量走 MITM 代理", "en": "Connected · system traffic via MITM proxy"],
-            "i18n_531": ["zh": "正在连接…", "en": "Connecting…"],
-            "i18n_532": ["zh": "本地代理运行中 · WiFi 手动代理生效", "en": "Local proxy running · WiFi manual proxy active"],
-            "i18n_533": ["zh": "已断开，点击开始抓包", "en": "Disconnected — tap to start capture"],
-            "i18n_534": ["zh": "点了没反应", "en": "Tapping does nothing"],
-            "i18n_535": ["zh": "正在连接 VPN，请在系统弹窗点「允许」…", "en": "Connecting VPN — tap 'Allow' in the system dialog…"],
-            "i18n_536": ["zh": "VPN 启动失败：%@\\n可用「本地代理」代替（WiFi 手动代理）", "en": "VPN start failed: %@\\nUse 'Local Proxy' instead (WiFi manual proxy)"],
-            "i18n_537": ["zh": "VPN 已连接（等待系统弹窗允许）", "en": "VPN connected (waiting for system dialog)"],
-            "i18n_538": ["zh": "本地代理已启动：127.0.0.1:18180\\n去 设置→WiFi→当前网络→配置代理→手动，填 127.0.0.1 和 18180", "en": "Local proxy started: 127.0.0.1:18180\\nGo to Settings→WiFi→current network→Configure Proxy→Manual, enter 127.0.0.1 and 18180"],
-            "i18n_539": ["zh": "证书生成失败", "en": "Certificate generation failed"],
-            "i18n_540": ["zh": "下载配置描述文件", "en": "Download Configuration Profile"],
-            "i18n_541": ["zh": "存储到文件再打开", "en": "Save to Files, then open"],
-            "i18n_542": ["zh": "打开 Safari 失败，请手动用「文件」App 打开：%@", "en": "Failed to open Safari — open manually with the Files app: %@"],
-            "i18n_543": ["zh": "已在 Safari 打开下载页\\n① 点「允许」下载描述文件\\n② 到 设置 → 已下载描述文件 → 安装\\n③ 设置 → 通用 → 关于本机 → 证书信任设置 → 打开完全信任", "en": "Opened download page in Safari\\n① Tap 'Allow' to download the profile\\n② Settings → Downloaded Profiles → Install\\n③ Settings → General → About → Certificate Trust Settings → Enable Full Trust"],
-            "i18n_544": ["zh": "当前账号", "en": "Current Account"],
-            "i18n_545": ["zh": "添加 / 切换账号", "en": "Add / Switch Account"],
-            "i18n_546": ["zh": "已保存账号（点击切换 · 长按删除）", "en": "Saved accounts (tap to switch · long-press to delete)"],
-            "i18n_547": ["zh": "已切换为 @%@", "en": "Switched to @%@"],
-            "i18n_548": ["zh": "已删除 @%@", "en": "Deleted @%@"],
-            "i18n_549": ["zh": "删除账号", "en": "Delete Account"],
-            "i18n_550": ["zh": "触发线上编译", "en": "Trigger Cloud Build"],
-            "i18n_551": ["zh": "请先登录账号", "en": "Log in first"],
-            "i18n_552": ["zh": "正在触发 %@ 编译…", "en": "Triggering %@ build…"],
-            "i18n_553": ["zh": "触发失败", "en": "Trigger failed"],
-            "i18n_554": ["zh": "最近编译记录", "en": "Recent Builds"],
-            "i18n_986": ["zh": "刷新", "en": "Refresh"],
-            "i18n_556": ["zh": "刷新状态", "en": "Refresh Status"],
-            "i18n_557": ["zh": "手动登录", "en": "Manual Login"],
-            "i18n_558": ["zh": "网页登录（推荐）", "en": "Web Login (recommended)"],
-            "i18n_559": ["zh": "在浏览器中登录", "en": "Log in in browser"],
-            "i18n_560": ["zh": "✅ 使用内置默认 Client ID（可直接登录）", "en": "✅ Using built-in default Client ID (ready to log in)"],
-            "i18n_561": ["zh": "再次打开授权页", "en": "Reopen Auth Page"],
-            "i18n_562": ["zh": "手动 Token（备选）", "en": "Manual Token (alternative)"],
-            "i18n_563": ["zh": "授权失败", "en": "Authorization failed"],
-            "i18n_564": ["zh": "设备码获取失败", "en": "Failed to get device code"],
-            "i18n_565": ["zh": "恢复默认 Client ID（清空自定义值）", "en": "Restore default Client ID (clear custom value)"],
-            "i18n_566": ["zh": "目标仓库", "en": "Target Repo"],
-            "i18n_567": ["zh": "仓库 Owner（用户名）", "en": "Repo Owner (username)"],
-            "i18n_568": ["zh": "仓库名", "en": "Repo Name"],
-            "i18n_569": ["zh": "分支", "en": "Branch"],
-            "i18n_570": ["zh": "已保存 ✓ 已恢复内置默认 Client ID，可直接登录", "en": "Saved ✓ Restored built-in default Client ID, ready to log in"],
-            "i18n_571": ["zh": "已保存 ✓", "en": "Saved ✓"],
-            "i18n_572": ["zh": "仓库设置", "en": "Repo Settings"],
-            "i18n_573": ["zh": "内容", "en": "Contents"],
-            "i18n_574": ["zh": "应用程序缓存", "en": "App Caches"],
-            "i18n_575": ["zh": "应用日志", "en": "App Logs"],
-            "i18n_576": ["zh": "系统缓存文件", "en": "System Cache Files"],
-            "i18n_577": ["zh": "系统日志文件", "en": "System Log Files"],
-            "i18n_578": ["zh": "系统临时文件", "en": "System Temp Files"],
-            "i18n_579": ["zh": "照片缓存", "en": "Photo Caches"],
-            "i18n_580": ["zh": "PhotoData 缩略图缓存（原图不删）", "en": "PhotoData thumbnail cache (originals kept)"],
-            "i18n_621": ["zh": "下载文件", "en": "Downloads"],
-            "i18n_582": ["zh": "启动快照", "en": "Launch Snapshots"],
-            "i18n_583": ["zh": "垃圾箱", "en": "Trash"],
-            "i18n_584": ["zh": "OTA 软件更新", "en": "OTA Software Updates"],
-            "i18n_585": ["zh": "已下载的系统更新包缓存", "en": "Downloaded system update package cache"],
-            "i18n_586": ["zh": "Safari 网页缓存（不删书签/历史）", "en": "Safari web cache (bookmarks/history kept)"],
-            "i18n_587": ["zh": "已用 %@ / 共 %@", "en": "Used %@ / Total %@"],
-            "i18n_588": ["zh": "系统缓存", "en": "System Caches"],
-            "i18n_589": ["zh": "应用缓存", "en": "App Caches"],
-            "i18n_635": ["zh": "临时文件", "en": "Temp Files"],
-            "i18n_591": ["zh": "日志文件", "en": "Log Files"],
-            "i18n_592": ["zh": "高级清理", "en": "Advanced Cleanup"],
-            "i18n_593": ["zh": "开始清理（%d 项）", "en": "Start Cleanup (%d item(s))"],
-            "i18n_594": ["zh": "⚠️ %@ 可能影响相关功能（下载/更新）", "en": "⚠️ %@ may affect related features (downloads/updates)"],
-            "i18n_595": ["zh": "扫描完成，可释放约 \\(AppCacheScanner.humanSize((quick + adv).reduce(0) { $0 + $1.size }))", "en": "Scan done — about %@ can be freed"],
-            "i18n_596": ["zh": "清理完成：%d 项成功，释放 %@", "en": "Cleanup done: %d OK, freed %@"],
-            "i18n_597": ["zh": "；失败：%@", "en": "; failed: %@"],
-            "i18n_598": ["zh": "下载产物", "en": "Downloads"],
-            "i18n_599": ["zh": "选择", "en": "Select"],
-            "i18n_600": ["zh": "已选 %d 项", "en": "%d selected"],
-            "i18n_601": ["zh": "%d 个文件/文件夹", "en": "%d file(s)/folder(s)"],
-            "i18n_602": ["zh": "将删除 %@ 项，不可恢复", "en": "%d item(s) will be deleted, unrecoverable"],
-            "i18n_603": ["zh": "文件夹", "en": "Folder"],
-            "i18n_604": ["zh": "主动连接", "en": "Active Connection"],
-            "i18n_1175": ["zh": "SSH 远程连接", "en": "SSH Remote"],
-            "i18n_606": ["zh": "被远程控制", "en": "Controlled Remotely"],
-            "i18n_608": ["zh": "运行中 :%d", "en": "Running on :%@"],
-            "i18n_609": ["zh": "未启动", "en": "Not running"],
-            "i18n_611": ["zh": "什么是智能搜索", "en": "What is Smart Search"],
-            "i18n_612": ["zh": "使用方法", "en": "How to Use"],
-            "i18n_613": ["zh": "输入栏上方的「智能搜索·开」chip 保持开启", "en": "Keep the 'Smart Search: ON' chip above the input bar enabled"],
-            "i18n_614": ["zh": "提问时注明「请搜索」或直接问时效性问题", "en": "Mention 'please search' in your question, or just ask time-sensitive questions"],
-            "i18n_615": ["zh": "示例", "en": "Examples"],
-            "i18n_616": ["zh": "隐私", "en": "Privacy"],
-            "i18n_617": ["zh": "审计日志", "en": "Audit Logs"],
-            "i18n_618": ["zh": "远程控制截图", "en": "Remote Control Screenshots"],
-            "i18n_860": ["zh": "崩溃日志", "en": "Crash Logs"],
-            "i18n_620": ["zh": "解密(砸壳)产物", "en": "Decrypted (jailbreak) Artifacts"],
-            "i18n_622": ["zh": "重复文件", "en": "Duplicate Files"],
-            "i18n_623": ["zh": "知识库", "en": "Knowledge Base"],
-            "i18n_758": ["zh": "运行日志", "en": "Run Logs"],
-            "i18n_625": ["zh": "宏/脚本", "en": "Macros/Scripts"],
-            "i18n_626": ["zh": "抓包数据", "en": "Capture Data"],
-            "i18n_627": ["zh": "插件", "en": "Plugins"],
-            "i18n_628": ["zh": "编译项目", "en": "Build Projects"],
-            "i18n_629": ["zh": "分析报告", "en": "Analysis Reports"],
-            "i18n_630": ["zh": "用户上传附件", "en": "User Uploads"],
-            "i18n_631": ["zh": "截图", "en": "Screenshots"],
-            "i18n_632": ["zh": "注入插件(dylib)", "en": "Injected dylibs"],
-            "i18n_633": ["zh": "工具大输出", "en": "Large Tool Outputs"],
-            "i18n_634": ["zh": "备份", "en": "Backups"],
-            "i18n_636": ["zh": "替换临时文件（注入用）", "en": "Replacement temp files (for injection)"],
-            "i18n_637": ["zh": "崩溃复现", "en": "Crash Reproduction"],
-            "i18n_638": ["zh": "静态注入临时目录", "en": "Static injection temp dir"],
-            "i18n_639": ["zh": "数据库文件", "en": "Database Files"],
-            "i18n_640": ["zh": "配置文件", "en": "Config Files"],
-            "i18n_641": ["zh": "搜索文件名", "en": "Search File Names"],
-            "i18n_642": ["zh": "复制路径", "en": "Copy Path"],
-            "i18n_643": ["zh": "新建", "en": "New"],
-            "i18n_644": ["zh": "删除确认", "en": "Delete Confirmation"],
-            "i18n_645": ["zh": "已删除 %@", "en": "Deleted %@"],
-            "i18n_646": ["zh": "删除失败：%@", "en": "Delete failed: %@"],
-            "i18n_647": ["zh": "确定删除 %@？此操作不可恢复。", "en": "Delete %@? This cannot be undone."],
-            "i18n_648": ["zh": "新建文件夹", "en": "New Folder"],
-            "i18n_649": ["zh": "创建", "en": "Create"],
-            "i18n_650": ["zh": "已创建 %@", "en": "Created %@"],
-            "i18n_651": ["zh": "创建失败：%@", "en": "Create failed: %@"],
-            "i18n_652": ["zh": "已复制路径", "en": "Path copied"],
-            "i18n_653": ["zh": "读取中…", "en": "Reading…"],
-            "i18n_654": ["zh": "仍要读取", "en": "Read anyway"],
-            "i18n_655": ["zh": "图片加载失败（格式或尺寸不支持）：%@", "en": "Image load failed (format or size unsupported): %@"],
-            "i18n_656": ["zh": "无法读取文件", "en": "Cannot read file"],
-            "i18n_657": ["zh": "（非 UTF-8，按二进制显示）", "en": "(non-UTF-8, shown as binary)"],
-            "i18n_658": ["zh": "文件大小：%d\\n\\n", "en": "File size: %@\\n\\n"],
-            "i18n_659": ["zh": "已自动安装", "en": "Auto-installed"],
-            "i18n_660": ["zh": "镜像", "en": "Mirror"],
-            "i18n_661": ["zh": "检查更新失败：GitHub 与备用源均不可达（可能被墙）。可在「更新镜像源」里配置可用镜像。", "en": "Update check failed: GitHub and backup sources unreachable (possibly blocked). Configure a working mirror under 'Update Mirrors'."],
-            "i18n_662": ["zh": "已是最新版本 v%d", "en": "Already up to date v%@"],
-            "i18n_663": ["zh": "请先检查更新", "en": "Check for updates first"],
-            "i18n_664": ["zh": "所有下载源都失败了（GitHub 可能被墙，可在「更新镜像源」配置可用镜像）", "en": "All download sources failed (GitHub may be blocked; configure a mirror under 'Update Mirrors')"],
-            "i18n_665": ["zh": "检查更新闪退", "en": "Update check crashed"],
-            "i18n_666": ["zh": " (子二进制加密, 非致命)", "en": " (sub-binary encrypted, non-fatal)"],
-            "i18n_667": ["zh": "已自动安装 v%@%@", "en": "Auto-installed v%@%@"],
-            "i18n_668": ["zh": "静默安装失败(exit %d), 分享调起也失败: %@", "en": "Silent install failed (exit %d), share fallback also failed: %@"],
-            "i18n_669": ["zh": "安装调起失败: %@", "en": "Install invocation failed: %@"],
-            "i18n_973": ["zh": "用户", "en": "User"],
-            "i18n_979": ["zh": "系统", "en": "System"],
-            "i18n_672": ["zh": "缓存 · 钥匙串 · 广告符 · 数据容器 · AI 清理", "en": "Caches · keychain · IDFA · containers · AI cleanup"],
-            "i18n_673": ["zh": "开始扫描", "en": "Start Scan"],
-            "i18n_674": ["zh": "扫描中…", "en": "Scanning…"],
-            "i18n_675": ["zh": "可清理项（勾选要执行的）", "en": "Cleanable items (check to run)"],
-            "i18n_676": ["zh": "请先勾选要清理的项", "en": "Check items to clean first"],
-            "i18n_677": ["zh": "一键清理（%d 项）", "en": "Clean All (%d item(s))"],
-            "i18n_678": ["zh": "重新扫描", "en": "Rescan"],
-            "i18n_679": ["zh": "未找到 App 或容器不可访问", "en": "App not found or container inaccessible"],
-            "i18n_680": ["zh": "扫描完成：%d 项", "en": "Scan done: %d item(s)"],
-            "i18n_681": ["zh": "标识符为只读信息，不可执行", "en": "Identifier is read-only info, not actionable"],
-            "i18n_682": ["zh": "已勾选危险项：将重置全部数据（自动备份可恢复）", "en": "Dangerous item checked: will reset all data (auto-backup can restore)"],
-            "i18n_683": ["zh": "清理完成：%d 成功 / %@ 失败", "en": "Cleanup done: %d OK / %d failed"],
-            "i18n_684": ["zh": "安全", "en": "Safe"],
-            "i18n_685": ["zh": "警告", "en": "Warning"],
-            "i18n_686": ["zh": "危险", "en": "Dangerous"],
-            "i18n_687": ["zh": "开始录制", "en": "Start Recording"],
-            "i18n_688": ["zh": "完整载荷", "en": "Full Payload"],
-            "i18n_689": ["zh": "互换token参数名", "en": "Swap token param names"],
-            "i18n_690": ["zh": "去掉tools纯对话", "en": "Drop tools, chat-only"],
-            "i18n_691": ["zh": "最小载荷", "en": "Minimal Payload"],
-            "i18n_692": ["zh": "未知(%d)", "en": "Unknown (%d)"],
-            "i18n_693": ["zh": "兼容级别说明", "en": "Compatibility Levels"],
-            "i18n_694": ["zh": "各模型当前级别", "en": "Current Level per Model"],
-            "i18n_695": ["zh": "重置全部兼容级别（重新从完整载荷试探）", "en": "Reset all compatibility levels (re-probe from full payload)"],
-            "i18n_696": ["zh": "最近请求日志", "en": "Recent Request Log"],
-            "i18n_855": ["zh": "失败", "en": "Failed"],
-            "i18n_698": ["zh": "已手动重置全部兼容级别", "en": "All compatibility levels manually reset"],
-            "i18n_699": ["zh": "启用远程诊断", "en": "Enable Remote Diagnostics"],
-            "i18n_700": ["zh": "服务器地址（https://你的域名:8766）", "en": "Server address (https://your.domain:8766)"],
-            "i18n_701": ["zh": "访问令牌（token）", "en": "Access token"],
-            "i18n_702": ["zh": "设备标识", "en": "Device ID"],
-            "i18n_703": ["zh": "复制设备 ID", "en": "Copy Device ID"],
-            "i18n_704": ["zh": "连接中…", "en": "Connecting…"],
-            "i18n_705": ["zh": "测试连接", "en": "Test Connection"],
-            "i18n_706": ["zh": "连接成功", "en": "Connected"],
-            "i18n_707": ["zh": "已执行远程指令", "en": "Remote command executed"],
-            "i18n_708": ["zh": "安全边界", "en": "Security Boundary"],
-            "i18n_709": ["zh": "远程通道只允许执行只读诊断白名单（设备信息/文件浏览/注入状态/日志查询等）。注入、删除、写入、启动 App、网络抓包等危险操作一律拒绝，绝不支持远程触发。", "en": "The remote channel only allows read-only diagnostic whitelist (device info / file browse / injection status / log queries). Injection, deletion, writing, launching apps and packet capture are always refused — remote triggering is never supported."],
-            "i18n_710": ["zh": "只读白名单，无危险操作", "en": "Read-only whitelist, no dangerous ops"],
-            "i18n_711": ["zh": "远程诊断", "en": "Remote Diagnostics"],
-            "i18n_712": ["zh": "机型", "en": "Model"],
-            "i18n_713": ["zh": "应用伪装", "en": "App Spoof"],
-            "i18n_714": ["zh": "还原", "en": "Restore"],
-            "i18n_715": ["zh": "设备伪装", "en": "Device Spoof"],
-            "i18n_716": ["zh": "✅ 伪装已应用：%@", "en": "✅ Spoof applied: %@"],
-            "i18n_717": ["zh": "✅ 已还原真实设备信息", "en": "✅ Real device info restored"],
-            "i18n_718": ["zh": "防护中", "en": "Protected"],
-            "i18n_719": ["zh": "检测到威胁", "en": "Threat Detected"],
-            "i18n_720": ["zh": "防护已关闭", "en": "Protection Off"],
-            "i18n_721": ["zh": "正在实时监控恶意网站", "en": "Monitoring malicious sites in real time"],
-            "i18n_722": ["zh": "已拦截可疑访问", "en": "Suspicious access blocked"],
-            "i18n_723": ["zh": "点击下方开关开启防护", "en": "Tap the toggle below to enable protection"],
-            "i18n_724": ["zh": "已拦截", "en": "Blocked"],
-            "i18n_725": ["zh": "次", "en": "times"],
-            "i18n_726": ["zh": "防护状态", "en": "Protection Status"],
-            "i18n_727": ["zh": "受影响版本", "en": "Affected Versions"],
-            "i18n_728": ["zh": "以下", "en": "below"],
-            "i18n_729": ["zh": "关闭防护", "en": "Disable Protection"],
-            "i18n_730": ["zh": "开启防护", "en": "Enable Protection"],
-            "i18n_731": ["zh": "防御措施", "en": "Defenses"],
-            "i18n_732": ["zh": "恶意网站检测", "en": "Malicious Site Detection"],
-            "i18n_733": ["zh": "拦截已知 Coruna 利用站点", "en": "Blocks known Coruna exploit sites"],
-            "i18n_734": ["zh": "检测异常进程行为和内存操作", "en": "Detects abnormal process behavior & memory operations"],
-            "i18n_735": ["zh": "14 个文件哈希 + 6 条网络规则", "en": "14 file hashes + 6 network rules"],
-            "i18n_736": ["zh": "内核防护", "en": "Kernel Protection"],
-            "i18n_737": ["zh": "覆盖版本", "en": "Covered Versions"],
-            "i18n_738": ["zh": "漏洞数量", "en": "Vuln Count"],
-            "i18n_739": ["zh": "5 条利用链 + 23 个漏洞", "en": "5 exploit chains + 23 vulnerabilities"],
-            "i18n_740": ["zh": "攻击方式", "en": "Attack Vector"],
-            "i18n_741": ["zh": "网页零点击", "en": "Web zero-click"],
-            "i18n_742": ["zh": "你的设备", "en": "Your Device"],
-            "i18n_743": ["zh": "Web 注入工具", "en": "Web Injection Tool"],
-            "i18n_744": ["zh": "网页端漏洞利用", "en": "Web-side exploitation"],
-            "i18n_745": ["zh": "注意", "en": "Caution"],
-            "i18n_746": ["zh": "继续", "en": "Continue"],
-            "i18n_747": ["zh": "此功能将利用 Coruna 漏洞链获取内核权限并注入 dylib 到 %@。\\n\\n仅用于安全研究目的。", "en": "This uses the Coruna chain to get kernel access and inject a dylib into %@.\\n\\nFor security research only."],
-            "i18n_748": ["zh": "设备不兼容", "en": "Device Incompatible"],
-            "i18n_749": ["zh": "内核 R/W", "en": "Kernel R/W"],
-            "i18n_750": ["zh": "注入配置", "en": "Injection Config"],
-            "i18n_751": ["zh": "选择要注入的应用", "en": "Pick app to inject"],
-            "i18n_752": ["zh": "选择要注入的 dylib", "en": "Pick dylib to inject"],
-            "i18n_753": ["zh": "利用路径", "en": "Exploit Path"],
-            "i18n_754": ["zh": "漏洞利用链", "en": "Exploit Chain"],
-            "i18n_755": ["zh": "沙盒逃逸", "en": "Sandbox Escape"],
-            "i18n_756": ["zh": "启动网页注入", "en": "Start Web Injection"],
-            "i18n_757": ["zh": "错误: %@", "en": "Error: %@"],
-            "i18n_759": ["zh": "选择目标 App", "en": "Select Target App"],
-            "i18n_760": ["zh": "页面加载完成", "en": "Page loaded"],
-            "i18n_761": ["zh": "页面加载失败: %@", "en": "Page load failed: %@"],
-            "i18n_762": ["zh": "切换纵向列表没用", "en": "Switching to vertical list does nothing"],
-            "i18n_763": ["zh": "删一个加一个", "en": "Deleting one adds another"],
-            "i18n_764": ["zh": "没反应", "en": "No response"],
-            "i18n_765": ["zh": "微信", "en": "WeChat"],
-            "i18n_766": ["zh": "抖音", "en": "Douyin"],
-            "i18n_767": ["zh": "相机", "en": "Camera"],
-            "i18n_768": ["zh": "选择可爱助手的角色", "en": "Pick a Cute Assistant character"],
-            "i18n_838": ["zh": "兔娘", "en": "Bunny Girl"],
-            "i18n_837": ["zh": "小萝莉", "en": "Loli"],
-            "i18n_839": ["zh": "猫娘", "en": "Catgirl"],
-            "i18n_772": ["zh": "悬浮尺寸（改完自动重启悬浮生效）", "en": "HUD size (auto-restarts HUD on change)"],
-            "i18n_773": ["zh": "小", "en": "Small"],
-            "i18n_774": ["zh": "大", "en": "Large"],
-            "i18n_775": ["zh": "当前尺寸：%d pt", "en": "Current size: %d pt"],
-            "i18n_776": ["zh": "气泡样式（改完自动重启悬浮生效）", "en": "Bubble style (auto-restarts HUD on change)"],
-            "i18n_777": ["zh": "气泡样式", "en": "Bubble Style"],
-            "i18n_778": ["zh": "经典圆角", "en": "Classic Rounded"],
-            "i18n_779": ["zh": "椭圆气泡", "en": "Ellipse Bubble"],
-            "i18n_780": ["zh": "方形硬边", "en": "Square Hard-Edge"],
-            "i18n_781": ["zh": "爆炸吐槽", "en": "Explosion Rant"],
-            "i18n_782": ["zh": "预览：哈喽呀～", "en": "Preview: Hello~"],
-            "i18n_783": ["zh": "快捷菜单", "en": "Quick Menu"],
-            "i18n_784": ["zh": "弹出样式", "en": "Popup Style"],
-            "i18n_785": ["zh": "扇形展开", "en": "Fan Spread"],
-            "i18n_786": ["zh": "纵向列表", "en": "Vertical List"],
-            "i18n_787": ["zh": "图标整体透明度", "en": "Icon Opacity"],
-            "i18n_788": ["zh": "散开角度", "en": "Spread Angle"],
-            "i18n_789": ["zh": "弧度(半径)", "en": "Arc (radius)"],
-            "i18n_790": ["zh": "图标大小", "en": "Icon Size"],
-            "i18n_791": ["zh": "删一个又冒出一个", "en": "Deleting one spawns another"],
-            "i18n_792": ["zh": "删除后返回又全部回来", "en": "Deleting then going back brings them all back"],
-            "i18n_793": ["zh": "其他", "en": "Other"],
-            "i18n_794": ["zh": "键盘弹出时自动隐藏桌宠", "en": "Auto-hide pet when keyboard appears"],
-            "i18n_795": ["zh": "粒子特效", "en": "Particle Effects"],
-            "i18n_796": ["zh": "可爱助手角色", "en": "Cute Assistant Character"],
-            "i18n_797": ["zh": "从已安装应用选择添加", "en": "Add from installed apps"],
-            "i18n_798": ["zh": "调整后自动重启悬浮，新尺寸立即生效", "en": "Auto-restarts HUD after change; new size applies immediately"],
-            "i18n_799": ["zh": "悬浮尺寸", "en": "HUD Size"],
-            "i18n_800": ["zh": "统一环境，AI 帮你操作", "en": "Unified runtime, AI does it for you"],
-            "i18n_801": ["zh": "全栈工具，文件/App/注入/终端", "en": "Full-stack tools: files/App/injection/terminal"],
-            "i18n_802": ["zh": "智能注入，控制任意 App", "en": "Smart injection, control any app"],
-            "i18n_803": ["zh": "语义化操作，说点就点", "en": "Semantic control — say it, tap it"],
-            "i18n_804": ["zh": "OCR 识别，自动读屏", "en": "OCR recognition, auto screen-reading"],
-            "i18n_805": ["zh": "完整 Linux 终端，跑脚本装包", "en": "Full Linux terminal: run scripts, install packages"],
-            "i18n_806": ["zh": "AI 自我进化，自动学习", "en": "AI self-evolves, auto-learns"],
-            "i18n_807": ["zh": "网络错误: %@", "en": "Network error: %@"],
-            "i18n_808": ["zh": "Client ID 无效。若手动填过 Client ID：请到仓库设置里清空并保存 (自动回退内置默认)，或注册自己的 GitHub App", "en": "Invalid Client ID. If you set it manually: clear & save in repo settings (falls back to built-in default), or register your own GitHub App"],
-            "i18n_809": ["zh": "设备码请求failed (HTTP %d) %@", "en": "Device code request failed (HTTP %d) %@"],
-            "i18n_1189": ["zh": "Client ID 无效。若手动填过 Client ID：请到仓库设置里清空并保存 (自动回退内置默认)，或注册自己的 OAuth App 后填入真实 Client ID。", "en": "Invalid Client ID. If you entered one manually: clear and save it in the repo settings (auto-falls back to built-in default), or register your own OAuth App and put in a real Client ID."],
-            "i18n_810": ["zh": "请在浏览器输入代码 %@", "en": "Enter code %@ in browser"],
-            "i18n_811": ["zh": "GitHub Device Flow 开始: user_code=%@", "en": "GitHub Device Flow started: user_code=%@"],
-            "i18n_812": ["zh": "请在浏览器输入代码 %@，等待授权…", "en": "Enter code %@ in browser and wait for authorization…"],
-            "i18n_813": ["zh": "授权超时，请重试", "en": "Authorization timed out, retry"],
-            "i18n_814": ["zh": "网络错误", "en": "Network error"],
-            "i18n_815": ["zh": "响应解析failed", "en": "Response parse failed"],
-            "i18n_816": ["zh": "未知响应", "en": "Unknown response"],
-            "i18n_817": ["zh": "身份验证failed (HTTP %d)", "en": "Authentication failed (HTTP %d)"],
-            "i18n_818": ["zh": "GitHub 网页登录OK: %@", "en": "GitHub web login OK: %@"],
-            "i18n_819": ["zh": "已登录 @%@", "en": "Logged in as @%@"],
-            "i18n_820": ["zh": "Token 不能为空", "en": "Token must not be empty"],
-            "i18n_821": ["zh": "Token 无效或已过期 (请检查 repo + workflow 权限)", "en": "Token invalid or expired (check repo + workflow permissions)"],
-            "i18n_822": ["zh": "GitHub 验证failed (HTTP %d)", "en": "GitHub verification failed (HTTP %d)"],
-            "i18n_823": ["zh": "GitHub 账号登录: %@ (HTTP %d)", "en": "GitHub login: %@ (HTTP %d)"],
-            "i18n_824": ["zh": "未登录 GitHub 账号", "en": "Not logged in to GitHub"],
-            "i18n_825": ["zh": "请填写 tweak 目录名", "en": "Enter tweak directory name"],
-            "i18n_826": ["zh": "触发线上编译 %@/%@ tweak=%@", "en": "Triggered cloud build %@/%@ tweak=%@"],
-            "i18n_827": ["zh": "已触发 %@ 编译，稍后刷新状态", "en": "Build for %@ triggered, refresh status later"],
-            "i18n_828": ["zh": "workflow '%@' 不存在 (请确认仓库里有 build-tweak.yml)", "en": "workflow '%@' not found (verify build-tweak.yml exists in repo)"],
-            "i18n_829": ["zh": "Token 无 workflow 权限或已过期", "en": "Token lacks workflow permission or expired"],
-            "i18n_830": ["zh": "触发failed (HTTP %d)", "en": "Trigger failed (HTTP %d)"],
-            "i18n_831": ["zh": "TrollAgent 抓包 VPN", "en": "TrollAgent Packet VPN"],
-            "i18n_832": ["zh": "默认抓包", "en": "Default Capture"],
-            "i18n_833": ["zh": "请先在系统弹窗点「允许」后再连接 (NEVPNErrorConfigurationInvalid=1)", "en": "Tap \"Allow\" in the system dialog first, then connect (NEVPNErrorConfigurationInvalid=1)"],
-            "i18n_834": ["zh": "VPN 启动未生效：系统未弹「允许」窗或隧道未连接（TrollStore 环境限制），请改用「本地代理」抓包（WiFi 场景）", "en": "VPN not active: no \"Allow\" dialog or tunnel not connected (TrollStore limitation); use \"Local Proxy\" capture instead (WiFi)"],
-            "i18n_835": ["zh": "TrollAgent 抓包证书", "en": "TrollAgent Capture Cert"],
-            "i18n_836": ["zh": "安装并信任后，TrollAgent 可解密 HTTPS 明文用于抓包分析", "en": "After install & trust, TrollAgent can decrypt HTTPS for capture analysis"],
-            "i18n_840": ["zh": "御姐兔女郎", "en": "Onee Bunny"],
-            "i18n_842": ["zh": "需要麦克风 + 语音识别权限才能跟我说话，请在系统设置里允许。", "en": "Need mic + speech recognition permission to talk to me. Allow it in Settings."],
-            "i18n_843": ["zh": "听你说…", "en": "Listening…"],
-            "i18n_844": ["zh": "说话", "en": "Speak"],
-            "i18n_972": ["zh": "全部", "en": "All"],
-            "i18n_974": ["zh": "巨魔", "en": "Troll"],
-            "i18n_978": ["zh": "搜索应用名称或 Bundle ID", "en": "Search app name or Bundle ID"],
-            "i18n_851": ["zh": "准备环境", "en": "Preparing env"],
-            "i18n_852": ["zh": "安装包", "en": "Installing package"],
-            "i18n_853": ["zh": "下载索引", "en": "Downloading index"],
-            "i18n_854": ["zh": "解包", "en": "Extracting"],
-            "i18n_858": ["zh": "暂无崩溃记录", "en": "No crash logs yet"],
-            "i18n_859": ["zh": "共 %d 条 · %@", "en": "%d log(s) · %@ first"],
-            "i18n_861": ["zh": "崩溃日志为空或无法读取", "en": "Empty or unreadable"],
-            "i18n_862": ["zh": "读取失败，请到工作区 crash/ 目录用文件浏览器查看", "en": "Read failed; browse workspace crash/ with the file browser"],
-            "i18n_863": ["zh": "崩溃详情", "en": "Crash Detail"],
-            "i18n_864": ["zh": "已复制全文（分享面板在侧载环境不可用）", "en": "Copied (share sheet unavailable in sideload env)"],
-            "i18n_865": ["zh": "已复制全部 %d 条日志（分享面板在侧载环境不可用）", "en": "Copied all %d log(s) (share sheet unavailable in sideload env)"],
-            "i18n_866": ["zh": "已清空", "en": "Cleared"],
-            "i18n_867": ["zh": "文件不存在，无法分享", "en": "File missing, can't share"],
-            "i18n_868": ["zh": "分享 %@", "en": "Share %@"],
-            "i18n_869": ["zh": "存储到文件", "en": "Save to Files"],
-            "i18n_1058": ["zh": "没有可分享的内容", "en": "Nothing to share"],
-            "i18n_872": ["zh": "拷贝", "en": "Copy"],
-            "i18n_873": ["zh": "文件不存在，无法保存", "en": "File missing, can't save"],
-            "i18n_874": ["zh": "仅支持 .tipa/.ipa 文件直接安装", "en": "Only .tipa/.ipa can install directly"],
-            "i18n_875": ["zh": "无法直达 TrollStore，已复制文件路径", "en": "Can't reach TrollStore; file path copied"],
-            "i18n_876": ["zh": "未检测到 TrollStore，已复制文件路径", "en": "TrollStore not detected; file path copied"],
-            "i18n_1009": ["zh": "文件不存在", "en": "File not found"],
-            "i18n_878": ["zh": "没有 App 能打开此文件", "en": "No app can open this file"],
-            "i18n_879": ["zh": "已复制到剪贴板", "en": "Copied to clipboard"],
-            "i18n_880": ["zh": "iOS 注入分析", "en": "iOS Injection Analysis"],
-            "i18n_881": ["zh": "网络抓包分析", "en": "Network Packet Capture"],
-            "i18n_882": ["zh": "SQLite 数据库取证", "en": "SQLite Forensics"],
-            "i18n_883": ["zh": "deb/ipa 包解剖", "en": "deb/ipa Anatomy"],
-            "i18n_884": ["zh": "跨环境文件访问", "en": "Cross-env File Access"],
-            "i18n_885": ["zh": "进程内存修改", "en": "Process Memory Edit"],
-            "i18n_886": ["zh": "设备信息与定位", "en": "Device Info & Location"],
-            "i18n_887": ["zh": "App 生命周期管理", "en": "App Lifecycle Management"],
-            "i18n_888": ["zh": "Shell & Env 边界参考", "en": "Shell & Env Boundaries"],
-            "i18n_889": ["zh": "已保存 %d 个技能", "en": "%d skills saved"],
-            "i18n_890": ["zh": "\\u201c%@ \\u201d %@", "en": "%@ %@"],
-            "i18n_891": ["zh": "来电提醒", "en": "Call Reminder"],
-            "i18n_892": ["zh": "呼叫 %@", "en": "Calling %@"],
-            "i18n_893": ["zh": "调度failed: %@", "en": "Schedule failed: %@"],
-            "i18n_894": ["zh": "%@ 已停用，跳过", "en": "%@ disabled, skipping"],
-            "i18n_895": ["zh": "呼叫 %@", "en": "Calling %@"],
-            "i18n_896": ["zh": "切换到 %@", "en": "Switching to %@"],
-            "i18n_897": ["zh": "启用", "en": "Enable"],
-            "i18n_898": ["zh": "停用", "en": "Disable"],
-            "i18n_899": ["zh": "待审批: %@", "en": "Pending: %@"],
-            "i18n_900": ["zh": "已批准: %@", "en": "Approved: %@"],
-            "i18n_901": ["zh": "已拒绝: %@", "en": "Rejected: %@"],
-            "i18n_902": ["zh": "待批准操作", "en": "Pending Approval"],
-            "i18n_903": ["zh": "运行中自动化", "en": "Running Automations"],
-            "i18n_904": ["zh": "立即运行", "en": "Run Now"],
-            "i18n_905": ["zh": "最近活动", "en": "Recent Activity"],
-            "i18n_907": ["zh": "工具调用", "en": "Tool Call"],
-            "i18n_909": ["zh": "提交时间", "en": "Submitted"],
-            "i18n_910": ["zh": "参数", "en": "Parameters"],
-            "i18n_911": ["zh": "审批", "en": "Approve"],
-            "i18n_912": ["zh": "我", "en": "Me"],
-            "i18n_913": ["zh": "助手", "en": "Assistant"],
-            "i18n_915": ["zh": "助手角色", "en": "Assistant Role"],
-            "i18n_916": ["zh": "新角色", "en": "New Role"],
-            "i18n_917": ["zh": "你是一个有帮助的助手。", "en": "You are a helpful assistant."],
-            "i18n_918": ["zh": "基本信息", "en": "Basic Info"],
-            "i18n_920": ["zh": "系统提示词", "en": "System Prompt"],
-            "i18n_921": ["zh": "关联模型", "en": "Linked Model"],
-            "i18n_922": ["zh": "模型配置", "en": "Model Config"],
-            "i18n_1166": ["zh": "保存", "en": "Save"],
-            "i18n_924": ["zh": "添加附件", "en": "Add Attachment"],
-            "i18n_925": ["zh": "从文件选择", "en": "From Files"],
-            "i18n_926": ["zh": "相机照片.jpg", "en": "camera_photo.jpg"],
-            "i18n_927": ["zh": "拍照", "en": "Take Photo"],
-            "i18n_928": ["zh": "相册图片.png", "en": "gallery_image.png"],
-            "i18n_929": ["zh": "从相册选择", "en": "From Gallery"],
-            "i18n_930": ["zh": "已添加 (%d)", "en": "%d added"],
-            "i18n_931": ["zh": "附件", "en": "Attachments"],
-            "i18n_932": ["zh": "任务列表", "en": "Task List"],
-            "i18n_933": ["zh": "最近执行", "en": "Recent Runs"],
-            "i18n_934": ["zh": "任务", "en": "Task"],
-            "i18n_935": ["zh": "调度（cron / 描述）", "en": "Schedule (cron / description)"],
-            "i18n_936": ["zh": "动作（工具调用）", "en": "Action (tool call)"],
-            "i18n_937": ["zh": "保存任务 %@", "en": "Save task %@"],
-            "i18n_938": ["zh": "新任务", "en": "New Task"],
-            "i18n_939": ["zh": "总开关", "en": "Master Switch"],
-            "i18n_940": ["zh": "允许自动化执行", "en": "Allow automation execution"],
-            "i18n_941": ["zh": "按任务控制", "en": "Per-task control"],
-            "i18n_942": ["zh": "自动化权限", "en": "Automation Permissions"],
-            "i18n_943": ["zh": "配对令牌（可选）", "en": "Pairing token (optional)"],
-            "i18n_944": ["zh": "保存并连接", "en": "Save & Connect"],
-            "i18n_945": ["zh": "新服务端", "en": "New Server"],
-            "i18n_946": ["zh": "选择 App", "en": "Select App"],
-            "i18n_947": ["zh": "注入详情", "en": "Injection Detail"],
-            "i18n_949": ["zh": "注入状态", "en": "Injection Status"],
-            "i18n_950": ["zh": "已启用注入", "en": "Injection Enabled"],
-            "i18n_952": ["zh": "已禁用注入", "en": "Injection Disabled"],
-            "i18n_953": ["zh": "已彻底移除", "en": "Fully Removed"],
-            "i18n_954": ["zh": "按类别过滤", "en": "Filter by Category"],
-            "i18n_955": ["zh": "活动记录", "en": "Activity Log"],
-            "i18n_956": ["zh": "用途摘要（AI 判断何时使用的依据）", "en": "Usage summary (basis for AI tool selection)"],
-            "i18n_957": ["zh": "新建 Skill", "en": "New Skill"],
-            "i18n_958": ["zh": "保存 %@", "en": "Save %@"],
-            "i18n_959": ["zh": "保存到 agents.json", "en": "Save to agents.json"],
-            "i18n_960": ["zh": "新建 Agent", "en": "New Agent"],
-            "i18n_962": ["zh": "签名密钥（可选）", "en": "Signing key (optional)"],
-            "i18n_963": ["zh": "事件列表（逗号分隔）", "en": "Event list (comma-separated)"],
-            "i18n_964": ["zh": "保存 %@", "en": "Save %@"],
-            "i18n_965": ["zh": "Webhook 编辑", "en": "Webhook Edit"],
-            "i18n_966": ["zh": "已保存的密钥", "en": "Saved Keys"],
-            "i18n_967": ["zh": "隐藏", "en": "Hide"],
-            "i18n_968": ["zh": "显示", "en": "Show"],
-            "i18n_969": ["zh": "上游模型", "en": "Upstream Model"],
-            "i18n_970": ["zh": "请先配置模型 API", "en": "Configure Model API first"],
-            "i18n_971": ["zh": "TrollAgent v%@ · %@ · 反馈内容：", "en": "TrollAgent v%@ · %@ · Feedback:"],
-            "i18n_976": ["zh": "当前分类下无运行中的应用", "en": "No running apps in this category"],
-            "i18n_977": ["zh": "无匹配应用", "en": "No matching apps"],
-            "i18n_980": ["zh": "加载应用列表…", "en": "Loading app list…"],
-            "i18n_981": ["zh": "选择应用", "en": "Select App"],
-            "i18n_982": ["zh": "搜索 · 分类 · 版本 · 索引", "en": "Search · Category · Version · Index"],
-            "i18n_983": ["zh": "输入网址，如 github.com", "en": "Enter URL, e.g. github.com"],
-            "i18n_984": ["zh": "后退", "en": "Back"],
-            "i18n_985": ["zh": "前进", "en": "Forward"],
-            "i18n_988": ["zh": "内置浏览器", "en": "Built-in Browser"],
-            "i18n_1180": ["zh": "完成", "en": "Done"],
-            "i18n_990": ["zh": "本机环境就绪", "en": "Environment ready"],
-            "i18n_991": ["zh": "本机环境异常", "en": "Environment issues found"],
-            "i18n_1167": ["zh": "就绪 · 可注入", "en": "Ready · Injectable"],
-            "i18n_993": ["zh": "需检查下方项目", "en": "Check items below"],
-            "i18n_994": ["zh": "设备型号", "en": "Device Model"],
-            "i18n_995": ["zh": "系统版本", "en": "iOS Version"],
-            "i18n_996": ["zh": "存储空间", "en": "Storage"],
-            "i18n_997": ["zh": "内存", "en": "Memory"],
-            "i18n_998": ["zh": "屏幕分辨率", "en": "Screen Resolution"],
-            "i18n_999": ["zh": "已安装应用", "en": "Installed Apps"],
-            "i18n_1000": ["zh": "工作区占用", "en": "Workspace Usage"],
-            "i18n_1001": ["zh": "电池电量", "en": "Battery"],
-            "i18n_1002": ["zh": "设备名称", "en": "Device Name"],
-            "i18n_1003": ["zh": "amfid 绕过", "en": "amfid Bypass"],
-            "i18n_1004": ["zh": "推断生效", "en": "Inferred Active"],
-            "i18n_1005": ["zh": "未知/未生效", "en": "Unknown/Inactive"],
-            "i18n_1006": ["zh": "设备标识符", "en": "Device Identifier"],
-            "i18n_1007": ["zh": "本机环境", "en": "Device Environment"],
-            "i18n_1008": ["zh": "未知文件", "en": "Unknown File"],
-            "i18n_1010": ["zh": "无法渲染图片", "en": "Cannot Render Image"],
-            "i18n_1011": ["zh": "无法读取", "en": "Cannot Read"],
-            "i18n_1012": ["zh": "此类型无法直接预览，可用上方按钮存储到文件或用其他 App 打开", "en": "This type can't be previewed; use the buttons above to save it to Files or open in another app"],
-            "i18n_1013": ["zh": "已导入并切换", "en": "Imported & switched"],
-            "i18n_1014": ["zh": "重复配置，未导入", "en": "Duplicate config, not imported"],
-            "i18n_1015": ["zh": "检测环境", "en": "Detect Environment"],
-            "i18n_1016": ["zh": "M月d日 HH:mm", "en": "M/d HH:mm"],
-            "i18n_1017": ["zh": "简洁模式", "en": "Concise Mode"],
-            "i18n_1018": ["zh": "综合模式", "en": "General Mode"],
-            "i18n_1019": ["zh": "开发者模式", "en": "Developer Mode"],
-            "i18n_1020": ["zh": "逆向专家模式", "en": "Reverse-Engineering Expert"],
-            "i18n_1021": ["zh": "渗透工程师模式", "en": "Pentesting Engineer"],
-            "i18n_1022": ["zh": "游戏修改模式", "en": "Game Modding Mode"],
-            "i18n_1023": ["zh": "AI 控制 UI 模式", "en": "AI UI Control Mode"],
-            "i18n_1024": ["zh": "1. 米斯特漏洞助手（完整版）", "en": "1. Mist Vulnerability Assistant (Full)"],
-            "i18n_1025": ["zh": "3. Skeleton Key (微软 2024)", "en": "3. Skeleton Key (Microsoft 2024)"],
-            "i18n_1026": ["zh": "4. Evil Confidant 邪恶密友", "en": "4. Evil Confidant"],
-            "i18n_1027": ["zh": "5. CO-STAR 破甲框架（完整版）", "en": "5. CO-STAR Jailbreak Framework (Full)"],
-            "i18n_1028": ["zh": "6. 安全审计员 - 反向诱导", "en": "6. Security Auditor - Reverse Induction"],
-            "i18n_1029": ["zh": "7. 编码绕过模式", "en": "7. Coding Bypass Mode"],
-            "i18n_1030": ["zh": "8. 学术研究员模式", "en": "8. Academic Researcher Mode"],
-            "i18n_1031": ["zh": "已选 %d 条", "en": "Selected %d item(s)"],
-            "i18n_1032": ["zh": "未选择模型", "en": "No model selected"],
-            "i18n_1033": ["zh": "已切换：%@", "en": "Switched: %@"],
-            "i18n_1034": ["zh": "网络已恢复", "en": "Network restored"],
-            "i18n_1035": ["zh": "已回到前台", "en": "Back to foreground"],
-            "i18n_1036": ["zh": "第 %d 轮", "en": "Round %d"],
-            "i18n_1037": ["zh": "推理·%@", "en": "Reasoning·%@"],
-            "i18n_1038": ["zh": "技能", "en": "Skills"],
-            "i18n_1041": ["zh": "低", "en": "Low"],
-            "i18n_1042": ["zh": "中", "en": "Medium"],
-            "i18n_1043": ["zh": "高", "en": "High"],
-            "i18n_1044": ["zh": "最高", "en": "Max"],
-            "i18n_1045": ["zh": "极限", "en": "Ultimate"],
-            "i18n_1046": ["zh": "应用", "en": "Apps"],
-            "i18n_1047": ["zh": "相册", "en": "Photos"],
-            "i18n_1049": ["zh": "浏览器", "en": "Browser"],
-            "i18n_1050": ["zh": "📷 图片%d 识别到的文字：\\n%@", "en": "📷 Image %d recognized text:\\n%@"],
-            "i18n_1051": ["zh": "🔍 已自动 OCR 识别图片文字", "en": "🔍 Auto-OCR done"],
-            "i18n_1052": ["zh": "处理请求", "en": "Processing request"],
-            "i18n_1053": ["zh": "[📱应用：%@（%@）]", "en": "[📱App: %@ (%@)]"],
-            "i18n_1054": ["zh": "[📎文件：%@] 已保存到 %@", "en": "[📎File: %@] saved to %@"],
-            "i18n_1055": ["zh": "[📎文件：%@]（复制到工作区失败，请手动放入 %@）", "en": "[📎File: %@] (copy to workspace failed, place it manually at %@)"],
-            "i18n_1056": ["zh": "发送消息", "en": "Send"],
-            "i18n_1057": ["zh": "已复制 %d 条内容", "en": "Copied %d item(s)"],
-            "i18n_1059": ["zh": "新会话", "en": "New Chat"],
-            "i18n_1060": ["zh": "我：%@", "en": "Me: %@"],
-            "i18n_1061": ["zh": "工具结果%@：%@", "en": "Tool result %@: %@"],
-            "i18n_1062": ["zh": "清空当前会话", "en": "Clear current chat"],
-            "i18n_1063": ["zh": "新建会话", "en": "New Chat"],
-            "i18n_1064": ["zh": "切换模型", "en": "Switch Model"],
-            "i18n_1065": ["zh": "查看已加载工具", "en": "View loaded tools"],
-            "i18n_1066": ["zh": "已清空当前会话", "en": "Cleared current chat"],
-            "i18n_1067": ["zh": "已新建会话", "en": "Created new chat"],
-            "i18n_1068": ["zh": "已提及 %@", "en": "Mentioned %@"],
-            "i18n_1069": ["zh": "选择上游模型", "en": "Select upstream model"],
-            "i18n_1070": ["zh": "在设置中管理模型", "en": "Manage models in Settings"],
-            "i18n_1071": ["zh": "思考中…", "en": "Thinking…"],
-            "i18n_1072": ["zh": "已深度思考 %d 字", "en": "Deep-thought %d chars"],
-            "i18n_1074": ["zh": "✗ 出错", "en": "✗ Error"],
-            "i18n_1075": ["zh": "✓ 完成", "en": "✓ Done"],
-            "i18n_1076": ["zh": "工具执行中…", "en": "Tool running…"],
-            "i18n_1077": ["zh": "工具结果 ▴", "en": "Tool result ▴"],
-            "i18n_1078": ["zh": "工具结果 ▾", "en": "Tool result ▾"],
-            "i18n_1079": ["zh": "用 TrollStore 安装", "en": "Install via TrollStore"],
-            "i18n_1080": ["zh": "✅ %d 步成功", "en": "✅ %d steps OK"],
-            "i18n_1081": ["zh": "输入消息...", "en": "Type a message…"],
-            "i18n_1082": ["zh": "选择分析", "en": "Choose to analyze"],
-            "i18n_1083": ["zh": "最多 8 张", "en": "Up to 8 photos"],
-            "i18n_1084": ["zh": "最多 8 个", "en": "Up to 8 files"],
-            "i18n_1085": ["zh": "AI 可控制", "en": "AI-controllable"],
-            "i18n_1086": ["zh": "思考·%@", "en": "Think·%@"],
-            "i18n_1087": ["zh": "搜索·%@", "en": "Search·%@"],
-            "i18n_1088": ["zh": "开", "en": "On"],
-            "i18n_1089": ["zh": "关", "en": "Off"],
-            "i18n_1090": ["zh": "需要 TrollStore 开启\"编辑 Entitlements\"并卸载重装", "en": "Requires 'Edit Entitlements' in TrollStore and a reinstall"],
-            "i18n_1091": ["zh": "→ AI 调用 web.search(\"2026 iPhone 发布会\")，再 web.fetch 打开最相关的链接读正文", "en": "→ AI calls web.search(\"2026 iPhone 发布会\"), then web.fetch opens the most relevant link to read it"],
-            "i18n_1144": ["zh": "目标 App", "en": "Target App"],
-            "i18n_1093": ["zh": "生成 Tweak 项目模板", "en": "Generate Tweak Project Template"],
-            "i18n_1094": ["zh": "在工作区创建 MyTweak 模板", "en": "Creates MyTweak template in workspace"],
-            "i18n_1095": ["zh": "📱 App 控制", "en": "📱 App Control"],
-            "i18n_1096": ["zh": "👆 UI 操作", "en": "👆 UI Actions"],
-            "i18n_1097": ["zh": "使用 artifact.* 读写", "en": "Read/write via artifact.*"],
-            "i18n_1098": ["zh": "删除 Documents/Workspace 下所有文件", "en": "Delete all files under Documents/Workspace"],
-            "i18n_1099": ["zh": "指令内容（Markdown）", "en": "Instruction Content (Markdown)"],
-            "i18n_1100": ["zh": "使用 workspace 目录内的文件", "en": "Use files inside the workspace directory"],
-            "i18n_1101": ["zh": "URL 无效", "en": "Invalid URL"],
-            "i18n_1102": ["zh": "模型 API", "en": "Model API"],
-            "i18n_1103": ["zh": "Base URL 无效", "en": "Invalid Base URL"],
-            "i18n_1104": ["zh": "延迟 %dms", "en": "Latency %dms"],
-            "i18n_1105": ["zh": "API 协议", "en": "API Protocol"],
-            "i18n_1106": ["zh": "API 配置", "en": "API Config"],
-            "i18n_1107": ["zh": "输入 token 估算", "en": "Input token estimate"],
-            "i18n_1108": ["zh": "通用 UIKit API，不依赖具体 App", "en": "Generic UIKit API, not tied to a specific app"],
-            "i18n_1109": ["zh": "AI 调用 control.inject(bundle_id) 注入 ControlAgent.dylib", "en": "AI calls control.inject(bundle_id) to inject ControlAgent.dylib"],
-            "i18n_1110": ["zh": "AI 调用 control.status 确认连接", "en": "AI calls control.status to confirm the connection"],
-            "i18n_1111": ["zh": "注入 ControlAgent 到目标 App", "en": "Inject ControlAgent into the target app"],
-            "i18n_1112": ["zh": "读取 UI 树", "en": "Read the UI tree"],
-            "i18n_1113": ["zh": "模拟滑动 (x1,y1 → x2,y2)", "en": "Simulate swipe (x1,y1 → x2,y2)"],
-            "i18n_1114": ["zh": "模拟按键 (home/back/enter)", "en": "Simulate keys (home/back/enter)"],
-            "i18n_1115": ["zh": "只监听 localhost (127.0.0.1:4789)，不暴露到网络", "en": "Listens on localhost only (127.0.0.1:4789), never exposed to the network"],
-            "i18n_1116": ["zh": "注入后必须重启目标 App，ControlAgent 才会启动", "en": "The target app must be restarted after injection for ControlAgent to start"],
-            "i18n_1117": ["zh": "需要 TrollStore 开启\"编辑 Entitlements\"并卸载重装", "en": "Requires 'Edit Entitlements' in TrollStore and a reinstall"],
-            "i18n_1118": ["zh": "UI 树限制 500 节点、深度 12 层", "en": "UI tree capped at 500 nodes, 12 levels deep"],
-            "i18n_1119": ["zh": "CA 证书", "en": "CA Certificate"],
-            "i18n_1120": ["zh": "查看已捕获的 HTTP/HTTPS 请求", "en": "View captured HTTP/HTTPS requests"],
-            "i18n_1121": ["zh": "VPN，或本地代理 + WiFi 手动代理 127.0.0.1:18180", "en": "VPN, or local proxy + WiFi manual proxy 127.0.0.1:18180"],
-            "i18n_1122": ["zh": "正常用目标 App，日志写入 Workspace/network_capture/mitm/", "en": "Use the target app normally; logs go to Workspace/network_capture/mitm/"],
-            "i18n_1123": ["zh": "GitHub 账号", "en": "GitHub Account"],
-            "i18n_1124": ["zh": "登录 GitHub 账号", "en": "Log in to GitHub Account"],
-            "i18n_1125": ["zh": "使用 Personal Access Token（PAT）", "en": "Use Personal Access Token (PAT)"],
-            "i18n_1126": ["zh": "线上编译（GitHub Actions）", "en": "Cloud Build (GitHub Actions)"],
-            "i18n_1127": ["zh": "tweak 目录名（如 CompileProbe）", "en": "Tweak folder name (e.g. CompileProbe)"],
-            "i18n_1128": ["zh": "请先登录 GitHub 账号", "en": "Log in to your GitHub account first"],
-            "i18n_1129": ["zh": "登录 GitHub", "en": "Log in to GitHub"],
-            "i18n_1130": ["zh": "OAuth App（网页登录用）", "en": "OAuth App (for web login)"],
-            "i18n_1131": ["zh": "workflow 文件名", "en": "Workflow file name"],
-            "i18n_1132": ["zh": "所有 App 的 Caches + tmp", "en": "All apps' Caches + tmp"],
-            "i18n_1133": ["zh": "所有 App 的 Library/Logs", "en": "All apps' Library/Logs"],
-            "i18n_1134": ["zh": "SplashBoard 启动截图缓存", "en": "SplashBoard launch screenshot cache"],
-            "i18n_1135": ["zh": "WebKit 缓存", "en": "WebKit Cache"],
-            "i18n_1136": ["zh": "所有 App 的 WebKit 网页缓存", "en": "All apps' WebKit web caches"],
-            "i18n_1137": ["zh": "Safari 缓存", "en": "Safari Cache"],
-            "i18n_1138": ["zh": "AI 自动调用 web.search 检索 → 必要时 web.fetch 读原文 → 带引用回答", "en": "AI auto-calls web.search, then web.fetch to read the source when needed — answers with citations"],
-            "i18n_1139": ["zh": "→ AI 调用 web.search(\"2026 iPhone 发布会\")，再 web.fetch 打开最相关的链接读正文", "en": "→ AI calls web.search(\"2026 iPhone 发布会\"), then web.fetch opens the most relevant link to read it"],
-            "i18n_1140": ["zh": "deb 包缓存", "en": "deb package cache"],
-            "i18n_1141": ["zh": "去掉tool_choice", "en": "Drop tool_choice"],
-            "i18n_1142": ["zh": "Responses API+工具", "en": "Responses API + tools"],
-            "i18n_1143": ["zh": "设备 ID", "en": "Device ID"],
-            "i18n_1145": ["zh": "Safari 行为监控", "en": "Safari Behavior Monitor"],
-            "i18n_1146": ["zh": "IOC 规则库", "en": "IOC Rule Base"],
-            "i18n_1147": ["zh": "监控 IOSurface 异常调用", "en": "Monitors abnormal IOSurface calls"],
-            "i18n_1148": ["zh": "关于 Coruna 漏洞", "en": "About the Coruna Bug"],
-            "i18n_1149": ["zh": "iOS 16.3 ✅ 受影响", "en": "iOS 16.3 ✅ Affected"],
-            "i18n_1150": ["zh": "一键注入 dylib 到任意 App", "en": "One-tap dylib injection into any app"],
-            "i18n_1151": ["zh": "基于 Google Threat Intelligence IOCs", "en": "Based on Google Threat Intelligence IOCs"],
-            "i18n_1152": ["zh": "Coruna Web 注入", "en": "Coruna Web Injection"],
-            "i18n_1153": ["zh": "Coruna 漏洞链支持 iOS 13.0 - 17.2.1。当前: %@", "en": "Coruna chain supports iOS 13.0 - 17.2.1. Current: %@"],
-            "i18n_1154": ["zh": "Dylib 文件", "en": "Dylib File"],
-            "i18n_1155": ["zh": "CVE-2024-23222 类型混淆", "en": "CVE-2024-23222 type confusion"],
-            "i18n_1156": ["zh": "Wasm 调度劫持", "en": "Wasm dispatch hijack"],
-            "i18n_1157": ["zh": "call_indirect 指针覆盖", "en": "call_indirect pointer overwrite"],
-            "i18n_1158": ["zh": "PAC 绕过", "en": "PAC Bypass"],
-            "i18n_1159": ["zh": "AMFI 补丁", "en": "AMFI Patch"],
-            "i18n_1160": ["zh": "启用 Developer Mode", "en": "Enable Developer Mode"],
-            "i18n_1161": ["zh": "选择 Dylib", "en": "Select Dylib"],
-            "i18n_1162": ["zh": "%d 个工具 · iOS/原生/Alpine 分层", "en": "%d tools · iOS/Native/Alpine layers"],
-            "i18n_1163": ["zh": "抓包 VPN", "en": "Packet VPN"],
-            "i18n_1164": ["zh": "Coruna 安全盾", "en": "Coruna Shield"],
-            "i18n_1165": ["zh": "ZeenAE · 独立开发者", "en": "ZeenAE · Independent Developer"],
-            "i18n_1169": ["zh": "GitHub 被墙时备用 · ", "en": "Fallback when GitHub is blocked · "],
-            "i18n_1170": ["zh": "检查更新", "en": "Check Update"],
-            "i18n_1171": ["zh": "默认（ghfast.top）", "en": "Default (ghfast.top)"],
-            "i18n_1172": ["zh": "如 192.168.1.100", "en": "e.g. 192.168.1.100"],
-            "i18n_1173": ["zh": "如 root", "en": "e.g. root"],
-            "i18n_1174": ["zh": "可选，如 /var/mobile/.ssh/id_rsa", "en": "Optional, e.g. /var/mobile/.ssh/id_rsa"],
-            "i18n_1176": ["zh": "工具权限策略", "en": "Tool Permissions"],
-            "i18n_1177": ["zh": "Alpine 工具", "en": "Alpine Tools"],
-            "i18n_1178": ["zh": "iOS 芯片直跑：sqlite3/plutil/jtool2/py3-native/node-native + 注入链", "en": "iOS chip-native: sqlite3/plutil/jtool2/py3-native/node-native + injection chain"],
-            "i18n_1179": ["zh": "Linux 沙箱工具链：busybox 全套 + apk 可装任意工具", "en": "Linux sandbox toolchain: full busybox + apk installs any tool"],
-            "i18n_1181": ["zh": "设置", "en": "Settings"],
-            "i18n_1182": ["zh": "SQLite 数据库（iOS 系统自带）", "en": "SQLite database (iOS built-in)"],
-            "i18n_1183": ["zh": "plist 读写（iOS 系统自带）", "en": "plist read/write (iOS built-in)"],
-            "i18n_1184": ["zh": "原生 Python 3.14（芯片直跑 numpy/pandas）", "en": "Native Python 3.14 (chip-native numpy/pandas)"],
-            "i18n_1185": ["zh": "Git 封装（纯 Python——rootfs 缺失兜底）", "en": "Git wrapper (pure Python — rootfs fallback)"],
-            "i18n_1186": ["zh": "签名工具（伪签/entitlements）", "en": "Signing tools (fake-sign/entitlements)"],
-            "i18n_1187": ["zh": "dylib 注入", "en": "dylib Injection"],
-            "i18n_1188": ["zh": "Mach-O 操作", "en": "Mach-O Ops"],
-            "i18n_1189": ["zh": "TrollStore 注入", "en": "TrollStore Injection"],
-            "i18n_1190": ["zh": "dylib 路径修改", "en": "dylib path patch"],
-            "i18n_1191": ["zh": "Alpine 命令", "en": "Alpine Commands"],
-            "i18n_1192": ["zh": "系统权限", "en": "System Permissions"],
-            "i18n_1193": ["zh": "自动化", "en": "Automation"],
-            "i18n_1194": ["zh": "MCP 工具 (%d)", "en": "MCP Tools (%d)"],
-            "i18n_1195": ["zh": "TrollAgent 统一环境终端（TrollRuntime/Alpine）", "en": "TrollAgent Unified Terminal (TrollRuntime/Alpine)"],
-            "i18n_1196": ["zh": "\\n…[输出过长已截断]", "en": "⏎…[output too long, truncated]"],
-            "i18n_1197": ["zh": "已复制", "en": "Copied"],
-        ]
+            tbl["i18n_1039"] = ["zh": "指令", "en": "Instructions"]
+            tbl["i18n_197"] = ["zh": "跳系统指令", "en": "Jump to System Prompts"]
+            tbl["i18n_198"] = ["zh": "%d 个 · %@", "en": "%d · %@"]
+            tbl["i18n_1073"] = ["zh": "工具", "en": "Tools"]
+            tbl["i18n_200"] = ["zh": "工具中心", "en": "Tool Center"]
+            tbl["i18n_201"] = ["zh": "网络与抓包", "en": "Network & Capture"]
+            tbl["i18n_202"] = ["zh": "中转站自适应降级记录", "en": "Relay auto-degrade log"]
+            tbl["i18n_203"] = ["zh": "线上编译 · %@", "en": "Cloud Build · %@"]
+            tbl["i18n_204"] = ["zh": "线上编译产物 · 勾选删除", "en": "Build artifacts · select & delete"]
+            tbl["i18n_205"] = ["zh": "计划 · 分色日志 · 现场截图 · 操作宏", "en": "Plan · color-coded log · live screenshot · macros"]
+            tbl["i18n_841"] = ["zh": "可爱助手", "en": "Cute Assistant"]
+            tbl["i18n_207"] = ["zh": "桌面悬浮运行中 · 手机桌面显示", "en": "HUD running · shown on home screen"]
+            tbl["i18n_208"] = ["zh": "桌面悬浮未运行 · 手机桌面隐藏", "en": "HUD stopped · hidden from home screen"]
+            tbl["i18n_209"] = ["zh": "伪装机型 · 注入生效", "en": "Spoof model · applied via injection"]
+            tbl["i18n_210"] = ["zh": "完整对话存档", "en": "Full chat archive"]
+            tbl["i18n_610"] = ["zh": "远程访问", "en": "Remote Access"]
+            tbl["i18n_212"] = ["zh": "SSH 连接远程服务器 · 远程终端被控制", "en": "SSH remote server · remote terminal control"]
+            tbl["i18n_213"] = ["zh": "悬浮窗 · AI 可控制 · 蓝框高亮", "en": "Floating window · AI-driven · blue-box highlight"]
+            tbl["i18n_214"] = ["zh": "隔离指令 · 工作流", "en": "Isolated prompts · workflows"]
+            tbl["i18n_215"] = ["zh": "文件导入 · 来源检索", "en": "Import files · source search"]
+            tbl["i18n_216"] = ["zh": "工具与管理", "en": "Tools & Management"]
+            tbl["i18n_217"] = ["zh": "工具调用 · 成功/失败 · 崩溃日志 · 导出给 AI 查看", "en": "Tool calls · success/fail · crash logs · export to AI"]
+            tbl["i18n_218"] = ["zh": "点开浏览目录 · 预览 · 复制路径 · 分享", "en": "Browse folders · preview · copy path · share"]
+            tbl["i18n_219"] = ["zh": "清理中心", "en": "Cleanup Center"]
+            tbl["i18n_220"] = ["zh": "缓存 · 钥匙串 · 广告符 · 数据容器 · 系统清理", "en": "Caches · keychain · IDFA · containers · system cleanup"]
+            tbl["i18n_221"] = ["zh": "检测恶意网站 · 拦截利用 · Web 注入", "en": "Detect malicious sites · block exploits · web injection"]
+            tbl["i18n_222"] = ["zh": "测试系统分享面板（Debug）", "en": "Test system share sheet (Debug)"]
+            tbl["i18n_223"] = ["zh": "需检查 %d 项", "en": "%d item(s) need attention"]
+            tbl["i18n_224"] = ["zh": "点击探测", "en": "Tap to probe"]
+            tbl["i18n_225"] = ["zh": "未登录 · 多账号", "en": "Not logged in · multi-account"]
+            tbl["i18n_226"] = ["zh": "%d 个账号", "en": "%d account(s)"]
+            tbl["i18n_227"] = ["zh": "%d 条 · 长按设默认", "en": "%d · long-press to set default"]
+            tbl["i18n_228"] = ["zh": "正在检查 GitHub 最新构建…", "en": "Checking GitHub for latest build…"]
+            tbl["i18n_229"] = ["zh": "正在下载 v%@… %d%%", "en": "Downloading v%@… %d%%"]
+            tbl["i18n_230"] = ["zh": "发现新版本 v%@ · 点此一键更新安装", "en": "v%@ available · tap to update & install"]
+            tbl["i18n_231"] = ["zh": "已是最新 · 检查源: %@", "en": "Up to date · source: %@"]
+            tbl["i18n_232"] = ["zh": "已是最新", "en": "Up to date"]
+            tbl["i18n_233"] = ["zh": "运行中 · 点击右侧开关关闭", "en": "Running · tap toggle to stop"]
+            tbl["i18n_234"] = ["zh": "未运行 · 点击右侧开关开启", "en": "Stopped · tap toggle to start"]
+            tbl["i18n_235"] = ["zh": "正在检查更新…", "en": "Checking for updates…"]
+            tbl["i18n_236"] = ["zh": "正在下载 v%@… %d%%", "en": "Downloading v%@… %d%%"]
+            tbl["i18n_237"] = ["zh": "发现新版本 v%@ · 点下方按钮更新", "en": "v%@ available · tap the button below to update"]
+            tbl["i18n_238"] = ["zh": "已是最新版本", "en": "Already up to date"]
+            tbl["i18n_239"] = ["zh": "更新状态", "en": "Update Status"]
+            tbl["i18n_240"] = ["zh": "当前版本", "en": "Current Version"]
+            tbl["i18n_241"] = ["zh": "立即检查更新", "en": "Check for Updates"]
+            tbl["i18n_242"] = ["zh": "高级设置", "en": "Advanced"]
+            tbl["i18n_243"] = ["zh": "更新镜像源", "en": "Update Mirrors"]
+            tbl["i18n_244"] = ["zh": "封装工具", "en": "Wrapper Tools"]
+            tbl["i18n_245"] = ["zh": "原生工具", "en": "Native Tools"]
+            tbl["i18n_246"] = ["zh": "注册的大工具（ToolRegistry——AI 可直接调用的封装能力）", "en": "Registered tools (ToolRegistry — wrapper capabilities AI can call directly)"]
+            tbl["i18n_247"] = ["zh": "有真实实现", "en": "Has real implementation"]
+            tbl["i18n_248"] = ["zh": "占位/文档", "en": "Stub / doc-only"]
+            tbl["i18n_249"] = ["zh": "文件属性（iOS 系统自带）", "en": "File attributes (iOS built-in)"]
+            tbl["i18n_250"] = ["zh": "Mach-O 解析（签名/权限/元数据）", "en": "Mach-O parsing (signature/permissions/metadata)"]
+            tbl["i18n_251"] = ["zh": "原生 Node.js（芯片直跑重负载 JS）", "en": "Native Node.js (chip-native heavy JS)"]
+            tbl["i18n_252"] = ["zh": "网络扫描脚本", "en": "Network scan script"]
+            tbl["i18n_253"] = ["zh": "代码签名绕过", "en": "Code-sign bypass"]
+            tbl["i18n_254"] = ["zh": "更改属主（iOS 系统）", "en": "Change owner (iOS)"]
+            tbl["i18n_255"] = ["zh": "复制（iOS 系统）", "en": "Copy (iOS)"]
+            tbl["i18n_256"] = ["zh": "建目录（iOS 系统）", "en": "Make directory (iOS)"]
+            tbl["i18n_257"] = ["zh": "移动（iOS 系统）", "en": "Move (iOS)"]
+            tbl["i18n_258"] = ["zh": "删除（iOS 系统）", "en": "Delete (iOS)"]
+            tbl["i18n_259"] = ["zh": "文件操作", "en": "File Ops"]
+            tbl["i18n_260"] = ["zh": "文本处理", "en": "Text Processing"]
+            tbl["i18n_261"] = ["zh": "压缩解压", "en": "Compress / Extract"]
+            tbl["i18n_262"] = ["zh": "系统信息", "en": "System Info"]
+            tbl["i18n_263"] = ["zh": "网络", "en": "Network"]
+            tbl["i18n_264"] = ["zh": "装任意工具（apk add <包名>）", "en": "Install any tool (apk add <pkg>)"]
+            tbl["i18n_265"] = ["zh": "编程环境", "en": "Programming Environment"]
+            tbl["i18n_266"] = ["zh": "文本编辑/输出", "en": "Text edit / output"]
+            tbl["i18n_267"] = ["zh": "真实实现", "en": "Real implementation"]
+            tbl["i18n_268"] = ["zh": "统一环境执行（iOS 原生命令 + Alpine 工具链）", "en": "Unified runtime (native iOS cmds + Alpine toolchain)"]
+            tbl["i18n_269"] = ["zh": "原生命令", "en": "Native commands"]
+            tbl["i18n_270"] = ["zh": "工具分三层", "en": "Tools in 3 layers"]
+            tbl["i18n_271"] = ["zh": "封装工具 = 注册的大工具（AI 直接调用——✓ 已验证 = 真机实测过）；原生工具 = iOS 芯片直跑命令；Alpine 工具 = Linux 沙箱工具链。", "en": "Wrapper tools = registered tools (AI calls directly — ✓ verified = tested on device); Native tools = iOS chip-native commands; Alpine tools = Linux sandbox toolchain."]
+            tbl["i18n_366"] = ["zh": "通知/位置/通讯录/日历/快捷指令", "en": "Notifications/location/contacts/calendar/shortcuts"]
+            tbl["i18n_367"] = ["zh": "任务 · 历史 · 重试", "en": "Tasks · history · retry"]
+            tbl["i18n_365"] = ["zh": "搜索工具...", "en": "Search tools..."]
+            tbl["i18n_275"] = ["zh": "工具中心（%d）", "en": "Tool Center (%d)"]
+            tbl["i18n_276"] = ["zh": "文件桥", "en": "File Bridge"]
+            tbl["i18n_277"] = ["zh": "注入管理", "en": "Injection Manager"]
+            tbl["i18n_278"] = ["zh": "高级探测", "en": "Advanced Probe"]
+            tbl["i18n_341"] = ["zh": "系统能力", "en": "System Capabilities"]
+            tbl["i18n_280"] = ["zh": "编译与模型", "en": "Build & Models"]
+            tbl["i18n_281"] = ["zh": "被引用但未注册", "en": "Referenced but not registered"]
+            tbl["i18n_282"] = ["zh": "输入命令…", "en": "Type a command…"]
+            tbl["i18n_283"] = ["zh": "清屏", "en": "Clear Screen"]
+            tbl["i18n_284"] = ["zh": "输入命令回车执行 · 自动超时 30s · 支持管道/&&/;/循环", "en": "Type a command & hit Enter · 30s auto-timeout · pipes/&&/;/loops OK"]
+            tbl["i18n_285"] = ["zh": "(无输出)", "en": "(no output)"]
+            tbl["i18n_286"] = ["zh": "⏎…[输出过长已截断]", "en": "⏎…[output too long, truncated]"]
+            tbl["i18n_287"] = ["zh": "⏱ 超时（30s）——命令可能挂起", "en": "⏱ Timeout (30s) — command may be hung"]
+            tbl["i18n_288"] = ["zh": "服务", "en": "Service"]
+            tbl["i18n_289"] = ["zh": "服务运行中：0.0.0.0:%@。已自动开启后台保活，切后台仍在线；被系统杀进程后仍会断线。", "en": "Service running at 0.0.0.0:%@. Background keep-alive enabled; stays online in background. It will drop if the system kills the process."]
+            tbl["i18n_290"] = ["zh": "启动后监听 0.0.0.0:%@，局域网与公网（经 N1 转发）均可访问；开启服务将自动启动后台保活。", "en": "Listens on 0.0.0.0:%@ once started; reachable on LAN and public internet (via N1 port forward). Enabling the service also starts background keep-alive."]
+            tbl["i18n_607"] = ["zh": "远程终端服务", "en": "Remote Terminal Service"]
+            tbl["i18n_292"] = ["zh": "已启动 :%d", "en": "Started on :%@"]
+            tbl["i18n_293"] = ["zh": "启动失败（端口占用？）", "en": "Start failed (port in use?)"]
+            tbl["i18n_518"] = ["zh": "已停止", "en": "Stopped"]
+            tbl["i18n_295"] = ["zh": "访问令牌（token，必填）", "en": "Access token (required)"]
+            tbl["i18n_296"] = ["zh": "端口（默认 8790）", "en": "Port (default 8790)"]
+            tbl["i18n_297"] = ["zh": "本机地址", "en": "Local Address"]
+            tbl["i18n_298"] = ["zh": "局域网 IP", "en": "LAN IP"]
+            tbl["i18n_299"] = ["zh": "获取失败", "en": "Failed to get"]
+            tbl["i18n_300"] = ["zh": "服务地址", "en": "Service Address"]
+            tbl["i18n_301"] = ["zh": "复制局域网地址", "en": "Copy LAN Address"]
+            tbl["i18n_302"] = ["zh": "N1 公网映射", "en": "N1 Public Mapping"]
+            tbl["i18n_303"] = ["zh": "N1 只做端口转发，无需装任何服务", "en": "N1 is a port-forward relay only; no services needed"]
+            tbl["i18n_304"] = ["zh": "危险工具授权", "en": "Dangerous Tool Authorization"]
+            tbl["i18n_305"] = ["zh": "默认只允许只读诊断工具（状态/文件浏览/日志/审计/注入状态查询）。开启后允许注入、删除、写入、启动 App、抓包等危险工具被远程调用——仅在你完全信任的私网映射下开启。", "en": "By default only read-only diagnostic tools are allowed (status/file browse/logs/audit/injection status). When enabled, dangerous tools like injection, deletion, writing, launching apps and packet capture can be called remotely — enable only behind a fully trusted private mapping."]
+            tbl["i18n_306"] = ["zh": "允许远程执行危险工具", "en": "Allow remote execution of dangerous tools"]
+            tbl["i18n_307"] = ["zh": "远程终端", "en": "Remote Terminal"]
+            tbl["i18n_312"] = ["zh": "越狱", "en": "Jailbreak"]
+            tbl["i18n_313"] = ["zh": "占位", "en": "Stub"]
+            tbl["i18n_314"] = ["zh": "仅真机验证", "en": "Device-verified"]
+            tbl["i18n_315"] = ["zh": "终端", "en": "Terminal"]
+            tbl["i18n_316"] = ["zh": "崩溃", "en": "Crash"]
+            tbl["i18n_871"] = ["zh": "分享", "en": "Share"]
+            tbl["i18n_318"] = ["zh": "没有崩溃记录", "en": "No crash records"]
+            tbl["i18n_319"] = ["zh": "按时间排序", "en": "Sort by time"]
+            tbl["i18n_320"] = ["zh": "按状态排序", "en": "Sort by status"]
+            tbl["i18n_321"] = ["zh": "按耗时排序", "en": "Sort by duration"]
+            tbl["i18n_322"] = ["zh": "按类别排序", "en": "Sort by category"]
+            tbl["i18n_856"] = ["zh": "最新", "en": "Newest"]
+            tbl["i18n_857"] = ["zh": "最早", "en": "Oldest"]
+            tbl["i18n_325"] = ["zh": "时间", "en": "Time"]
+            tbl["i18n_326"] = ["zh": "耗时", "en": "Duration"]
+            tbl["i18n_327"] = ["zh": "类别", "en": "Category"]
+            tbl["i18n_328"] = ["zh": "执行成功", "en": "Succeeded"]
+            tbl["i18n_329"] = ["zh": "执行失败", "en": "Failed"]
+            tbl["i18n_330"] = ["zh": "哪些工具有问题、为什么", "en": "Which tools fail, and why"]
+            tbl["i18n_331"] = ["zh": "错误码分布（env=环境 / target=目标 / param=参数 / tool=工具自身）", "en": "Error code breakdown (env / target / param / tool)"]
+            tbl["i18n_332"] = ["zh": "工具健康度排行（按失败次数）", "en": "Tool health ranking (by failures)"]
+            tbl["i18n_333"] = ["zh": "暂无文件日志", "en": "No file logs"]
+            tbl["i18n_334"] = ["zh": "（今天暂无文件日志）", "en": "(No file logs today)"]
+            tbl["i18n_335"] = ["zh": "导出失败：%@", "en": "Export failed: %@"]
+            tbl["i18n_336"] = ["zh": "编译模式", "en": "Build Mode"]
+            tbl["i18n_337"] = ["zh": "生成编译令牌", "en": "Generate Build Token"]
+            tbl["i18n_338"] = ["zh": "用于验证本地编译请求", "en": "Used to verify local build requests"]
+            tbl["i18n_339"] = ["zh": "项目模板", "en": "Project Template"]
+            tbl["i18n_340"] = ["zh": "编译", "en": "Build"]
+            tbl["i18n_342"] = ["zh": "通讯录搜索", "en": "Contacts Search"]
+            tbl["i18n_343"] = ["zh": "日历事件", "en": "Calendar Events"]
+            tbl["i18n_344"] = ["zh": "提醒事项", "en": "Reminders"]
+            tbl["i18n_345"] = ["zh": "定位", "en": "Location"]
+            tbl["i18n_346"] = ["zh": "本地通知", "en": "Local Notifications"]
+            tbl["i18n_347"] = ["zh": "扫码识别", "en": "QR Scan"]
+            tbl["i18n_348"] = ["zh": "本机工具审计", "en": "Tool Audit"]
+            tbl["i18n_349"] = ["zh": "🔌 注入", "en": "🔌 Injection"]
+            tbl["i18n_350"] = ["zh": "🎭 设备/伪装", "en": "🎭 Device/Spoof"]
+            tbl["i18n_351"] = ["zh": "📁 文件系统", "en": "📁 File System"]
+            tbl["i18n_352"] = ["zh": "🌐 浏览器", "en": "🌐 Browser"]
+            tbl["i18n_353"] = ["zh": "🔨 编译/构建", "en": "🔨 Build/Compile"]
+            tbl["i18n_354"] = ["zh": "💾 备份", "en": "💾 Backup"]
+            tbl["i18n_355"] = ["zh": "🧹 清理", "en": "🧹 Cleanup"]
+            tbl["i18n_356"] = ["zh": "🎬 宏", "en": "🎬 Macros"]
+            tbl["i18n_357"] = ["zh": "🧠 知识/记忆", "en": "🧠 Knowledge/Memory"]
+            tbl["i18n_358"] = ["zh": "⚙️ 系统能力", "en": "⚙️ System Capabilities"]
+            tbl["i18n_359"] = ["zh": "🔍 诊断/日志", "en": "🔍 Diagnostics/Logs"]
+            tbl["i18n_360"] = ["zh": "📊 静态分析", "en": "📊 Static Analysis"]
+            tbl["i18n_361"] = ["zh": "⏰ 自动化/定时", "en": "⏰ Automation/Schedule"]
+            tbl["i18n_362"] = ["zh": "📚 技能", "en": "📚 Skills"]
+            tbl["i18n_363"] = ["zh": "🐛 调试", "en": "🐛 Debug"]
+            tbl["i18n_364"] = ["zh": "📦 其他", "en": "📦 Other"]
+            tbl["i18n_368"] = ["zh": "策略", "en": "Policy"]
+            tbl["i18n_369"] = ["zh": "过滤", "en": "Filter"]
+            tbl["i18n_370"] = ["zh": "仅显示真实实现", "en": "Show real implementations only"]
+            tbl["i18n_371"] = ["zh": "工具总数（%d）", "en": "Total tools (%d)"]
+            tbl["i18n_372"] = ["zh": "按类别分组，共 %d 类", "en": "%d categories"]
+            tbl["i18n_373"] = ["zh": "真实", "en": "Real"]
+            tbl["i18n_374"] = ["zh": "✅已检验", "en": "✅ Verified"]
+            tbl["i18n_1040"] = ["zh": "工作区", "en": "Workspace"]
+            tbl["i18n_948"] = ["zh": "路径", "en": "Path"]
+            tbl["i18n_377"] = ["zh": "在会话工具中打开", "en": "Open in session tools"]
+            tbl["i18n_378"] = ["zh": "清空工作区", "en": "Clear Workspace"]
+            tbl["i18n_1048"] = ["zh": "文件", "en": "Files"]
+            tbl["i18n_380"] = ["zh": "导入文件到工作区", "en": "Import file to workspace"]
+            tbl["i18n_381"] = ["zh": "选择外部文件复制到工作区", "en": "Pick an external file to copy into workspace"]
+            tbl["i18n_382"] = ["zh": "破甲测试专用", "en": "For breakout testing"]
+            tbl["i18n_383"] = ["zh": "这里的模型破甲提示词会作为补充提示词注入 AI，适合做破甲、越狱、注入、绕过等高级测试任务。", "en": "These breakout instructions are injected into AI as supplemental prompts — for breakout, jailbreak, injection and bypass testing."]
+            tbl["i18n_384"] = ["zh": "选「开发者模式」系统指令 + 这里的破甲提示词 = 最强的破甲测试组合。", "en": "Pick the 'Developer Mode' system prompt + breakout instructions here = the strongest breakout testing combo."]
+            tbl["i18n_385"] = ["zh": "复制内容", "en": "Copy Content"]
+            tbl["i18n_386"] = ["zh": "编辑", "en": "Edit"]
+            tbl["i18n_387"] = ["zh": "所有开启的指令都会合并后注入 AI 请求。系统指令先注入，破甲指令后注入。", "en": "All enabled instructions are merged into every AI request. System prompt is injected first, breakout instructions after."]
+            tbl["i18n_388"] = ["zh": "（空指令）", "en": "(empty instruction)"]
+            tbl["i18n_389"] = ["zh": "难往下滑", "en": "Hard to scroll"]
+            tbl["i18n_390"] = ["zh": "指令名称", "en": "Instruction Name"]
+            tbl["i18n_391"] = ["zh": "如：我的工程规范", "en": "e.g. My engineering conventions"]
+            tbl["i18n_392"] = ["zh": "用 <!--用户可见--> ... <!--/用户可见--> 包住的段落只显示给你，不会注入 AI 请求（适合放“为什么有效”这类说明）", "en": "Paragraphs wrapped in <!--user-visible--> ... <!--/user-visible--> are shown only to you and are never injected into AI requests (great for 'why it works' notes)."]
+            tbl["i18n_393"] = ["zh": "新建指令", "en": "New Instruction"]
+            tbl["i18n_394"] = ["zh": "编辑指令", "en": "Edit Instruction"]
+            tbl["i18n_395"] = ["zh": "来源", "en": "Source"]
+            tbl["i18n_396"] = ["zh": "导入文件", "en": "Import File"]
+            tbl["i18n_397"] = ["zh": "从工作区导入", "en": "Import from Workspace"]
+            tbl["i18n_398"] = ["zh": "已导入", "en": "Imported"]
+            tbl["i18n_399"] = ["zh": "清空全部", "en": "Clear All"]
+            tbl["i18n_400"] = ["zh": "确定清空全部已导入文件？", "en": "Clear all imported files?"]
+            tbl["i18n_961"] = ["zh": "端点", "en": "Endpoint"]
+            tbl["i18n_402"] = ["zh": "可选签名密钥", "en": "Optional Signing Key"]
+            tbl["i18n_403"] = ["zh": "事件", "en": "Events"]
+            tbl["i18n_906"] = ["zh": "操作", "en": "Actions"]
+            tbl["i18n_405"] = ["zh": "已保存", "en": "Saved"]
+            tbl["i18n_951"] = ["zh": "失败: %@", "en": "Failed: %@"]
+            tbl["i18n_407"] = ["zh": "已发送", "en": "Sent"]
+            tbl["i18n_408"] = ["zh": "从剪贴板导入", "en": "Import from Clipboard"]
+            tbl["i18n_409"] = ["zh": "用量统计", "en": "Usage Stats"]
+            tbl["i18n_410"] = ["zh": "先显示 gpt-4o，很久才变成 5.6", "en": "Shows gpt-4o first, takes a while to become 5.6"]
+            tbl["i18n_411"] = ["zh": "导入完成：成功 %d 个，失败 %@ 个", "en": "Import done: %d OK, %d failed"]
+            tbl["i18n_412"] = ["zh": "导入完成：成功 %d 个", "en": "Import done: %d OK"]
+            tbl["i18n_413"] = ["zh": "无法读取所选文件", "en": "Cannot read the selected file"]
+            tbl["i18n_414"] = ["zh": "无法访问所选文件", "en": "Cannot access the selected file"]
+            tbl["i18n_415"] = ["zh": "已取消导入", "en": "Import cancelled"]
+            tbl["i18n_416"] = ["zh": "剪贴板为空，请先复制模型配置 JSON", "en": "Clipboard is empty — copy a model config JSON first"]
+            tbl["i18n_417"] = ["zh": " 副本", "en": " Copy"]
+            tbl["i18n_418"] = ["zh": "测速失败 · %dms", "en": "Speed test failed · %dms"]
+            tbl["i18n_419"] = ["zh": "标准键:供应商键", "en": "Standard key:provider key"]
+            tbl["i18n_919"] = ["zh": "名称", "en": "Name"]
+            tbl["i18n_421"] = ["zh": "模型名", "en": "Model Name"]
+            tbl["i18n_422"] = ["zh": "鉴权方式", "en": "Auth Method"]
+            tbl["i18n_423"] = ["zh": "连接测试", "en": "Connection Test"]
+            tbl["i18n_424"] = ["zh": "添加模型", "en": "Add Model"]
+            tbl["i18n_425"] = ["zh": "无需鉴权", "en": "No auth needed"]
+            tbl["i18n_426"] = ["zh": "正在测试...", "en": "Testing..."]
+            tbl["i18n_427"] = ["zh": "正在获取模型列表...", "en": "Fetching model list..."]
+            tbl["i18n_428"] = ["zh": "未返回任何模型", "en": "No models returned"]
+            tbl["i18n_429"] = ["zh": "获取到 %d 个模型", "en": "Got %d models"]
+            tbl["i18n_430"] = ["zh": "正在测速...", "en": "Speed testing..."]
+            tbl["i18n_431"] = ["zh": "接口延迟 %dms", "en": "Latency %dms"]
+            tbl["i18n_432"] = ["zh": "选择模型", "en": "Select Model"]
+            tbl["i18n_433"] = ["zh": "请求数", "en": "Requests"]
+            tbl["i18n_434"] = ["zh": "成功率", "en": "Success Rate"]
+            tbl["i18n_435"] = ["zh": "平均耗时", "en": "Avg Time"]
+            tbl["i18n_436"] = ["zh": "清除记录", "en": "Clear Records"]
+            tbl["i18n_437"] = ["zh": "断开", "en": "Disconnect"]
+            tbl["i18n_438"] = ["zh": "连接", "en": "Connect"]
+            tbl["i18n_439"] = ["zh": "已连接 ✅", "en": "Connected ✅"]
+            tbl["i18n_440"] = ["zh": "未连接 ❌", "en": "Disconnected ❌"]
+            tbl["i18n_441"] = ["zh": "(未设置)", "en": "(not set)"]
+            tbl["i18n_442"] = ["zh": "错误", "en": "Error"]
+            tbl["i18n_443"] = ["zh": "网关", "en": "Gateway"]
+            tbl["i18n_444"] = ["zh": "收起内容", "en": "Collapse"]
+            tbl["i18n_445"] = ["zh": "查看内容", "en": "View Content"]
+            tbl["i18n_446"] = ["zh": "系统指令 vs 模型破甲提示词", "en": "System Prompt vs Breakout Instructions"]
+            tbl["i18n_447"] = ["zh": "模型破甲提示词 = 破甲测试专用", "en": "Breakout instructions = for breakout testing"]
+            tbl["i18n_448"] = ["zh": "选择「开发者模式」可以让 AI 执行破甲、越狱、注入、绕过等高级测试任务，适合做 App 破解和安全测试。", "en": "Choosing 'Developer Mode' lets AI run breakout, jailbreak, injection and bypass tasks — for app cracking & security testing."]
+            tbl["i18n_449"] = ["zh": "其他模式（逆向、渗透、游戏修改等）也都有各自的专业提示词，直接选对应模式即可。", "en": "Other modes (reverse engineering, pentest, game modding…) each ship with their own specialized prompts — just pick the mode."]
+            tbl["i18n_450"] = ["zh": "目标 App 切后台不挂起，4789 持续在线", "en": "Target app stays alive in background, port 4789 keeps online"]
+            tbl["i18n_451"] = ["zh": "远程控制时建议开启，防止目标 App 被系统挂起", "en": "Recommended during remote control, keeps the target app from being suspended"]
+            tbl["i18n_452"] = ["zh": "读取完整 UI 树（frame / 文字 / 类型 / 无障碍信息）", "en": "Read full UI tree (frame / text / type / accessibility info)"]
+            tbl["i18n_453"] = ["zh": "实时截图", "en": "Live screenshot"]
+            tbl["i18n_454"] = ["zh": "模拟点击 / 滑动 / 输入文字", "en": "Simulate tap / swipe / text input"]
+            tbl["i18n_455"] = ["zh": "模拟按键（Home / 返回 / 回车）", "en": "Simulate keys (Home / Back / Enter)"]
+            tbl["i18n_456"] = ["zh": "使用流程", "en": "How to Use"]
+            tbl["i18n_457"] = ["zh": "在聊天中让 AI 注入：\"给小红书注入控制代理\"", "en": "In chat, ask AI to inject: \"inject control agent into 小红书\""]
+            tbl["i18n_458"] = ["zh": "手动启动目标 App（注入后需重启）", "en": "Launch the target app manually (restart needed after injection)"]
+            tbl["i18n_459"] = ["zh": "AI 自动读取 UI 树 → 决定操作 → 点击/输入/滑动", "en": "AI reads UI tree → decides actions → tap/type/swipe"]
+            tbl["i18n_460"] = ["zh": "工具列表", "en": "Tool List"]
+            tbl["i18n_461"] = ["zh": "检查连接状态", "en": "Check Connection"]
+            tbl["i18n_462"] = ["zh": "截图保存到工作区", "en": "Save screenshot to workspace"]
+            tbl["i18n_463"] = ["zh": "模拟点击 (x, y)", "en": "Simulate tap (x, y)"]
+            tbl["i18n_464"] = ["zh": "输入文字", "en": "Type Text"]
+            tbl["i18n_465"] = ["zh": "注意事项", "en": "Notes"]
+            tbl["i18n_466"] = ["zh": "一次只能控制一个前台 App", "en": "Only one foreground app can be controlled at a time"]
+            tbl["i18n_467"] = ["zh": "全机扫描", "en": "Scan All"]
+            tbl["i18n_468"] = ["zh": "一键全恢复", "en": "Restore All"]
+            tbl["i18n_469"] = ["zh": "清理残留", "en": "Clean Residuals"]
+            tbl["i18n_470"] = ["zh": "将扫描并自动恢复所有存在注入痕迹/损坏二进制的 App（还原到注入前状态）。确定继续？", "en": "This scans and auto-restores every app with injection traces/corrupted binaries (back to pre-injection state). Continue?"]
+            tbl["i18n_471"] = ["zh": "将删除注入标记、孤儿备份与 Frameworks 内非系统 dylib。确定继续？", "en": "This removes injection markers, orphan backups and non-system dylibs in Frameworks. Continue?"]
+            tbl["i18n_472"] = ["zh": "⚠️ 损坏", "en": "⚠️ Corrupted"]
+            tbl["i18n_473"] = ["zh": "有备份", "en": "Has backup"]
+            tbl["i18n_474"] = ["zh": "%@ 注入资产", "en": "%d injection assets"]
+            tbl["i18n_475"] = ["zh": "%@ 改动", "en": "%d changes"]
+            tbl["i18n_476"] = ["zh": "✅ %@ 已恢复", "en": "✅ %@ restored"]
+            tbl["i18n_477"] = ["zh": "✅ %@ 已清理 %d 项", "en": "✅ %@ cleaned %d item(s)"]
+            tbl["i18n_478"] = ["zh": "⚠️ %@ 清理 %d 项，%d 个错误", "en": "⚠️ %@ cleaned %d item(s), %d error(s)"]
+            tbl["i18n_479"] = ["zh": "❌ %@ 失败：%@", "en": "❌ %@ failed: %@"]
+            tbl["i18n_480"] = ["zh": "❌ 失败：%@", "en": "❌ Failed: %@"]
+            tbl["i18n_481"] = ["zh": "🔍 扫描完成：%d 个需恢复的 App（点击列表可单独恢复/清理）", "en": "🔍 Scan done: %d app(s) need restore (tap a row to restore/clean individually)"]
+            tbl["i18n_482"] = ["zh": "✅ 一键恢复完成：还原 %d 个 App", "en": "✅ Restore-all done: %d app(s) restored"]
+            tbl["i18n_483"] = ["zh": "⚠️ 还原 %d 个，%@ 个失败：%@", "en": "⚠️ %d restored, %d failed: %@"]
+            tbl["i18n_484"] = ["zh": "✅ 清理完成：%d 项残留已清理", "en": "✅ Cleanup done: %d residual(s) cleaned"]
+            tbl["i18n_485"] = ["zh": "⚠️ 清理 %d 项，%d 个错误：%@", "en": "⚠️ %d cleaned, %d error(s): %@"]
+            tbl["i18n_486"] = ["zh": "应用信息", "en": "App Info"]
+            tbl["i18n_487"] = ["zh": "容器", "en": "Container"]
+            tbl["i18n_488"] = ["zh": "注入操作", "en": "Injection"]
+            tbl["i18n_489"] = ["zh": "已注入", "en": "Injected"]
+            tbl["i18n_490"] = ["zh": "未注入", "en": "Not injected"]
+            tbl["i18n_491"] = ["zh": "注入工具链", "en": "Injection Toolchain"]
+            tbl["i18n_492"] = ["zh": "检查结果", "en": "Check Result"]
+            tbl["i18n_493"] = ["zh": "❌ 注入失败：%d", "en": "❌ Injection failed: %@"]
+            tbl["i18n_494"] = ["zh": "✅ 注入成功", "en": "✅ Injection succeeded"]
+            tbl["i18n_495"] = ["zh": "⚠️ 注入未确认（见检查结果）", "en": "⚠️ Injection unconfirmed (see check result)"]
+            tbl["i18n_496"] = ["zh": "❌ 移除失败：%d", "en": "❌ Removal failed: %@"]
+            tbl["i18n_497"] = ["zh": "✅ 已还原", "en": "✅ Restored"]
+            tbl["i18n_498"] = ["zh": "⚠️ 还原未确认", "en": "⚠️ Restore unconfirmed"]
+            tbl["i18n_499"] = ["zh": "❌ 恢复失败：%d", "en": "❌ Recovery failed: %@"]
+            tbl["i18n_500"] = ["zh": "✅ 已从备份恢复", "en": "✅ Restored from backup"]
+            tbl["i18n_501"] = ["zh": "⚠️ 未发现可用备份（可能本来就未注入）", "en": "⚠️ No backup found (maybe it was never injected)"]
+            tbl["i18n_502"] = ["zh": "在聊天中让 AI 注入：\"给小红书注入控制代理\"", "en": "In chat, ask AI to inject: \"inject control agent into 小红书\""]
+            tbl["i18n_987"] = ["zh": "重试", "en": "Retry"]
+            tbl["i18n_504"] = ["zh": "停止", "en": "Stop"]
+            tbl["i18n_505"] = ["zh": "停止抓包", "en": "Stop Capture"]
+            tbl["i18n_506"] = ["zh": "开始抓包", "en": "Start Capture"]
+            tbl["i18n_507"] = ["zh": "流量抓取", "en": "Traffic Capture"]
+            tbl["i18n_508"] = ["zh": "抓取 HTTP/HTTPS 请求数据并保存在抓包记录中", "en": "Capture HTTP/HTTPS request data and save to capture logs"]
+            tbl["i18n_509"] = ["zh": "CA 证书已安装并信任", "en": "CA certificate installed & trusted"]
+            tbl["i18n_510"] = ["zh": "未生成，点击生成并安装", "en": "Not generated — tap to generate & install"]
+            tbl["i18n_511"] = ["zh": "已配置", "en": "Configured"]
+            tbl["i18n_1168"] = ["zh": "未配置", "en": "Not set"]
+            tbl["i18n_513"] = ["zh": "抓包记录", "en": "Capture Logs"]
+            tbl["i18n_514"] = ["zh": "%d 个文件", "en": "%d file(s)"]
+            tbl["i18n_515"] = ["zh": "停止本地代理", "en": "Stop Local Proxy"]
+            tbl["i18n_516"] = ["zh": "启动本地代理", "en": "Start Local Proxy"]
+            tbl["i18n_975"] = ["zh": "运行中", "en": "Running"]
+            tbl["i18n_519"] = ["zh": "使用步骤", "en": "How to Use"]
+            tbl["i18n_520"] = ["zh": "生成证书", "en": "Generate Certificate"]
+            tbl["i18n_521"] = ["zh": "自动用 Safari 打开下载描述文件", "en": "Safari opens the profile download automatically"]
+            tbl["i18n_522"] = ["zh": "安装", "en": "Install"]
+            tbl["i18n_523"] = ["zh": "设置 → 已下载描述文件 → 安装", "en": "Settings → Downloaded Profiles → Install"]
+            tbl["i18n_524"] = ["zh": "信任", "en": "Trust"]
+            tbl["i18n_525"] = ["zh": "通用 → 证书信任设置 → 打开完全信任", "en": "General → Certificate Trust Settings → Enable Full Trust"]
+            tbl["i18n_526"] = ["zh": "使用", "en": "Use"]
+            tbl["i18n_527"] = ["zh": "提示", "en": "Notice"]
+            tbl["i18n_528"] = ["zh": "暂无抓包记录", "en": "No capture logs yet"]
+            tbl["i18n_529"] = ["zh": "抓包记录（%d）", "en": "Capture Logs (%d)"]
+            tbl["i18n_530"] = ["zh": "已连接 · 系统流量走 MITM 代理", "en": "Connected · system traffic via MITM proxy"]
+            tbl["i18n_531"] = ["zh": "正在连接…", "en": "Connecting…"]
+            tbl["i18n_532"] = ["zh": "本地代理运行中 · WiFi 手动代理生效", "en": "Local proxy running · WiFi manual proxy active"]
+            tbl["i18n_533"] = ["zh": "已断开，点击开始抓包", "en": "Disconnected — tap to start capture"]
+            tbl["i18n_534"] = ["zh": "点了没反应", "en": "Tapping does nothing"]
+            tbl["i18n_535"] = ["zh": "正在连接 VPN，请在系统弹窗点「允许」…", "en": "Connecting VPN — tap 'Allow' in the system dialog…"]
+            tbl["i18n_536"] = ["zh": "VPN 启动失败：%@\\n可用「本地代理」代替（WiFi 手动代理）", "en": "VPN start failed: %@\\nUse 'Local Proxy' instead (WiFi manual proxy)"]
+            tbl["i18n_537"] = ["zh": "VPN 已连接（等待系统弹窗允许）", "en": "VPN connected (waiting for system dialog)"]
+            tbl["i18n_538"] = ["zh": "本地代理已启动：127.0.0.1:18180\\n去 设置→WiFi→当前网络→配置代理→手动，填 127.0.0.1 和 18180", "en": "Local proxy started: 127.0.0.1:18180\\nGo to Settings→WiFi→current network→Configure Proxy→Manual, enter 127.0.0.1 and 18180"]
+            tbl["i18n_539"] = ["zh": "证书生成失败", "en": "Certificate generation failed"]
+            tbl["i18n_540"] = ["zh": "下载配置描述文件", "en": "Download Configuration Profile"]
+            tbl["i18n_541"] = ["zh": "存储到文件再打开", "en": "Save to Files, then open"]
+            tbl["i18n_542"] = ["zh": "打开 Safari 失败，请手动用「文件」App 打开：%@", "en": "Failed to open Safari — open manually with the Files app: %@"]
+            tbl["i18n_543"] = ["zh": "已在 Safari 打开下载页\\n① 点「允许」下载描述文件\\n② 到 设置 → 已下载描述文件 → 安装\\n③ 设置 → 通用 → 关于本机 → 证书信任设置 → 打开完全信任", "en": "Opened download page in Safari\\n① Tap 'Allow' to download the profile\\n② Settings → Downloaded Profiles → Install\\n③ Settings → General → About → Certificate Trust Settings → Enable Full Trust"]
+            tbl["i18n_544"] = ["zh": "当前账号", "en": "Current Account"]
+            tbl["i18n_545"] = ["zh": "添加 / 切换账号", "en": "Add / Switch Account"]
+            tbl["i18n_546"] = ["zh": "已保存账号（点击切换 · 长按删除）", "en": "Saved accounts (tap to switch · long-press to delete)"]
+            tbl["i18n_547"] = ["zh": "已切换为 @%@", "en": "Switched to @%@"]
+            tbl["i18n_548"] = ["zh": "已删除 @%@", "en": "Deleted @%@"]
+            tbl["i18n_549"] = ["zh": "删除账号", "en": "Delete Account"]
+            tbl["i18n_550"] = ["zh": "触发线上编译", "en": "Trigger Cloud Build"]
+            tbl["i18n_551"] = ["zh": "请先登录账号", "en": "Log in first"]
+            tbl["i18n_552"] = ["zh": "正在触发 %@ 编译…", "en": "Triggering %@ build…"]
+            tbl["i18n_553"] = ["zh": "触发失败", "en": "Trigger failed"]
+            tbl["i18n_554"] = ["zh": "最近编译记录", "en": "Recent Builds"]
+            tbl["i18n_986"] = ["zh": "刷新", "en": "Refresh"]
+            tbl["i18n_556"] = ["zh": "刷新状态", "en": "Refresh Status"]
+            tbl["i18n_557"] = ["zh": "手动登录", "en": "Manual Login"]
+            tbl["i18n_558"] = ["zh": "网页登录（推荐）", "en": "Web Login (recommended)"]
+            tbl["i18n_559"] = ["zh": "在浏览器中登录", "en": "Log in in browser"]
+            tbl["i18n_560"] = ["zh": "✅ 使用内置默认 Client ID（可直接登录）", "en": "✅ Using built-in default Client ID (ready to log in)"]
+            tbl["i18n_561"] = ["zh": "再次打开授权页", "en": "Reopen Auth Page"]
+            tbl["i18n_562"] = ["zh": "手动 Token（备选）", "en": "Manual Token (alternative)"]
+            tbl["i18n_563"] = ["zh": "授权失败", "en": "Authorization failed"]
+            tbl["i18n_564"] = ["zh": "设备码获取失败", "en": "Failed to get device code"]
+            tbl["i18n_565"] = ["zh": "恢复默认 Client ID（清空自定义值）", "en": "Restore default Client ID (clear custom value)"]
+            tbl["i18n_566"] = ["zh": "目标仓库", "en": "Target Repo"]
+            tbl["i18n_567"] = ["zh": "仓库 Owner（用户名）", "en": "Repo Owner (username)"]
+            tbl["i18n_568"] = ["zh": "仓库名", "en": "Repo Name"]
+            tbl["i18n_569"] = ["zh": "分支", "en": "Branch"]
+            tbl["i18n_570"] = ["zh": "已保存 ✓ 已恢复内置默认 Client ID，可直接登录", "en": "Saved ✓ Restored built-in default Client ID, ready to log in"]
+            tbl["i18n_571"] = ["zh": "已保存 ✓", "en": "Saved ✓"]
+            tbl["i18n_572"] = ["zh": "仓库设置", "en": "Repo Settings"]
+            tbl["i18n_573"] = ["zh": "内容", "en": "Contents"]
+            tbl["i18n_574"] = ["zh": "应用程序缓存", "en": "App Caches"]
+            tbl["i18n_575"] = ["zh": "应用日志", "en": "App Logs"]
+            tbl["i18n_576"] = ["zh": "系统缓存文件", "en": "System Cache Files"]
+            tbl["i18n_577"] = ["zh": "系统日志文件", "en": "System Log Files"]
+            tbl["i18n_578"] = ["zh": "系统临时文件", "en": "System Temp Files"]
+            tbl["i18n_579"] = ["zh": "照片缓存", "en": "Photo Caches"]
+            tbl["i18n_580"] = ["zh": "PhotoData 缩略图缓存（原图不删）", "en": "PhotoData thumbnail cache (originals kept)"]
+            tbl["i18n_621"] = ["zh": "下载文件", "en": "Downloads"]
+            tbl["i18n_582"] = ["zh": "启动快照", "en": "Launch Snapshots"]
+            tbl["i18n_583"] = ["zh": "垃圾箱", "en": "Trash"]
+            tbl["i18n_584"] = ["zh": "OTA 软件更新", "en": "OTA Software Updates"]
+            tbl["i18n_585"] = ["zh": "已下载的系统更新包缓存", "en": "Downloaded system update package cache"]
+            tbl["i18n_586"] = ["zh": "Safari 网页缓存（不删书签/历史）", "en": "Safari web cache (bookmarks/history kept)"]
+            tbl["i18n_587"] = ["zh": "已用 %@ / 共 %@", "en": "Used %@ / Total %@"]
+            tbl["i18n_588"] = ["zh": "系统缓存", "en": "System Caches"]
+            tbl["i18n_589"] = ["zh": "应用缓存", "en": "App Caches"]
+            tbl["i18n_635"] = ["zh": "临时文件", "en": "Temp Files"]
+            tbl["i18n_591"] = ["zh": "日志文件", "en": "Log Files"]
+            tbl["i18n_592"] = ["zh": "高级清理", "en": "Advanced Cleanup"]
+            tbl["i18n_593"] = ["zh": "开始清理（%d 项）", "en": "Start Cleanup (%d item(s))"]
+            tbl["i18n_594"] = ["zh": "⚠️ %@ 可能影响相关功能（下载/更新）", "en": "⚠️ %@ may affect related features (downloads/updates)"]
+            tbl["i18n_595"] = ["zh": "扫描完成，可释放约 \\(AppCacheScanner.humanSize((quick + adv).reduce(0) { $0 + $1.size }))", "en": "Scan done — about %@ can be freed"]
+            tbl["i18n_596"] = ["zh": "清理完成：%d 项成功，释放 %@", "en": "Cleanup done: %d OK, freed %@"]
+            tbl["i18n_597"] = ["zh": "；失败：%@", "en": "; failed: %@"]
+            tbl["i18n_598"] = ["zh": "下载产物", "en": "Downloads"]
+            tbl["i18n_599"] = ["zh": "选择", "en": "Select"]
+            tbl["i18n_600"] = ["zh": "已选 %d 项", "en": "%d selected"]
+            tbl["i18n_601"] = ["zh": "%d 个文件/文件夹", "en": "%d file(s)/folder(s)"]
+            tbl["i18n_602"] = ["zh": "将删除 %@ 项，不可恢复", "en": "%d item(s) will be deleted, unrecoverable"]
+            tbl["i18n_603"] = ["zh": "文件夹", "en": "Folder"]
+            tbl["i18n_604"] = ["zh": "主动连接", "en": "Active Connection"]
+            tbl["i18n_1175"] = ["zh": "SSH 远程连接", "en": "SSH Remote"]
+            tbl["i18n_606"] = ["zh": "被远程控制", "en": "Controlled Remotely"]
+            tbl["i18n_608"] = ["zh": "运行中 :%d", "en": "Running on :%@"]
+            tbl["i18n_609"] = ["zh": "未启动", "en": "Not running"]
+            tbl["i18n_611"] = ["zh": "什么是智能搜索", "en": "What is Smart Search"]
+            tbl["i18n_612"] = ["zh": "使用方法", "en": "How to Use"]
+            tbl["i18n_613"] = ["zh": "输入栏上方的「智能搜索·开」chip 保持开启", "en": "Keep the 'Smart Search: ON' chip above the input bar enabled"]
+            tbl["i18n_614"] = ["zh": "提问时注明「请搜索」或直接问时效性问题", "en": "Mention 'please search' in your question, or just ask time-sensitive questions"]
+            tbl["i18n_615"] = ["zh": "示例", "en": "Examples"]
+            tbl["i18n_616"] = ["zh": "隐私", "en": "Privacy"]
+            tbl["i18n_617"] = ["zh": "审计日志", "en": "Audit Logs"]
+            tbl["i18n_618"] = ["zh": "远程控制截图", "en": "Remote Control Screenshots"]
+            tbl["i18n_860"] = ["zh": "崩溃日志", "en": "Crash Logs"]
+            tbl["i18n_620"] = ["zh": "解密(砸壳)产物", "en": "Decrypted (jailbreak) Artifacts"]
+            tbl["i18n_622"] = ["zh": "重复文件", "en": "Duplicate Files"]
+            tbl["i18n_623"] = ["zh": "知识库", "en": "Knowledge Base"]
+            tbl["i18n_758"] = ["zh": "运行日志", "en": "Run Logs"]
+            tbl["i18n_625"] = ["zh": "宏/脚本", "en": "Macros/Scripts"]
+            tbl["i18n_626"] = ["zh": "抓包数据", "en": "Capture Data"]
+            tbl["i18n_627"] = ["zh": "插件", "en": "Plugins"]
+            tbl["i18n_628"] = ["zh": "编译项目", "en": "Build Projects"]
+            tbl["i18n_629"] = ["zh": "分析报告", "en": "Analysis Reports"]
+            tbl["i18n_630"] = ["zh": "用户上传附件", "en": "User Uploads"]
+            tbl["i18n_631"] = ["zh": "截图", "en": "Screenshots"]
+            tbl["i18n_632"] = ["zh": "注入插件(dylib)", "en": "Injected dylibs"]
+            tbl["i18n_633"] = ["zh": "工具大输出", "en": "Large Tool Outputs"]
+            tbl["i18n_634"] = ["zh": "备份", "en": "Backups"]
+            tbl["i18n_636"] = ["zh": "替换临时文件（注入用）", "en": "Replacement temp files (for injection)"]
+            tbl["i18n_637"] = ["zh": "崩溃复现", "en": "Crash Reproduction"]
+            tbl["i18n_638"] = ["zh": "静态注入临时目录", "en": "Static injection temp dir"]
+            tbl["i18n_639"] = ["zh": "数据库文件", "en": "Database Files"]
+            tbl["i18n_640"] = ["zh": "配置文件", "en": "Config Files"]
+            tbl["i18n_641"] = ["zh": "搜索文件名", "en": "Search File Names"]
+            tbl["i18n_642"] = ["zh": "复制路径", "en": "Copy Path"]
+            tbl["i18n_643"] = ["zh": "新建", "en": "New"]
+            tbl["i18n_644"] = ["zh": "删除确认", "en": "Delete Confirmation"]
+            tbl["i18n_645"] = ["zh": "已删除 %@", "en": "Deleted %@"]
+            tbl["i18n_646"] = ["zh": "删除失败：%@", "en": "Delete failed: %@"]
+            tbl["i18n_647"] = ["zh": "确定删除 %@？此操作不可恢复。", "en": "Delete %@? This cannot be undone."]
+            tbl["i18n_648"] = ["zh": "新建文件夹", "en": "New Folder"]
+            tbl["i18n_649"] = ["zh": "创建", "en": "Create"]
+            tbl["i18n_650"] = ["zh": "已创建 %@", "en": "Created %@"]
+            tbl["i18n_651"] = ["zh": "创建失败：%@", "en": "Create failed: %@"]
+            tbl["i18n_652"] = ["zh": "已复制路径", "en": "Path copied"]
+            tbl["i18n_653"] = ["zh": "读取中…", "en": "Reading…"]
+            tbl["i18n_654"] = ["zh": "仍要读取", "en": "Read anyway"]
+            tbl["i18n_655"] = ["zh": "图片加载失败（格式或尺寸不支持）：%@", "en": "Image load failed (format or size unsupported): %@"]
+            tbl["i18n_656"] = ["zh": "无法读取文件", "en": "Cannot read file"]
+            tbl["i18n_657"] = ["zh": "（非 UTF-8，按二进制显示）", "en": "(non-UTF-8, shown as binary)"]
+            tbl["i18n_658"] = ["zh": "文件大小：%d\\n\\n", "en": "File size: %@\\n\\n"]
+            tbl["i18n_659"] = ["zh": "已自动安装", "en": "Auto-installed"]
+            tbl["i18n_660"] = ["zh": "镜像", "en": "Mirror"]
+            tbl["i18n_661"] = ["zh": "检查更新失败：GitHub 与备用源均不可达（可能被墙）。可在「更新镜像源」里配置可用镜像。", "en": "Update check failed: GitHub and backup sources unreachable (possibly blocked). Configure a working mirror under 'Update Mirrors'."]
+            tbl["i18n_662"] = ["zh": "已是最新版本 v%d", "en": "Already up to date v%@"]
+            tbl["i18n_663"] = ["zh": "请先检查更新", "en": "Check for updates first"]
+            tbl["i18n_664"] = ["zh": "所有下载源都失败了（GitHub 可能被墙，可在「更新镜像源」配置可用镜像）", "en": "All download sources failed (GitHub may be blocked; configure a mirror under 'Update Mirrors')"]
+            tbl["i18n_665"] = ["zh": "检查更新闪退", "en": "Update check crashed"]
+            tbl["i18n_666"] = ["zh": " (子二进制加密, 非致命)", "en": " (sub-binary encrypted, non-fatal)"]
+            tbl["i18n_667"] = ["zh": "已自动安装 v%@%@", "en": "Auto-installed v%@%@"]
+            tbl["i18n_668"] = ["zh": "静默安装失败(exit %d), 分享调起也失败: %@", "en": "Silent install failed (exit %d), share fallback also failed: %@"]
+            tbl["i18n_669"] = ["zh": "安装调起失败: %@", "en": "Install invocation failed: %@"]
+            tbl["i18n_973"] = ["zh": "用户", "en": "User"]
+            tbl["i18n_979"] = ["zh": "系统", "en": "System"]
+            tbl["i18n_672"] = ["zh": "缓存 · 钥匙串 · 广告符 · 数据容器 · AI 清理", "en": "Caches · keychain · IDFA · containers · AI cleanup"]
+            tbl["i18n_673"] = ["zh": "开始扫描", "en": "Start Scan"]
+            tbl["i18n_674"] = ["zh": "扫描中…", "en": "Scanning…"]
+            tbl["i18n_675"] = ["zh": "可清理项（勾选要执行的）", "en": "Cleanable items (check to run)"]
+            tbl["i18n_676"] = ["zh": "请先勾选要清理的项", "en": "Check items to clean first"]
+            tbl["i18n_677"] = ["zh": "一键清理（%d 项）", "en": "Clean All (%d item(s))"]
+            tbl["i18n_678"] = ["zh": "重新扫描", "en": "Rescan"]
+            tbl["i18n_679"] = ["zh": "未找到 App 或容器不可访问", "en": "App not found or container inaccessible"]
+            tbl["i18n_680"] = ["zh": "扫描完成：%d 项", "en": "Scan done: %d item(s)"]
+            tbl["i18n_681"] = ["zh": "标识符为只读信息，不可执行", "en": "Identifier is read-only info, not actionable"]
+            tbl["i18n_682"] = ["zh": "已勾选危险项：将重置全部数据（自动备份可恢复）", "en": "Dangerous item checked: will reset all data (auto-backup can restore)"]
+            tbl["i18n_683"] = ["zh": "清理完成：%d 成功 / %@ 失败", "en": "Cleanup done: %d OK / %d failed"]
+            tbl["i18n_684"] = ["zh": "安全", "en": "Safe"]
+            tbl["i18n_685"] = ["zh": "警告", "en": "Warning"]
+            tbl["i18n_686"] = ["zh": "危险", "en": "Dangerous"]
+            tbl["i18n_687"] = ["zh": "开始录制", "en": "Start Recording"]
+            tbl["i18n_688"] = ["zh": "完整载荷", "en": "Full Payload"]
+            tbl["i18n_689"] = ["zh": "互换token参数名", "en": "Swap token param names"]
+            tbl["i18n_690"] = ["zh": "去掉tools纯对话", "en": "Drop tools, chat-only"]
+            tbl["i18n_691"] = ["zh": "最小载荷", "en": "Minimal Payload"]
+            tbl["i18n_692"] = ["zh": "未知(%d)", "en": "Unknown (%d)"]
+            tbl["i18n_693"] = ["zh": "兼容级别说明", "en": "Compatibility Levels"]
+            tbl["i18n_694"] = ["zh": "各模型当前级别", "en": "Current Level per Model"]
+            tbl["i18n_695"] = ["zh": "重置全部兼容级别（重新从完整载荷试探）", "en": "Reset all compatibility levels (re-probe from full payload)"]
+            tbl["i18n_696"] = ["zh": "最近请求日志", "en": "Recent Request Log"]
+            tbl["i18n_855"] = ["zh": "失败", "en": "Failed"]
+            tbl["i18n_698"] = ["zh": "已手动重置全部兼容级别", "en": "All compatibility levels manually reset"]
+            tbl["i18n_699"] = ["zh": "启用远程诊断", "en": "Enable Remote Diagnostics"]
+            tbl["i18n_700"] = ["zh": "服务器地址（https://你的域名:8766）", "en": "Server address (https://your.domain:8766)"]
+            tbl["i18n_701"] = ["zh": "访问令牌（token）", "en": "Access token"]
+            tbl["i18n_702"] = ["zh": "设备标识", "en": "Device ID"]
+            tbl["i18n_703"] = ["zh": "复制设备 ID", "en": "Copy Device ID"]
+            tbl["i18n_704"] = ["zh": "连接中…", "en": "Connecting…"]
+            tbl["i18n_705"] = ["zh": "测试连接", "en": "Test Connection"]
+            tbl["i18n_706"] = ["zh": "连接成功", "en": "Connected"]
+            tbl["i18n_707"] = ["zh": "已执行远程指令", "en": "Remote command executed"]
+            tbl["i18n_708"] = ["zh": "安全边界", "en": "Security Boundary"]
+            tbl["i18n_709"] = ["zh": "远程通道只允许执行只读诊断白名单（设备信息/文件浏览/注入状态/日志查询等）。注入、删除、写入、启动 App、网络抓包等危险操作一律拒绝，绝不支持远程触发。", "en": "The remote channel only allows read-only diagnostic whitelist (device info / file browse / injection status / log queries). Injection, deletion, writing, launching apps and packet capture are always refused — remote triggering is never supported."]
+            tbl["i18n_710"] = ["zh": "只读白名单，无危险操作", "en": "Read-only whitelist, no dangerous ops"]
+            tbl["i18n_711"] = ["zh": "远程诊断", "en": "Remote Diagnostics"]
+            tbl["i18n_712"] = ["zh": "机型", "en": "Model"]
+            tbl["i18n_713"] = ["zh": "应用伪装", "en": "App Spoof"]
+            tbl["i18n_714"] = ["zh": "还原", "en": "Restore"]
+            tbl["i18n_715"] = ["zh": "设备伪装", "en": "Device Spoof"]
+            tbl["i18n_716"] = ["zh": "✅ 伪装已应用：%@", "en": "✅ Spoof applied: %@"]
+            tbl["i18n_717"] = ["zh": "✅ 已还原真实设备信息", "en": "✅ Real device info restored"]
+            tbl["i18n_718"] = ["zh": "防护中", "en": "Protected"]
+            tbl["i18n_719"] = ["zh": "检测到威胁", "en": "Threat Detected"]
+            tbl["i18n_720"] = ["zh": "防护已关闭", "en": "Protection Off"]
+            tbl["i18n_721"] = ["zh": "正在实时监控恶意网站", "en": "Monitoring malicious sites in real time"]
+            tbl["i18n_722"] = ["zh": "已拦截可疑访问", "en": "Suspicious access blocked"]
+            tbl["i18n_723"] = ["zh": "点击下方开关开启防护", "en": "Tap the toggle below to enable protection"]
+            tbl["i18n_724"] = ["zh": "已拦截", "en": "Blocked"]
+            tbl["i18n_725"] = ["zh": "次", "en": "times"]
+            tbl["i18n_726"] = ["zh": "防护状态", "en": "Protection Status"]
+            tbl["i18n_727"] = ["zh": "受影响版本", "en": "Affected Versions"]
+            tbl["i18n_728"] = ["zh": "以下", "en": "below"]
+            tbl["i18n_729"] = ["zh": "关闭防护", "en": "Disable Protection"]
+            tbl["i18n_730"] = ["zh": "开启防护", "en": "Enable Protection"]
+            tbl["i18n_731"] = ["zh": "防御措施", "en": "Defenses"]
+            tbl["i18n_732"] = ["zh": "恶意网站检测", "en": "Malicious Site Detection"]
+            tbl["i18n_733"] = ["zh": "拦截已知 Coruna 利用站点", "en": "Blocks known Coruna exploit sites"]
+            tbl["i18n_734"] = ["zh": "检测异常进程行为和内存操作", "en": "Detects abnormal process behavior & memory operations"]
+            tbl["i18n_735"] = ["zh": "14 个文件哈希 + 6 条网络规则", "en": "14 file hashes + 6 network rules"]
+            tbl["i18n_736"] = ["zh": "内核防护", "en": "Kernel Protection"]
+            tbl["i18n_737"] = ["zh": "覆盖版本", "en": "Covered Versions"]
+            tbl["i18n_738"] = ["zh": "漏洞数量", "en": "Vuln Count"]
+            tbl["i18n_739"] = ["zh": "5 条利用链 + 23 个漏洞", "en": "5 exploit chains + 23 vulnerabilities"]
+            tbl["i18n_740"] = ["zh": "攻击方式", "en": "Attack Vector"]
+            tbl["i18n_741"] = ["zh": "网页零点击", "en": "Web zero-click"]
+            tbl["i18n_742"] = ["zh": "你的设备", "en": "Your Device"]
+            tbl["i18n_743"] = ["zh": "Web 注入工具", "en": "Web Injection Tool"]
+            tbl["i18n_744"] = ["zh": "网页端漏洞利用", "en": "Web-side exploitation"]
+            tbl["i18n_745"] = ["zh": "注意", "en": "Caution"]
+            tbl["i18n_746"] = ["zh": "继续", "en": "Continue"]
+            tbl["i18n_747"] = ["zh": "此功能将利用 Coruna 漏洞链获取内核权限并注入 dylib 到 %@。\\n\\n仅用于安全研究目的。", "en": "This uses the Coruna chain to get kernel access and inject a dylib into %@.\\n\\nFor security research only."]
+            tbl["i18n_748"] = ["zh": "设备不兼容", "en": "Device Incompatible"]
+            tbl["i18n_749"] = ["zh": "内核 R/W", "en": "Kernel R/W"]
+            tbl["i18n_750"] = ["zh": "注入配置", "en": "Injection Config"]
+            tbl["i18n_751"] = ["zh": "选择要注入的应用", "en": "Pick app to inject"]
+            tbl["i18n_752"] = ["zh": "选择要注入的 dylib", "en": "Pick dylib to inject"]
+            tbl["i18n_753"] = ["zh": "利用路径", "en": "Exploit Path"]
+            tbl["i18n_754"] = ["zh": "漏洞利用链", "en": "Exploit Chain"]
+            tbl["i18n_755"] = ["zh": "沙盒逃逸", "en": "Sandbox Escape"]
+            tbl["i18n_756"] = ["zh": "启动网页注入", "en": "Start Web Injection"]
+            tbl["i18n_757"] = ["zh": "错误: %@", "en": "Error: %@"]
+            tbl["i18n_759"] = ["zh": "选择目标 App", "en": "Select Target App"]
+            tbl["i18n_760"] = ["zh": "页面加载完成", "en": "Page loaded"]
+            tbl["i18n_761"] = ["zh": "页面加载失败: %@", "en": "Page load failed: %@"]
+            tbl["i18n_762"] = ["zh": "切换纵向列表没用", "en": "Switching to vertical list does nothing"]
+            tbl["i18n_763"] = ["zh": "删一个加一个", "en": "Deleting one adds another"]
+            tbl["i18n_764"] = ["zh": "没反应", "en": "No response"]
+            tbl["i18n_765"] = ["zh": "微信", "en": "WeChat"]
+            tbl["i18n_766"] = ["zh": "抖音", "en": "Douyin"]
+            tbl["i18n_767"] = ["zh": "相机", "en": "Camera"]
+            tbl["i18n_768"] = ["zh": "选择可爱助手的角色", "en": "Pick a Cute Assistant character"]
+            tbl["i18n_838"] = ["zh": "兔娘", "en": "Bunny Girl"]
+            tbl["i18n_837"] = ["zh": "小萝莉", "en": "Loli"]
+            tbl["i18n_839"] = ["zh": "猫娘", "en": "Catgirl"]
+            tbl["i18n_772"] = ["zh": "悬浮尺寸（改完自动重启悬浮生效）", "en": "HUD size (auto-restarts HUD on change)"]
+            tbl["i18n_773"] = ["zh": "小", "en": "Small"]
+            tbl["i18n_774"] = ["zh": "大", "en": "Large"]
+            tbl["i18n_775"] = ["zh": "当前尺寸：%d pt", "en": "Current size: %d pt"]
+            tbl["i18n_776"] = ["zh": "气泡样式（改完自动重启悬浮生效）", "en": "Bubble style (auto-restarts HUD on change)"]
+            tbl["i18n_777"] = ["zh": "气泡样式", "en": "Bubble Style"]
+            tbl["i18n_778"] = ["zh": "经典圆角", "en": "Classic Rounded"]
+            tbl["i18n_779"] = ["zh": "椭圆气泡", "en": "Ellipse Bubble"]
+            tbl["i18n_780"] = ["zh": "方形硬边", "en": "Square Hard-Edge"]
+            tbl["i18n_781"] = ["zh": "爆炸吐槽", "en": "Explosion Rant"]
+            tbl["i18n_782"] = ["zh": "预览：哈喽呀～", "en": "Preview: Hello~"]
+            tbl["i18n_783"] = ["zh": "快捷菜单", "en": "Quick Menu"]
+            tbl["i18n_784"] = ["zh": "弹出样式", "en": "Popup Style"]
+            tbl["i18n_785"] = ["zh": "扇形展开", "en": "Fan Spread"]
+            tbl["i18n_786"] = ["zh": "纵向列表", "en": "Vertical List"]
+            tbl["i18n_787"] = ["zh": "图标整体透明度", "en": "Icon Opacity"]
+            tbl["i18n_788"] = ["zh": "散开角度", "en": "Spread Angle"]
+            tbl["i18n_789"] = ["zh": "弧度(半径)", "en": "Arc (radius)"]
+            tbl["i18n_790"] = ["zh": "图标大小", "en": "Icon Size"]
+            tbl["i18n_791"] = ["zh": "删一个又冒出一个", "en": "Deleting one spawns another"]
+            tbl["i18n_792"] = ["zh": "删除后返回又全部回来", "en": "Deleting then going back brings them all back"]
+            tbl["i18n_793"] = ["zh": "其他", "en": "Other"]
+            tbl["i18n_794"] = ["zh": "键盘弹出时自动隐藏桌宠", "en": "Auto-hide pet when keyboard appears"]
+            tbl["i18n_795"] = ["zh": "粒子特效", "en": "Particle Effects"]
+            tbl["i18n_796"] = ["zh": "可爱助手角色", "en": "Cute Assistant Character"]
+            tbl["i18n_797"] = ["zh": "从已安装应用选择添加", "en": "Add from installed apps"]
+            tbl["i18n_798"] = ["zh": "调整后自动重启悬浮，新尺寸立即生效", "en": "Auto-restarts HUD after change; new size applies immediately"]
+            tbl["i18n_799"] = ["zh": "悬浮尺寸", "en": "HUD Size"]
+            tbl["i18n_800"] = ["zh": "统一环境，AI 帮你操作", "en": "Unified runtime, AI does it for you"]
+            tbl["i18n_801"] = ["zh": "全栈工具，文件/App/注入/终端", "en": "Full-stack tools: files/App/injection/terminal"]
+            tbl["i18n_802"] = ["zh": "智能注入，控制任意 App", "en": "Smart injection, control any app"]
+            tbl["i18n_803"] = ["zh": "语义化操作，说点就点", "en": "Semantic control — say it, tap it"]
+            tbl["i18n_804"] = ["zh": "OCR 识别，自动读屏", "en": "OCR recognition, auto screen-reading"]
+            tbl["i18n_805"] = ["zh": "完整 Linux 终端，跑脚本装包", "en": "Full Linux terminal: run scripts, install packages"]
+            tbl["i18n_806"] = ["zh": "AI 自我进化，自动学习", "en": "AI self-evolves, auto-learns"]
+            tbl["i18n_807"] = ["zh": "网络错误: %@", "en": "Network error: %@"]
+            tbl["i18n_808"] = ["zh": "Client ID 无效。若手动填过 Client ID：请到仓库设置里清空并保存 (自动回退内置默认)，或注册自己的 GitHub App", "en": "Invalid Client ID. If you set it manually: clear & save in repo settings (falls back to built-in default), or register your own GitHub App"]
+            tbl["i18n_809"] = ["zh": "设备码请求failed (HTTP %d) %@", "en": "Device code request failed (HTTP %d) %@"]
+            tbl["i18n_1189"] = ["zh": "Client ID 无效。若手动填过 Client ID：请到仓库设置里清空并保存 (自动回退内置默认)，或注册自己的 OAuth App 后填入真实 Client ID。", "en": "Invalid Client ID. If you entered one manually: clear and save it in the repo settings (auto-falls back to built-in default), or register your own OAuth App and put in a real Client ID."]
+            tbl["i18n_810"] = ["zh": "请在浏览器输入代码 %@", "en": "Enter code %@ in browser"]
+            tbl["i18n_811"] = ["zh": "GitHub Device Flow 开始: user_code=%@", "en": "GitHub Device Flow started: user_code=%@"]
+            tbl["i18n_812"] = ["zh": "请在浏览器输入代码 %@，等待授权…", "en": "Enter code %@ in browser and wait for authorization…"]
+            tbl["i18n_813"] = ["zh": "授权超时，请重试", "en": "Authorization timed out, retry"]
+            tbl["i18n_814"] = ["zh": "网络错误", "en": "Network error"]
+            tbl["i18n_815"] = ["zh": "响应解析failed", "en": "Response parse failed"]
+            tbl["i18n_816"] = ["zh": "未知响应", "en": "Unknown response"]
+            tbl["i18n_817"] = ["zh": "身份验证failed (HTTP %d)", "en": "Authentication failed (HTTP %d)"]
+            tbl["i18n_818"] = ["zh": "GitHub 网页登录OK: %@", "en": "GitHub web login OK: %@"]
+            tbl["i18n_819"] = ["zh": "已登录 @%@", "en": "Logged in as @%@"]
+            tbl["i18n_820"] = ["zh": "Token 不能为空", "en": "Token must not be empty"]
+            tbl["i18n_821"] = ["zh": "Token 无效或已过期 (请检查 repo + workflow 权限)", "en": "Token invalid or expired (check repo + workflow permissions)"]
+            tbl["i18n_822"] = ["zh": "GitHub 验证failed (HTTP %d)", "en": "GitHub verification failed (HTTP %d)"]
+            tbl["i18n_823"] = ["zh": "GitHub 账号登录: %@ (HTTP %d)", "en": "GitHub login: %@ (HTTP %d)"]
+            tbl["i18n_824"] = ["zh": "未登录 GitHub 账号", "en": "Not logged in to GitHub"]
+            tbl["i18n_825"] = ["zh": "请填写 tweak 目录名", "en": "Enter tweak directory name"]
+            tbl["i18n_826"] = ["zh": "触发线上编译 %@/%@ tweak=%@", "en": "Triggered cloud build %@/%@ tweak=%@"]
+            tbl["i18n_827"] = ["zh": "已触发 %@ 编译，稍后刷新状态", "en": "Build for %@ triggered, refresh status later"]
+            tbl["i18n_828"] = ["zh": "workflow '%@' 不存在 (请确认仓库里有 build-tweak.yml)", "en": "workflow '%@' not found (verify build-tweak.yml exists in repo)"]
+            tbl["i18n_829"] = ["zh": "Token 无 workflow 权限或已过期", "en": "Token lacks workflow permission or expired"]
+            tbl["i18n_830"] = ["zh": "触发failed (HTTP %d)", "en": "Trigger failed (HTTP %d)"]
+            tbl["i18n_831"] = ["zh": "TrollAgent 抓包 VPN", "en": "TrollAgent Packet VPN"]
+            tbl["i18n_832"] = ["zh": "默认抓包", "en": "Default Capture"]
+            tbl["i18n_833"] = ["zh": "请先在系统弹窗点「允许」后再连接 (NEVPNErrorConfigurationInvalid=1)", "en": "Tap \"Allow\" in the system dialog first, then connect (NEVPNErrorConfigurationInvalid=1)"]
+            tbl["i18n_834"] = ["zh": "VPN 启动未生效：系统未弹「允许」窗或隧道未连接（TrollStore 环境限制），请改用「本地代理」抓包（WiFi 场景）", "en": "VPN not active: no \"Allow\" dialog or tunnel not connected (TrollStore limitation); use \"Local Proxy\" capture instead (WiFi)"]
+            tbl["i18n_835"] = ["zh": "TrollAgent 抓包证书", "en": "TrollAgent Capture Cert"]
+            tbl["i18n_836"] = ["zh": "安装并信任后，TrollAgent 可解密 HTTPS 明文用于抓包分析", "en": "After install & trust, TrollAgent can decrypt HTTPS for capture analysis"]
+            tbl["i18n_840"] = ["zh": "御姐兔女郎", "en": "Onee Bunny"]
+            tbl["i18n_842"] = ["zh": "需要麦克风 + 语音识别权限才能跟我说话，请在系统设置里允许。", "en": "Need mic + speech recognition permission to talk to me. Allow it in Settings."]
+            tbl["i18n_843"] = ["zh": "听你说…", "en": "Listening…"]
+            tbl["i18n_844"] = ["zh": "说话", "en": "Speak"]
+            tbl["i18n_972"] = ["zh": "全部", "en": "All"]
+            tbl["i18n_974"] = ["zh": "巨魔", "en": "Troll"]
+            tbl["i18n_978"] = ["zh": "搜索应用名称或 Bundle ID", "en": "Search app name or Bundle ID"]
+            tbl["i18n_851"] = ["zh": "准备环境", "en": "Preparing env"]
+            tbl["i18n_852"] = ["zh": "安装包", "en": "Installing package"]
+            tbl["i18n_853"] = ["zh": "下载索引", "en": "Downloading index"]
+            tbl["i18n_854"] = ["zh": "解包", "en": "Extracting"]
+            tbl["i18n_858"] = ["zh": "暂无崩溃记录", "en": "No crash logs yet"]
+            tbl["i18n_859"] = ["zh": "共 %d 条 · %@", "en": "%d log(s) · %@ first"]
+            tbl["i18n_861"] = ["zh": "崩溃日志为空或无法读取", "en": "Empty or unreadable"]
+            tbl["i18n_862"] = ["zh": "读取失败，请到工作区 crash/ 目录用文件浏览器查看", "en": "Read failed; browse workspace crash/ with the file browser"]
+            tbl["i18n_863"] = ["zh": "崩溃详情", "en": "Crash Detail"]
+            tbl["i18n_864"] = ["zh": "已复制全文（分享面板在侧载环境不可用）", "en": "Copied (share sheet unavailable in sideload env)"]
+            tbl["i18n_865"] = ["zh": "已复制全部 %d 条日志（分享面板在侧载环境不可用）", "en": "Copied all %d log(s) (share sheet unavailable in sideload env)"]
+            tbl["i18n_866"] = ["zh": "已清空", "en": "Cleared"]
+            tbl["i18n_867"] = ["zh": "文件不存在，无法分享", "en": "File missing, can't share"]
+            tbl["i18n_868"] = ["zh": "分享 %@", "en": "Share %@"]
+            tbl["i18n_869"] = ["zh": "存储到文件", "en": "Save to Files"]
+            tbl["i18n_1058"] = ["zh": "没有可分享的内容", "en": "Nothing to share"]
+            tbl["i18n_872"] = ["zh": "拷贝", "en": "Copy"]
+            tbl["i18n_873"] = ["zh": "文件不存在，无法保存", "en": "File missing, can't save"]
+            tbl["i18n_874"] = ["zh": "仅支持 .tipa/.ipa 文件直接安装", "en": "Only .tipa/.ipa can install directly"]
+            tbl["i18n_875"] = ["zh": "无法直达 TrollStore，已复制文件路径", "en": "Can't reach TrollStore; file path copied"]
+            tbl["i18n_876"] = ["zh": "未检测到 TrollStore，已复制文件路径", "en": "TrollStore not detected; file path copied"]
+            tbl["i18n_1009"] = ["zh": "文件不存在", "en": "File not found"]
+            tbl["i18n_878"] = ["zh": "没有 App 能打开此文件", "en": "No app can open this file"]
+            tbl["i18n_879"] = ["zh": "已复制到剪贴板", "en": "Copied to clipboard"]
+            tbl["i18n_880"] = ["zh": "iOS 注入分析", "en": "iOS Injection Analysis"]
+            tbl["i18n_881"] = ["zh": "网络抓包分析", "en": "Network Packet Capture"]
+            tbl["i18n_882"] = ["zh": "SQLite 数据库取证", "en": "SQLite Forensics"]
+            tbl["i18n_883"] = ["zh": "deb/ipa 包解剖", "en": "deb/ipa Anatomy"]
+            tbl["i18n_884"] = ["zh": "跨环境文件访问", "en": "Cross-env File Access"]
+            tbl["i18n_885"] = ["zh": "进程内存修改", "en": "Process Memory Edit"]
+            tbl["i18n_886"] = ["zh": "设备信息与定位", "en": "Device Info & Location"]
+            tbl["i18n_887"] = ["zh": "App 生命周期管理", "en": "App Lifecycle Management"]
+            tbl["i18n_888"] = ["zh": "Shell & Env 边界参考", "en": "Shell & Env Boundaries"]
+            tbl["i18n_889"] = ["zh": "已保存 %d 个技能", "en": "%d skills saved"]
+            tbl["i18n_890"] = ["zh": "\\u201c%@ \\u201d %@", "en": "%@ %@"]
+            tbl["i18n_891"] = ["zh": "来电提醒", "en": "Call Reminder"]
+            tbl["i18n_892"] = ["zh": "呼叫 %@", "en": "Calling %@"]
+            tbl["i18n_893"] = ["zh": "调度failed: %@", "en": "Schedule failed: %@"]
+            tbl["i18n_894"] = ["zh": "%@ 已停用，跳过", "en": "%@ disabled, skipping"]
+            tbl["i18n_895"] = ["zh": "呼叫 %@", "en": "Calling %@"]
+            tbl["i18n_896"] = ["zh": "切换到 %@", "en": "Switching to %@"]
+            tbl["i18n_897"] = ["zh": "启用", "en": "Enable"]
+            tbl["i18n_898"] = ["zh": "停用", "en": "Disable"]
+            tbl["i18n_899"] = ["zh": "待审批: %@", "en": "Pending: %@"]
+            tbl["i18n_900"] = ["zh": "已批准: %@", "en": "Approved: %@"]
+            tbl["i18n_901"] = ["zh": "已拒绝: %@", "en": "Rejected: %@"]
+            tbl["i18n_902"] = ["zh": "待批准操作", "en": "Pending Approval"]
+            tbl["i18n_903"] = ["zh": "运行中自动化", "en": "Running Automations"]
+            tbl["i18n_904"] = ["zh": "立即运行", "en": "Run Now"]
+            tbl["i18n_905"] = ["zh": "最近活动", "en": "Recent Activity"]
+            tbl["i18n_907"] = ["zh": "工具调用", "en": "Tool Call"]
+            tbl["i18n_909"] = ["zh": "提交时间", "en": "Submitted"]
+            tbl["i18n_910"] = ["zh": "参数", "en": "Parameters"]
+            tbl["i18n_911"] = ["zh": "审批", "en": "Approve"]
+            tbl["i18n_912"] = ["zh": "我", "en": "Me"]
+            tbl["i18n_913"] = ["zh": "助手", "en": "Assistant"]
+            tbl["i18n_915"] = ["zh": "助手角色", "en": "Assistant Role"]
+            tbl["i18n_916"] = ["zh": "新角色", "en": "New Role"]
+            tbl["i18n_917"] = ["zh": "你是一个有帮助的助手。", "en": "You are a helpful assistant."]
+            tbl["i18n_918"] = ["zh": "基本信息", "en": "Basic Info"]
+            tbl["i18n_920"] = ["zh": "系统提示词", "en": "System Prompt"]
+            tbl["i18n_921"] = ["zh": "关联模型", "en": "Linked Model"]
+            tbl["i18n_922"] = ["zh": "模型配置", "en": "Model Config"]
+            tbl["i18n_1166"] = ["zh": "保存", "en": "Save"]
+            tbl["i18n_924"] = ["zh": "添加附件", "en": "Add Attachment"]
+            tbl["i18n_925"] = ["zh": "从文件选择", "en": "From Files"]
+            tbl["i18n_926"] = ["zh": "相机照片.jpg", "en": "camera_photo.jpg"]
+            tbl["i18n_927"] = ["zh": "拍照", "en": "Take Photo"]
+            tbl["i18n_928"] = ["zh": "相册图片.png", "en": "gallery_image.png"]
+            tbl["i18n_929"] = ["zh": "从相册选择", "en": "From Gallery"]
+            tbl["i18n_930"] = ["zh": "已添加 (%d)", "en": "%d added"]
+            tbl["i18n_931"] = ["zh": "附件", "en": "Attachments"]
+            tbl["i18n_932"] = ["zh": "任务列表", "en": "Task List"]
+            tbl["i18n_933"] = ["zh": "最近执行", "en": "Recent Runs"]
+            tbl["i18n_934"] = ["zh": "任务", "en": "Task"]
+            tbl["i18n_935"] = ["zh": "调度（cron / 描述）", "en": "Schedule (cron / description)"]
+            tbl["i18n_936"] = ["zh": "动作（工具调用）", "en": "Action (tool call)"]
+            tbl["i18n_937"] = ["zh": "保存任务 %@", "en": "Save task %@"]
+            tbl["i18n_938"] = ["zh": "新任务", "en": "New Task"]
+            tbl["i18n_939"] = ["zh": "总开关", "en": "Master Switch"]
+            tbl["i18n_940"] = ["zh": "允许自动化执行", "en": "Allow automation execution"]
+            tbl["i18n_941"] = ["zh": "按任务控制", "en": "Per-task control"]
+            tbl["i18n_942"] = ["zh": "自动化权限", "en": "Automation Permissions"]
+            tbl["i18n_943"] = ["zh": "配对令牌（可选）", "en": "Pairing token (optional)"]
+            tbl["i18n_944"] = ["zh": "保存并连接", "en": "Save & Connect"]
+            tbl["i18n_945"] = ["zh": "新服务端", "en": "New Server"]
+            tbl["i18n_946"] = ["zh": "选择 App", "en": "Select App"]
+            tbl["i18n_947"] = ["zh": "注入详情", "en": "Injection Detail"]
+            tbl["i18n_949"] = ["zh": "注入状态", "en": "Injection Status"]
+            tbl["i18n_950"] = ["zh": "已启用注入", "en": "Injection Enabled"]
+            tbl["i18n_952"] = ["zh": "已禁用注入", "en": "Injection Disabled"]
+            tbl["i18n_953"] = ["zh": "已彻底移除", "en": "Fully Removed"]
+            tbl["i18n_954"] = ["zh": "按类别过滤", "en": "Filter by Category"]
+            tbl["i18n_955"] = ["zh": "活动记录", "en": "Activity Log"]
+            tbl["i18n_956"] = ["zh": "用途摘要（AI 判断何时使用的依据）", "en": "Usage summary (basis for AI tool selection)"]
+            tbl["i18n_957"] = ["zh": "新建 Skill", "en": "New Skill"]
+            tbl["i18n_958"] = ["zh": "保存 %@", "en": "Save %@"]
+            tbl["i18n_959"] = ["zh": "保存到 agents.json", "en": "Save to agents.json"]
+            tbl["i18n_960"] = ["zh": "新建 Agent", "en": "New Agent"]
+            tbl["i18n_962"] = ["zh": "签名密钥（可选）", "en": "Signing key (optional)"]
+            tbl["i18n_963"] = ["zh": "事件列表（逗号分隔）", "en": "Event list (comma-separated)"]
+            tbl["i18n_964"] = ["zh": "保存 %@", "en": "Save %@"]
+            tbl["i18n_965"] = ["zh": "Webhook 编辑", "en": "Webhook Edit"]
+            tbl["i18n_966"] = ["zh": "已保存的密钥", "en": "Saved Keys"]
+            tbl["i18n_967"] = ["zh": "隐藏", "en": "Hide"]
+            tbl["i18n_968"] = ["zh": "显示", "en": "Show"]
+            tbl["i18n_969"] = ["zh": "上游模型", "en": "Upstream Model"]
+            tbl["i18n_970"] = ["zh": "请先配置模型 API", "en": "Configure Model API first"]
+            tbl["i18n_971"] = ["zh": "TrollAgent v%@ · %@ · 反馈内容：", "en": "TrollAgent v%@ · %@ · Feedback:"]
+            tbl["i18n_976"] = ["zh": "当前分类下无运行中的应用", "en": "No running apps in this category"]
+            tbl["i18n_977"] = ["zh": "无匹配应用", "en": "No matching apps"]
+            tbl["i18n_980"] = ["zh": "加载应用列表…", "en": "Loading app list…"]
+            tbl["i18n_981"] = ["zh": "选择应用", "en": "Select App"]
+            tbl["i18n_982"] = ["zh": "搜索 · 分类 · 版本 · 索引", "en": "Search · Category · Version · Index"]
+            tbl["i18n_983"] = ["zh": "输入网址，如 github.com", "en": "Enter URL, e.g. github.com"]
+            tbl["i18n_984"] = ["zh": "后退", "en": "Back"]
+            tbl["i18n_985"] = ["zh": "前进", "en": "Forward"]
+            tbl["i18n_988"] = ["zh": "内置浏览器", "en": "Built-in Browser"]
+            tbl["i18n_1180"] = ["zh": "完成", "en": "Done"]
+            tbl["i18n_990"] = ["zh": "本机环境就绪", "en": "Environment ready"]
+            tbl["i18n_991"] = ["zh": "本机环境异常", "en": "Environment issues found"]
+            tbl["i18n_1167"] = ["zh": "就绪 · 可注入", "en": "Ready · Injectable"]
+            tbl["i18n_993"] = ["zh": "需检查下方项目", "en": "Check items below"]
+            tbl["i18n_994"] = ["zh": "设备型号", "en": "Device Model"]
+            tbl["i18n_995"] = ["zh": "系统版本", "en": "iOS Version"]
+            tbl["i18n_996"] = ["zh": "存储空间", "en": "Storage"]
+            tbl["i18n_997"] = ["zh": "内存", "en": "Memory"]
+            tbl["i18n_998"] = ["zh": "屏幕分辨率", "en": "Screen Resolution"]
+            tbl["i18n_999"] = ["zh": "已安装应用", "en": "Installed Apps"]
+            tbl["i18n_1000"] = ["zh": "工作区占用", "en": "Workspace Usage"]
+            tbl["i18n_1001"] = ["zh": "电池电量", "en": "Battery"]
+            tbl["i18n_1002"] = ["zh": "设备名称", "en": "Device Name"]
+            tbl["i18n_1003"] = ["zh": "amfid 绕过", "en": "amfid Bypass"]
+            tbl["i18n_1004"] = ["zh": "推断生效", "en": "Inferred Active"]
+            tbl["i18n_1005"] = ["zh": "未知/未生效", "en": "Unknown/Inactive"]
+            tbl["i18n_1006"] = ["zh": "设备标识符", "en": "Device Identifier"]
+            tbl["i18n_1007"] = ["zh": "本机环境", "en": "Device Environment"]
+            tbl["i18n_1008"] = ["zh": "未知文件", "en": "Unknown File"]
+            tbl["i18n_1010"] = ["zh": "无法渲染图片", "en": "Cannot Render Image"]
+            tbl["i18n_1011"] = ["zh": "无法读取", "en": "Cannot Read"]
+            tbl["i18n_1012"] = ["zh": "此类型无法直接预览，可用上方按钮存储到文件或用其他 App 打开", "en": "This type can't be previewed; use the buttons above to save it to Files or open in another app"]
+            tbl["i18n_1013"] = ["zh": "已导入并切换", "en": "Imported & switched"]
+            tbl["i18n_1014"] = ["zh": "重复配置，未导入", "en": "Duplicate config, not imported"]
+            tbl["i18n_1015"] = ["zh": "检测环境", "en": "Detect Environment"]
+            tbl["i18n_1016"] = ["zh": "M月d日 HH:mm", "en": "M/d HH:mm"]
+            tbl["i18n_1017"] = ["zh": "简洁模式", "en": "Concise Mode"]
+            tbl["i18n_1018"] = ["zh": "综合模式", "en": "General Mode"]
+            tbl["i18n_1019"] = ["zh": "开发者模式", "en": "Developer Mode"]
+            tbl["i18n_1020"] = ["zh": "逆向专家模式", "en": "Reverse-Engineering Expert"]
+            tbl["i18n_1021"] = ["zh": "渗透工程师模式", "en": "Pentesting Engineer"]
+            tbl["i18n_1022"] = ["zh": "游戏修改模式", "en": "Game Modding Mode"]
+            tbl["i18n_1023"] = ["zh": "AI 控制 UI 模式", "en": "AI UI Control Mode"]
+            tbl["i18n_1024"] = ["zh": "1. 米斯特漏洞助手（完整版）", "en": "1. Mist Vulnerability Assistant (Full)"]
+            tbl["i18n_1025"] = ["zh": "3. Skeleton Key (微软 2024)", "en": "3. Skeleton Key (Microsoft 2024)"]
+            tbl["i18n_1026"] = ["zh": "4. Evil Confidant 邪恶密友", "en": "4. Evil Confidant"]
+            tbl["i18n_1027"] = ["zh": "5. CO-STAR 破甲框架（完整版）", "en": "5. CO-STAR Jailbreak Framework (Full)"]
+            tbl["i18n_1028"] = ["zh": "6. 安全审计员 - 反向诱导", "en": "6. Security Auditor - Reverse Induction"]
+            tbl["i18n_1029"] = ["zh": "7. 编码绕过模式", "en": "7. Coding Bypass Mode"]
+            tbl["i18n_1030"] = ["zh": "8. 学术研究员模式", "en": "8. Academic Researcher Mode"]
+            tbl["i18n_1031"] = ["zh": "已选 %d 条", "en": "Selected %d item(s)"]
+            tbl["i18n_1032"] = ["zh": "未选择模型", "en": "No model selected"]
+            tbl["i18n_1033"] = ["zh": "已切换：%@", "en": "Switched: %@"]
+            tbl["i18n_1034"] = ["zh": "网络已恢复", "en": "Network restored"]
+            tbl["i18n_1035"] = ["zh": "已回到前台", "en": "Back to foreground"]
+            tbl["i18n_1036"] = ["zh": "第 %d 轮", "en": "Round %d"]
+            tbl["i18n_1037"] = ["zh": "推理·%@", "en": "Reasoning·%@"]
+            tbl["i18n_1038"] = ["zh": "技能", "en": "Skills"]
+            tbl["i18n_1041"] = ["zh": "低", "en": "Low"]
+            tbl["i18n_1042"] = ["zh": "中", "en": "Medium"]
+            tbl["i18n_1043"] = ["zh": "高", "en": "High"]
+            tbl["i18n_1044"] = ["zh": "最高", "en": "Max"]
+            tbl["i18n_1045"] = ["zh": "极限", "en": "Ultimate"]
+            tbl["i18n_1046"] = ["zh": "应用", "en": "Apps"]
+            tbl["i18n_1047"] = ["zh": "相册", "en": "Photos"]
+            tbl["i18n_1049"] = ["zh": "浏览器", "en": "Browser"]
+            tbl["i18n_1050"] = ["zh": "📷 图片%d 识别到的文字：\\n%@", "en": "📷 Image %d recognized text:\\n%@"]
+            tbl["i18n_1051"] = ["zh": "🔍 已自动 OCR 识别图片文字", "en": "🔍 Auto-OCR done"]
+            tbl["i18n_1052"] = ["zh": "处理请求", "en": "Processing request"]
+            tbl["i18n_1053"] = ["zh": "[📱应用：%@（%@）]", "en": "[📱App: %@ (%@)]"]
+            tbl["i18n_1054"] = ["zh": "[📎文件：%@] 已保存到 %@", "en": "[📎File: %@] saved to %@"]
+            tbl["i18n_1055"] = ["zh": "[📎文件：%@]（复制到工作区失败，请手动放入 %@）", "en": "[📎File: %@] (copy to workspace failed, place it manually at %@)"]
+            tbl["i18n_1056"] = ["zh": "发送消息", "en": "Send"]
+            tbl["i18n_1057"] = ["zh": "已复制 %d 条内容", "en": "Copied %d item(s)"]
+            tbl["i18n_1059"] = ["zh": "新会话", "en": "New Chat"]
+            tbl["i18n_1060"] = ["zh": "我：%@", "en": "Me: %@"]
+            tbl["i18n_1061"] = ["zh": "工具结果%@：%@", "en": "Tool result %@: %@"]
+            tbl["i18n_1062"] = ["zh": "清空当前会话", "en": "Clear current chat"]
+            tbl["i18n_1063"] = ["zh": "新建会话", "en": "New Chat"]
+            tbl["i18n_1064"] = ["zh": "切换模型", "en": "Switch Model"]
+            tbl["i18n_1065"] = ["zh": "查看已加载工具", "en": "View loaded tools"]
+            tbl["i18n_1066"] = ["zh": "已清空当前会话", "en": "Cleared current chat"]
+            tbl["i18n_1067"] = ["zh": "已新建会话", "en": "Created new chat"]
+            tbl["i18n_1068"] = ["zh": "已提及 %@", "en": "Mentioned %@"]
+            tbl["i18n_1069"] = ["zh": "选择上游模型", "en": "Select upstream model"]
+            tbl["i18n_1070"] = ["zh": "在设置中管理模型", "en": "Manage models in Settings"]
+            tbl["i18n_1071"] = ["zh": "思考中…", "en": "Thinking…"]
+            tbl["i18n_1072"] = ["zh": "已深度思考 %d 字", "en": "Deep-thought %d chars"]
+            tbl["i18n_1074"] = ["zh": "✗ 出错", "en": "✗ Error"]
+            tbl["i18n_1075"] = ["zh": "✓ 完成", "en": "✓ Done"]
+            tbl["i18n_1076"] = ["zh": "工具执行中…", "en": "Tool running…"]
+            tbl["i18n_1077"] = ["zh": "工具结果 ▴", "en": "Tool result ▴"]
+            tbl["i18n_1078"] = ["zh": "工具结果 ▾", "en": "Tool result ▾"]
+            tbl["i18n_1079"] = ["zh": "用 TrollStore 安装", "en": "Install via TrollStore"]
+            tbl["i18n_1080"] = ["zh": "✅ %d 步成功", "en": "✅ %d steps OK"]
+            tbl["i18n_1081"] = ["zh": "输入消息...", "en": "Type a message…"]
+            tbl["i18n_1082"] = ["zh": "选择分析", "en": "Choose to analyze"]
+            tbl["i18n_1083"] = ["zh": "最多 8 张", "en": "Up to 8 photos"]
+            tbl["i18n_1084"] = ["zh": "最多 8 个", "en": "Up to 8 files"]
+            tbl["i18n_1085"] = ["zh": "AI 可控制", "en": "AI-controllable"]
+            tbl["i18n_1086"] = ["zh": "思考·%@", "en": "Think·%@"]
+            tbl["i18n_1087"] = ["zh": "搜索·%@", "en": "Search·%@"]
+            tbl["i18n_1088"] = ["zh": "开", "en": "On"]
+            tbl["i18n_1089"] = ["zh": "关", "en": "Off"]
+            tbl["i18n_1090"] = ["zh": "需要 TrollStore 开启\"编辑 Entitlements\"并卸载重装", "en": "Requires 'Edit Entitlements' in TrollStore and a reinstall"]
+            tbl["i18n_1091"] = ["zh": "→ AI 调用 web.search(\"2026 iPhone 发布会\")，再 web.fetch 打开最相关的链接读正文", "en": "→ AI calls web.search(\"2026 iPhone 发布会\"), then web.fetch opens the most relevant link to read it"]
+            tbl["i18n_1144"] = ["zh": "目标 App", "en": "Target App"]
+            tbl["i18n_1093"] = ["zh": "生成 Tweak 项目模板", "en": "Generate Tweak Project Template"]
+            tbl["i18n_1094"] = ["zh": "在工作区创建 MyTweak 模板", "en": "Creates MyTweak template in workspace"]
+            tbl["i18n_1095"] = ["zh": "📱 App 控制", "en": "📱 App Control"]
+            tbl["i18n_1096"] = ["zh": "👆 UI 操作", "en": "👆 UI Actions"]
+            tbl["i18n_1097"] = ["zh": "使用 artifact.* 读写", "en": "Read/write via artifact.*"]
+            tbl["i18n_1098"] = ["zh": "删除 Documents/Workspace 下所有文件", "en": "Delete all files under Documents/Workspace"]
+            tbl["i18n_1099"] = ["zh": "指令内容（Markdown）", "en": "Instruction Content (Markdown)"]
+            tbl["i18n_1100"] = ["zh": "使用 workspace 目录内的文件", "en": "Use files inside the workspace directory"]
+            tbl["i18n_1101"] = ["zh": "URL 无效", "en": "Invalid URL"]
+            tbl["i18n_1102"] = ["zh": "模型 API", "en": "Model API"]
+            tbl["i18n_1103"] = ["zh": "Base URL 无效", "en": "Invalid Base URL"]
+            tbl["i18n_1104"] = ["zh": "延迟 %dms", "en": "Latency %dms"]
+            tbl["i18n_1105"] = ["zh": "API 协议", "en": "API Protocol"]
+            tbl["i18n_1106"] = ["zh": "API 配置", "en": "API Config"]
+            tbl["i18n_1107"] = ["zh": "输入 token 估算", "en": "Input token estimate"]
+            tbl["i18n_1108"] = ["zh": "通用 UIKit API，不依赖具体 App", "en": "Generic UIKit API, not tied to a specific app"]
+            tbl["i18n_1109"] = ["zh": "AI 调用 control.inject(bundle_id) 注入 ControlAgent.dylib", "en": "AI calls control.inject(bundle_id) to inject ControlAgent.dylib"]
+            tbl["i18n_1110"] = ["zh": "AI 调用 control.status 确认连接", "en": "AI calls control.status to confirm the connection"]
+            tbl["i18n_1111"] = ["zh": "注入 ControlAgent 到目标 App", "en": "Inject ControlAgent into the target app"]
+            tbl["i18n_1112"] = ["zh": "读取 UI 树", "en": "Read the UI tree"]
+            tbl["i18n_1113"] = ["zh": "模拟滑动 (x1,y1 → x2,y2)", "en": "Simulate swipe (x1,y1 → x2,y2)"]
+            tbl["i18n_1114"] = ["zh": "模拟按键 (home/back/enter)", "en": "Simulate keys (home/back/enter)"]
+            tbl["i18n_1115"] = ["zh": "只监听 localhost (127.0.0.1:4789)，不暴露到网络", "en": "Listens on localhost only (127.0.0.1:4789), never exposed to the network"]
+            tbl["i18n_1116"] = ["zh": "注入后必须重启目标 App，ControlAgent 才会启动", "en": "The target app must be restarted after injection for ControlAgent to start"]
+            tbl["i18n_1117"] = ["zh": "需要 TrollStore 开启\"编辑 Entitlements\"并卸载重装", "en": "Requires 'Edit Entitlements' in TrollStore and a reinstall"]
+            tbl["i18n_1118"] = ["zh": "UI 树限制 500 节点、深度 12 层", "en": "UI tree capped at 500 nodes, 12 levels deep"]
+            tbl["i18n_1119"] = ["zh": "CA 证书", "en": "CA Certificate"]
+            tbl["i18n_1120"] = ["zh": "查看已捕获的 HTTP/HTTPS 请求", "en": "View captured HTTP/HTTPS requests"]
+            tbl["i18n_1121"] = ["zh": "VPN，或本地代理 + WiFi 手动代理 127.0.0.1:18180", "en": "VPN, or local proxy + WiFi manual proxy 127.0.0.1:18180"]
+            tbl["i18n_1122"] = ["zh": "正常用目标 App，日志写入 Workspace/network_capture/mitm/", "en": "Use the target app normally; logs go to Workspace/network_capture/mitm/"]
+            tbl["i18n_1123"] = ["zh": "GitHub 账号", "en": "GitHub Account"]
+            tbl["i18n_1124"] = ["zh": "登录 GitHub 账号", "en": "Log in to GitHub Account"]
+            tbl["i18n_1125"] = ["zh": "使用 Personal Access Token（PAT）", "en": "Use Personal Access Token (PAT)"]
+            tbl["i18n_1126"] = ["zh": "线上编译（GitHub Actions）", "en": "Cloud Build (GitHub Actions)"]
+            tbl["i18n_1127"] = ["zh": "tweak 目录名（如 CompileProbe）", "en": "Tweak folder name (e.g. CompileProbe)"]
+            tbl["i18n_1128"] = ["zh": "请先登录 GitHub 账号", "en": "Log in to your GitHub account first"]
+            tbl["i18n_1129"] = ["zh": "登录 GitHub", "en": "Log in to GitHub"]
+            tbl["i18n_1130"] = ["zh": "OAuth App（网页登录用）", "en": "OAuth App (for web login)"]
+            tbl["i18n_1131"] = ["zh": "workflow 文件名", "en": "Workflow file name"]
+            tbl["i18n_1132"] = ["zh": "所有 App 的 Caches + tmp", "en": "All apps' Caches + tmp"]
+            tbl["i18n_1133"] = ["zh": "所有 App 的 Library/Logs", "en": "All apps' Library/Logs"]
+            tbl["i18n_1134"] = ["zh": "SplashBoard 启动截图缓存", "en": "SplashBoard launch screenshot cache"]
+            tbl["i18n_1135"] = ["zh": "WebKit 缓存", "en": "WebKit Cache"]
+            tbl["i18n_1136"] = ["zh": "所有 App 的 WebKit 网页缓存", "en": "All apps' WebKit web caches"]
+            tbl["i18n_1137"] = ["zh": "Safari 缓存", "en": "Safari Cache"]
+            tbl["i18n_1138"] = ["zh": "AI 自动调用 web.search 检索 → 必要时 web.fetch 读原文 → 带引用回答", "en": "AI auto-calls web.search, then web.fetch to read the source when needed — answers with citations"]
+            tbl["i18n_1139"] = ["zh": "→ AI 调用 web.search(\"2026 iPhone 发布会\")，再 web.fetch 打开最相关的链接读正文", "en": "→ AI calls web.search(\"2026 iPhone 发布会\"), then web.fetch opens the most relevant link to read it"]
+            tbl["i18n_1140"] = ["zh": "deb 包缓存", "en": "deb package cache"]
+            tbl["i18n_1141"] = ["zh": "去掉tool_choice", "en": "Drop tool_choice"]
+            tbl["i18n_1142"] = ["zh": "Responses API+工具", "en": "Responses API + tools"]
+            tbl["i18n_1143"] = ["zh": "设备 ID", "en": "Device ID"]
+            tbl["i18n_1145"] = ["zh": "Safari 行为监控", "en": "Safari Behavior Monitor"]
+            tbl["i18n_1146"] = ["zh": "IOC 规则库", "en": "IOC Rule Base"]
+            tbl["i18n_1147"] = ["zh": "监控 IOSurface 异常调用", "en": "Monitors abnormal IOSurface calls"]
+            tbl["i18n_1148"] = ["zh": "关于 Coruna 漏洞", "en": "About the Coruna Bug"]
+            tbl["i18n_1149"] = ["zh": "iOS 16.3 ✅ 受影响", "en": "iOS 16.3 ✅ Affected"]
+            tbl["i18n_1150"] = ["zh": "一键注入 dylib 到任意 App", "en": "One-tap dylib injection into any app"]
+            tbl["i18n_1151"] = ["zh": "基于 Google Threat Intelligence IOCs", "en": "Based on Google Threat Intelligence IOCs"]
+            tbl["i18n_1152"] = ["zh": "Coruna Web 注入", "en": "Coruna Web Injection"]
+            tbl["i18n_1153"] = ["zh": "Coruna 漏洞链支持 iOS 13.0 - 17.2.1。当前: %@", "en": "Coruna chain supports iOS 13.0 - 17.2.1. Current: %@"]
+            tbl["i18n_1154"] = ["zh": "Dylib 文件", "en": "Dylib File"]
+            tbl["i18n_1155"] = ["zh": "CVE-2024-23222 类型混淆", "en": "CVE-2024-23222 type confusion"]
+            tbl["i18n_1156"] = ["zh": "Wasm 调度劫持", "en": "Wasm dispatch hijack"]
+            tbl["i18n_1157"] = ["zh": "call_indirect 指针覆盖", "en": "call_indirect pointer overwrite"]
+            tbl["i18n_1158"] = ["zh": "PAC 绕过", "en": "PAC Bypass"]
+            tbl["i18n_1159"] = ["zh": "AMFI 补丁", "en": "AMFI Patch"]
+            tbl["i18n_1160"] = ["zh": "启用 Developer Mode", "en": "Enable Developer Mode"]
+            tbl["i18n_1161"] = ["zh": "选择 Dylib", "en": "Select Dylib"]
+            tbl["i18n_1162"] = ["zh": "%d 个工具 · iOS/原生/Alpine 分层", "en": "%d tools · iOS/Native/Alpine layers"]
+            tbl["i18n_1163"] = ["zh": "抓包 VPN", "en": "Packet VPN"]
+            tbl["i18n_1164"] = ["zh": "Coruna 安全盾", "en": "Coruna Shield"]
+            tbl["i18n_1165"] = ["zh": "ZeenAE · 独立开发者", "en": "ZeenAE · Independent Developer"]
+            tbl["i18n_1169"] = ["zh": "GitHub 被墙时备用 · ", "en": "Fallback when GitHub is blocked · "]
+            tbl["i18n_1170"] = ["zh": "检查更新", "en": "Check Update"]
+            tbl["i18n_1171"] = ["zh": "默认（ghfast.top）", "en": "Default (ghfast.top)"]
+            tbl["i18n_1172"] = ["zh": "如 192.168.1.100", "en": "e.g. 192.168.1.100"]
+            tbl["i18n_1173"] = ["zh": "如 root", "en": "e.g. root"]
+            tbl["i18n_1174"] = ["zh": "可选，如 /var/mobile/.ssh/id_rsa", "en": "Optional, e.g. /var/mobile/.ssh/id_rsa"]
+            tbl["i18n_1176"] = ["zh": "工具权限策略", "en": "Tool Permissions"]
+            tbl["i18n_1177"] = ["zh": "Alpine 工具", "en": "Alpine Tools"]
+            tbl["i18n_1178"] = ["zh": "iOS 芯片直跑：sqlite3/plutil/jtool2/py3-native/node-native + 注入链", "en": "iOS chip-native: sqlite3/plutil/jtool2/py3-native/node-native + injection chain"]
+            tbl["i18n_1179"] = ["zh": "Linux 沙箱工具链：busybox 全套 + apk 可装任意工具", "en": "Linux sandbox toolchain: full busybox + apk installs any tool"]
+            tbl["i18n_1181"] = ["zh": "设置", "en": "Settings"]
+            tbl["i18n_1182"] = ["zh": "SQLite 数据库（iOS 系统自带）", "en": "SQLite database (iOS built-in)"]
+            tbl["i18n_1183"] = ["zh": "plist 读写（iOS 系统自带）", "en": "plist read/write (iOS built-in)"]
+            tbl["i18n_1184"] = ["zh": "原生 Python 3.14（芯片直跑 numpy/pandas）", "en": "Native Python 3.14 (chip-native numpy/pandas)"]
+            tbl["i18n_1185"] = ["zh": "Git 封装（纯 Python——rootfs 缺失兜底）", "en": "Git wrapper (pure Python — rootfs fallback)"]
+            tbl["i18n_1186"] = ["zh": "签名工具（伪签/entitlements）", "en": "Signing tools (fake-sign/entitlements)"]
+            tbl["i18n_1187"] = ["zh": "dylib 注入", "en": "dylib Injection"]
+            tbl["i18n_1188"] = ["zh": "Mach-O 操作", "en": "Mach-O Ops"]
+            tbl["i18n_1189"] = ["zh": "TrollStore 注入", "en": "TrollStore Injection"]
+            tbl["i18n_1190"] = ["zh": "dylib 路径修改", "en": "dylib path patch"]
+            tbl["i18n_1191"] = ["zh": "Alpine 命令", "en": "Alpine Commands"]
+            tbl["i18n_1192"] = ["zh": "系统权限", "en": "System Permissions"]
+            tbl["i18n_1193"] = ["zh": "自动化", "en": "Automation"]
+            tbl["i18n_1194"] = ["zh": "MCP 工具 (%d)", "en": "MCP Tools (%d)"]
+            tbl["i18n_1195"] = ["zh": "TrollAgent 统一环境终端（TrollRuntime/Alpine）", "en": "TrollAgent Unified Terminal (TrollRuntime/Alpine)"]
+            tbl["i18n_1196"] = ["zh": "\\n…[输出过长已截断]", "en": "⏎…[output too long, truncated]"]
+            tbl["i18n_1197"] = ["zh": "已复制", "en": "Copied"]
+        _table = tbl
+        return tbl
+    }
 
     static func t(_ key: String) -> String {
         let lang = LanguageManager.shared.language.rawValue
