@@ -13,7 +13,7 @@ enum ToolLayer: String, CaseIterable {
 
     var subtitle: String {
         switch self {
-        case .packaged: return "App 封装能力：文件、记忆、构建、模型、技能、消息、自动化"
+        case .packaged: return "注册的大工具（ToolRegistry——AI 可直接调用的封装能力）"
         case .native: return "iOS 芯片直跑：sqlite3/plutil/jtool2/py3-native/node-native + 注入链"
         case .alpine: return "Linux 沙箱工具链：busybox 全套 + apk 可装任意工具"
         }
@@ -142,7 +142,7 @@ struct ToolCenterView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("工具分三层")
                             .font(.headline)
-                        Text("封装工具 = App 能力（AI 直接调用）；原生工具 = iOS 芯片直跑命令；Alpine 工具 = Linux 沙箱工具链。shell.exec 统一执行原生 + Alpine 命令，无需选择环境。")
+                        Text("封装工具 = 注册的大工具（AI 直接调用）；原生工具 = iOS 芯片直跑命令；Alpine 工具 = Linux 沙箱工具链。shell.exec 统一执行原生 + Alpine 命令，无需选择环境。")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
