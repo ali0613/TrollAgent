@@ -6,36 +6,22 @@ import SwiftUI
 //              ★常驻核心 + 真实/占位 徽标，设置页删掉重复入口（工具中心为唯一主入口）。
 
 enum ToolLayer: String, CaseIterable {
-    case ios = "iOS 系统工具"
+    // v6.6.0-fix33: 三层重构——封装工具（MCP）/ 原生工具（iOS 芯片直跑命令）/ Alpine 工具（Linux 沙箱命令）
+    case packaged = "封装工具"
     case native = "原生工具"
     case alpine = "Alpine 工具"
 
     var subtitle: String {
         switch self {
-        case .ios: return "直接操作 iPhone：启停 App、注入、UI 自动化、容器、定位"
-        case .native: return "App 内执行：网络、文件、OCR、宏、构建、知识库"
-        case .alpine: return "Linux 沙箱：装包、解包、编译、复杂脚本"
+        case .packaged: return "App 封装能力：文件、记忆、构建、模型、技能、消息、自动化"
+        case .native: return "iOS 芯片直跑：sqlite3/plutil/jtool2/py3-native/node-native + 注入链"
+        case .alpine: return "Linux 沙箱工具链：busybox 全套 + apk 可装任意工具"
         }
     }
 
-    /// 按工具名前缀/白名单映射到层（可跨层：shell.exec 含 iOS 原生命令 + Alpine 命令两个分支）
+    /// 全部 MCP 工具归"封装工具"层；原生/Alpine 层展示静态命令清单（shell.exec 内可用）
     static func layers(for def: ToolDefinition) -> [ToolLayer] {
-        let n = def.name
-        // v6.6.0: shell.exec 统一环境（TrollRuntime/Alpine 完整工具链 + iOS 原生兜底）——不再有 runtime 路由。
-        if n == "shell.exec" {
-            return [.native, .alpine]
-        }
-        if n == "env.setup_re" {
-            return [.alpine]
-        }
-        // iOS 系统层：直接操作设备/已装 App
-        let iosPrefixes = ["app", "inject", "control.", "container.", "device.", "location.",
-                           "memory", "process.", "scan.", "contacts.", "reminder", "calendar",
-                           "phone", "bind.", "browser.", "diagnose.", "ssh"]
-        if iosPrefixes.contains(where: { n == $0 || n.hasPrefix($0) }) {
-            return [.ios]
-        }
-        return [.native]
+        return [.packaged]
     }
 }
 
@@ -43,6 +29,7 @@ enum ToolLayer: String, CaseIterable {
 struct ToolRowItem: Identifiable {
     let def: ToolDefinition
     let branch: String?
+    var isReal: Bool = true   // v6.6.0-fix33: 原生/Alpine 命令都是真实命令（不标占位）
     var id: String { def.name }
 }
 
@@ -53,6 +40,44 @@ struct ToolCenterView: View {
     @State private var showOnlyReal = true   // v6.6.0-fix32: 默认只显示真实实现（占位工具隐藏——减少混乱）
 
     // v6.1.5-14bo：真实实现清单（并入原权限页）——区分"有真实实现" vs "占位/文档"
+    // v6.6.0-fix33: 原生工具命令清单（shell.exec 内可用——iOS 芯片直跑）
+    private let nativeCommands: [(String, String)] = [
+        // iOS 系统自带
+        ("sqlite3", "SQLite 数据库（iOS 系统自带）"),
+        ("plutil", "plist 读写（iOS 系统自带）"),
+        ("ta", "文件属性（iOS 系统自带）"),
+        // bin/ 内置
+        ("jtool2", "Mach-O 解析（签名/权限/元数据）"),
+        ("py3-native", "原生 Python 3.14（芯片直跑 numpy/pandas）"),
+        ("node-native", "原生 Node.js（芯片直跑重负载 JS）"),
+        ("git.py", "Git 封装（纯 Python——rootfs 缺失兜底）"),
+        ("nscan.py", "网络扫描脚本"),
+        // 注入链工具（Resources/bin）
+        ("ldid", "签名工具（伪签/entitlements）"),
+        ("insert_dylib", "dylib 注入"),
+        ("optool", "Mach-O 操作"),
+        ("ct_bypass", "代码签名绕过"),
+        ("opainject", "TrollStore 注入"),
+        ("install_name_tool", "dylib 路径修改"),
+        ("chown", "更改属主（iOS 系统）"),
+        ("cp", "复制（iOS 系统）"),
+        ("mkdir", "建目录（iOS 系统）"),
+        ("mv", "移动（iOS 系统）"),
+        ("rm", "删除（iOS 系统）"),
+    ]
+
+    // v6.6.0-fix33: Alpine 工具命令清单（常用——完整 busybox 全套 + apk 可装）
+    private let alpineCommands: [(String, String)] = [
+        ("ls/cp/mv/rm/mkdir/cat/head/tail/wc", "文件操作"),
+        ("find/grep/sed/awk/sort/uniq/tr", "文本处理"),
+        ("tar/unzip/gzip/xz", "压缩解压"),
+        ("ps/top/df/du/date/uname/whoami/id", "系统信息"),
+        ("curl/wget/ping/nc/ssh", "网络"),
+        ("apk", "装任意工具（apk add <包名>）"),
+        ("sh/bash/python3/nodejs/gcc/make/git", "编程环境"),
+        ("vi/nano/echo/printf", "文本编辑/输出"),
+    ]
+
     private let realTools: Set<String> = [
         "ping", "device.info", "device.probe",
         "artifact.read_text", "artifact.write_text", "artifact.list", "workspace.info",
@@ -79,16 +104,29 @@ struct ToolCenterView: View {
         var result: [(layer: ToolLayer, rows: [ToolRowItem])] = []
         for layer in ToolLayer.allCases {
             var rows: [ToolRowItem] = []
-            for def in registry.definitions.sorted(by: { $0.name < $1.name }) {
-                guard ToolLayer.layers(for: def).contains(layer) else { continue }
-                guard passesFilter(def) else { continue }
-                var branch: String? = nil
-                if def.name == "shell.exec" {
-                    // v6.6.0-fix32: 去重——shell.exec 只在 native 层显示一次（统一环境执行）
-                    if layer == .alpine { continue }
-                    branch = "统一环境执行（iOS 原生命令 + Alpine 工具链）"
+            switch layer {
+            case .packaged:
+                // 封装工具层：MCP 工具（注册表——真实实现过滤 + 搜索）
+                for def in registry.definitions.sorted(by: { $0.name < $1.name }) {
+                    guard passesFilter(def) else { continue }
+                    var branch: String? = nil
+                    if def.name == "shell.exec" {
+                        branch = "统一环境执行（iOS 原生命令 + Alpine 工具链）"
+                    }
+                    rows.append(ToolRowItem(def: def, branch: branch, isReal: realTools.contains(def.name)))
                 }
-                rows.append(ToolRowItem(def: def, branch: branch))
+            case .native:
+                // 原生工具层：静态命令清单（搜索过滤）
+                for (cmd, desc) in nativeCommands {
+                    if !searchText.isEmpty && !cmd.localizedCaseInsensitiveContains(searchText) && !desc.localizedCaseInsensitiveContains(searchText) { continue }
+                    rows.append(ToolRowItem(def: ToolDefinition(name: cmd, summary: desc), branch: nil))
+                }
+            case .alpine:
+                // Alpine 工具层：静态命令清单（搜索过滤）
+                for (cmd, desc) in alpineCommands {
+                    if !searchText.isEmpty && !cmd.localizedCaseInsensitiveContains(searchText) && !desc.localizedCaseInsensitiveContains(searchText) { continue }
+                    rows.append(ToolRowItem(def: ToolDefinition(name: cmd, summary: desc), branch: nil))
+                }
             }
             if !rows.isEmpty {
                 result.append((layer, rows))
@@ -102,9 +140,9 @@ struct ToolCenterView: View {
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("工具按执行环境分三层")
+                        Text("工具分三层")
                             .font(.headline)
-                        Text("统一环境（TrollRuntime）：iOS 原生能力 + Alpine Linux 完整工具链，shell.exec 统一执行——iOS 路径自动 bind 直读直写，无需选择环境。")
+                        Text("封装工具 = App 能力（AI 直接调用）；原生工具 = iOS 芯片直跑命令；Alpine 工具 = Linux 沙箱工具链。shell.exec 统一执行原生 + Alpine 命令，无需选择环境。")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -177,7 +215,7 @@ struct ToolCenterView: View {
                             .foregroundColor(.secondary)
                     }) {
                         ForEach(item.rows) { row in
-                            ToolRow(def: row.def, branch: row.branch, isCore: registry.isCore(row.def.name), isReal: realTools.contains(row.def.name))
+                            ToolRow(def: row.def, branch: row.branch, isCore: registry.isCore(row.def.name), isReal: row.isReal)
                         }
                     }
                 }
