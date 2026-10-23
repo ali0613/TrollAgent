@@ -1417,6 +1417,19 @@ enum L10n {
             tbl["i18n_1195"] = ["zh": "TrollAgent 统一环境终端（TrollRuntime/Alpine）", "en": "TrollAgent Unified Terminal (TrollRuntime/Alpine)"]
             tbl["i18n_1196"] = ["zh": "\\n…[输出过长已截断]", "en": "⏎…[output too long, truncated]"]
             tbl["i18n_1197"] = ["zh": "已复制", "en": "Copied"]
+            // status texts (runtime status bar; zh kept short)
+            tbl["status_requesting_model_rounds"] = ["zh": "请求中（第 %d/%d 轮）", "en": "Requesting model (round %d/%d)"]
+            tbl["status_requesting_model_round"] = ["zh": "请求中（第 %d 轮）", "en": "Requesting model (round %d)"]
+            tbl["status_waiting_model"] = ["zh": "等待响应…", "en": "Waiting for model response…"]
+            tbl["status_response_done"] = ["zh": "完成 · 共 %@ 秒（含重试）", "en": "Response done · total %@s (incl. fallback retries)"]
+            tbl["status_rejected_simplify"] = ["zh": "请求被拒，改用简化参数（%d/%d）…", "en": "Request rejected, trying simplified params (level %d/%d)…"]
+            tbl["status_timeout_simplify"] = ["zh": "超时，改用简化参数（%d/%d）· 剩余 %d 秒…", "en": "Request timeout, trying simplified params (level %d/%d)· budget left %ds…"]
+            tbl["status_reasoning_upgraded"] = ["zh": "推理未触发，已升级最高档重试…", "en": "Low/mid tier didn't trigger reasoning, auto-upgraded to the highest tier and retrying…"]
+            tbl["status_images_stripped"] = ["zh": "模型不支持图片，已移除重试…", "en": "Current model can't see images, auto-removed them and retrying…"]
+            tbl["status_retry_responses"] = ["zh": "重试 Responses API（第 %d/3 次）…", "en": "Retrying Responses API (attempt %d/3)…"]
+            tbl["status_requesting_responses"] = ["zh": "正在经 Responses API 请求…", "en": "Requesting via Responses API (keeping tool calls)…"]
+            tbl["status_streaming_responses"] = ["zh": "流式请求中 (Responses API)…", "en": "Streaming via Responses API…"]
+            tbl["status_connected"] = ["zh": "已连接 · 首字节 %.1f 秒，接收中…", "en": "Connected · first byte %.1fs, receiving…"]
         _table = tbl
         return tbl
     }

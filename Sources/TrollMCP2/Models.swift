@@ -995,9 +995,9 @@ final class ConversationStore: ObservableObject {
                 // v2.9.34：带轮次前缀；v4.3.71 无上限 (requestRounds==0) 时不显示 "/0"
                 if self.requestRound > 0 && !status.contains("Round ") {
                     if self.requestRounds > 0 {
-                        self.statusText = "Requesting model (round \(self.requestRound)/\(self.requestRounds))· \(status)"
+                        self.statusText = L10n.t("status_requesting_model_rounds", self.requestRound, self.requestRounds) + " · " + status
                     } else {
-                        self.statusText = "Requesting model (round \(self.requestRound))· \(status)"
+                        self.statusText = L10n.t("status_requesting_model_round", self.requestRound) + " · " + status
                     }
                 } else {
                     self.statusText = status

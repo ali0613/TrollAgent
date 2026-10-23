@@ -240,7 +240,7 @@ final class OpenAIClient {
             case .success:
                 let secs = String(format: "%.1f", Double(el) / 1000.0)
                 NetworkLog.shared.log("\(self.config.name) request done (\(el)ms)")
-                onStatus?("Response done · total \(secs)s (incl. fallback retries)")
+                onStatus?(L10n.t("status_response_done", secs))
                 ModelStore.shared.breaker(for: self.config.id).recordSuccess(usedHalfOpenPermit: self.usedHalfOpenPermit)
                 UsageRecorder.shared.end(config: self.config, ok: true, elapsedMs: el)
             case .failure(let e):
@@ -327,9 +327,9 @@ final class OpenAIClient {
         // 记录发送的载荷摘要 (不含 apiKey），便于排查
         NetworkLog.shared.log("\(config.name) L\(level) \(levelName(level)) → POST \(endpoint), fields: \(body.keys.sorted().joined(separator: ","))")
         if isFirst {
-            onStatus?("Waiting for model response…")
+            onStatus?(L10n.t("status_waiting_model"))
         } else {
-            onStatus?("Request rejected, trying simplified params (level \(level)/\(maxLevel))…")
+            onStatus?(L10n.t("status_rejected_simplify", level, maxLevel))
         }
 
         let task = session.dataTask(with: request) { data, response, error in
@@ -351,7 +351,7 @@ final class OpenAIClient {
                     if next <= self.maxLevel {
                         let remain = max(0, Int(self.overallDeadline.timeIntervalSinceNow))
                         NetworkLog.shared.log("\(self.config.name) L\(level) request timeout → auto-fallback to L\(next) (\(self.levelName(next)))")
-                        onStatus?("Request timeout, trying simplified params (level \(next)/\(self.maxLevel))· budget left \(remain)s…")
+                        onStatus?(L10n.t("status_timeout_simplify", next, self.maxLevel, remain))
                         self.attempt(level: next, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                         return
                     }
@@ -395,7 +395,7 @@ final class OpenAIClient {
                     let saved = self.currentReasoningLevel
                     self.currentReasoningLevel = 4   // v4.3.40：升到极限档 max (破甲站支持, 思考最多)
                     NetworkLog.shared.log("\(self.config.name): low/mid-tier response had no reasoning trace (reasoning_tokens=\(reasoningTokens)), auto-upgraded to max and retrying")
-                    onStatus?("Low/mid tier didn't trigger reasoning, auto-upgraded to the highest tier and retrying…")
+                    onStatus?(L10n.t("status_reasoning_upgraded"))
                     self.attempt(level: level, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                     self.currentReasoningLevel = saved
                     return
@@ -433,7 +433,7 @@ final class OpenAIClient {
                     }
                 }
                 NetworkLog.shared.log("\(self.config.name): model is non-vision, stripped images and retrying L\(level)")
-                onStatus?("Current model can't see images, auto-removed them and retrying…")
+                onStatus?(L10n.t("status_images_stripped"))
                 self.attempt(level: level, isFirst: false, messages: stripped, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                 return
             }
@@ -709,9 +709,9 @@ final class OpenAIClient {
 
             NetworkLog.shared.log("\(config.name) L5 Responses API+tools → POST /responses, fields: \(body.keys.sorted().joined(separator: ","))")
             if attempt > 0 {
-                onStatus?("Retrying Responses API (attempt \(attempt + 1)/3)…")
+                onStatus?(L10n.t("status_retry_responses", attempt + 1))
             } else {
-                onStatus?("Requesting via Responses API (keeping tool calls)…")
+                onStatus?(L10n.t("status_requesting_responses"))
             }
 
             let task = session.dataTask(with: request) { [weak self] data, response, error in
@@ -1276,7 +1276,7 @@ final class OpenAIClient {
         applyParamAliases(into: &body)
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
-        onStatus?("正在流式请求 (Responses API)…")
+        onStatus?(L10n.t("status_streaming_responses"))
 
         // 累积状态
         var fullText = ""
@@ -1329,7 +1329,7 @@ final class OpenAIClient {
                 // v2.9.88：链路可视化 —— 首字节到达即上报"已连接，开始流式接收"
                 let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
                 NetworkLog.shared.log("\(self.config.name): 流式首字节 (\(el)ms)")
-                onStatus?("已连接 · 首字节 \(String(format: "%.1f", Double(el) / 1000.0))s，开始接收…")
+                onStatus?(L10n.t("status_connected", Double(el) / 1000.0))
             }
             if fellBackToNonStream { return }
             guard let ev = self.parseSSEEvent(raw) else { return }
@@ -1428,7 +1428,7 @@ final class OpenAIClient {
                     let saved = self.currentReasoningLevel
                     self.currentReasoningLevel = 3   // v4.3.37：升到最高档 max
                     NetworkLog.shared.log("\(self.config.name): Responses 流式低/中档无思考 (reasoning_tokens=\(respReasoningTokens))，切非流式以 max 重试")
-                    onStatus?("Low/mid tier didn't trigger reasoning, auto-upgraded to the highest tier and retrying…")
+                    onStatus?(L10n.t("status_reasoning_upgraded"))
                     self.performResponses(messages: messages, tools: tools, onStatus: onStatus, onThinking: onThinking, completion: guardedCompletion)
                     self.currentReasoningLevel = saved
                     return
