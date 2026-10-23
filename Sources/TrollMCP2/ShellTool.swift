@@ -36,7 +36,7 @@ enum ShellDiag {
 final class ShellExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "shell.exec",
-        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux aarch64 完整工具链执行（原生 ARM64，apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写（仅 /ios_workspace、/ios_containers、/ios_system 三个——/ios_appdata 等不存在，无 iOS 原生 shell 兜底，plutil/jtool2 不可用，ps 只见容器进程）。python3/node 直接在统一环境原生执行（无 py3-native/node-native 变体命令，勿用）。缺工具需显式 apk add（不会自动装；git/wget/curl 已预装；make/cmake/gcc/clang/openssl/radare2 均可用 apk 装）。Use for: file ops, system info, network, text processing.",
+        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux aarch64 完整工具链执行（原生 ARM64，apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写（仅 /ios_workspace、/ios_containers、/ios_system 三个——/ios_appdata 等不存在，无 iOS 原生 shell 兜底，plutil/jtool2 不可用，ps 只见容器进程）。python3/node 在统一环境原生执行；重计算用 py3-native/node-native 原生入口（shell.exec 路由前缀，iPhone 芯片直跑 numpy/pandas/重 node，未内置时自动降级 python3/node）。缺工具需显式 apk add（不会自动装；git/wget/curl 已预装；make/cmake/gcc/clang/openssl/radare2 均可用 apk 装）。Use for: file ops, system info, network, text processing.",
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",
@@ -147,12 +147,13 @@ final class ShellExecTool: MCPTool {
             if trimmed == "ta" || trimmed.hasPrefix("ta ") {
                 return OffloadRouter.run(trimmed)
             }
-            // v7.0.5: py3-native 已废弃引导（实测此构建未内置原生 Python）——一律用 python3（统一环境 Alpine apk 装 py3-xxx）；
-            // 保留旧入口兜底：若内置 bin/python3 存在仍可执行。
+            // v6.6.0-fix15: py3-native 原生入口——App bin/python3（Python.xcframework + PythonCLI），iPhone 芯片直跑
+            // numpy/pandas 深度运算。构建未集成时 runNativePython 内部报"未内置"并提示降级 python3。
             if trimmed == "py3-native" || trimmed.hasPrefix("py3-native ") {
                 return ShellExecTool.runNativePython(String(trimmed.dropFirst("py3-native".count)).trimmingCharacters(in: .whitespaces))
             }
-            // v7.0.5: node-native 已废弃引导（实测此构建未内置原生 node）——一律用 node（统一环境 Alpine nodejs）。
+            // v6.6.0-fix15: node-native 原生入口——App bin/node（nodejs-mobile），V8 芯片直跑重负载。
+            // 构建未集成时 runNativeNode 内部报"未内置"并提示降级 node。
             if trimmed == "node-native" || trimmed.hasPrefix("node-native ") {
                 return ShellExecTool.runNativeNode(String(trimmed.dropFirst("node-native".count)).trimmingCharacters(in: .whitespaces))
             }

@@ -382,11 +382,20 @@ final class SystemPrompts {
       sysctl 是 Alpine 的（无 /proc/sys，kern.* 不可查）；ps 只看到容器自身进程，看不到 iOS 侧进程。
       plist 解析用 python3 plistlib；Mach-O 分析用 Alpine binutils（objdump/nm/strings/readelf/size）或 llvm-objdump。
       统一环境内命令/管道/路径全支持——环境是统一的，先查命令本身再下结论。
-    - PYTHON3 (v6.6.0-fix15): python3 在统一环境（Alpine aarch64）原生执行——完整 CPython + pip，apk add python3
-      py3-numpy 等任意装包。无 py3-native 变体命令——一律用 python3。重计算（大矩阵/数据分析）直接用 python3，
-      重包异常闪退=解释器限制，改用 PC 侧跑。脚本/中间文件流转用 /ios_workspace 共享。
-    - NODE (v6.6.0-fix15): node 在统一环境（Alpine aarch64）原生执行——apk add nodejs。无 node-native 变体命令——
-      一律用 node。构建/打包/webpack 类重负载直接用 node。
+    - PYTHON3 & PY3-NATIVE (v6.6.0-fix15): python3 = 统一环境（Alpine aarch64）原生执行——apk add python3
+      py3-numpy 等任意装包，日常/装包/生态用。py3-native = 原生 Python 入口（shell.exec 路由命令，iPhone 芯片直跑）——
+      numpy/pandas 深度运算（大矩阵/数据分析/模型推理）用；写法：`py3-native -c "..."` / `py3-native script.py` /
+      `py3-native -m pip list`（无需额外参数，命令名前缀即路由）。若 py3-native 报"原生 Python 未内置"（构建未集成
+      Python.xcframework）→ 自动降级用 python3（统一环境 apk 装 py3-numpy）。两者共享 /ios_workspace 文件流转。
+    - NODE & NODE-NATIVE (v6.6.0-fix15): node = 统一环境（Alpine aarch64）原生执行——apk add nodejs，轻量 JS/日常用。
+      node-native = 原生 node 入口（shell.exec 路由命令，V8 芯片直跑）——重 node 负载（构建工具/打包/webpack）用；
+      写法：`node-native -e "..."` / `node-native script.js`（命令名前缀即路由）。若 node-native 报"原生 node 未内置"
+      （构建未集成 nodejs-mobile）→ 降级用 node（统一环境 nodejs）。
+    - NATIVE ENTRYPOINTS 总览 (shell.exec 路由前缀——原生芯片直跑，非 Alpine 命令，勿在统一环境 command -v):
+      · `py3-native <args>`  原生 Python（numpy/pandas 深度运算；未内置自动降级 python3）
+      · `node-native <args>` 原生 node（V8 重负载；未内置自动降级 node）
+      其余原生二进制（ldid/opainject/optool/insert_dylib/ct_bypass 等）由对应 MCP 工具内部调用，AI 无需直接执行。
+      所有原生入口与统一环境共享 /ios_workspace 文件系统（中间数据文件流转）。
 
     - COMMAND EXISTENCE (v4.5.9, 实测边界): App 视角下 `ls /usr/bin` 目录枚举只显示系统 daemon 子集
       (swift-inspect/sysdiagnose 等)，常用命令(chmod/ls/cp/launchctl)不会出现在目录列表里——但【直接路径访问正常】。
