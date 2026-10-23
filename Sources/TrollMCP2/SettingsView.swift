@@ -131,7 +131,7 @@ struct SettingsView: View {
             SettingsItem(title: "工具中心",
                          subtitle: "\(ToolRegistry.shared.toolCount) 个工具 · iOS/原生/Alpine 分层",
                          icon: "wrench.and.screwdriver.fill", color: .green,
-                         destination: AnyView(ToolCenterView()))
+                         destination: AnyView(ToolCenterView(inSheet: false)))
         ]))
 
         // 网络与抓包（v3.3.1：独立分组，不依赖开发者模式——普通用户也能直接看到抓包入口）

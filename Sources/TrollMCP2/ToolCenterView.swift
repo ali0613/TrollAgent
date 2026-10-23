@@ -38,6 +38,7 @@ struct ToolCenterView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var searchText = ""
     @State private var showOnlyReal = false  // v6.6.0-fix35: 默认显示全部注册工具（注册=有 handler——不再有"占位"概念）；开关改"仅真机验证"
+    var inSheet: Bool = true   // v7.0.4: true=sheet 呈现（显示"完成"关闭）；false=导航 push（无完成，标题与外层同高）
 
     // v6.1.5-14bo：真实实现清单（并入原权限页）——区分"有真实实现" vs "占位/文档"
     // v6.6.0-fix33: 原生工具命令清单（shell.exec 内可用——iOS 芯片直跑）
@@ -129,8 +130,7 @@ struct ToolCenterView: View {
         return result
     }
 
-    var body: some View {
-        NavigationView {
+    @ViewBuilder private var toolList: some View {
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
@@ -222,15 +222,25 @@ struct ToolCenterView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("工具中心（\(registry.toolCount)）")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("完成") { presentationMode.wrappedValue.dismiss() }
+    }
+
+    var body: some View {
+        if inSheet {
+            NavigationView { toolList }
+                .navigationTitle("工具中心（\(registry.toolCount)）")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("完成") { presentationMode.wrappedValue.dismiss() }
+                    }
                 }
-            }
+                .navigationViewStyle(.stack)
+        } else {
+            // v7.0.4: 导航 push——无内层 NavigationView（标题与外层"设置"导航栏同高），无"完成"按钮（返回按钮足够）
+            toolList
+                .navigationTitle("工具中心（\(registry.toolCount)）")
+                .navigationBarTitleDisplayMode(.inline)
         }
-        .navigationViewStyle(.stack)
     }
 }
 
