@@ -969,7 +969,7 @@ final class ProbeInspectTool: MCPTool {
             "limit": "Max classes to return (default 30, max 100)",
             "cleanup": "Remove ProbeAgent after query (default false)"
         ],
-        prerequisites: ["[This tool is ineffective on encrypted apps (cryptid=1)] — on TARGET_INCOMPATIBLE / 'encrypted (cryptid=1)' don't retry, first app command=decrypt to crack the shell + replace_decrypted, then analyze, "must inject enable ProbeAgent first (prerequisite): can't inject into encrypted apps (see inject prerequisites)"]
+        prerequisites: ["[This tool is ineffective on encrypted apps (cryptid=1)] — on TARGET_INCOMPATIBLE / 'encrypted (cryptid=1)' don't retry, first app command=decrypt to crack the shell + replace_decrypted, then analyze", "must inject enable ProbeAgent first (prerequisite): can't inject into encrypted apps (see inject prerequisites)"]
     )
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
