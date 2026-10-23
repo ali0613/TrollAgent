@@ -157,13 +157,13 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             let bid = Bundle.main.bundleIdentifier ?? "com.trollagent.app"
             if let url = URL(string: "apple-magnifier://enable-jit?bundle-id=\(bid)"),
                UIApplication.shared.canOpenURL(url) {
-                logJIT("[scheduleTrollStoreJITURL] canOpenURL=true, opening \(url.absoluteString)\n")
+                self.logJIT("[scheduleTrollStoreJITURL] canOpenURL=true, opening \(url.absoluteString)\n")
                 fputs("[appmain] opening TrollStore JIT URL (fallback)\n", stderr)
                 UIApplication.shared.open(url)
                 Thread.sleep(forTimeInterval: 2.5)  // 等 TrollStore RootHelper 完成 attach（JIT 授权持续进程生命周期）
-                logJIT("[scheduleTrollStoreJITURL] after 2.5s sleep (URL opened)\n")
+                self.logJIT("[scheduleTrollStoreJITURL] after 2.5s sleep (URL opened)\n")
             } else {
-                logJIT("[scheduleTrollStoreJITURL] WARN canOpenURL=false (no TrollStore? bid=\(bid))\n")
+                self.logJIT("[scheduleTrollStoreJITURL] WARN canOpenURL=false (no TrollStore? bid=\(bid))\n")
                 fputs("[appmain] WARN: TrollStore URL unavailable (no TrollStore?)\n", stderr)
             }
         }
