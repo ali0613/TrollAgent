@@ -132,14 +132,14 @@ struct OnboardingView: View {
     // MARK: - 页 2：能力
     private var capabilityPage: some View {
         VStack(spacing: 20) {
-            Text("全副武装，AI 帮你操作")
+            Text("统一环境，AI 帮你操作")
                 .font(.title2)
                 .fontWeight(.bold)
                 .padding(.top, 10)
 
             ScrollView {
                 VStack(spacing: 12) {
-                    capRow("hammer.fill", "200+ 工具，文件/App/注入/终端", [.orange, .tmBrown])
+                    capRow("hammer.fill", "全栈工具，文件/App/注入/终端", [.orange, .tmBrown])
                     capRow("syringe.fill", "智能注入，控制任意 App", [.green, .tmTeal])
                     capRow("cursorarrow.click.2", "语义化操作，说点就点", [.tmCyan, .blue])
                     capRow("text.viewfinder", "OCR 识别，自动读屏", [.purple, .tmIndigo])
