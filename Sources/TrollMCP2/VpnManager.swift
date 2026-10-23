@@ -87,7 +87,7 @@ final class VpnManager {
             guard let self = self else { return }
             VpnManager.vpnlog("loadAllFromPreferences count=\(managers?.count ?? -1)")
             // 优先复用系统已注册的"TrollAgent 抓包 VPN"配置；没有则新建。
-            self.manager = managers?.first(where: { $0.localizedDescription == "TrollAgent 抓包 VPN" })
+            self.manager = managers?.first(where: { $0.localizedDescription == L10n.t("i18n_831") })
                               ?? NETunnelProviderManager()
             self.manager.loadFromPreferences { [weak self] _ in
                 guard let self = self else { return }
@@ -167,7 +167,7 @@ final class VpnManager {
             "getCertPath": "/var/mobile/Documents/Workspace/certs/ca.pem",
             // 抓包任务元数据（task 表记录用；taskID 由引擎生成，这里给个初始标识）
             "taskID": "trollagent-capture",
-            "ruleName": "默认抓包",
+            "ruleName": L10n.t("i18n_832"),
             "hostFilters": []
         ]
         let config: [String: Any] = startState
@@ -196,7 +196,7 @@ final class VpnManager {
         }
         self.manager.protocolConfiguration = proto
         self.manager.isEnabled = true
-        self.manager.localizedDescription = "TrollAgent 抓包 VPN"
+        self.manager.localizedDescription = L10n.t("i18n_831")
         VpnManager.vpnlog("saveAndStart: proto=\(proto.serverAddress ?? "nil") bundle=\(proto.providerBundleIdentifier ?? "nil")")
         self.manager.saveToPreferences { [weak self] err2 in
             guard let self = self else { return }
@@ -230,7 +230,7 @@ final class VpnManager {
                     return
                 }
                 VpnManager.vpnlog("approval wait TIMEOUT (16 ticks) status=invalid")
-                completion("请先在系统弹窗点「允许」后再连接 (NEVPNErrorConfigurationInvalid=1)")
+                completion(L10n.t("i18n_833"))
                 return
             }
             do {
@@ -294,7 +294,7 @@ final class VpnManager {
     /// 这里启动即查：存在我们的配置且不在 connected 状态 → 删掉（路由随配置撤销）。
     static func cleanupStaleConfig() {
         NETunnelProviderManager.loadAllFromPreferences { managers, _ in
-            guard let stale = managers?.first(where: { $0.localizedDescription == "TrollAgent 抓包 VPN" }),
+            guard let stale = managers?.first(where: { $0.localizedDescription == L10n.t("i18n_831") }),
                   stale.connection.status != .connected else { return }
             stale.removeFromPreferences { err in
                 VpnManager.vpnlog("cleanupStaleConfig: removed stale config, status was \(stale.connection.status.rawValue) err=\(err?.localizedDescription ?? "nil")")
@@ -355,8 +355,8 @@ final class VpnManager {
             "PayloadVersion": 1,
             "PayloadIdentifier": "com.trollagent.app.mitm",
             "PayloadUUID": UUID().uuidString,
-            "PayloadDisplayName": "TrollAgent 抓包证书",
-            "PayloadDescription": "安装并信任后，TrollAgent 可解密 HTTPS 明文用于抓包分析",
+            "PayloadDisplayName": L10n.t("i18n_835"),
+            "PayloadDescription": L10n.t("i18n_836"),
             "PayloadContent": [certPayload]
         ]
         guard let data = try? PropertyListSerialization.data(fromPropertyList: profile, format: .xml, options: 0) else { return nil }

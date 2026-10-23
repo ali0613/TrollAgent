@@ -178,7 +178,7 @@ final class GitHubAccountStore: ObservableObject {
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 if let err = err {
-                    self.lastError = "网络错误: \(err.localizedDescription)"
+                    self.lastError = L10n.t("i18n_807", err.localizedDescription)
                     completion(nil, self.lastError)
                     return
                 }
@@ -186,12 +186,12 @@ final class GitHubAccountStore: ObservableObject {
                 guard let data = data,
                       let code = try? JSONDecoder().decode(DeviceCode.self, from: data) else {
                     let raw = data.map { String(data: $0, encoding: .utf8) ?? "" } ?? ""
-                    self.lastError = status == 404 ? "Client ID 无效。若手动填过 Client ID：请到仓库设置里清空并保存 (自动回退内置默认)，或注册自己的 OAuth App 后填入真实 Client ID。" : "设备码请求failed (HTTP \(status)) \(raw.prefix(200))"
+                    self.lastError = status == 404 ? "Client ID 无效。若手动填过 Client ID：请到仓库设置里清空并保存 (自动回退内置默认)，或注册自己的 OAuth App 后填入真实 Client ID。" : L10n.t("i18n_809", status, raw.prefix(200))
                     completion(nil, self.lastError)
                     return
                 }
-                self.deviceFlowState = "请在浏览器输入代码 \(code.user_code)"
-                NetworkLog.shared.log("GitHub Device Flow 开始: user_code=\(code.user_code)")
+                self.deviceFlowState = L10n.t("i18n_810", code.user_code)
+                NetworkLog.shared.log(L10n.t("i18n_811", code.user_code))
                 completion(code, nil)
             }
         }.resume()
@@ -200,7 +200,7 @@ final class GitHubAccountStore: ObservableObject {
     /// 第二步：轮询换取 access_token (interval 秒一次，最长 expires_in 秒）。
     func pollDeviceToken(deviceCode: DeviceCode, completion: @escaping (Bool, String?) -> Void) {
         isDevicePolling = true
-        deviceFlowState = "请在浏览器输入代码 \(deviceCode.user_code)，等待授权…"
+        deviceFlowState = L10n.t("i18n_812", deviceCode.user_code)
 
         let deadline = Date().addingTimeInterval(Double(deviceCode.expires_in))
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
@@ -214,7 +214,7 @@ final class GitHubAccountStore: ObservableObject {
                 DispatchQueue.main.async {
                     self.isDevicePolling = false
                     self.deviceFlowState = nil
-                    completion(false, "授权超时，请重试")
+                    completion(false, L10n.t("i18n_813"))
                 }
                 return
             }
@@ -262,10 +262,10 @@ final class GitHubAccountStore: ObservableObject {
         req.httpBody = body.data(using: .utf8)
 
         URLSession.shared.dataTask(with: req) { data, _, err in
-            if err != nil { completion(nil, "网络错误"); return }
+            if err != nil { completion(nil, L10n.t("i18n_814")); return }
             guard let data = data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                completion(nil, "响应解析failed")
+                completion(nil, L10n.t("i18n_815"))
                 return
             }
             if let token = json["access_token"] as? String {
@@ -273,7 +273,7 @@ final class GitHubAccountStore: ObservableObject {
             } else if let err = json["error"] as? String {
                 completion(nil, err)   // authorization_pending / slow_down / expired_token / access_denied
             } else {
-                completion(nil, "未知响应")
+                completion(nil, L10n.t("i18n_816"))
             }
         }.resume()
     }
@@ -288,7 +288,7 @@ final class GitHubAccountStore: ObservableObject {
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 if let err = err {
-                    self.lastError = "网络错误: \(err.localizedDescription)"
+                    self.lastError = L10n.t("i18n_807", err.localizedDescription)
                     completion(false, self.lastError)
                     return
                 }
@@ -296,7 +296,7 @@ final class GitHubAccountStore: ObservableObject {
                 guard status == 200, let data = data,
                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                       let login = json["login"] as? String else {
-                    self.lastError = "身份验证failed (HTTP \(status))"
+                    self.lastError = L10n.t("i18n_817", status)
                     completion(false, self.lastError)
                     return
                 }
@@ -316,9 +316,9 @@ final class GitHubAccountStore: ObservableObject {
                     self.accounts.append(acct)
                 }
                 self.activeLogin = login
-                NetworkLog.shared.log("GitHub 网页登录OK: \(login)")
+                NetworkLog.shared.log(L10n.t("i18n_818", login))
                 self.persist()
-                completion(true, "已登录 @\(login)")
+                completion(true, L10n.t("i18n_819", login))
             }
         }.resume()
     }
@@ -328,7 +328,7 @@ final class GitHubAccountStore: ObservableObject {
     /// 用 GitHub PAT 验证并登录/更新账号。OK回调 true + 账号 login。
     func verifyAndLogin(token: String, completion: @escaping (Bool, String?) -> Void) {
         guard !token.isEmpty else {
-            lastError = "Token 不能为空"
+            lastError = L10n.t("i18n_820")
             completion(false, lastError)
             return
         }
@@ -343,7 +343,7 @@ final class GitHubAccountStore: ObservableObject {
                 guard let self = self else { return }
                 self.isVerifying = false
                 if let err = err {
-                    self.lastError = "网络错误: \(err.localizedDescription)"
+                    self.lastError = L10n.t("i18n_807", err.localizedDescription)
                     completion(false, self.lastError)
                     return
                 }
@@ -351,8 +351,8 @@ final class GitHubAccountStore: ObservableObject {
                 guard status == 200, let data = data,
                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                       let login = json["login"] as? String else {
-                    self.lastError = status == 401 ? "Token 无效或已过期 (请检查 repo + workflow 权限)"
-                        : "GitHub 验证failed (HTTP \(status))"
+                    self.lastError = status == 401 ? L10n.t("i18n_821")
+                        : L10n.t("i18n_822", status)
                     completion(false, self.lastError)
                     return
                 }
@@ -371,7 +371,7 @@ final class GitHubAccountStore: ObservableObject {
                     self.accounts.append(acct)
                 }
                 self.activeLogin = login
-                NetworkLog.shared.log("GitHub 账号登录: \(login) (HTTP \(status))")
+                NetworkLog.shared.log(L10n.t("i18n_823", login, status))
                 self.persist()
                 completion(true, login)
             }
@@ -401,12 +401,12 @@ final class GitHubAccountStore: ObservableObject {
 
     func triggerBuild(tweak: String, completion: @escaping (Bool, String?) -> Void) {
         guard let token = activeToken else {
-            lastError = "未登录 GitHub 账号"
+            lastError = L10n.t("i18n_824")
             completion(false, lastError)
             return
         }
         guard !tweak.isEmpty else {
-            lastError = "请填写 tweak 目录名"
+            lastError = L10n.t("i18n_825")
             completion(false, lastError)
             return
         }
@@ -427,7 +427,7 @@ final class GitHubAccountStore: ObservableObject {
                 guard let self = self else { return }
                 self.isTriggering = false
                 if let err = err {
-                    self.lastError = "网络错误: \(err.localizedDescription)"
+                    self.lastError = L10n.t("i18n_807", err.localizedDescription)
                     completion(false, self.lastError)
                     return
                 }
@@ -435,15 +435,15 @@ final class GitHubAccountStore: ObservableObject {
                 if status == 204 {
                     NetworkLog.shared.log("触发线上编译 \(self.repoOwner)/\(self.repoName) tweak=\(tweak) (HTTP 204)")
                     self.fetchRuns { _ in }
-                    completion(true, "已触发 \(tweak) 编译，稍后刷新状态")
+                    completion(true, L10n.t("i18n_827", tweak))
                 } else if status == 404 {
-                    self.lastError = "workflow '\(self.workflowId)' 不存在 (请确认仓库里有 build-tweak.yml)"
+                    self.lastError = L10n.t("i18n_828", self.workflowId)
                     completion(false, self.lastError)
                 } else if status == 401 {
-                    self.lastError = "Token 无 workflow 权限或已过期"
+                    self.lastError = L10n.t("i18n_829")
                     completion(false, self.lastError)
                 } else {
-                    self.lastError = "触发failed (HTTP \(status))"
+                    self.lastError = L10n.t("i18n_830", status)
                     completion(false, self.lastError)
                 }
             }

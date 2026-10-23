@@ -35,7 +35,7 @@ struct WorkspaceBrowserView: View {
     static let dirNotes: [String: String] = [
         "audit": L10n.t("i18n_617"),
         "control_shots": L10n.t("i18n_618"),
-        "crash": L10n.t("i18n_830"),
+        "crash": L10n.t("i18n_860"),
         "decrypted": L10n.t("i18n_620"),
         "downloads": L10n.t("i18n_621"),
         "duplicates": L10n.t("i18n_622"),
@@ -52,7 +52,7 @@ struct WorkspaceBrowserView: View {
         "tool_spill": L10n.t("i18n_633"),
         "backup": L10n.t("i18n_634"),
         "tmp": L10n.t("i18n_635"),
-        "deb": L10n.t("i18n_1110")
+        "deb": L10n.t("i18n_1140")
     ]
 
     /// v3.0.90：目录备注——先精确匹配，再模糊匹配（动态名字）
@@ -215,7 +215,7 @@ struct WorkspaceBrowserView: View {
             Text(L10n.t("i18n_647", confirmDelete?.name ?? ""))
         }
         .alert(L10n.t("i18n_648"), isPresented: $showNewFolder) {
-            TextField(L10n.t("i18n_889"), text: $newFolderName)
+            TextField(L10n.t("i18n_919"), text: $newFolderName)
             Button(L10n.t("i18n_649")) {
                 let name = newFolderName.trimmingCharacters(in: .whitespaces)
                 if !name.isEmpty {

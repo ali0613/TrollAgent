@@ -13,11 +13,12 @@ enum GirlCharacter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var displayName: String {
         switch self {
-        case .loli: return L10n.t("i18n_807")
-        case .rabit: return L10n.t("i18n_808")
-        case .cat: return L10n.t("i18n_809")
+        case .loli: return L10n.t("i18n_837")
+        case .rabit: return L10n.t("i18n_838")
+        case .cat: return L10n.t("i18n_839")
         }
     }
+    var id: String { rawValue }
     var iconPrefix: String {
         switch self {
         case .loli: return "girl"
@@ -33,9 +34,7 @@ extension GirlCharacter {
     /// 直接 GirlCharacter(rawValue:) 会拿到 nil 静默回退 .loli，这里做一次旧值→.rabit 兼容映射。
     static func stored(rawValue: String?) -> GirlCharacter {
         guard let raw = rawValue, !raw.isEmpty else { return .loli }
-        if raw == L10n.t("i18n_810") { return .rabit }   // 旧 rawValue 迁移：御姐兔女郎 → 兔娘
-        let legacy: [String: GirlCharacter] = ["小萝莉": .loli, "兔娘": .rabit, "猫娘": .cat, "御姐兔女郎": .rabit]
-        if let c = legacy[raw] { return c }
+        if raw == L10n.t("i18n_840") { return .rabit }   // 旧 rawValue 迁移：御姐兔女郎 → 兔娘
         return GirlCharacter(rawValue: raw) ?? .loli
     }
 }
@@ -148,10 +147,10 @@ struct GirlCompanionView: View {
                 if tapFlash == 0 { expression = .idle }
             }
         }
-        .alert(L10n.t("i18n_811"), isPresented: $deniedHint) {
+        .alert(L10n.t("i18n_841"), isPresented: $deniedHint) {
             Button(L10n.t("ui_44"), role: .cancel) {}
         } message: {
-            Text(L10n.t("i18n_812"))
+            Text(L10n.t("i18n_842"))
         }
     }
 
@@ -167,7 +166,7 @@ struct GirlCompanionView: View {
                         .frame(width: 7, height: 7)
                         .scaleEffect(voice.isListening ? 1.2 : 1.0)
                         .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: voice.isListening)
-                    Text(L10n.t("i18n_813"))
+                    Text(L10n.t("i18n_843"))
                         .font(.caption2)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
@@ -175,7 +174,7 @@ struct GirlCompanionView: View {
                     Image(systemName: "mic.fill")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.white)
-                    Text(L10n.t("i18n_814"))
+                    Text(L10n.t("i18n_844"))
                         .font(.caption2)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)

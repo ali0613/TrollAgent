@@ -34,7 +34,7 @@ struct DeviceDetectionView: View {
                                     .font(.system(size: 36))
                                     .foregroundColor(.white)
                             }
-                            Text(r.ready ? L10n.t("i18n_960") : L10n.t("i18n_961"))
+                            Text(r.ready ? L10n.t("i18n_990") : L10n.t("i18n_991"))
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)
@@ -48,7 +48,7 @@ struct DeviceDetectionView: View {
                                 Circle()
                                     .fill(r.ready ? Color.green : Color.yellow)
                                     .frame(width: 8, height: 8)
-                                Text(r.ready ? L10n.t("i18n_1137") : L10n.t("i18n_963"))
+                                Text(r.ready ? L10n.t("i18n_1167") : L10n.t("i18n_993"))
                                     .font(.caption)
                                     .fontWeight(.medium)
                                     .foregroundColor(.white)
@@ -111,7 +111,7 @@ struct DeviceDetectionView: View {
                     // 设备信息卡片（v2.9.67 增强）
                     VStack(spacing: 12) {
                         HStack {
-                            Label(L10n.t("i18n_964"), systemImage: "iphone")
+                            Label(L10n.t("i18n_994"), systemImage: "iphone")
                                 .font(.subheadline)
                             Spacer()
                             Text("\(r.deviceModelName)（\(r.deviceModelIdentifier)）")
@@ -120,7 +120,7 @@ struct DeviceDetectionView: View {
                         }
                         Divider()
                         HStack {
-                            Label(L10n.t("i18n_965"), systemImage: "gear")
+                            Label(L10n.t("i18n_995"), systemImage: "gear")
                                 .font(.subheadline)
                             Spacer()
                             Text("iOS \(r.systemVersion)")
@@ -129,7 +129,7 @@ struct DeviceDetectionView: View {
                         }
                         Divider()
                         HStack {
-                            Label(L10n.t("i18n_966"), systemImage: "internaldrive")
+                            Label(L10n.t("i18n_996"), systemImage: "internaldrive")
                                 .font(.subheadline)
                             Spacer()
                             Text(L10n.t("ui_163", r.storageFree, r.storageTotal))
@@ -138,7 +138,7 @@ struct DeviceDetectionView: View {
                         }
                         Divider()
                         HStack {
-                            Label(L10n.t("i18n_967"), systemImage: "memorychip")
+                            Label(L10n.t("i18n_997"), systemImage: "memorychip")
                                 .font(.subheadline)
                             Spacer()
                             Text(r.memoryTotal)
@@ -147,7 +147,7 @@ struct DeviceDetectionView: View {
                         }
                         Divider()
                         HStack {
-                            Label(L10n.t("i18n_968"), systemImage: "rectangle")
+                            Label(L10n.t("i18n_998"), systemImage: "rectangle")
                                 .font(.subheadline)
                             Spacer()
                             Text(r.screenSize)
@@ -156,7 +156,7 @@ struct DeviceDetectionView: View {
                         }
                         Divider()
                         HStack {
-                            Label(L10n.t("i18n_969"), systemImage: "square.grid.2x2")
+                            Label(L10n.t("i18n_999"), systemImage: "square.grid.2x2")
                                 .font(.subheadline)
                             Spacer()
                             Text(L10n.t("ui_164", r.appCount))
@@ -165,7 +165,7 @@ struct DeviceDetectionView: View {
                         }
                         Divider()
                         HStack {
-                            Label(L10n.t("i18n_970"), systemImage: "folder")
+                            Label(L10n.t("i18n_1000"), systemImage: "folder")
                                 .font(.subheadline)
                             Spacer()
                             Text(r.workspaceSize)
@@ -174,7 +174,7 @@ struct DeviceDetectionView: View {
                         }
                         Divider()
                         HStack {
-                            Label(L10n.t("i18n_971"), systemImage: "battery.100")
+                            Label(L10n.t("i18n_1001"), systemImage: "battery.100")
                                 .font(.subheadline)
                             Spacer()
                             Text(r.batteryLevel)
@@ -183,7 +183,7 @@ struct DeviceDetectionView: View {
                         }
                         Divider()
                         HStack {
-                            Label(L10n.t("i18n_972"), systemImage: "info.circle")
+                            Label(L10n.t("i18n_1002"), systemImage: "info.circle")
                                 .font(.subheadline)
                             Spacer()
                             Text(r.deviceName)
@@ -199,16 +199,16 @@ struct DeviceDetectionView: View {
                     // 结论卡片
                     VStack(spacing: 12) {
                         HStack {
-                            Label(L10n.t("i18n_973"), systemImage: "lock.shield")
+                            Label(L10n.t("i18n_1003"), systemImage: "lock.shield")
                                 .font(.subheadline)
                             Spacer()
-                            Text(r.amfidBypassInferred ? L10n.t("i18n_974") : L10n.t("i18n_975"))
+                            Text(r.amfidBypassInferred ? L10n.t("i18n_1004") : L10n.t("i18n_1005"))
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
                         Divider()
                         HStack {
-                            Label(L10n.t("i18n_976"), systemImage: "number")
+                            Label(L10n.t("i18n_1006"), systemImage: "number")
                                 .font(.subheadline)
                             Spacer()
                             Text(r.vendorID)
@@ -254,12 +254,12 @@ struct DeviceDetectionView: View {
             .padding(.top, 8)
         }
         .background(Color(.systemGroupedBackground))
-        .navigationTitle(L10n.t("i18n_977"))
+        .navigationTitle(L10n.t("i18n_1007"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 if showsDismissButton {
-                    Button(L10n.t("i18n_1150")) { presentationMode.wrappedValue.dismiss() }
+                    Button(L10n.t("i18n_1180")) { presentationMode.wrappedValue.dismiss() }
                 }
             }
         }

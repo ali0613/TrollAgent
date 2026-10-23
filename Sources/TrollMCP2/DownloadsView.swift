@@ -60,7 +60,7 @@ struct DownloadsView: View {
         .navigationTitle(L10n.t("page_downloads"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarItems(
-            leading: Button(editMode ? L10n.t("i18n_1150") : L10n.t("i18n_599")) {
+            leading: Button(editMode ? L10n.t("i18n_1180") : L10n.t("i18n_599")) {
                 withAnimation { editMode.toggle() }
                 if !editMode { selected.removeAll() }
             },

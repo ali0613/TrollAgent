@@ -31,7 +31,7 @@ final class InstallationRegistry: ObservableObject {
 
     /// 开始安装任务（串行引擎下不存在并发，直接覆盖）
     func start(key: String) {
-        active = InstallProgress(key: key, startedAt: Date(), phase: L10n.t("i18n_821"))
+        active = InstallProgress(key: key, startedAt: Date(), phase: L10n.t("i18n_851"))
     }
 
     /// 后台读线程回调：逐行解析 apk 输出，提取阶段与 (N/M) 包数。
@@ -50,11 +50,11 @@ final class InstallationRegistry: ObservableObject {
             p.done = rd
         }
         if trimmed.contains("Installing") || trimmed.contains("installing") {
-            p.phase = L10n.t("i18n_822")
+            p.phase = L10n.t("i18n_852")
         } else if trimmed.contains("Downloading") || trimmed.hasPrefix("fetch ") {
-            p.phase = L10n.t("i18n_823")
+            p.phase = L10n.t("i18n_853")
         } else if trimmed.contains("Extracting") || trimmed.contains("extracting") {
-            p.phase = L10n.t("i18n_824")
+            p.phase = L10n.t("i18n_854")
         }
         p.lastLine = String(trimmed.prefix(60))
 
@@ -70,7 +70,7 @@ final class InstallationRegistry: ObservableObject {
     func finish(ok: Bool, summary: String) {
         guard var p = active else { return }
         p.ok = ok
-        p.phase = ok ? L10n.t("i18n_1150") : L10n.t("i18n_825")
+        p.phase = ok ? L10n.t("i18n_1180") : L10n.t("i18n_855")
         p.summary = summary
         let snap = p
         DispatchQueue.main.async { [weak self] in

@@ -20,7 +20,7 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
 
     private let searchBar = UISearchBar()
     private let searchWrap = UIView()   // 搜索栏圆角容器（视觉对齐原 SwiftUI 版搜索胶囊）
-    private let categoryControl = UISegmentedControl(items: [L10n.t("i18n_942"), L10n.t("i18n_943"), L10n.t("i18n_944"), L10n.t("i18n_945")])
+    private let categoryControl = UISegmentedControl(items: [L10n.t("i18n_972"), L10n.t("i18n_973"), L10n.t("i18n_974"), L10n.t("i18n_975")])
     override func viewDidLoad() {
         super.viewDidLoad()
         tableView.register(AppBrowserCell.self, forCellReuseIdentifier: AppBrowserCell.reuseID)
@@ -30,7 +30,7 @@ final class AppBrowserTableController: UITableViewController, UISearchBarDelegat
         tableView.sectionIndexBackgroundColor = .clear
 
         searchBar.delegate = self
-        searchBar.placeholder = L10n.t("i18n_948")
+        searchBar.placeholder = L10n.t("i18n_978")
         searchBar.searchBarStyle = .minimal
         searchBar.backgroundImage = UIImage()
         // v6.1.5：彻底透明化 searchBar 自身——消除"双重框中框"（外层 searchWrap 圆角灰底 +
@@ -298,9 +298,9 @@ final class AppBrowserCell: UITableViewCell {
         bundleLabel.text = app.bundleId
         versionLabel.text = app.version.isEmpty ? nil : app.version
         let (text, color): (String?, UIColor) = {
-            if app.isTroll { return (L10n.t("i18n_944"), .systemTeal) }
-            if app.isSystem { return (L10n.t("i18n_949"), .gray) }
-            return (L10n.t("i18n_943"), .systemBlue)
+            if app.isTroll { return (L10n.t("i18n_974"), .systemTeal) }
+            if app.isSystem { return (L10n.t("i18n_979"), .gray) }
+            return (L10n.t("i18n_973"), .systemBlue)
         }()
         badgeLabel.text = text
         badgeLabel.textColor = color

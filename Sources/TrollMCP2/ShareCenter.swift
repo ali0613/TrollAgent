@@ -36,12 +36,12 @@ final class ShareCenter: ObservableObject {
     func presentShareMenuFile(_ url: URL) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
             guard FileManager.default.fileExists(atPath: url.path) else {
-                self.showNotice(L10n.t("i18n_837"))
+                self.showNotice(L10n.t("i18n_867"))
                 return
             }
-            let alert = UIAlertController(title: L10n.t("i18n_838", url.lastPathComponent),
+            let alert = UIAlertController(title: L10n.t("i18n_868", url.lastPathComponent),
                                           message: nil, preferredStyle: .actionSheet)
-            alert.addAction(UIAlertAction(title: L10n.t("i18n_839"), style: .default) { _ in
+            alert.addAction(UIAlertAction(title: L10n.t("i18n_869"), style: .default) { _ in
                 self.saveToFiles(url)
             })
             // v4.3.51：移除"用其他 App 打开"——UIDocumentInteractionController.presentOpenInMenu
@@ -58,14 +58,14 @@ final class ShareCenter: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
-                self.showNotice(L10n.t("i18n_1028"))
+                self.showNotice(L10n.t("i18n_1058"))
                 return
             }
-            let alert = UIAlertController(title: L10n.t("i18n_841"), message: nil, preferredStyle: .actionSheet)
-            alert.addAction(UIAlertAction(title: L10n.t("i18n_842"), style: .default) { _ in
+            let alert = UIAlertController(title: L10n.t("i18n_871"), message: nil, preferredStyle: .actionSheet)
+            alert.addAction(UIAlertAction(title: L10n.t("i18n_872"), style: .default) { _ in
                 self.fallbackClipboard(trimmed)
             })
-            alert.addAction(UIAlertAction(title: L10n.t("i18n_839"), style: .default) { _ in
+            alert.addAction(UIAlertAction(title: L10n.t("i18n_869"), style: .default) { _ in
                 if let url = Self.writeTextToTemp(trimmed) {
                     self.saveToFiles(url)
                 } else {
@@ -86,7 +86,7 @@ final class ShareCenter: ObservableObject {
         // 延迟 0.45s：contextMenu 按钮点击后 dismiss 动画约 0.5s，立即 present 会被吞
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             guard FileManager.default.fileExists(atPath: url.path) else {
-                self.showNotice(L10n.t("i18n_843"))
+                self.showNotice(L10n.t("i18n_873"))
                 return
             }
             guard let top = Self.topViewController() else { return }
@@ -104,20 +104,20 @@ final class ShareCenter: ObservableObject {
     /// 该路径是系统级 scheme 路由，不经过 MobileIcons 图标列表渲染，侧载环境安全。
     func openInTrollStore(_ url: URL) {
         guard url.pathExtension.lowercased() == "tipa" || url.pathExtension.lowercased() == "ipa" else {
-            self.showNotice(L10n.t("i18n_844"))
+            self.showNotice(L10n.t("i18n_874"))
             return
         }
         guard let base = URL(string: "apple-magnifier://install?url="),
               let encoded = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let target = URL(string: base.absoluteString + encoded) else {
             UIPasteboard.general.string = url.path
-            self.showNotice(L10n.t("i18n_845"))
+            self.showNotice(L10n.t("i18n_875"))
             return
         }
         UIApplication.shared.open(target) { ok in
             if !ok {
                 UIPasteboard.general.string = url.path
-                self.showNotice(L10n.t("i18n_846"))
+                self.showNotice(L10n.t("i18n_876"))
             }
         }
         AuditLog.shared.log("share.open_in_trollstore", detail: url.lastPathComponent)
@@ -129,7 +129,7 @@ final class ShareCenter: ObservableObject {
         // 延迟 0.45s：contextMenu 按钮点击后 dismiss 动画约 0.5s，立即 present 会被吞
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             guard FileManager.default.fileExists(atPath: url.path) else {
-                self.showNotice(L10n.t("i18n_979"))
+                self.showNotice(L10n.t("i18n_1009"))
                 return
             }
             guard let top = Self.topViewController() else { return }
@@ -140,7 +140,7 @@ final class ShareCenter: ObservableObject {
             let rect = view.bounds
             let ok = doc.presentOpenInMenu(from: rect, in: view, animated: true)
             if !ok {
-                self.showNotice(L10n.t("i18n_848"))
+                self.showNotice(L10n.t("i18n_878"))
             }
             AuditLog.shared.log("share.open_in", detail: url.lastPathComponent)
         }
@@ -171,7 +171,7 @@ final class ShareCenter: ObservableObject {
     /// 纯文字/链接复制兜底
     func fallbackClipboard(_ text: String) {
         UIPasteboard.general.string = text
-        showNotice(L10n.t("i18n_849"))
+        showNotice(L10n.t("i18n_879"))
         AuditLog.shared.log("share.fallback_clipboard", detail: "texts=1")
     }
 

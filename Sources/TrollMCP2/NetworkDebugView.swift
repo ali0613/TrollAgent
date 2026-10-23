@@ -13,10 +13,10 @@ struct NetworkDebugView: View {
         switch level {
         case 0: return L10n.t("i18n_688")
         case 1: return L10n.t("i18n_689")
-        case 2: return L10n.t("i18n_1111")
+        case 2: return L10n.t("i18n_1141")
         case 3: return L10n.t("i18n_690")
         case 4: return L10n.t("i18n_691")
-        case 5: return L10n.t("i18n_1112")
+        case 5: return L10n.t("i18n_1142")
         default: return L10n.t("i18n_692", level)
         }
     }
@@ -102,7 +102,7 @@ struct NetworkDebugView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: newestFirst ? "clock.fill" : "clock.arrow.circlepath")
-                        Text(newestFirst ? L10n.t("i18n_826") : L10n.t("i18n_827")).font(.caption)
+                        Text(newestFirst ? L10n.t("i18n_856") : L10n.t("i18n_857")).font(.caption)
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -121,7 +121,7 @@ struct NetworkDebugView: View {
                     ForEach(Array(displayed.enumerated()), id: \.offset) { _, line in
                         Text(line)
                             .font(.system(.caption2, design: .monospaced))
-                            .foregroundColor(line.contains(L10n.t("i18n_825")) ? .red : .secondary)
+                            .foregroundColor(line.contains(L10n.t("i18n_855")) ? .red : .secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

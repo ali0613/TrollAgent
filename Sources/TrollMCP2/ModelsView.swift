@@ -64,7 +64,7 @@ struct ModelsView: View {
             }
             .listStyle(.insetGrouped)
         }
-        .navigationTitle(L10n.t("i18n_1072"))
+        .navigationTitle(L10n.t("i18n_1102"))
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 // v2.9.108：从剪贴板粘贴导入（借鉴 cc-switch ccswitch:// 一键导入思路，零 URL Scheme 风险）
@@ -319,7 +319,7 @@ struct ModelRow: View {
         latencyText = ""
         let base = config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + "/models") else {
-            latencyText = L10n.t("i18n_1073")
+            latencyText = L10n.t("i18n_1103")
             latencyColor = .red
             testing = false
             return
@@ -341,7 +341,7 @@ struct ModelRow: View {
                     latencyText = L10n.t("i18n_418", ms)
                     latencyColor = .red
                 } else {
-                    latencyText = L10n.t("i18n_1074", ms)
+                    latencyText = L10n.t("i18n_1104", ms)
                     latencyColor = ms < 500 ? .green : (ms < 2000 ? .orange : .red)
                 }
             }
@@ -494,11 +494,11 @@ struct ModelEditorView: View {
             List {
                 Section(header: sectionHeader(apiProtocol.uppercased())) {
                     quickConfigRow
-                    editorRow(L10n.t("i18n_889"), text: $name, placeholder: "Botcf")
-                    pickerRow(L10n.t("i18n_1075"), selection: $apiProtocol, options: ModelConfig.apiProtocols)
+                    editorRow(L10n.t("i18n_919"), text: $name, placeholder: "Botcf")
+                    pickerRow(L10n.t("i18n_1105"), selection: $apiProtocol, options: ModelConfig.apiProtocols)
                 }
 
-                Section(header: sectionHeader(L10n.t("i18n_1076"))) {
+                Section(header: sectionHeader(L10n.t("i18n_1106"))) {
                     editorRow("Base URL", text: $baseURL, placeholder: "https://botcf.com/v1")
                     editorRow(L10n.t("i18n_421"), text: $model, placeholder: "gpt-5.6-terra")
                     pickerRow(L10n.t("i18n_422"), selection: $authMethod, options: ModelConfig.authMethods)
@@ -511,7 +511,7 @@ struct ModelEditorView: View {
                 // 按行业标准默认值自动生效(参考Codex等AI同行)：temperature 0.7 / maxTokens 2048 / 上下文预算默认，
                 // 保存时沿用默认值，无需手动配置
 
-                Section(header: sectionHeader(L10n.t("i18n_876"))) {
+                Section(header: sectionHeader(L10n.t("i18n_906"))) {
                     Button(action: fetchUpstreamModels) {
                         HStack(spacing: 12) {
                             Image(systemName: "arrow.down.circle")
@@ -593,7 +593,7 @@ struct ModelEditorView: View {
                     Button(L10n.t("ui_40")) { presentationMode.wrappedValue.dismiss() }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(L10n.t("i18n_1150")) { saveOnly() }
+                    Button(L10n.t("i18n_1180")) { saveOnly() }
                 }
             }
             .sheet(isPresented: $showingQuickPicker) {
@@ -801,7 +801,7 @@ struct ModelEditorView: View {
         let base = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + "/models") else {
             isTesting = false
-            testStatus = L10n.t("i18n_1073")
+            testStatus = L10n.t("i18n_1103")
             testColor = .red
             return
         }
@@ -941,7 +941,7 @@ struct UsageStatsView: View {
                         statCell(title: L10n.t("i18n_433"), value: "\(agg.total)", color: .blue)
                         statCell(title: L10n.t("i18n_434"), value: agg.total > 0 ? "\(Int(Double(agg.ok) / Double(agg.total) * 100))%" : "-", color: .green)
                         statCell(title: L10n.t("i18n_435"), value: agg.total > 0 ? "\(agg.elapsed / agg.total)ms" : "-", color: .orange)
-                        statCell(title: L10n.t("i18n_1077"), value: "\(fmtK(agg.inputTokens))", color: .purple)
+                        statCell(title: L10n.t("i18n_1107"), value: "\(fmtK(agg.inputTokens))", color: .purple)
                     }
                 }
 
@@ -982,7 +982,7 @@ struct UsageStatsView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(L10n.t("i18n_1150")) { presentationMode.wrappedValue.dismiss() }
+                    Button(L10n.t("i18n_1180")) { presentationMode.wrappedValue.dismiss() }
                 }
             }
             .onAppear {

@@ -197,7 +197,7 @@ struct AboutAuthorView: View {
     private var disclaimerRows: [String] { L10n.t("about_disclaimer_rows").components(separatedBy: "|") }
 
     private func copyFeedback() {
-        let text = L10n.t("i18n_941", versionLine, deviceLine)
+        let text = L10n.t("i18n_971", versionLine, deviceLine)
         UIPasteboard.general.string = text
         copied = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { copied = false }

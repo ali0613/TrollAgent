@@ -21,17 +21,17 @@ final class ApprovalCenter: ObservableObject {
 
     func submit(tool: String, summary: String, params: String) {
         pending.insert(Pending(toolName: tool, summary: summary, params: params), at: 0)
-        AuditLog.shared.log("approval", detail: L10n.t("i18n_869", tool))
+        AuditLog.shared.log("approval", detail: L10n.t("i18n_899", tool))
     }
 
     func approve(_ item: Pending) {
         if let idx = pending.firstIndex(where: { $0.id == item.id }) { pending[idx].decision = .approved }
-        AuditLog.shared.log("approval", detail: L10n.t("i18n_870", item.toolName))
+        AuditLog.shared.log("approval", detail: L10n.t("i18n_900", item.toolName))
     }
 
     func deny(_ item: Pending) {
         if let idx = pending.firstIndex(where: { $0.id == item.id }) { pending[idx].decision = .denied }
-        AuditLog.shared.log("approval", detail: L10n.t("i18n_871", item.toolName), level: .warning)
+        AuditLog.shared.log("approval", detail: L10n.t("i18n_901", item.toolName), level: .warning)
     }
 }
 
@@ -45,7 +45,7 @@ struct OperationView: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_872"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_902"))) {
                     if approvals.pending.filter({ $0.decision == .pending }).isEmpty {
                         Text(L10n.t("ui_85"))
                             .foregroundColor(.secondary)
@@ -64,7 +64,7 @@ struct OperationView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_873"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_903"))) {
                     let running = automations.tasks.filter { $0.enabled }
                     if running.isEmpty {
                         Text(L10n.t("ui_81"))
@@ -79,7 +79,7 @@ struct OperationView: View {
                                         .foregroundColor(.secondary)
                                 }
                                 Spacer()
-                                Button(L10n.t("i18n_874")) {
+                                Button(L10n.t("i18n_904")) {
                                     _ = AutomationStore.shared.run(name: t.name)
                                 }
                                 .font(.caption)
@@ -88,7 +88,7 @@ struct OperationView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_875"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_905"))) {
                     ForEach(audit.entries.prefix(10)) { e in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(e.detail)
@@ -101,7 +101,7 @@ struct OperationView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_876"))
+            .navigationTitle(L10n.t("i18n_906"))
         }
     }
 
@@ -121,12 +121,12 @@ struct ApprovalSheet: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_877"))) {
-                    LabeledRow(label: L10n.t("i18n_1043"), value: item.toolName)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_907"))) {
+                    LabeledRow(label: L10n.t("i18n_1073"), value: item.toolName)
                     LabeledRow(label: L10n.t("ui_132"), value: item.summary)
-                    LabeledRow(label: L10n.t("i18n_879"), value: OperationView.timeFormatter.string(from: item.submittedAt))
+                    LabeledRow(label: L10n.t("i18n_909"), value: OperationView.timeFormatter.string(from: item.submittedAt))
                 }
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_880"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_910"))) {
                     Text(item.params)
                         .font(.system(.caption, design: .monospaced))
                 }
@@ -140,7 +140,7 @@ struct ApprovalSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_881"))
+            .navigationTitle(L10n.t("i18n_911"))
         }
     }
 }
@@ -174,7 +174,7 @@ struct ConversationTranscriptView: View {
                     ForEach(messages) { msg in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text(msg.role == "user" ? L10n.t("i18n_882") : (msg.role == "assistant" ? L10n.t("i18n_883") : L10n.t("i18n_949")))
+                                Text(msg.role == "user" ? L10n.t("i18n_912") : (msg.role == "assistant" ? L10n.t("i18n_913") : L10n.t("i18n_979")))
                                     .font(.caption)
                                     .fontWeight(.semibold)
                                     .foregroundColor(msg.role == "user" ? .blue : .green)
@@ -269,10 +269,10 @@ struct AssistantProfilesView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_885"))
+            .navigationTitle(L10n.t("i18n_915"))
             .toolbar {
                 Button(action: {
-                    editing = AssistantProfile(name: L10n.t("i18n_886"), systemPrompt: L10n.t("i18n_887"))
+                    editing = AssistantProfile(name: L10n.t("i18n_916"), systemPrompt: L10n.t("i18n_917"))
                 }) { Image(systemName: "plus") }
             }
             .sheet(item: $editing) { profile in
@@ -291,22 +291,22 @@ struct AssistantProfileEditor: View {
     var body: some View {
         
             Form {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_888"))) {
-                    TextField(L10n.t("i18n_889"), text: $profile.name)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_918"))) {
+                    TextField(L10n.t("i18n_919"), text: $profile.name)
                 }
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_890"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_920"))) {
                     TextEditor(text: $profile.systemPrompt)
                         .frame(minHeight: 120)
                 }
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_891"))) {
-                    Picker(L10n.t("i18n_892"), selection: $profile.modelConfigId) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_921"))) {
+                    Picker(L10n.t("i18n_922"), selection: $profile.modelConfigId) {
                         Text(L10n.t("ui_144")).tag(UUID?.none)
                         ForEach(models.configs) { c in
                             Text(c.name).tag(UUID?.some(c.id))
                         }
                     }
                 }
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_880"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_910"))) {
                     HStack {
                         Text(L10n.t("ui_108"))
                         Slider(value: $profile.temperature, in: 0...2, step: 0.1)
@@ -317,7 +317,7 @@ struct AssistantProfileEditor: View {
                     }
                 }
                 Section {
-                    Button(L10n.t("i18n_1136")) {
+                    Button(L10n.t("i18n_1166")) {
                         if let idx = store.profiles.firstIndex(where: { $0.id == profile.id }) {
                             store.profiles[idx] = profile
                         } else {
@@ -328,7 +328,7 @@ struct AssistantProfileEditor: View {
                     }
                 }
             }
-            .navigationTitle(profile.name.isEmpty ? L10n.t("i18n_886") : profile.name)
+            .navigationTitle(profile.name.isEmpty ? L10n.t("i18n_916") : profile.name)
         
         .navigationViewStyle(.stack)
     }
@@ -354,18 +354,18 @@ struct AttachmentBottomPanel: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_894"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_924"))) {
                     Button(action: { showImporter = true }) {
-                        Label(L10n.t("i18n_895"), systemImage: "folder")
+                        Label(L10n.t("i18n_925"), systemImage: "folder")
                     }
-                    Button(action: { store.add(L10n.t("i18n_896")) }) {
-                        Label(L10n.t("i18n_897"), systemImage: "camera")
+                    Button(action: { store.add(L10n.t("i18n_926")) }) {
+                        Label(L10n.t("i18n_927"), systemImage: "camera")
                     }
-                    Button(action: { store.add(L10n.t("i18n_898")) }) {
-                        Label(L10n.t("i18n_899"), systemImage: "photo.on.rectangle")
+                    Button(action: { store.add(L10n.t("i18n_928")) }) {
+                        Label(L10n.t("i18n_929"), systemImage: "photo.on.rectangle")
                     }
                 }
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_900", store.items.count))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_930", store.items.count))) {
                     if store.items.isEmpty {
                         Text(L10n.t("ui_95")).foregroundColor(.secondary)
                     } else {
@@ -379,9 +379,9 @@ struct AttachmentBottomPanel: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_901"))
+            .navigationTitle(L10n.t("i18n_931"))
             .toolbar {
-                Button(L10n.t("i18n_1150")) { isPresented = false }
+                Button(L10n.t("i18n_1180")) { isPresented = false }
             }
             .sheet(isPresented: $showImporter) {
                 DocumentImporter { url in
@@ -411,7 +411,7 @@ struct AutomationCenterView: View {
             .padding(.vertical, 8)
 
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_902"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_932"))) {
                     if store.tasks.isEmpty {
                         Text(L10n.t("ui_90"))
                             .foregroundColor(.secondary)
@@ -441,7 +441,7 @@ struct AutomationCenterView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_903"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_933"))) {
                     let history = store.history.prefix(20)
                     if history.isEmpty {
                         Text(L10n.t("ui_86")).foregroundColor(.secondary)
@@ -481,30 +481,30 @@ struct AutomationTaskEditor: View {
     var body: some View {
         
             Form {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_904"))) {
-                    TextField(L10n.t("i18n_889"), text: $task.name)
-                    TextField(L10n.t("i18n_905"), text: $task.schedule)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_934"))) {
+                    TextField(L10n.t("i18n_919"), text: $task.name)
+                    TextField(L10n.t("i18n_935"), text: $task.schedule)
                         .font(.system(.body, design: .monospaced))
                         .autocapitalization(.none)
-                    TextField(L10n.t("i18n_906"), text: $task.action)
+                    TextField(L10n.t("i18n_936"), text: $task.action)
                         .font(.system(.body, design: .monospaced))
                         .autocapitalization(.none)
-                    Toggle(L10n.t("i18n_867"), isOn: $task.enabled)
+                    Toggle(L10n.t("i18n_897"), isOn: $task.enabled)
                 }
                 Section {
-                    Button(L10n.t("i18n_1136")) {
+                    Button(L10n.t("i18n_1166")) {
                         if let idx = store.tasks.firstIndex(where: { $0.id == task.id }) {
                             store.tasks[idx] = task
                         } else {
                             store.tasks.append(task)
                         }
                         store.save()
-                        AuditLog.shared.log("automation", detail: L10n.t("i18n_907", task.name))
+                        AuditLog.shared.log("automation", detail: L10n.t("i18n_937", task.name))
                         presentationMode.wrappedValue.dismiss()
                     }
                 }
             }
-            .navigationTitle(task.name.isEmpty ? L10n.t("i18n_908") : task.name)
+            .navigationTitle(task.name.isEmpty ? L10n.t("i18n_938") : task.name)
         
         .navigationViewStyle(.stack)
     }
@@ -519,10 +519,10 @@ struct AutomationPermissionsView: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_909"))) {
-                    Toggle(L10n.t("i18n_910"), isOn: $globalEnabled)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_939"))) {
+                    Toggle(L10n.t("i18n_940"), isOn: $globalEnabled)
                 }
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_911"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_941"))) {
                     if store.tasks.isEmpty {
                         Text(L10n.t("ui_78")).foregroundColor(.secondary)
                     } else {
@@ -536,7 +536,7 @@ struct AutomationPermissionsView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_912"))
+            .navigationTitle(L10n.t("i18n_942"))
         }
         .navigationViewStyle(.stack)
     }
@@ -630,15 +630,15 @@ struct GatewayEditorView: View {
         
             Form {
                 Section(header: SettingSectionHeader(title: L10n.t("ui_97"))) {
-                    TextField(L10n.t("i18n_889"), text: $server.name)
+                    TextField(L10n.t("i18n_919"), text: $server.name)
                     TextField("ws://host:port", text: $server.url)
                         .font(.system(.body, design: .monospaced))
                         .autocapitalization(.none)
                         .keyboardType(.URL)
-                    SecureField(L10n.t("i18n_913"), text: $server.token)
+                    SecureField(L10n.t("i18n_943"), text: $server.token)
                 }
                 Section {
-                    Button(L10n.t("i18n_914")) {
+                    Button(L10n.t("i18n_944")) {
                         if let idx = store.servers.firstIndex(where: { $0.id == server.id }) {
                             store.servers[idx] = server
                         } else {
@@ -651,7 +651,7 @@ struct GatewayEditorView: View {
                     }
                 }
             }
-            .navigationTitle(server.name.isEmpty ? L10n.t("i18n_915") : server.name)
+            .navigationTitle(server.name.isEmpty ? L10n.t("i18n_945") : server.name)
         
         .navigationViewStyle(.stack)
     }
@@ -672,7 +672,7 @@ struct InjectionDetailView: View {
         CompatNav {
             List {
                 if bundleId.isEmpty {
-                    Section(header: SettingSectionHeader(title: L10n.t("i18n_916"))) {
+                    Section(header: SettingSectionHeader(title: L10n.t("i18n_946"))) {
                         ForEach(AppCatalog.list().prefix(100)) { app in
                             Button(action: {
                                 bundleId = app.bundleId
@@ -692,7 +692,7 @@ struct InjectionDetailView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_917"))
+            .navigationTitle(L10n.t("i18n_947"))
         }
         .navigationViewStyle(.stack)
     }
@@ -702,11 +702,11 @@ struct InjectionDetailView: View {
                 Section(header: SettingSectionHeader(title: "App")) {
                     LabeledRow(label: "Bundle ID", value: bundleId)
                     if let app = AppCatalog.find(bundleId) {
-                        LabeledRow(label: L10n.t("i18n_889"), value: app.name)
-                        LabeledRow(label: L10n.t("i18n_918"), value: app.path)
+                        LabeledRow(label: L10n.t("i18n_919"), value: app.name)
+                        LabeledRow(label: L10n.t("i18n_948"), value: app.path)
                     }
                 }
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_919"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_949"))) {
                     if info.isEmpty {
                         Text(L10n.t("ui_35")).foregroundColor(.secondary)
                     } else {
@@ -715,27 +715,27 @@ struct InjectionDetailView: View {
                         }
                     }
                 }
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_876"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_906"))) {
                     Button(action: {
                         do {
                             _ = try InjectionManager.shared.enable(bundleId: bundleId, dylibName: "@executable_path/ControlAgent.dylib")
-                            message = L10n.t("i18n_920")
+                            message = L10n.t("i18n_950")
                             reload()
-                        } catch { message = L10n.t("i18n_921", error.localizedDescription) }
+                        } catch { message = L10n.t("i18n_951", error.localizedDescription) }
                     }) { Text(L10n.t("ui_42")).foregroundColor(.green) }
                     Button(action: {
                         do {
                             _ = try InjectionManager.shared.disable(bundleId: bundleId)
-                            message = L10n.t("i18n_922")
+                            message = L10n.t("i18n_952")
                             reload()
-                        } catch { message = L10n.t("i18n_921", error.localizedDescription) }
+                        } catch { message = L10n.t("i18n_951", error.localizedDescription) }
                     }) { Text(L10n.t("ui_116")).foregroundColor(.orange) }
                     Button(action: {
                         do {
                             _ = try InjectionRemoveTool().invoke(["bundle_id": bundleId])
-                            message = L10n.t("i18n_923")
+                            message = L10n.t("i18n_953")
                             reload()
-                        } catch { message = L10n.t("i18n_921", error.localizedDescription) }
+                        } catch { message = L10n.t("i18n_951", error.localizedDescription) }
                     }) { Text(L10n.t("ui_57")).foregroundColor(.red) }
                 }
                 if !message.isEmpty {
@@ -760,10 +760,10 @@ struct SettingsActivityView: View {
         CompatNav {
             List {
                 Section {
-                    TextField(L10n.t("i18n_924"), text: $filter)
+                    TextField(L10n.t("i18n_954"), text: $filter)
                         .autocapitalization(.none)
                 }
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_925"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_955"))) {
                     let entries = filter.isEmpty ? audit.entries : audit.entries.filter { $0.category.contains(filter) }
                     if entries.isEmpty {
                         Text(L10n.t("ui_92")).foregroundColor(.secondary)
@@ -787,7 +787,7 @@ struct SettingsActivityView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_925"))
+            .navigationTitle(L10n.t("i18n_955"))
         }
         .navigationViewStyle(.stack)
     }
@@ -805,13 +805,13 @@ struct SkillEditorView: View {
         CompatNav {
             Form {
                 Section(header: SettingSectionHeader(title: "Skill")) {
-                    TextField(L10n.t("i18n_889"), text: $name)
-                    TextField(L10n.t("i18n_926"), text: $summary)
+                    TextField(L10n.t("i18n_919"), text: $name)
+                    TextField(L10n.t("i18n_956"), text: $summary)
                     TextEditor(text: $instruction)
                         .frame(minHeight: 120)
                 }
                 Section {
-                    Button(L10n.t("i18n_1136")) {
+                    Button(L10n.t("i18n_1166")) {
                         SkillStore.shared.upsert(SkillItem(name: name, summary: summary, instruction: instruction))
                         presentationMode.wrappedValue.dismiss()
                     }
@@ -822,7 +822,7 @@ struct SkillEditorView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle(L10n.t("i18n_927"))
+            .navigationTitle(L10n.t("i18n_957"))
         }
         .navigationViewStyle(.stack)
     }
@@ -847,7 +847,7 @@ enum AgentJSONStore {
         if let data = try? JSONSerialization.data(withJSONObject: list, options: .prettyPrinted) {
             try? data.write(to: url)
         }
-        AuditLog.shared.log("agents", detail: L10n.t("i18n_928", entry["name"] ?? ""))
+        AuditLog.shared.log("agents", detail: L10n.t("i18n_958", entry["name"] ?? ""))
     }
 }
 
@@ -860,18 +860,18 @@ struct AgentEditorView: View {
         CompatNav {
             Form {
                 Section(header: SettingSectionHeader(title: "Agent")) {
-                    TextField(L10n.t("i18n_889"), text: $name)
+                    TextField(L10n.t("i18n_919"), text: $name)
                     TextEditor(text: $systemPrompt)
                         .frame(minHeight: 120)
                 }
                 Section {
-                    Button(L10n.t("i18n_929")) {
+                    Button(L10n.t("i18n_959")) {
                         AgentJSONStore.upsert(file: "agents.json", entry: ["name": name, "systemPrompt": systemPrompt])
                         presentationMode.wrappedValue.dismiss()
                     }
                 }
             }
-            .navigationTitle(L10n.t("i18n_930"))
+            .navigationTitle(L10n.t("i18n_960"))
         }
         .navigationViewStyle(.stack)
     }
@@ -888,23 +888,23 @@ struct WebhookEditorView: View {
     var body: some View {
         CompatNav {
             Form {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_931"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_961"))) {
                     TextField("https://example.com/webhook", text: $url)
                         .autocapitalization(.none)
                         .keyboardType(.URL)
-                    SecureField(L10n.t("i18n_932"), text: $secret)
-                    TextField(L10n.t("i18n_933"), text: $events)
+                    SecureField(L10n.t("i18n_962"), text: $secret)
+                    TextField(L10n.t("i18n_963"), text: $events)
                         .autocapitalization(.none)
                 }
                 Section {
-                    Button(L10n.t("i18n_1136")) {
+                    Button(L10n.t("i18n_1166")) {
                         UserDefaults.standard.set(["url": url, "secret": secret, "events": events], forKey: "trollmcp2.webhook")
-                        AuditLog.shared.log("webhook", detail: L10n.t("i18n_934", url))
+                        AuditLog.shared.log("webhook", detail: L10n.t("i18n_964", url))
                         presentationMode.wrappedValue.dismiss()
                     }
                 }
             }
-            .navigationTitle(L10n.t("i18n_935"))
+            .navigationTitle(L10n.t("i18n_965"))
         }
         .navigationViewStyle(.stack)
     }
@@ -920,7 +920,7 @@ struct APIKeyRecoverySheet: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_936"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_966"))) {
                     if models.configs.isEmpty {
                         Text(L10n.t("ui_88")).foregroundColor(.secondary)
                     } else {
@@ -935,9 +935,9 @@ struct APIKeyRecoverySheet: View {
                                 }
                                 Spacer()
                                 if revealed == c.id {
-                                    Button(L10n.t("i18n_937")) { revealed = nil }.font(.caption)
+                                    Button(L10n.t("i18n_967")) { revealed = nil }.font(.caption)
                                 } else {
-                                    Button(L10n.t("i18n_938")) { revealed = c.id }.font(.caption)
+                                    Button(L10n.t("i18n_968")) { revealed = c.id }.font(.caption)
                                 }
                             }
                         }
@@ -951,7 +951,7 @@ struct APIKeyRecoverySheet: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("API Key")
-            .toolbar { Button(L10n.t("i18n_1150")) { presentationMode.wrappedValue.dismiss() } }
+            .toolbar { Button(L10n.t("i18n_1180")) { presentationMode.wrappedValue.dismiss() } }
         }
         .navigationViewStyle(.stack)
     }
@@ -985,7 +985,7 @@ struct UpstreamModelPickerView: View {
                 } else if upstream.isEmpty {
                     Text(L10n.t("ui_109")).foregroundColor(.secondary)
                 } else {
-                    Section(header: SettingSectionHeader(title: L10n.t("i18n_939"))) {
+                    Section(header: SettingSectionHeader(title: L10n.t("i18n_969"))) {
                         ForEach(upstream, id: \.self) { id in
                             Button(action: {
                                 if var c = models.defaultConfig {
@@ -1006,7 +1006,7 @@ struct UpstreamModelPickerView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_939"))
+            .navigationTitle(L10n.t("i18n_969"))
             .toolbar {
                 Button(action: fetch) { Image(systemName: "arrow.clockwise") }
             }
@@ -1016,7 +1016,7 @@ struct UpstreamModelPickerView: View {
 
     private func fetch() {
         guard let config = models.defaultConfig else {
-            errorText = L10n.t("i18n_940")
+            errorText = L10n.t("i18n_970")
             return
         }
         loading = true

@@ -12,10 +12,10 @@ enum AppCategory: String, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .all: return L10n.t("i18n_942")
-        case .user: return L10n.t("i18n_943")
-        case .troll: return L10n.t("i18n_944")
-        case .running: return L10n.t("i18n_945")
+        case .all: return L10n.t("i18n_972")
+        case .user: return L10n.t("i18n_973")
+        case .troll: return L10n.t("i18n_974")
+        case .running: return L10n.t("i18n_975")
         }
     }
 }
@@ -91,7 +91,7 @@ struct AppBrowserList: View {
                                 VStack(spacing: 10) {
                                     Image(systemName: "magnifyingglass")
                                         .font(.system(size: 34)).foregroundColor(.secondary)
-                                    Text(category == .running ? L10n.t("i18n_946") : L10n.t("i18n_947"))
+                                    Text(category == .running ? L10n.t("i18n_976") : L10n.t("i18n_977"))
                                         .font(.footnote).foregroundColor(.secondary)
                                 }
                             }
@@ -114,7 +114,7 @@ struct AppBrowserList: View {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(.secondary)
                 .font(.system(size: 14))
-            TextField(L10n.t("i18n_948"), text: $searchText)
+            TextField(L10n.t("i18n_978"), text: $searchText)
                 .font(.subheadline)
             if !searchText.isEmpty {
                 Button { searchText = "" } label: {
@@ -190,9 +190,9 @@ struct AppBrowserList: View {
 
     private func typeBadge(_ app: AppCatalog.AppEntry) -> some View {
         let (text, color): (String, Color) = {
-            if app.isTroll { return (L10n.t("i18n_944"), Color.tmCyan) }
-            if app.isSystem { return (L10n.t("i18n_949"), .gray) }
-            return (L10n.t("i18n_943"), .blue)
+            if app.isTroll { return (L10n.t("i18n_974"), Color.tmCyan) }
+            if app.isSystem { return (L10n.t("i18n_979"), .gray) }
+            return (L10n.t("i18n_973"), .blue)
         }()
         return Text(text)
             .font(.system(size: 9, weight: .bold))
@@ -246,7 +246,7 @@ struct AppBrowserContainer: View {
 
             if !loaded {
                 Spacer()
-                ProgressView(L10n.t("i18n_950"))
+                ProgressView(L10n.t("i18n_980"))
                 Spacer()
             } else {
                 // v6.0.31：UIKit 原生渲染（TrollStore 同款 UITableView），替换 SwiftUI AppBrowserList

@@ -73,7 +73,7 @@ struct MacroView: View {
     private var recordingBanner: some View {
         HStack(spacing: 10) {
             Circle().fill(Color.red).frame(width: 10, height: 10)
-            Text("🎬 \(L10n.t("ui_188"))：\(MacroRecorder.shared.currentName)")
+            Text("🎬 \(L10n.t("ui_188", "录制中"))：\(MacroRecorder.shared.currentName)")
                 .font(.subheadline.weight(.semibold))
             Spacer()
             Button {
@@ -189,7 +189,7 @@ struct MacroView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 ui.macroPresented = true
                 refresh()
-                showToast(out["message"] as? String ?? L10n.t("i18n_1150"))
+                showToast(out["message"] as? String ?? L10n.t("i18n_1180"))
             }
         }
     }

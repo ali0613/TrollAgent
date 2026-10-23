@@ -208,7 +208,7 @@ struct CrashLogView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: newestFirst ? "clock.fill" : "clock.arrow.circlepath")
-                        Text(newestFirst ? L10n.t("i18n_826") : L10n.t("i18n_827")).font(.caption)
+                        Text(newestFirst ? L10n.t("i18n_856") : L10n.t("i18n_857")).font(.caption)
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -224,13 +224,13 @@ struct CrashLogView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "checkmark.shield")
                                 .foregroundColor(.green)
-                            Text(L10n.t("i18n_828"))
+                            Text(L10n.t("i18n_858"))
                                 .font(.footnote)
                         }
                         .padding(.vertical, 8)
                     }
                 } else {
-                    Section(header: Text(L10n.t("i18n_829", paths.count, newestFirst ? "最新在前" : "最早在前"))) {
+                    Section(header: Text(L10n.t("i18n_859", paths.count, newestFirst ? "最新在前" : "最早在前"))) {
                         let displayed = newestFirst ? paths : Array(paths.reversed())
                         ForEach(displayed, id: \.self) { p in
                         Button {
@@ -252,7 +252,7 @@ struct CrashLogView: View {
                 }
             }
         }
-        .navigationTitle(L10n.t("i18n_830"))
+        .navigationTitle(L10n.t("i18n_860"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { paths = CrashCatcher.list() }
         .overlay(alignment: .bottom) {
@@ -280,7 +280,7 @@ struct CrashLogView: View {
                             Image(systemName: "doc.text.magnifyingglass")
                                 .font(.system(size: 36))
                                 .foregroundColor(.secondary)
-                            Text(L10n.t("i18n_831"))
+                            Text(L10n.t("i18n_861"))
                                 .font(.footnote)
                                 .foregroundColor(.secondary)
                         }
@@ -290,7 +290,7 @@ struct CrashLogView: View {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 36))
                                 .foregroundColor(.orange)
-                            Text(L10n.t("i18n_832"))
+                            Text(L10n.t("i18n_862"))
                                 .font(.footnote)
                                 .foregroundColor(.secondary)
                         }
@@ -304,7 +304,7 @@ struct CrashLogView: View {
                         }
                     }
                 }
-                .navigationTitle(L10n.t("i18n_833"))
+                .navigationTitle(L10n.t("i18n_863"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     // v2.9.179：崩溃日志页彻底不弹分享面板——sig_1789582263 实证
@@ -313,13 +313,13 @@ struct CrashLogView: View {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button {
                             UIPasteboard.general.string = detailContent
-                            toast = L10n.t("i18n_834")
+                            toast = L10n.t("i18n_864")
                         } label: {
                             Image(systemName: "doc.on.doc")
                         }
                     }
                     ToolbarItem(placement: .navigationBarLeading) {
-                        Button(L10n.t("i18n_1150")) { showDetail = false }
+                        Button(L10n.t("i18n_1180")) { showDetail = false }
                     }
                 }
             }
@@ -330,7 +330,7 @@ struct CrashLogView: View {
                 if !paths.isEmpty {
                     Button {
                         UIPasteboard.general.string = CrashCatcher.exportAll()
-                        toast = L10n.t("i18n_835", paths.count)
+                        toast = L10n.t("i18n_865", paths.count)
                     } label: {
                         Image(systemName: "doc.on.doc")
                     }
@@ -340,7 +340,7 @@ struct CrashLogView: View {
                 Button(L10n.t("ui_107")) {
                     CrashCatcher.clear()
                     paths = []
-                    toast = L10n.t("i18n_836")
+                    toast = L10n.t("i18n_866")
                 }
                 .disabled(paths.isEmpty)
             }

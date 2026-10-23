@@ -86,8 +86,8 @@ final class AutomationStore: ObservableObject {
         let content = UNMutableNotificationContent()
         switch task.kind {
         case "call":
-            content.title = L10n.t("i18n_861")
-            content.body = task.number.isEmpty ? (task.body.isEmpty ? task.name : task.body) : L10n.t("i18n_862", task.number)
+            content.title = L10n.t("i18n_891")
+            content.body = task.number.isEmpty ? (task.body.isEmpty ? task.name : task.body) : L10n.t("i18n_892", task.number)
         default:
             content.title = task.title.isEmpty ? (task.action.isEmpty ? task.name : task.action) : task.title
             content.body = task.body.isEmpty ? task.action : task.body
@@ -97,7 +97,7 @@ final class AutomationStore: ObservableObject {
         let req = UNNotificationRequest(identifier: task.id.uuidString, content: content, trigger: trigger(for: task))
         center.add(req) { err in
             if let err = err {
-                AuditLog.shared.log("automation", detail: L10n.t("i18n_863", err.localizedDescription), level: .warning)
+                AuditLog.shared.log("automation", detail: L10n.t("i18n_893", err.localizedDescription), level: .warning)
             }
         }
         AuditLog.shared.log("automation.schedule", detail: "\(task.name) kind=\(task.kind)")
@@ -111,14 +111,14 @@ final class AutomationStore: ObservableObject {
     func run(name: String) -> Bool {
         guard var t = tasks.first(where: { $0.name == name }) else { return false }
         guard t.enabled else {
-            AuditLog.shared.log("automation", detail: L10n.t("i18n_864", name), level: .warning)
+            AuditLog.shared.log("automation", detail: L10n.t("i18n_894", name), level: .warning)
             return false
         }
         let content = UNMutableNotificationContent()
         switch t.kind {
         case "call":
-            content.title = L10n.t("i18n_861")
-            content.body = t.number.isEmpty ? t.name : L10n.t("i18n_865", t.number)
+            content.title = L10n.t("i18n_891")
+            content.body = t.number.isEmpty ? t.name : L10n.t("i18n_895", t.number)
         default:
             content.title = t.title.isEmpty ? (t.action.isEmpty ? t.name : t.action) : t.title
             content.body = t.body.isEmpty ? t.action : t.body
@@ -241,7 +241,7 @@ final class ModelSelectedProfileIDTool: MCPTool {
             var updated = target
             updated.isDefault = true
             store.update(updated)
-            AuditLog.shared.log("model.selectedProfileID", detail: L10n.t("i18n_866", target.name))
+            AuditLog.shared.log("model.selectedProfileID", detail: L10n.t("i18n_896", target.name))
             return ["selected": target.name, "id": newId]
         }
         guard let current = store.defaultConfig else {

@@ -29,7 +29,7 @@ struct CorunaInjectView: View {
             }
             .padding()
         }
-        .navigationTitle(L10n.t("i18n_1122"))
+        .navigationTitle(L10n.t("i18n_1152"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             isDeviceCompatible = CorunaWebInjector.isCompatible
@@ -49,7 +49,7 @@ struct CorunaInjectView: View {
             Button(L10n.t("i18n_746"), role: .destructive) { startInjection() }
             Button(L10n.t("ui_40"), role: .cancel) {}
         } message: {
-            Text(L10n.t("i18n_747", selectedApp?.name ?? L10n.t("i18n_1114")))
+            Text(L10n.t("i18n_747", selectedApp?.name ?? L10n.t("i18n_1144")))
         }
     }
 
@@ -63,7 +63,7 @@ struct CorunaInjectView: View {
                     .font(.headline)
                     .foregroundColor(.orange)
             }
-            Text(L10n.t("i18n_1123", CorunaWebInjector.deviceInfo))
+            Text(L10n.t("i18n_1153", CorunaWebInjector.deviceInfo))
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -139,7 +139,7 @@ struct CorunaInjectView: View {
                 HStack {
                     Image(systemName: "app.dashed").foregroundColor(.blue)
                     VStack(alignment: .leading) {
-                        Text(L10n.t("i18n_1114")).font(.subheadline)
+                        Text(L10n.t("i18n_1144")).font(.subheadline)
                         Text(selectedApp?.name ?? L10n.t("i18n_751"))
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -156,7 +156,7 @@ struct CorunaInjectView: View {
                 HStack {
                     Image(systemName: "square.stack.3d.down.right").foregroundColor(.purple)
                     VStack(alignment: .leading) {
-                        Text(L10n.t("i18n_1124")).font(.subheadline)
+                        Text(L10n.t("i18n_1154")).font(.subheadline)
                         Text(selectedDylib.isEmpty ? L10n.t("i18n_752") : (selectedDylib as NSString).lastPathComponent)
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -186,12 +186,12 @@ struct CorunaInjectView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.t("i18n_754")).font(.headline)
             VStack(alignment: .leading, spacing: 8) {
-                chainStep(number: 1, title: "WebKit RCE", desc: L10n.t("i18n_1125"), active: injector.stageProgress >= 0.3)
-                chainStep(number: 2, title: L10n.t("i18n_1126"), desc: L10n.t("i18n_1127"), active: injector.stageProgress >= 0.4)
-                chainStep(number: 3, title: L10n.t("i18n_1128"), desc: "arm64e GOT-swap", active: injector.stageProgress >= 0.6)
+                chainStep(number: 1, title: "WebKit RCE", desc: L10n.t("i18n_1155"), active: injector.stageProgress >= 0.3)
+                chainStep(number: 2, title: L10n.t("i18n_1156"), desc: L10n.t("i18n_1157"), active: injector.stageProgress >= 0.4)
+                chainStep(number: 3, title: L10n.t("i18n_1158"), desc: "arm64e GOT-swap", active: injector.stageProgress >= 0.6)
                 chainStep(number: 4, title: L10n.t("i18n_755"), desc: "mach_vm_allocate RWX", active: injector.stageProgress >= 0.7)
                 chainStep(number: 5, title: L10n.t("i18n_749"), desc: "CVE-2023-41974 IOSurface", active: injector.stageProgress >= 0.8)
-                chainStep(number: 6, title: L10n.t("i18n_1129"), desc: L10n.t("i18n_1130"), active: injector.stageProgress >= 0.9)
+                chainStep(number: 6, title: L10n.t("i18n_1159"), desc: L10n.t("i18n_1160"), active: injector.stageProgress >= 0.9)
             }
         }
         .padding()
@@ -361,7 +361,7 @@ struct DylibPickerSheet: View {
                     }
                 }
             }
-            .navigationTitle(L10n.t("i18n_1131"))
+            .navigationTitle(L10n.t("i18n_1161"))
             .navigationBarItems(trailing: Button(L10n.t("ui_177")) {
                 presentationMode.wrappedValue.dismiss()
             })
