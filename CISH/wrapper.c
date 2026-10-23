@@ -68,7 +68,7 @@ int troll_jit_probe(void) {
                    MAP_PRIVATE | MAP_ANON | MAP_JIT, -1, 0);
     if (p == MAP_FAILED) return 0;
     ((volatile uint8_t *)p)[0] = 0xC3;  // 写一字节验证可写（JIT 授权下才允许）
-    __builtin___clear_cache((char *)p, (char *)p + 4096);
+    // 不调用 __builtin___clear_cache（macOS 交叉 iOS 无内建实现，且 probe 不执行代码，无需清指令缓存）
     munmap(p, 4096);
     return 1;
 #else
