@@ -43,6 +43,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>trollagent</string>
+		<string>apple-magnifier</string>
 			</array>
 		</dict>
 	</array>
@@ -54,6 +55,7 @@
 		<string>snssdk1128</string>
 		<string>App-prefs</string>
 		<string>trollagent</string>
+		<string>apple-magnifier</string>
 		<string>wechat</string>
 		<string>mqq</string>
 		<string>sinaweibo</string>

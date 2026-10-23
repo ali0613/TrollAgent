@@ -21,7 +21,7 @@ jobs:
     needs: [native-python, native-wheels, native-nmap, native-llvm, native-node]
     runs-on: macos-latest
     env:
-      RELEASE_VERSION: 7.0.3   # v7.0.3: 恢复 -Djit=true + jit-fallback 补丁（jit_on 运行时化——map 失败回退纯解释器不崩）   # v7.0.2: 回退 pty stdio→realfs 管道（v7.0.0 对齐 rcarmo 的 pty 集成引入 shell.exec 挂死——关 JIT 后不崩但 echo hi 都超时 137）
+      RELEASE_VERSION: 7.0.4   # v7.0.4: 自动启用 JIT（ptrace 自开 + URL fallback——免手动开 TrollStore JIT）   # v7.0.3: 恢复 -Djit=true + jit-fallback 补丁（jit_on 运行时化——map 失败回退纯解释器不崩）   # v7.0.2: 回退 pty stdio→realfs 管道（v7.0.0 对齐 rcarmo 的 pty 集成引入 shell.exec 挂死——关 JIT 后不崩但 echo hi 都超时 137）
     steps:
       - uses: actions/checkout@v4
 

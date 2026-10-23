@@ -38,6 +38,23 @@ extern void (*exit_hook)(struct task *task, int code);
 
 static atomic_int g_booted = 0;
 
+// v7.0.4: ptrace 自开 JIT——TrollStore 的 JIT 开关本质是 ptrace(PT_ATTACHEXC)+detach 让内核
+// 放行可执行映射（持续进程生命周期）。App 内直接对主进程 attach/detach，等同手动开 JIT 且免闪切。
+// 注意：iOS ptrace 无权限时返回 EPERM——Swift 侧检测负值后 fallback apple-magnifier URL。
+extern int ptrace(int request, pid_t pid, void *addr, int data);
+int troll_self_enable_jit(void) {
+#ifdef __APPLE__
+    pid_t pid = getpid();
+    int r = ptrace(16 /* PT_ATTACHEXC */, pid, 0, 0);  // 16 = PT_ATTACHEXC（Darwin）
+    if (r != 0) return -1;
+    usleep(100 * 1000);  // 100ms——TrollStore jit.m 同款等待 attach 生效
+    ptrace(17 /* PT_DETACH */, pid, 0, 0);
+    return 0;
+#else
+    return -1;
+#endif
+}
+
 // 通知管道写端（串行：一次只有一个在跑的命令会收到退出通知）
 static pthread_mutex_t g_notify_mtx = PTHREAD_MUTEX_INITIALIZER;
 static int g_notify_fd = -1;

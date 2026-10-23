@@ -7,6 +7,8 @@ import SwiftUI
 @_silgen_name("HUDMainStart") func HUDMainStart()
 @_silgen_name("HUDExit") func HUDExit()
 @_silgen_name("HUDCheck") func HUDCheck() -> Int32
+// v7.0.4: 自动启用 JIT——wrapper.c 的 ptrace 自开（免闪切）；失败时 fallback apple-magnifier URL
+@_silgen_name("troll_self_enable_jit") func troll_self_enable_jit() -> Int32
 // v6.6.0: troll_request_jit/have_jit 已删（CELF/elf-runner 退役——统一环境 Asbestos 无 JIT）
 
 @main
@@ -51,6 +53,22 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // v2.9.368：全局 UITextView 零内边距——TextEditor 默认有 8pt 上下内边距，
         // 导致输入框高度过大；全局清零后 TextEditor 高度紧贴文字。
         UITextView.appearance().textContainerInset = .zero
+
+        // v7.0.4: 自动 JIT——ptrace 自开（同步，100ms 无感）；失败 fallback TrollStore URL（闪切一次）。
+        // 时序关键：cish_boot 是懒初始化（首次 shell.exec 才 boot）——这里先开 JIT，boot 时 map_dual 成功进真 JIT。
+        if troll_self_enable_jit() != 0 {
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 1.5) {
+                let bid = Bundle.main.bundleIdentifier ?? "com.trollagent.app"
+                if let url = URL(string: "apple-magnifier://enable-jit?bundle-id=\(bid)"),
+                   UIApplication.shared.canOpenURL(url) {
+                    fputs("[appmain] ptrace JIT failed, fallback URL\n", stderr)
+                    UIApplication.shared.open(url)
+                    Thread.sleep(forTimeInterval: 2.5)  // 等 TrollStore 完成 attach/detach
+                }
+            }
+        } else {
+            fputs("[appmain] ptrace JIT enabled\n", stderr)
+        }
 
         CrashCatcher.install()  // v2.9.145c：最先注册崩溃捕获，闪退自动落盘 crash/ 可查
         Workspace.ensure()
