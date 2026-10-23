@@ -36,7 +36,7 @@ enum ShellDiag {
 final class ShellExecTool: MCPTool {
     let definition = ToolDefinition(
         name: "shell.exec",
-        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux 完整工具链执行（Asbestos 解释器——apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写；iOS 特有命令(plutil/sysctl 等)内部自动走 iOS 原生兜底——无需指定环境、无需感知环境。py3-native = 原生 Python 显式命令（芯片直跑 numpy/pandas 深度运算——重计算用；日常 python3 走统一环境 Alpine）；node-native = 原生 node 显式命令（V8 芯片直跑重负载——重 node 任务用；轻量 JS 走统一环境 Alpine nodejs）。缺轻量工具自动 apk add 并重试一次；重量级工具(git/wget/make/cmake/gcc/clang/openssl/radare2)需 tool.install 手动装. Use for: file ops, system info, network, text processing.",
+        summary: "Run shell command (terminal/CLI) in unified environment (TrollRuntime). Params: command(必填), timeout(默认20s/max120). 统一环境(v6.6.0): 全部命令默认在 Alpine Linux aarch64 完整工具链执行（原生 ARM64，apk/管道/符号链接/动态 ELF 全支持），iOS 路径自动 bind 为 /ios_* 直读直写（仅 /ios_workspace、/ios_containers、/ios_system 三个——/ios_appdata 等不存在，无 iOS 原生 shell 兜底，plutil/jtool2 不可用，ps 只见容器进程）。python3/node 直接在统一环境原生执行（无 py3-native/node-native 变体命令，勿用）。缺工具需显式 apk add（不会自动装；git/wget/curl 已预装；make/cmake/gcc/clang/openssl/radare2 均可用 apk 装）。Use for: file ops, system info, network, text processing.",
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",
@@ -111,9 +111,9 @@ final class ShellExecTool: MCPTool {
                     "Documents: \(docs)",
                     "cwd: \(TrollRuntimeEngine.cwd)",
                     "iOS 系统路径可见(/var/containers): \(iosContainers)",
-                    "默认执行: Alpine Linux 完整工具链（Asbestos 解释器——apk/管道/动态 ELF 全支持）",
-                    "iOS 路径自动 bind 为 /ios_* 直读直写；iOS 特有命令自动原生兜底",
-                    "提示: 无需指定环境——统一执行。含 | ; && > 复合命令在环境内正常组合"
+                    "默认执行: Alpine Linux aarch64 完整工具链（原生 ARM64——apk/管道/动态 ELF 全支持）",
+                    "iOS 路径自动 bind 为 /ios_* 直读直写（仅 Workspace/Containers/System 三个；无 iOS 原生兜底）",
+                    "提示: 无需指定环境——统一执行。含 | ; && > 复合命令在环境内正常组合；缺工具显式 apk add"
                 ].joined(separator: "\n"),
                 "hint": "env probe: diagnose execution environment issues"
             ]
@@ -147,13 +147,12 @@ final class ShellExecTool: MCPTool {
             if trimmed == "ta" || trimmed.hasPrefix("ta ") {
                 return OffloadRouter.run(trimmed)
             }
-            // v6.6.0-fix15: py3-native 显式命令——原生 Python（iPhone 芯片直跑 numpy/pandas 深度运算）。
-            // AI 按场景选择：重计算（大矩阵/数据分析/模型）→ py3-native；日常/装包/生态 → python3（Alpine）。
+            // v7.0.5: py3-native 已废弃引导（实测此构建未内置原生 Python）——一律用 python3（统一环境 Alpine apk 装 py3-xxx）；
+            // 保留旧入口兜底：若内置 bin/python3 存在仍可执行。
             if trimmed == "py3-native" || trimmed.hasPrefix("py3-native ") {
                 return ShellExecTool.runNativePython(String(trimmed.dropFirst("py3-native".count)).trimmingCharacters(in: .whitespaces))
             }
-            // v6.6.0-fix15: node-native 显式命令——原生 node（V8 芯片直跑——重 node 任务/构建工具）。
-            // AI 按场景选择：重 node 负载 → node-native；轻量 JS 脚本 → 统一环境 Alpine nodejs。
+            // v7.0.5: node-native 已废弃引导（实测此构建未内置原生 node）——一律用 node（统一环境 Alpine nodejs）。
             if trimmed == "node-native" || trimmed.hasPrefix("node-native ") {
                 return ShellExecTool.runNativeNode(String(trimmed.dropFirst("node-native".count)).trimmingCharacters(in: .whitespaces))
             }
@@ -167,7 +166,7 @@ final class ShellExecTool: MCPTool {
             if let guardMsg = ShellExecTool.alpineIOSPathGuard(boundCmd) {
                 return ["command": trimmed, "exit_code": 1,
                         "stdout": guardMsg,
-                        "hint": "该命令在统一环境（TrollRuntime）执行，但读不到该 iOS 路径（非绑定目录(Workspace/Containers/System/App数据容器)，或文件>2MB）。三种解法：①先 cp 到 Workspace：`cp <file> /var/mobile/Documents/Workspace/`，再走 Alpine /ios_workspace 直读分析；②App 数据容器走 /ios_appdata 下 UUID 路径；③用原生 shell 工具（strings/nm/hexdump 直读大文件）；④对二进制用 binary.symbols / file analyze。"]
+                        "hint": "该命令在统一环境（TrollRuntime）执行，但读不到该 iOS 路径（仅绑定 Workspace/Containers/System 三个目录，文件无 2MB 限制）。解法：①先 cp 到 Workspace：`cp <file> /var/mobile/Documents/Workspace/`，再走 Alpine /ios_workspace 直读分析；②读 App 数据容器用 bind_app bundle_id:<id>（只读）→ /ios_data_<app>；③对二进制用 file analyze / binary.symbols。"]
             }
             let (output, exitCode, timedOut) = TrollRuntimeEngine.exec(boundCmd, timeout: timeout)
             // v6.6.0: Alpine 工具裁剪（幂等）——统一后原生覆盖极少，不影响主环境工具链
