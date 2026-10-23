@@ -414,9 +414,10 @@ struct ConversationDrawerView: View {
         .padding(.bottom, 24)
     }
 
-    static let formatter: DateFormatter = {
+    // v7.0.5：会话时间格式改为动态读取（static let 启动缓存后切语言不刷新，会残留"M月d日"）
+    static var formatter: DateFormatter {
         let f = DateFormatter()
         f.dateFormat = L10n.t("i18n_1016")
         return f
-    }()
+    }
 }

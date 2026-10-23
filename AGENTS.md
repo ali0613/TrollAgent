@@ -4,7 +4,7 @@
 
 ## 这是什么
 
-TrollAgent 是部署在 iOS 设备上的原生 MCP 服务，通过 37 个原生工具让 AI 直接操作真实 iOS 系统：App 管理、dylib 注入、网络抓包、SQLite 取证、跨环境文件、内存修改、包解剖、设备/定位等。Shell 分为 **iOS 原生**（直接读写真实文件系统）与 **iSH Alpine**（Linux 工具链）两套环境。
+TrollAgent 是部署在 iOS 设备上的原生 MCP 服务，通过 37 个原生工具让 AI 直接操作真实 iOS 系统：App 管理、dylib 注入、网络抓包、SQLite 取证、跨环境文件、内存修改、包解剖、设备/定位等。Shell 分为 **iOS 原生**（直接读写真实文件系统）与**统一环境 TrollRuntime**（Alpine rootfs + Asbestos 翻译器，iSH 已退役）两套环境。
 
 ## 第一原则：先路由，后动手
 

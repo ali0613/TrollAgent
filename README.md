@@ -1,84 +1,94 @@
-# TrollAgent（原 TrollMCP2）
+# TrollAgent
 
-**AI 驱动的 iOS 巨魔（TrollStore）实验与 QA 工作台** —— Swift + SwiftUI + SwiftPM，跑在 iOS 15+ / TrollStore 环境，内置 **37 个大工具、100+ 子命令**，AI 通过自然语言调用全部能力。
+**AI-driven iOS experimentation & QA workbench for TrollStore** — Swift + SwiftUI + SwiftPM, runs on iOS 15+ under TrollStore, ships **37 native tools, 100+ subcommands**, all callable by AI through natural language.
 
-> 小白模式：你只需要说一句大白话（比如"帮我分析下这个 App 怎么实现的"、"看看这个插件安不安全"、"帮我抓一下这个 App 的包"），AI 会自动选工具、自动装依赖、直接干完，再给你一句人话结论。
+> Zero-learning mode: just say it in plain words ("analyze how this app works", "is this plugin safe", "capture this app's traffic") — the AI picks the tools, installs dependencies, does the job, and gives you a one-line human answer.
 
-## 核心能力全景
+## Feature overview
 
-### 🧩 注入与自动化（对齐 TrollFools 注入策略）
-- `inject`（enable / disable / remove / restore / enable_persisted / status / inspect / list）：dylib 注入、移除、备份恢复（`.bak_macho` 自动回滚）
-- `inject verify`：注入后健康检查（Mach-O load command + 进程存活 + 崩溃检测）；`inject static`：Mach-O 静态分析
-- `inject mem`：内存注入（opainject，零文件残留）；`hook_apply` / `probe_inspect`；`inject load_dylib`：加载自写 dylib
-- `rescue`（scan / recover_all / cleanup）：紧急恢复（Residue 式，防"注入后 App 打不开"死局）
-- 注入失败自动回滚 + 注入后启动自检（闪退自动还原）
+### 🧩 Injection & automation (TrollFools-aligned injection strategy)
+- `inject` (enable / disable / remove / restore / enable_persisted / status / inspect / list): dylib injection, removal, backup-restore with automatic `.bak_macho` rollback
+- `inject verify`: post-injection health check (Mach-O load commands + process liveness + crash detection); `inject static`: Mach-O static analysis
+- `inject mem`: in-memory injection (opainject, zero file residue); `hook_apply` / `probe_inspect`; `inject load_dylib`: load your own dylib
+- `rescue` (scan / recover_all / cleanup): emergency recovery against "app won't open after injection"
+- Failed injections auto-rollback + post-injection launch self-check (auto-restore on crash)
 
-### 📱 应用管理
-- `app`（launch / stop / restart / status / stats）：进程管理（start 三级降级：open -b → direct_exec → url_scheme）
-- `app diagnose`：启动失败自动判因（注入残留/加密/签名/崩溃现场 → 明确 next_step）
-- `app install / uninstall / duplicate`：AI 安装/卸载/复制 App（trollstorehelper 静默安装优先）
-- `app encrypt_info / decrypt / replace_decrypted / restore_binary`：内置砸壳引擎（DecryptEngine：task_for_pid + vm_read 内存 dump → 重建解密镜像 → 打包 ipa）
+### 📱 App management
+- `app` (launch / stop / restart / status / stats): process control (3-tier start fallback: `open -b` → direct exec → url scheme)
+- `app diagnose`: auto root-cause for launch failures (injection residue / encryption / signature / crash scene → explicit `next_step`)
+- `app install / uninstall / duplicate`: AI install / uninstall / duplicate (silent install via trollstorehelper first)
+- `app encrypt_info / decrypt / replace_decrypted / restore_binary`: built-in decryption engine (DecryptEngine: `task_for_pid` + `vm_read` memory dump → rebuilt decrypted image → packaged ipa)
 - `app entitlements / deps / cache_inspect / cache_clear / launch_options / inject_package`
-- `inject ipa_inspect / dylib_inspect`：IPA/dylib 解析（架构/签名/entitlements/依赖，区分"解析失败"与"真没有"）
+- `inject ipa_inspect / dylib_inspect`: IPA/dylib parsing (arch / signature / entitlements / dependencies, telling "parse failed" apart from "genuinely absent")
 
-### 🧹 系统清理
-- 存储环形卡片 + 6 类缓存占用 + 快速/高级清理 Tab + 一键清理（setuid root 整目录重建）
+### 🧹 System cleanup
+- Storage ring card + 6 cache categories + quick/advanced cleanup tabs + one-tap cleanup (setuid root full-directory rebuild)
 
-### 📂 文件系统与数据
-- `file`（inspect / analyze）：文件检查（原生元信息；自动 bind 环境内 file+strings）
-- `db`（list / schema / query）：原生 sqlite3 直读 App 数据容器
-- `package`（inspect / unpack）：deb/ipa 解包（ar/tar/zip）
-- `artifact`（read / write / list）：工作区文件管理
-- `container`（refresh / resolve / write / delete）：容器解析与读写
+### 📂 Filesystem & data
+- `file` (inspect / analyze): file inspection (native metadata; auto-binds `file`+`strings` in the unified environment)
+- `db` (list / schema / query): read app data containers directly via native sqlite3
+- `package` (inspect / unpack): deb/ipa unpacking (ar/tar/zip)
+- `artifact` (read / write / list): workspace file management
+- `container` (refresh / resolve / write / delete): container resolution and read/write
 
-### 🌐 浏览器（WKWebView + JS 注入，仿 Playwright）
-- `browser`（status / navigate / screenshot / snapshot / text / click / type / submit / scroll / wait / wait_for）+ 元素绝对 xpath
-- `browser form_fields / fill_form`：整表自动填充（React/Vue 兼容 value setter + 事件）
-- `browser adblock / clear`：广告/追踪拦截（WKContentRuleList，参考 reynard-browser 内容拦截）+ 缓存/Cookie 清理；navigate 支持 `fresh=true` 忽略缓存强制拉新
+### 🌐 Browser (WKWebView + JS injection, Playwright-style)
+- `browser` (status / navigate / screenshot / snapshot / text / click / type / submit / scroll / wait / wait_for) + absolute XPath for elements
+- `browser form_fields / fill_form`: full-form autofill (React/Vue-compatible value setter + events)
+- `browser adblock / clear`: ad/tracker blocking (WKContentRuleList) + cache/Cookie clearing; `navigate` supports `fresh=true` to bypass cache
 
-### 🎮 设备伪装（绿盾式）
-- `device fake / restore`：内存注入 FakeDevice.dylib 改 UIDevice 机型（零残留，重启还原）
-- `device advertising / idfv`：广告标识/IDFV；`inject keychain_wipe`：钥匙串清理
+### 🎮 Device spoofing (GreenShield-style)
+- `device fake / restore`: in-memory FakeDevice.dylib to spoof UIDevice model (zero residue, resets on reboot)
+- `device advertising / idfv`: ad identifiers / IDFV; `inject keychain_wipe`: keychain cleaning
 
-### 🛡️ 安全检测
-- `device info / probe / snapshot`：TrollStore / task_for_pid / 容器读写 / 注入工具链全项检测
+### 🛡️ Security detection
+- `device info / probe / snapshot`: full checks for TrollStore / task_for_pid / container read-write / injection toolchain
 
-### 🔌 跨 App UI 控制
-- `control`（inject / status / ui_tree / screenshot / tap / swipe / type / key / tap_text / type_text）
-- 注入 ControlAgent.dylib → localhost:4789 HTTP API（/status /ui_tree /tap /swipe /type）
+### 🔌 Cross-app UI control
+- `control` (inject / status / ui_tree / screenshot / tap / swipe / type / key / tap_text / type_text)
+- Injects ControlAgent.dylib → localhost:4789 HTTP API (/status /ui_tree /tap /swipe /type)
 
-### 🏗️ 构建与工程
-- `tool.install`：统一工具安装闭环——统一环境 apk 即装即用（apk→pip→CI，CI 交叉编译原生 iOS 二进制 best-effort）
-- `env.setup_re`：一键逆向工具链（binutils/file/python3/sqlite/tcpdump/7z…）
-- `github`（account_status / trigger_build / fetch_runs / download_artifact）：GitHub Actions 触发/查进度/取产物
-- `project`：工作区项目管理；`macro`（record / run / list / delete / export）：可录制重复操作
+### 🏗️ Build & engineering
+- `tool.install`: unified tool install loop — one-click in the unified environment (apk→pip→CI; CI cross-compiles native iOS binaries best-effort)
+- `env.setup_re`: one-click reverse-engineering toolchain (binutils/file/python3/sqlite/tcpdump/7z…)
+- `github` (account_status / trigger_build / fetch_runs / download_artifact): trigger GitHub Actions, watch progress, grab artifacts — the CI builds and ships TrollAgent.tipa
+- `project`: workspace project management; `macro` (record / run / list / delete / export): recordable repeatable operations
 
-### 🤖 AI 与模型
-- 多上游模型（OpenAI 兼容 / Anthropic Messages）、SSE 流式逐字输出、推理强度控制
-- 技能系统：`skills.list` / `skills.read` / `skills.set_enabled`（可复用标准工作流）
+### 🤖 AI & models
+- Multiple upstream models (OpenAI-compatible / Anthropic Messages), SSE streaming word-by-word output, reasoning intensity control
+- Skill system: `skills.list` / `skills.read` / `skills.set_enabled` (reusable standard workflows)
 
-### 📡 网关与自动化
-- Gateway WebSocket 配对、多节点调用、`automation`（run / list / jobs / stop / status / history / set_enabled）、`ssh`（exec / scp）、`server`（start / stop / status）
+### 📡 Gateway & automation
+- Gateway WebSocket pairing, multi-node calls, `automation` (run / list / jobs / stop / status / history / set_enabled), `ssh` (exec / scp), `server` (start / stop / status)
+- **Remote terminal service**: built-in HTTP terminal on `127.0.0.1:8790` (/api/tools), reachable from a browser or via SSH tunnel
 
-### 📊 网络与诊断
-- `web.search`（多引擎回退 Bing→DuckDuckGo→Baidu、`queries` 多词并行检索自动去重、来源分级排序 `sort`、结果沉淀知识库 `save`）
-- `web.fetch`（自动正文抽取 article/main 优先 + 内置浏览器兜底）
-- `network.capture`（start / stop / requests / analyze）：注入 NetworkTweak 抓 NSURLSession；TLSHook 解 SSL_read/SSL_write
-- `vpn.capture`（⚠️ 半成品/开发中）：系统代理模式隧道（不转发 packetFlow）——自建 socket 直连 App 会断网、QUIC 不解密、TLS-pinned 握手失败；实际可用路径以 local proxy（WiFi 手动代理 127.0.0.1:18180）为准
-- `diagnose`（startup / injection）、崩溃日志解析、`verify`（file / app_running）
+### 📊 Network & diagnostics
+- `web.search` (multi-engine fallback Bing→DuckDuckGo→Baidu, parallel `queries`, source-graded `sort`, results into knowledge base via `save`)
+- `web.fetch` (auto article extraction, article/main first + built-in browser fallback)
+- `network.capture` (start / stop / requests / analyze): NSURLSession capture via injected NetworkTweak; TLSHook decrypts SSL_read/SSL_write
+- `vpn.capture`: system-proxy capture — the reliable path is the local proxy (WiFi manual proxy `127.0.0.1:18180`)
+- `diagnose` (startup / injection), crash log parsing, `verify` (file / app_running)
 
-### 📚 知识库与系统能力
-- `knowledge`（import_text / import_file / search / delete / clear）：知识库增删查
-- `memory`（内存搜索/修改/冻结）、`assistant_memory`（跨会话记忆）
-- `location`（get / fake / status / clear）、`reminder`（create / schedule / recurring）
+### 📚 Knowledge & system
+- `knowledge` (import_text / import_file / search / delete / clear): knowledge base CRUD
+- `memory` (search / modify / freeze), `assistant_memory` (cross-session memory)
+- `location` (get / fake / status / clear), `reminder` (create / schedule / recurring)
 
-## 架构要点
-- **注册中心**：`MCPCore.swift` 单点注册全部工具，默认全量启用（37 个大工具）
-- **统一 Linux 用户态**：内置 TrollRuntime（Asbestos 解释器——Alpine 完整工具链），AI 可自动 `apk add` 安装任意 Linux 工具（python3/git/sqlite/jq…），并通过自动 bind 直读 iOS 文件（iSH 已退役）
-- **原生 iOS 工具三通道**：内置 bin / GitHub Actions 交叉编译 / 自写 dylib（`inject load_dylib`）
-- **TrollStore 机制**：内置 setuid root 工具链（ldid/optool/insert_dylib/ct_bypass）、trollstorehelper 静默安装
-- **失败边界**：高优先级工具统一 `error_code/reason/next_step`，拒绝误导性报错
+### 🐰 Desktop companion (HUD)
+- Floating anime companion (loli / bunny-girl / cat-girl) on top of any app: idle frames, wall-climbing, bubble chat
+- 200+ bilingual bubble lines (time greetings, weather, moods, interactions) that follow the app language setting
+- Quick menu to launch WeChat / Douyin / AI chat / hide, resizable, draggable, multi-gesture interactions
 
-## 构建
-macOS runner / 本地 Mac：`bash scripts/build-ipa.sh`（产物 TrollAgent.ipa，TrollStore 直接安装）。
-CI 传 `RELEASE_VERSION` 自动注入产物版本（解决版本脱节）。
+## Architecture
+- **Registry**: all tools registered in one place in `MCPCore.swift`, fully enabled by default (37 tools)
+- **Unified Linux userland**: built-in TrollRuntime (Asbestos interpreter — full Alpine toolchain); the AI can `apk add` any Linux tool (python3/git/sqlite/jq…) and reads iOS files directly via auto-bind (iSH retired)
+- **JIT double-ensure**: on launch the app tries ptrace self-attach (silent) + unconditionally invokes the TrollStore URL (`apple-magnifier://enable-jit`, the reliable external-attach path); waits 3s before the first shell command
+- **Native iOS tool three channels**: bundled binaries / GitHub Actions cross-compilation / self-written dylibs (`inject load_dylib`)
+- **TrollStore mechanics**: bundled setuid root toolchain (ldid/optool/insert_dylib/ct_bypass), silent install via trollstorehelper
+- **Failure boundaries**: high-priority tools return unified `error_code/reason/next_step`, no misleading errors
+- **i18n**: full Simplified-Chinese / English switching across the whole UI, including the HUD bubble lines and time formats
+
+## Build
+macOS runner / local Mac: `bash scripts/build-ipa.sh` (produces TrollAgent.ipa, installable directly via TrollStore).
+CI accepts `RELEASE_VERSION` to auto-inject the release version (fixes version drift); the release artifact ships as `TrollAgent.tipa`.
+
+See [FAQ](FAQ.md) for JIT, the unified environment, and known issues.
