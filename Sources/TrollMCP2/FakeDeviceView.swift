@@ -56,7 +56,7 @@ struct FakeDeviceView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(L10n.t("ui_15"))
                             .font(.headline)
-                        Picker(L10n.t("i18n_980"), selection: $selectedAppId) {
+                        Picker(L10n.t("i18n_1114"), selection: $selectedAppId) {
                             Text(L10n.t("ui_134")).tag("")
                             ForEach(apps, id: \.bundleId) { app in
                                 Text("\(app.name) (\(app.bundleId))").tag(app.bundleId)

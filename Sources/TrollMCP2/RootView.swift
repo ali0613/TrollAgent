@@ -100,7 +100,7 @@ struct RootView: View {
         // v2.9.126：深链导入确认页——暂存配置后弹窗，确认才写入
         .onReceive(NotificationCenter.default.publisher(for: PendingImport.didStageNotification)) { note in
             if let result = note.userInfo?["result"] as? String {
-                importResult = result == "imported" ? L10n.t("i18n_849") : L10n.t("i18n_850")
+                importResult = result == "imported" ? L10n.t("i18n_983") : L10n.t("i18n_984")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { importResult = nil }
             }
         }
@@ -346,7 +346,7 @@ struct ConversationDrawerView: View {
                 return c.label
             }
         }
-        return L10n.t("i18n_851")
+        return L10n.t("i18n_985")
     }
 
     private func refreshReadiness() {
@@ -416,7 +416,7 @@ struct ConversationDrawerView: View {
 
     static let formatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = L10n.t("i18n_852")
+        f.dateFormat = L10n.t("i18n_986")
         return f
     }()
 }

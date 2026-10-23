@@ -36,7 +36,7 @@ struct ChatView: View {
     @State private var selectionMode = false
     @State private var selectedIds = Set<UUID>()
     @State private var showToast = false
-    @State private var toastText = L10n.t("i18n_1033")
+    @State private var toastText = L10n.t("i18n_1167")
     var body: some View {
         CompatNav {
             VStack(spacing: 0) {
@@ -54,13 +54,13 @@ struct ChatView: View {
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 inputBar
             }
-            .navigationTitle(selectionMode ? L10n.t("i18n_867", selectedIds.count) : store.currentTitle)
+            .navigationTitle(selectionMode ? L10n.t("i18n_1001", selectedIds.count) : store.currentTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // v3.4.3：标题 + 模型名（🟢 deepseek v4 ▽）与右侧图标放同一平行线（导航栏 principal）
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 8) {
-                        Text(selectionMode ? L10n.t("i18n_867", selectedIds.count) : store.currentTitle)
+                        Text(selectionMode ? L10n.t("i18n_1001", selectedIds.count) : store.currentTitle)
                             .font(.subheadline)
                             .fontWeight(.semibold)
                             .lineLimit(1)
@@ -69,7 +69,7 @@ struct ChatView: View {
                                 Image(systemName: "circle.fill")
                                     .font(.system(size: 7))
                                     .foregroundColor(.green)
-                                Text(modelStore.defaultConfig?.name ?? L10n.t("i18n_868"))
+                                Text(modelStore.defaultConfig?.name ?? L10n.t("i18n_1002"))
                                     .font(.caption2)
                                     .fontWeight(.medium)
                                     .foregroundColor(.secondary)
@@ -263,7 +263,7 @@ struct ChatView: View {
                     c.isDefault = true
                     modelStore.update(c)
                     showModelPicker = false
-                    showToast(L10n.t("i18n_869", cfg.name))
+                    showToast(L10n.t("i18n_1003", cfg.name))
                 }
                 .sheetDetentsHeight(360)
             } else {
@@ -272,7 +272,7 @@ struct ChatView: View {
                     c.isDefault = true
                     modelStore.update(c)
                     showModelPicker = false
-                    showToast(L10n.t("i18n_869", cfg.name))
+                    showToast(L10n.t("i18n_1003", cfg.name))
                 }
             }
         }
@@ -299,11 +299,11 @@ struct ChatView: View {
         }
         // v2.9.10：网络恢复 / 回前台提示（配合后台自动重连）
         .onReceive(NotificationCenter.default.publisher(for: AppLifecycleMonitor.networkRestored)) { _ in
-            showToast(L10n.t("i18n_870"))
+            showToast(L10n.t("i18n_1004"))
         }
         .onReceive(NotificationCenter.default.publisher(for: AppLifecycleMonitor.willEnterForeground)) { _ in
             if AppLifecycleMonitor.shared.isNetworkAvailable {
-                showToast(L10n.t("i18n_871"))
+                showToast(L10n.t("i18n_1005"))
             }
         }
     }
@@ -547,7 +547,7 @@ struct ChatView: View {
                                         .foregroundColor(.secondary)
                                         .padding(.trailing, 16)
                                 } else {
-                                    Text(L10n.t("i18n_872", store.requestRound))
+                                    Text(L10n.t("i18n_1006", store.requestRound))
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                         .padding(.trailing, 16)
@@ -612,25 +612,25 @@ struct ChatView: View {
             HStack(spacing: 6) {
                 // v3.4.5：六个胶囊统一同宽同高（76×32），比例完全一致、长度略长
                 // v3.4.7：推理用"大脑"图标、思考用"灯泡"图标（用户指定，勿对调）
-                ChatChip(label: L10n.t("i18n_873", reasoningLabel()), action: {
+                ChatChip(label: L10n.t("i18n_1007", reasoningLabel()), action: {
                     reasoning = (reasoning + 1) % 5
                 }, accent: true, icon: "brain").frame(height: 36)
-                ChatChip(label: L10n.t("i18n_922", thinkEnabled ? L10n.t("i18n_924") : L10n.t("i18n_925")), action: {
+                ChatChip(label: L10n.t("i18n_1056", thinkEnabled ? L10n.t("i18n_1058") : L10n.t("i18n_1059")), action: {
                     thinkEnabled.toggle()
                 }, accent: thinkEnabled, icon: "lightbulb").frame(height: 36)
-                ChatChip(label: L10n.t("i18n_923", smartSearch ? L10n.t("i18n_924") : L10n.t("i18n_925")), action: {
+                ChatChip(label: L10n.t("i18n_1057", smartSearch ? L10n.t("i18n_1058") : L10n.t("i18n_1059")), action: {
                     smartSearch.toggle()
                 }, accent: smartSearch, icon: "magnifyingglass").frame(height: 36)
-                QuickTabButton(icon: "bolt", label: L10n.t("i18n_874")) {
+                QuickTabButton(icon: "bolt", label: L10n.t("i18n_1008")) {
                     AppUIState.shared.quickSkillsPresented = true
                 }.frame(height: 36)
-                QuickTabButton(icon: "doc.text", label: L10n.t("i18n_875")) {
+                QuickTabButton(icon: "doc.text", label: L10n.t("i18n_1009")) {
                     // v4.4.16：点"指令"→ 打开设置并真正跳到系统指令页(此前只打开设置,未定位到 SystemPromptsView, 用户实测'没真正跳到')
                     AppUIState.shared.settingsJumpToModels = false
                     AppUIState.shared.settingsJumpToSystemPrompts = true
                     AppUIState.shared.settingsPresented = true
                 }.frame(height: 36)
-                QuickTabButton(icon: "folder", label: L10n.t("i18n_876")) {
+                QuickTabButton(icon: "folder", label: L10n.t("i18n_1010")) {
                     AppUIState.shared.quickFilesPresented = true
                 }.frame(height: 36)
             }
@@ -744,25 +744,25 @@ struct ChatView: View {
 
     private func reasoningLabel() -> String {
         // v4.3.40：档位扩为 低/中/高/最高/极限——最高档=xhigh, 极限档=max (破甲站 gpt-6.1-sol 实测支持 low/medium/high/xhigh/max)
-        let labels = [L10n.t("i18n_877"), L10n.t("i18n_878"), L10n.t("i18n_879"), L10n.t("i18n_880"), L10n.t("i18n_881")]
-        return reasoning >= 0 && reasoning < labels.count ? labels[reasoning] : L10n.t("i18n_879")
+        let labels = [L10n.t("i18n_1011"), L10n.t("i18n_1012"), L10n.t("i18n_1013"), L10n.t("i18n_1014"), L10n.t("i18n_1015")]
+        return reasoning >= 0 && reasoning < labels.count ? labels[reasoning] : L10n.t("i18n_1013")
     }
 
     /// v3.3.4：+ 展开的快捷附件行（应用 / 相册 / 文件 / 浏览器），对齐微信式附件栏
     /// v3.4.2：从左屏幕边缘到右屏幕边缘均匀分布——四格等宽、间隙一致（含两侧边缘间隙）
     private var attachQuickRow: some View {
         HStack(spacing: 12) {
-            attachQuickButton("apps.iphone", L10n.t("i18n_882")) {
+            attachQuickButton("apps.iphone", L10n.t("i18n_1016")) {
                 withAnimation { attachExpanded = false }
                 attachmentSheet = .appPicker
             }
             .frame(maxWidth: .infinity)
-            attachQuickButton("photo.on.rectangle", L10n.t("i18n_883")) {
+            attachQuickButton("photo.on.rectangle", L10n.t("i18n_1017")) {
                 withAnimation { attachExpanded = false }
                 attachmentSheet = .photoPicker
             }
             .frame(maxWidth: .infinity)
-            attachQuickButton("folder", L10n.t("i18n_884")) {
+            attachQuickButton("folder", L10n.t("i18n_1018")) {
                 withAnimation { attachExpanded = false }
                 // v3.3.4：快捷行直接弹 UIKit 文档选择器（无需半屏面板中转）
                 Self.presentDocumentPicker { urls in
@@ -770,7 +770,7 @@ struct ChatView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            attachQuickButton("globe", L10n.t("i18n_885")) {
+            attachQuickButton("globe", L10n.t("i18n_1019")) {
                 withAnimation { attachExpanded = false }
                 attachmentSheet = nil
                 FloatingBrowser.shared.show()
@@ -829,7 +829,7 @@ struct ChatView: View {
                     try? data.write(to: URL(fileURLWithPath: tmpPath))
                     if let ocrResult = try? OCRImageTool().invoke(["path": tmpPath]),
                        let text = ocrResult["text"] as? String, !text.isEmpty {
-                        ocrTexts.append(L10n.t("i18n_886", i+1, text))
+                        ocrTexts.append(L10n.t("i18n_1020", i+1, text))
                     }
                     try? FileManager.default.removeItem(atPath: tmpPath)
                 }
@@ -837,11 +837,11 @@ struct ChatView: View {
             if !ocrTexts.isEmpty {
                 inputText = inputText + "\n\n" + ocrTexts.joined(separator: "\n\n")
                 imagesToSend = [] // 去掉图片，只发文字
-                showToast(L10n.t("i18n_887"))
+                showToast(L10n.t("i18n_1021"))
             }
         }
         // v2.9.72：启动工作流可视化
-        WorkflowManager.shared.startRun(L10n.t("i18n_888"))
+        WorkflowManager.shared.startRun(L10n.t("i18n_1022"))
         if store.selectedId == nil { store.newConversation() }
         var text = inputText
         let imgs = pendingImages
@@ -851,7 +851,7 @@ struct ChatView: View {
         var attDesc: [String] = []
         for att in appAtts {
             let bid = att.bundleId ?? "unknown"
-            attDesc.append(L10n.t("i18n_889", att.displayName, bid))
+            attDesc.append(L10n.t("i18n_1023", att.displayName, bid))
         }
         for att in fileAtts {
             // v2.9.291：文件附件自动复制到工作区 uploads/ 并附加路径——
@@ -861,9 +861,9 @@ struct ChatView: View {
             if let sp = saved {
                 // v3.1.70：去掉"可用 artifact / shell.exec 读取分析"工具残留（用户反馈），
                 // 只保留路径——AI 的 fs 工具集本身就能读，无需在消息里提示
-                attDesc.append(L10n.t("i18n_890", att.displayName, sp))
+                attDesc.append(L10n.t("i18n_1024", att.displayName, sp))
             } else {
-                attDesc.append(L10n.t("i18n_891", att.displayName, Workspace.root.path))
+                attDesc.append(L10n.t("i18n_1025", att.displayName, Workspace.root.path))
             }
         }
         if !attDesc.isEmpty {
@@ -877,7 +877,7 @@ struct ChatView: View {
         let finalImgs = attImgs.isEmpty ? imagesToSend : attImgs
         // v3.4.1：思考总开关接入主发送路径（此前漏传，思考·开/关在输入框无效）
         store.send(text, using: cfg, imageDataURLs: finalImgs, reasoningLevel: thinkEnabled ? reasoning : 3, smartSearch: smartSearch)
-        AuditLog.shared.log("chat", detail: L10n.t("i18n_892"))
+        AuditLog.shared.log("chat", detail: L10n.t("i18n_1026"))
     }
 
     /// v2.9.9：图片文件 → base64 data URL
@@ -1034,7 +1034,7 @@ struct ChatView: View {
 
     private func copyMessage(_ m: ChatMessage) {
         UIPasteboard.general.string = m.content
-        showToast(L10n.t("i18n_1033"))
+        showToast(L10n.t("i18n_1167"))
     }
 
     private func shareMessage(_ m: ChatMessage) {
@@ -1045,7 +1045,7 @@ struct ChatView: View {
         let count = selectedIds.count
         UIPasteboard.general.string = exportText()
         exitSelection()
-        showToast(count > 0 ? L10n.t("i18n_893", count) : L10n.t("i18n_1033"))
+        showToast(count > 0 ? L10n.t("i18n_1027", count) : L10n.t("i18n_1167"))
     }
 
     private func shareSelected() {
@@ -1056,7 +1056,7 @@ struct ChatView: View {
     private func presentShareSheet(text: String) {
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty else {
-            showToast(L10n.t("i18n_894"))
+            showToast(L10n.t("i18n_1028"))
             return
         }
         ShareCenter.shared.presentShareMenuText(content)
@@ -1068,7 +1068,7 @@ struct ChatView: View {
         guard !msgs.isEmpty else { return "" }
         var parts: [String] = []
         let title = store.currentTitle
-        if !title.isEmpty && title != L10n.t("i18n_895") {
+        if !title.isEmpty && title != L10n.t("i18n_1029") {
             parts.append("【\(title)】")
         }
         for m in msgs {
@@ -1080,10 +1080,10 @@ struct ChatView: View {
     private func formatted(_ m: ChatMessage) -> String {
         switch m.role {
         case "user":
-            return L10n.t("i18n_896", m.content)
+            return L10n.t("i18n_1030", m.content)
         case "tool":
             let name = m.toolName.map { "（\($0)）" } ?? ""
-            return L10n.t("i18n_897", name, m.content)
+            return L10n.t("i18n_1031", name, m.content)
         default:
             return m.content
         }
@@ -1100,10 +1100,10 @@ struct ChatView: View {
     // v6.1.5-14bl：/命令 快捷菜单
     private var commandQuickMenu: some View {
         let items: [(String, String, String)] = [
-            ("/clear", "trash", L10n.t("i18n_898")),
-            ("/new", "square.and.pencil", L10n.t("i18n_899")),
-            ("/model", "cpu", L10n.t("i18n_900")),
-            ("/tools", "wrench.and.screwdriver", L10n.t("i18n_901")),
+            ("/clear", "trash", L10n.t("i18n_1032")),
+            ("/new", "square.and.pencil", L10n.t("i18n_1033")),
+            ("/model", "cpu", L10n.t("i18n_1034")),
+            ("/tools", "wrench.and.screwdriver", L10n.t("i18n_1035")),
         ]
         return VStack(spacing: 0) {
             ForEach(items, id: \.0) { item in
@@ -1180,8 +1180,8 @@ struct ChatView: View {
 
     private func runQuickCommand(_ name: String) {
         switch name {
-        case "/clear": store.clearCurrent(); showToast(L10n.t("i18n_902"))
-        case "/new": store.newConversation(); showToast(L10n.t("i18n_903"))
+        case "/clear": store.clearCurrent(); showToast(L10n.t("i18n_1036"))
+        case "/new": store.newConversation(); showToast(L10n.t("i18n_1037"))
         case "/model": showModelPicker = true
         case "/tools": showToolCenter = true
         default: break
@@ -1194,7 +1194,7 @@ struct ChatView: View {
         let att = PendingAttachment(kind: .app, displayName: app.name, dataURL: nil, thumbnail: icon, bundleId: app.bundleId, fileURL: nil)
         pendingAttachments.append(att)
         inputText = inputText.replacingOccurrences(of: "@", with: "").trimmingCharacters(in: .whitespaces)
-        showToast(L10n.t("i18n_904", app.name))
+        showToast(L10n.t("i18n_1038", app.name))
     }
 }
 
@@ -1266,7 +1266,7 @@ struct ChatModelPickerSheet: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: L10n.t("i18n_905"))) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_1039"))) {
                     ForEach(modelStore.configs) { cfg in
                         Button(action: { onSelect(cfg) }) {
                             HStack {
@@ -1294,17 +1294,17 @@ struct ChatModelPickerSheet: View {
                         AppUIState.shared.settingsJumpToModels = true
                         AppUIState.shared.settingsPresented = true
                     }) {
-                        Label(L10n.t("i18n_906"), systemImage: "gearshape.fill")
+                        Label(L10n.t("i18n_1040"), systemImage: "gearshape.fill")
                             .font(.footnote)
                     }
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle(L10n.t("i18n_900"))
+            .navigationTitle(L10n.t("i18n_1034"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(L10n.t("i18n_1016")) { }
+                    Button(L10n.t("i18n_1150")) { }
                         .hidden()
                 }
             }
@@ -1696,7 +1696,7 @@ struct MessageBubble: View {
                     Image(systemName: thinkingExpanded ? "chevron.down.circle" : "chevron.right.circle")
                         .font(.system(size: 14))
                     // v3.5.4：思考中→"思考中…"；思考完→"已深度思考 N 字"(业界一致)
-                    Text(isStreaming ? L10n.t("i18n_907") : L10n.t("i18n_908", text.count))
+                    Text(isStreaming ? L10n.t("i18n_1041") : L10n.t("i18n_1042", text.count))
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(.orange)
@@ -1755,7 +1755,7 @@ struct MessageBubble: View {
     /// v3.5.16：卡片标题只显示工具名（去掉"命令符/命令"），像 Minis 步骤标签那样简洁。
     /// 具体命令/参数仍在卡片下方 args 等宽行完整显示，标题不再拼命令，避免命令符状态占据标题。
     private func toolShortLabel() -> String {
-        message.toolName ?? L10n.t("i18n_909")
+        message.toolName ?? L10n.t("i18n_1043")
     }
 
     private var toolBubble: some View {
@@ -1798,7 +1798,7 @@ struct MessageBubble: View {
                             .foregroundColor(.blue)
                             .cornerRadius(6)
                         } else {
-                            Text(message.isError ? L10n.t("i18n_910") : L10n.t("i18n_911"))
+                            Text(message.isError ? L10n.t("i18n_1044") : L10n.t("i18n_1045"))
                                 .font(.caption2.bold())
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -1849,7 +1849,7 @@ struct MessageBubble: View {
                     Image(systemName: "brain.head.profile")
                         .font(.system(size: 14))
                         .foregroundColor(.orange)
-                    Text(isStreaming ? L10n.t("i18n_907") : L10n.t("i18n_908", text.count))
+                    Text(isStreaming ? L10n.t("i18n_1041") : L10n.t("i18n_1042", text.count))
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(.orange)
@@ -1897,7 +1897,7 @@ struct MessageBubble: View {
                         } else {
                             HStack(spacing: 6) {
                                 ProgressView().scaleEffect(0.8)
-                                Text(L10n.t("i18n_912"))
+                                Text(L10n.t("i18n_1046"))
                                     .font(.subheadline)
                                     .fontWeight(.medium)
                                     .foregroundColor(.blue)
@@ -1908,7 +1908,7 @@ struct MessageBubble: View {
                         Image(systemName: message.isError ? "exclamationmark.circle" : "checkmark.circle")
                             .font(.system(size: 14))
                             .foregroundColor(message.isError ? .red : .blue)
-                        Text(expanded ? L10n.t("i18n_913") : L10n.t("i18n_914"))
+                        Text(expanded ? L10n.t("i18n_1047") : L10n.t("i18n_1048"))
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .foregroundColor(message.isError ? .red : .blue)
@@ -2017,7 +2017,7 @@ struct FileCardRow: View {
             // v4.3.51：URL scheme 直调 TrollStore 安装（不渲染 App 图标列表，安全）
             if ext == "tipa" || ext == "ipa" {
                 Button(action: { ShareCenter.shared.openInTrollStore(url) }) {
-                    Label(L10n.t("i18n_915"), systemImage: "shippingbox")
+                    Label(L10n.t("i18n_1049"), systemImage: "shippingbox")
                 }
             }
         }
@@ -2109,7 +2109,7 @@ struct TrailCard: View {
         let ok = steps.filter { $0.status == .success }.count
         let fail = steps.filter { $0.status == .failed }.count
         if fail > 0 { return "✅\(ok) ❌\(fail)" }
-        return L10n.t("i18n_916", ok)
+        return L10n.t("i18n_1050", ok)
     }
 }
 
@@ -2187,7 +2187,7 @@ struct ChatInputTextView: UIViewRepresentable {
         tv.backgroundColor = .clear
         tv.font = .systemFont(ofSize: 16)
         tv.textColor = UIColor.label
-        tv.placeholder = L10n.t("i18n_917")
+        tv.placeholder = L10n.t("i18n_1051")
         tv.placeholderColor = .gray
         tv.minimumNumberOfLines = 1
         tv.maximumNumberOfLines = 4

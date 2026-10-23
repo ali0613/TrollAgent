@@ -21,17 +21,17 @@ final class ApprovalCenter: ObservableObject {
 
     func submit(tool: String, summary: String, params: String) {
         pending.insert(Pending(toolName: tool, summary: summary, params: params), at: 0)
-        AuditLog.shared.log("approval", detail: "待审批: \(tool)")
+        AuditLog.shared.log("approval", detail: L10n.t("i18n_869", tool))
     }
 
     func approve(_ item: Pending) {
         if let idx = pending.firstIndex(where: { $0.id == item.id }) { pending[idx].decision = .approved }
-        AuditLog.shared.log("approval", detail: "已批准: \(item.toolName)")
+        AuditLog.shared.log("approval", detail: L10n.t("i18n_870", item.toolName))
     }
 
     func deny(_ item: Pending) {
         if let idx = pending.firstIndex(where: { $0.id == item.id }) { pending[idx].decision = .denied }
-        AuditLog.shared.log("approval", detail: "已拒绝: \(item.toolName)", level: .warning)
+        AuditLog.shared.log("approval", detail: L10n.t("i18n_871", item.toolName), level: .warning)
     }
 }
 
@@ -45,7 +45,7 @@ struct OperationView: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: "待批准操作")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_872"))) {
                     if approvals.pending.filter({ $0.decision == .pending }).isEmpty {
                         Text(L10n.t("ui_85"))
                             .foregroundColor(.secondary)
@@ -64,7 +64,7 @@ struct OperationView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: "运行中自动化")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_873"))) {
                     let running = automations.tasks.filter { $0.enabled }
                     if running.isEmpty {
                         Text(L10n.t("ui_81"))
@@ -79,7 +79,7 @@ struct OperationView: View {
                                         .foregroundColor(.secondary)
                                 }
                                 Spacer()
-                                Button("立即运行") {
+                                Button(L10n.t("i18n_874")) {
                                     _ = AutomationStore.shared.run(name: t.name)
                                 }
                                 .font(.caption)
@@ -88,7 +88,7 @@ struct OperationView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: "最近活动")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_875"))) {
                     ForEach(audit.entries.prefix(10)) { e in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(e.detail)
@@ -101,7 +101,7 @@ struct OperationView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("操作")
+            .navigationTitle(L10n.t("i18n_876"))
         }
     }
 
@@ -121,12 +121,12 @@ struct ApprovalSheet: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: "工具调用")) {
-                    LabeledRow(label: "工具", value: item.toolName)
-                    LabeledRow(label: "说明", value: item.summary)
-                    LabeledRow(label: "提交时间", value: OperationView.timeFormatter.string(from: item.submittedAt))
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_877"))) {
+                    LabeledRow(label: L10n.t("i18n_1043"), value: item.toolName)
+                    LabeledRow(label: L10n.t("ui_132"), value: item.summary)
+                    LabeledRow(label: L10n.t("i18n_879"), value: OperationView.timeFormatter.string(from: item.submittedAt))
                 }
-                Section(header: SettingSectionHeader(title: "参数")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_880"))) {
                     Text(item.params)
                         .font(.system(.caption, design: .monospaced))
                 }
@@ -140,7 +140,7 @@ struct ApprovalSheet: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("审批")
+            .navigationTitle(L10n.t("i18n_881"))
         }
     }
 }
@@ -174,7 +174,7 @@ struct ConversationTranscriptView: View {
                     ForEach(messages) { msg in
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text(msg.role == "user" ? "我" : (msg.role == "assistant" ? "助手" : "系统"))
+                                Text(msg.role == "user" ? L10n.t("i18n_882") : (msg.role == "assistant" ? L10n.t("i18n_883") : L10n.t("i18n_949")))
                                     .font(.caption)
                                     .fontWeight(.semibold)
                                     .foregroundColor(msg.role == "user" ? .blue : .green)
@@ -269,10 +269,10 @@ struct AssistantProfilesView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("助手角色")
+            .navigationTitle(L10n.t("i18n_885"))
             .toolbar {
                 Button(action: {
-                    editing = AssistantProfile(name: "新角色", systemPrompt: "你是一个有帮助的助手。")
+                    editing = AssistantProfile(name: L10n.t("i18n_886"), systemPrompt: L10n.t("i18n_887"))
                 }) { Image(systemName: "plus") }
             }
             .sheet(item: $editing) { profile in
@@ -291,22 +291,22 @@ struct AssistantProfileEditor: View {
     var body: some View {
         
             Form {
-                Section(header: SettingSectionHeader(title: "基本信息")) {
-                    TextField("名称", text: $profile.name)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_888"))) {
+                    TextField(L10n.t("i18n_889"), text: $profile.name)
                 }
-                Section(header: SettingSectionHeader(title: "系统提示词")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_890"))) {
                     TextEditor(text: $profile.systemPrompt)
                         .frame(minHeight: 120)
                 }
-                Section(header: SettingSectionHeader(title: "关联模型")) {
-                    Picker("模型配置", selection: $profile.modelConfigId) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_891"))) {
+                    Picker(L10n.t("i18n_892"), selection: $profile.modelConfigId) {
                         Text(L10n.t("ui_144")).tag(UUID?.none)
                         ForEach(models.configs) { c in
                             Text(c.name).tag(UUID?.some(c.id))
                         }
                     }
                 }
-                Section(header: SettingSectionHeader(title: "参数")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_880"))) {
                     HStack {
                         Text(L10n.t("ui_108"))
                         Slider(value: $profile.temperature, in: 0...2, step: 0.1)
@@ -317,7 +317,7 @@ struct AssistantProfileEditor: View {
                     }
                 }
                 Section {
-                    Button("保存") {
+                    Button(L10n.t("i18n_1136")) {
                         if let idx = store.profiles.firstIndex(where: { $0.id == profile.id }) {
                             store.profiles[idx] = profile
                         } else {
@@ -328,7 +328,7 @@ struct AssistantProfileEditor: View {
                     }
                 }
             }
-            .navigationTitle(profile.name.isEmpty ? "新角色" : profile.name)
+            .navigationTitle(profile.name.isEmpty ? L10n.t("i18n_886") : profile.name)
         
         .navigationViewStyle(.stack)
     }
@@ -354,18 +354,18 @@ struct AttachmentBottomPanel: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: "添加附件")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_894"))) {
                     Button(action: { showImporter = true }) {
-                        Label("从文件选择", systemImage: "folder")
+                        Label(L10n.t("i18n_895"), systemImage: "folder")
                     }
-                    Button(action: { store.add("相机照片.jpg") }) {
-                        Label("拍照", systemImage: "camera")
+                    Button(action: { store.add(L10n.t("i18n_896")) }) {
+                        Label(L10n.t("i18n_897"), systemImage: "camera")
                     }
-                    Button(action: { store.add("相册图片.png") }) {
-                        Label("从相册选择", systemImage: "photo.on.rectangle")
+                    Button(action: { store.add(L10n.t("i18n_898")) }) {
+                        Label(L10n.t("i18n_899"), systemImage: "photo.on.rectangle")
                     }
                 }
-                Section(header: SettingSectionHeader(title: "已添加 (\(store.items.count))")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_900", store.items.count))) {
                     if store.items.isEmpty {
                         Text(L10n.t("ui_95")).foregroundColor(.secondary)
                     } else {
@@ -379,9 +379,9 @@ struct AttachmentBottomPanel: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("附件")
+            .navigationTitle(L10n.t("i18n_901"))
             .toolbar {
-                Button("完成") { isPresented = false }
+                Button(L10n.t("i18n_1150")) { isPresented = false }
             }
             .sheet(isPresented: $showImporter) {
                 DocumentImporter { url in
@@ -411,7 +411,7 @@ struct AutomationCenterView: View {
             .padding(.vertical, 8)
 
             List {
-                Section(header: SettingSectionHeader(title: "任务列表")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_902"))) {
                     if store.tasks.isEmpty {
                         Text(L10n.t("ui_90"))
                             .foregroundColor(.secondary)
@@ -441,7 +441,7 @@ struct AutomationCenterView: View {
                     }
                 }
 
-                Section(header: SettingSectionHeader(title: "最近执行")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_903"))) {
                     let history = store.history.prefix(20)
                     if history.isEmpty {
                         Text(L10n.t("ui_86")).foregroundColor(.secondary)
@@ -481,30 +481,30 @@ struct AutomationTaskEditor: View {
     var body: some View {
         
             Form {
-                Section(header: SettingSectionHeader(title: "任务")) {
-                    TextField("名称", text: $task.name)
-                    TextField("调度（cron / 描述）", text: $task.schedule)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_904"))) {
+                    TextField(L10n.t("i18n_889"), text: $task.name)
+                    TextField(L10n.t("i18n_905"), text: $task.schedule)
                         .font(.system(.body, design: .monospaced))
                         .autocapitalization(.none)
-                    TextField("动作（工具调用）", text: $task.action)
+                    TextField(L10n.t("i18n_906"), text: $task.action)
                         .font(.system(.body, design: .monospaced))
                         .autocapitalization(.none)
-                    Toggle("启用", isOn: $task.enabled)
+                    Toggle(L10n.t("i18n_867"), isOn: $task.enabled)
                 }
                 Section {
-                    Button("保存") {
+                    Button(L10n.t("i18n_1136")) {
                         if let idx = store.tasks.firstIndex(where: { $0.id == task.id }) {
                             store.tasks[idx] = task
                         } else {
                             store.tasks.append(task)
                         }
                         store.save()
-                        AuditLog.shared.log("automation", detail: "保存任务 \(task.name)")
+                        AuditLog.shared.log("automation", detail: L10n.t("i18n_907", task.name))
                         presentationMode.wrappedValue.dismiss()
                     }
                 }
             }
-            .navigationTitle(task.name.isEmpty ? "新任务" : task.name)
+            .navigationTitle(task.name.isEmpty ? L10n.t("i18n_908") : task.name)
         
         .navigationViewStyle(.stack)
     }
@@ -519,10 +519,10 @@ struct AutomationPermissionsView: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: "总开关")) {
-                    Toggle("允许自动化执行", isOn: $globalEnabled)
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_909"))) {
+                    Toggle(L10n.t("i18n_910"), isOn: $globalEnabled)
                 }
-                Section(header: SettingSectionHeader(title: "按任务控制")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_911"))) {
                     if store.tasks.isEmpty {
                         Text(L10n.t("ui_78")).foregroundColor(.secondary)
                     } else {
@@ -536,7 +536,7 @@ struct AutomationPermissionsView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("自动化权限")
+            .navigationTitle(L10n.t("i18n_912"))
         }
         .navigationViewStyle(.stack)
     }
@@ -629,16 +629,16 @@ struct GatewayEditorView: View {
     var body: some View {
         
             Form {
-                Section(header: SettingSectionHeader(title: "服务端")) {
-                    TextField("名称", text: $server.name)
+                Section(header: SettingSectionHeader(title: L10n.t("ui_97"))) {
+                    TextField(L10n.t("i18n_889"), text: $server.name)
                     TextField("ws://host:port", text: $server.url)
                         .font(.system(.body, design: .monospaced))
                         .autocapitalization(.none)
                         .keyboardType(.URL)
-                    SecureField("配对令牌（可选）", text: $server.token)
+                    SecureField(L10n.t("i18n_913"), text: $server.token)
                 }
                 Section {
-                    Button("保存并连接") {
+                    Button(L10n.t("i18n_914")) {
                         if let idx = store.servers.firstIndex(where: { $0.id == server.id }) {
                             store.servers[idx] = server
                         } else {
@@ -651,7 +651,7 @@ struct GatewayEditorView: View {
                     }
                 }
             }
-            .navigationTitle(server.name.isEmpty ? "新服务端" : server.name)
+            .navigationTitle(server.name.isEmpty ? L10n.t("i18n_915") : server.name)
         
         .navigationViewStyle(.stack)
     }
@@ -672,7 +672,7 @@ struct InjectionDetailView: View {
         CompatNav {
             List {
                 if bundleId.isEmpty {
-                    Section(header: SettingSectionHeader(title: "选择 App")) {
+                    Section(header: SettingSectionHeader(title: L10n.t("i18n_916"))) {
                         ForEach(AppCatalog.list().prefix(100)) { app in
                             Button(action: {
                                 bundleId = app.bundleId
@@ -692,7 +692,7 @@ struct InjectionDetailView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("注入详情")
+            .navigationTitle(L10n.t("i18n_917"))
         }
         .navigationViewStyle(.stack)
     }
@@ -702,11 +702,11 @@ struct InjectionDetailView: View {
                 Section(header: SettingSectionHeader(title: "App")) {
                     LabeledRow(label: "Bundle ID", value: bundleId)
                     if let app = AppCatalog.find(bundleId) {
-                        LabeledRow(label: "名称", value: app.name)
-                        LabeledRow(label: "路径", value: app.path)
+                        LabeledRow(label: L10n.t("i18n_889"), value: app.name)
+                        LabeledRow(label: L10n.t("i18n_918"), value: app.path)
                     }
                 }
-                Section(header: SettingSectionHeader(title: "注入状态")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_919"))) {
                     if info.isEmpty {
                         Text(L10n.t("ui_35")).foregroundColor(.secondary)
                     } else {
@@ -715,27 +715,27 @@ struct InjectionDetailView: View {
                         }
                     }
                 }
-                Section(header: SettingSectionHeader(title: "操作")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_876"))) {
                     Button(action: {
                         do {
                             _ = try InjectionManager.shared.enable(bundleId: bundleId, dylibName: "@executable_path/ControlAgent.dylib")
-                            message = "已启用注入"
+                            message = L10n.t("i18n_920")
                             reload()
-                        } catch { message = "失败: \(error.localizedDescription)" }
+                        } catch { message = L10n.t("i18n_921", error.localizedDescription) }
                     }) { Text(L10n.t("ui_42")).foregroundColor(.green) }
                     Button(action: {
                         do {
                             _ = try InjectionManager.shared.disable(bundleId: bundleId)
-                            message = "已禁用注入"
+                            message = L10n.t("i18n_922")
                             reload()
-                        } catch { message = "失败: \(error.localizedDescription)" }
+                        } catch { message = L10n.t("i18n_921", error.localizedDescription) }
                     }) { Text(L10n.t("ui_116")).foregroundColor(.orange) }
                     Button(action: {
                         do {
                             _ = try InjectionRemoveTool().invoke(["bundle_id": bundleId])
-                            message = "已彻底移除"
+                            message = L10n.t("i18n_923")
                             reload()
-                        } catch { message = "失败: \(error.localizedDescription)" }
+                        } catch { message = L10n.t("i18n_921", error.localizedDescription) }
                     }) { Text(L10n.t("ui_57")).foregroundColor(.red) }
                 }
                 if !message.isEmpty {
@@ -760,10 +760,10 @@ struct SettingsActivityView: View {
         CompatNav {
             List {
                 Section {
-                    TextField("按类别过滤", text: $filter)
+                    TextField(L10n.t("i18n_924"), text: $filter)
                         .autocapitalization(.none)
                 }
-                Section(header: SettingSectionHeader(title: "活动记录")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_925"))) {
                     let entries = filter.isEmpty ? audit.entries : audit.entries.filter { $0.category.contains(filter) }
                     if entries.isEmpty {
                         Text(L10n.t("ui_92")).foregroundColor(.secondary)
@@ -787,7 +787,7 @@ struct SettingsActivityView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("活动记录")
+            .navigationTitle(L10n.t("i18n_925"))
         }
         .navigationViewStyle(.stack)
     }
@@ -805,24 +805,24 @@ struct SkillEditorView: View {
         CompatNav {
             Form {
                 Section(header: SettingSectionHeader(title: "Skill")) {
-                    TextField("名称", text: $name)
-                    TextField("用途摘要（AI 判断何时使用的依据）", text: $summary)
+                    TextField(L10n.t("i18n_889"), text: $name)
+                    TextField(L10n.t("i18n_926"), text: $summary)
                     TextEditor(text: $instruction)
                         .frame(minHeight: 120)
                 }
                 Section {
-                    Button("保存") {
+                    Button(L10n.t("i18n_1136")) {
                         SkillStore.shared.upsert(SkillItem(name: name, summary: summary, instruction: instruction))
                         presentationMode.wrappedValue.dismiss()
                     }
                 }
-                Section(header: SettingSectionHeader(title: "说明")) {
+                Section(header: SettingSectionHeader(title: L10n.t("ui_132"))) {
                     Text(L10n.t("ui_66"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle("新建 Skill")
+            .navigationTitle(L10n.t("i18n_927"))
         }
         .navigationViewStyle(.stack)
     }
@@ -847,7 +847,7 @@ enum AgentJSONStore {
         if let data = try? JSONSerialization.data(withJSONObject: list, options: .prettyPrinted) {
             try? data.write(to: url)
         }
-        AuditLog.shared.log("agents", detail: "保存 \(entry["name"] ?? "")")
+        AuditLog.shared.log("agents", detail: L10n.t("i18n_928", entry["name"] ?? ""))
     }
 }
 
@@ -860,18 +860,18 @@ struct AgentEditorView: View {
         CompatNav {
             Form {
                 Section(header: SettingSectionHeader(title: "Agent")) {
-                    TextField("名称", text: $name)
+                    TextField(L10n.t("i18n_889"), text: $name)
                     TextEditor(text: $systemPrompt)
                         .frame(minHeight: 120)
                 }
                 Section {
-                    Button("保存到 agents.json") {
+                    Button(L10n.t("i18n_929")) {
                         AgentJSONStore.upsert(file: "agents.json", entry: ["name": name, "systemPrompt": systemPrompt])
                         presentationMode.wrappedValue.dismiss()
                     }
                 }
             }
-            .navigationTitle("新建 Agent")
+            .navigationTitle(L10n.t("i18n_930"))
         }
         .navigationViewStyle(.stack)
     }
@@ -888,23 +888,23 @@ struct WebhookEditorView: View {
     var body: some View {
         CompatNav {
             Form {
-                Section(header: SettingSectionHeader(title: "端点")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_931"))) {
                     TextField("https://example.com/webhook", text: $url)
                         .autocapitalization(.none)
                         .keyboardType(.URL)
-                    SecureField("签名密钥（可选）", text: $secret)
-                    TextField("事件列表（逗号分隔）", text: $events)
+                    SecureField(L10n.t("i18n_932"), text: $secret)
+                    TextField(L10n.t("i18n_933"), text: $events)
                         .autocapitalization(.none)
                 }
                 Section {
-                    Button("保存") {
+                    Button(L10n.t("i18n_1136")) {
                         UserDefaults.standard.set(["url": url, "secret": secret, "events": events], forKey: "trollmcp2.webhook")
-                        AuditLog.shared.log("webhook", detail: "保存 \(url)")
+                        AuditLog.shared.log("webhook", detail: L10n.t("i18n_934", url))
                         presentationMode.wrappedValue.dismiss()
                     }
                 }
             }
-            .navigationTitle("Webhook 编辑")
+            .navigationTitle(L10n.t("i18n_935"))
         }
         .navigationViewStyle(.stack)
     }
@@ -920,7 +920,7 @@ struct APIKeyRecoverySheet: View {
     var body: some View {
         CompatNav {
             List {
-                Section(header: SettingSectionHeader(title: "已保存的密钥")) {
+                Section(header: SettingSectionHeader(title: L10n.t("i18n_936"))) {
                     if models.configs.isEmpty {
                         Text(L10n.t("ui_88")).foregroundColor(.secondary)
                     } else {
@@ -935,9 +935,9 @@ struct APIKeyRecoverySheet: View {
                                 }
                                 Spacer()
                                 if revealed == c.id {
-                                    Button("隐藏") { revealed = nil }.font(.caption)
+                                    Button(L10n.t("i18n_937")) { revealed = nil }.font(.caption)
                                 } else {
-                                    Button("显示") { revealed = c.id }.font(.caption)
+                                    Button(L10n.t("i18n_938")) { revealed = c.id }.font(.caption)
                                 }
                             }
                         }
@@ -951,7 +951,7 @@ struct APIKeyRecoverySheet: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("API Key")
-            .toolbar { Button("完成") { presentationMode.wrappedValue.dismiss() } }
+            .toolbar { Button(L10n.t("i18n_1150")) { presentationMode.wrappedValue.dismiss() } }
         }
         .navigationViewStyle(.stack)
     }
@@ -985,7 +985,7 @@ struct UpstreamModelPickerView: View {
                 } else if upstream.isEmpty {
                     Text(L10n.t("ui_109")).foregroundColor(.secondary)
                 } else {
-                    Section(header: SettingSectionHeader(title: "上游模型")) {
+                    Section(header: SettingSectionHeader(title: L10n.t("i18n_939"))) {
                         ForEach(upstream, id: \.self) { id in
                             Button(action: {
                                 if var c = models.defaultConfig {
@@ -1006,7 +1006,7 @@ struct UpstreamModelPickerView: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("上游模型")
+            .navigationTitle(L10n.t("i18n_939"))
             .toolbar {
                 Button(action: fetch) { Image(systemName: "arrow.clockwise") }
             }
@@ -1016,7 +1016,7 @@ struct UpstreamModelPickerView: View {
 
     private func fetch() {
         guard let config = models.defaultConfig else {
-            errorText = "请先配置模型 API"
+            errorText = L10n.t("i18n_940")
             return
         }
         loading = true

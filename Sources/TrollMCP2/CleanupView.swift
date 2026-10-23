@@ -35,7 +35,7 @@ struct CleanupCenterView: View {
                     AppCleanupView(bundleId: app.bundleId, name: app.name)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {
-                                Button(L10n.t("i18n_1016")) { showCleanup = false }
+                                Button(L10n.t("i18n_1150")) { showCleanup = false }
                             }
                         }
             }
@@ -92,7 +92,7 @@ struct AppCleanupView: View {
                     Text(L10n.t("ui_162"))
                         .font(.footnote).foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
-                    Button(L10n.t("i18n_823")) { scan() }
+                    Button(L10n.t("i18n_957")) { scan() }
                         .font(.headline)
                         .padding(.horizontal, 24).padding(.vertical, 8)
                         .background(Color.tmCyan).foregroundColor(.white)

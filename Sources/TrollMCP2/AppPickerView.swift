@@ -9,15 +9,15 @@ struct AppPickerView: View {
     var body: some View {
         CompatNav {
             AppBrowserContainer(
-                title: L10n.t("i18n_817"),
-                subtitle: L10n.t("i18n_818"),
+                title: L10n.t("i18n_951"),
+                subtitle: L10n.t("i18n_952"),
                 icon: "app.badge.fill",
                 onTap: { app in
                     onSelect?(app)
                     presentationMode.wrappedValue.dismiss()
                 }
             )
-            .navigationTitle(L10n.t("i18n_817"))
+            .navigationTitle(L10n.t("i18n_951"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

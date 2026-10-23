@@ -50,7 +50,7 @@ struct RemoteTerminalView: View {
                 }
                 Button(L10n.t("i18n_301")) {
                     UIPasteboard.general.string = "http://\(lanIP):\(portText)"
-                    toast = L10n.t("i18n_1033")
+                    toast = L10n.t("i18n_1167")
                 }
             }
 

@@ -208,7 +208,7 @@ struct CrashLogView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: newestFirst ? "clock.fill" : "clock.arrow.circlepath")
-                        Text(newestFirst ? "最新" : "最早").font(.caption)
+                        Text(newestFirst ? L10n.t("i18n_826") : L10n.t("i18n_827")).font(.caption)
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -224,13 +224,13 @@ struct CrashLogView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "checkmark.shield")
                                 .foregroundColor(.green)
-                            Text("暂无崩溃记录")
+                            Text(L10n.t("i18n_828"))
                                 .font(.footnote)
                         }
                         .padding(.vertical, 8)
                     }
                 } else {
-                    Section(header: Text("共 \(paths.count) 条 · \(newestFirst ? "最新在前" : "最早在前")")) {
+                    Section(header: Text(L10n.t("i18n_829", paths.count, newestFirst ? "最新在前" : "最早在前"))) {
                         let displayed = newestFirst ? paths : Array(paths.reversed())
                         ForEach(displayed, id: \.self) { p in
                         Button {
@@ -252,7 +252,7 @@ struct CrashLogView: View {
                 }
             }
         }
-        .navigationTitle("崩溃日志")
+        .navigationTitle(L10n.t("i18n_830"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { paths = CrashCatcher.list() }
         .overlay(alignment: .bottom) {
@@ -280,7 +280,7 @@ struct CrashLogView: View {
                             Image(systemName: "doc.text.magnifyingglass")
                                 .font(.system(size: 36))
                                 .foregroundColor(.secondary)
-                            Text("崩溃日志为空或无法读取")
+                            Text(L10n.t("i18n_831"))
                                 .font(.footnote)
                                 .foregroundColor(.secondary)
                         }
@@ -290,7 +290,7 @@ struct CrashLogView: View {
                             Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 36))
                                 .foregroundColor(.orange)
-                            Text("读取失败，请到工作区 crash/ 目录用文件浏览器查看")
+                            Text(L10n.t("i18n_832"))
                                 .font(.footnote)
                                 .foregroundColor(.secondary)
                         }
@@ -304,7 +304,7 @@ struct CrashLogView: View {
                         }
                     }
                 }
-                .navigationTitle("崩溃详情")
+                .navigationTitle(L10n.t("i18n_833"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     // v2.9.179：崩溃日志页彻底不弹分享面板——sig_1789582263 实证
@@ -313,13 +313,13 @@ struct CrashLogView: View {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button {
                             UIPasteboard.general.string = detailContent
-                            toast = "已复制全文（分享面板在侧载环境不可用）"
+                            toast = L10n.t("i18n_834")
                         } label: {
                             Image(systemName: "doc.on.doc")
                         }
                     }
                     ToolbarItem(placement: .navigationBarLeading) {
-                        Button("完成") { showDetail = false }
+                        Button(L10n.t("i18n_1150")) { showDetail = false }
                     }
                 }
             }
@@ -330,17 +330,17 @@ struct CrashLogView: View {
                 if !paths.isEmpty {
                     Button {
                         UIPasteboard.general.string = CrashCatcher.exportAll()
-                        toast = "已复制全部 \(paths.count) 条日志（分享面板在侧载环境不可用）"
+                        toast = L10n.t("i18n_835", paths.count)
                     } label: {
                         Image(systemName: "doc.on.doc")
                     }
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("清空") {
+                Button(L10n.t("ui_107")) {
                     CrashCatcher.clear()
                     paths = []
-                    toast = "已清空"
+                    toast = L10n.t("i18n_836")
                 }
                 .disabled(paths.isEmpty)
             }

@@ -7,9 +7,9 @@ import Combine
 /// v4.5.0：可爱助手全局开关 + 角色（设置里可选开/关、切换角色，UserDefaults 持久化）
 /// 角色：小萝莉(girl_*) / 兔娘(rabit_*) / 猫娘(cat_*)
 enum GirlCharacter: String, CaseIterable, Identifiable {
-    case loli = "小萝莉"
-    case rabit = "兔娘"
-    case cat = "猫娘"
+    case loli = L10n.t("i18n_807")
+    case rabit = L10n.t("i18n_808")
+    case cat = L10n.t("i18n_809")
     var id: String { rawValue }
     var iconPrefix: String {
         switch self {
@@ -26,7 +26,7 @@ extension GirlCharacter {
     /// 直接 GirlCharacter(rawValue:) 会拿到 nil 静默回退 .loli，这里做一次旧值→.rabit 兼容映射。
     static func stored(rawValue: String?) -> GirlCharacter {
         guard let raw = rawValue, !raw.isEmpty else { return .loli }
-        if raw == "御姐兔女郎" { return .rabit }   // 旧 rawValue 迁移：御姐兔女郎 → 兔娘
+        if raw == L10n.t("i18n_810") { return .rabit }   // 旧 rawValue 迁移：御姐兔女郎 → 兔娘
         return GirlCharacter(rawValue: raw) ?? .loli
     }
 }
@@ -139,10 +139,10 @@ struct GirlCompanionView: View {
                 if tapFlash == 0 { expression = .idle }
             }
         }
-        .alert("可爱助手", isPresented: $deniedHint) {
-            Button("好", role: .cancel) {}
+        .alert(L10n.t("i18n_811"), isPresented: $deniedHint) {
+            Button(L10n.t("ui_44"), role: .cancel) {}
         } message: {
-            Text("需要麦克风 + 语音识别权限才能跟我说话，请在系统设置里允许。")
+            Text(L10n.t("i18n_812"))
         }
     }
 
@@ -158,7 +158,7 @@ struct GirlCompanionView: View {
                         .frame(width: 7, height: 7)
                         .scaleEffect(voice.isListening ? 1.2 : 1.0)
                         .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: voice.isListening)
-                    Text("听你说…")
+                    Text(L10n.t("i18n_813"))
                         .font(.caption2)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)
@@ -166,7 +166,7 @@ struct GirlCompanionView: View {
                     Image(systemName: "mic.fill")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.white)
-                    Text("说话")
+                    Text(L10n.t("i18n_814"))
                         .font(.caption2)
                         .fontWeight(.semibold)
                         .foregroundColor(.white)

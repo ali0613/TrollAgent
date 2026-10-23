@@ -116,7 +116,7 @@ struct RemoteControlView: View {
                     capabilityRow("camera", L10n.t("i18n_453"))
                     capabilityRow("hand.tap", L10n.t("i18n_454"))
                     capabilityRow("keyboard", L10n.t("i18n_455"))
-                    capabilityRow("checkmark.circle", L10n.t("i18n_944"))
+                    capabilityRow("checkmark.circle", L10n.t("i18n_1078"))
                 }
             }
 
@@ -125,9 +125,9 @@ struct RemoteControlView: View {
             CardBox {
                 VStack(alignment: .leading, spacing: 12) {
                     stepView(1, L10n.t("i18n_502"))
-                    stepView(2, L10n.t("i18n_945"))
+                    stepView(2, L10n.t("i18n_1079"))
                     stepView(3, L10n.t("i18n_458"))
-                    stepView(4, L10n.t("i18n_946"))
+                    stepView(4, L10n.t("i18n_1080"))
                     stepView(5, L10n.t("i18n_459"))
                 }
             }
@@ -136,14 +136,14 @@ struct RemoteControlView: View {
             CardSectionHeader(icon: "wrench.and.screwdriver", title: L10n.t("i18n_460"))
             CardBox {
                 VStack(alignment: .leading, spacing: 8) {
-                    toolRow("control.inject", L10n.t("i18n_947"))
+                    toolRow("control.inject", L10n.t("i18n_1081"))
                     toolRow("control.status", L10n.t("i18n_461"))
-                    toolRow("control.ui_tree", L10n.t("i18n_948"))
+                    toolRow("control.ui_tree", L10n.t("i18n_1082"))
                     toolRow("control.screenshot", L10n.t("i18n_462"))
                     toolRow("control.tap", L10n.t("i18n_463"))
-                    toolRow("control.swipe", L10n.t("i18n_949"))
+                    toolRow("control.swipe", L10n.t("i18n_1083"))
                     toolRow("control.type", L10n.t("i18n_464"))
-                    toolRow("control.key", L10n.t("i18n_950"))
+                    toolRow("control.key", L10n.t("i18n_1084"))
                 }
             }
 
@@ -151,11 +151,11 @@ struct RemoteControlView: View {
             CardSectionHeader(icon: "exclamationmark.triangle", title: L10n.t("i18n_465"), color: .orange)
             CardBox {
                 VStack(alignment: .leading, spacing: 6) {
-                    noteRow(L10n.t("i18n_951"))
-                    noteRow(L10n.t("i18n_952"))
+                    noteRow(L10n.t("i18n_1085"))
+                    noteRow(L10n.t("i18n_1086"))
                     noteRow(L10n.t("i18n_466"))
-                    noteRow(L10n.t("i18n_926"))
-                    noteRow(L10n.t("i18n_954"))
+                    noteRow(L10n.t("i18n_1060"))
+                    noteRow(L10n.t("i18n_1088"))
                 }
             }
         }

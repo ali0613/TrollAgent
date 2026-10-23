@@ -66,8 +66,8 @@ struct AttachmentPanelView: View {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 18) {
                 AttachmentOption(
                     icon: "square.grid.2x2",
-                    title: L10n.t("i18n_882"),
-                    subtitle: L10n.t("i18n_918")
+                    title: L10n.t("i18n_1016"),
+                    subtitle: L10n.t("i18n_1052")
                 ) {
                     presentationMode.wrappedValue.dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -76,8 +76,8 @@ struct AttachmentPanelView: View {
                 }
                 AttachmentOption(
                     icon: "photo.on.rectangle",
-                    title: L10n.t("i18n_883"),
-                    subtitle: L10n.t("i18n_919")
+                    title: L10n.t("i18n_1017"),
+                    subtitle: L10n.t("i18n_1053")
                 ) {
                     presentationMode.wrappedValue.dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -86,8 +86,8 @@ struct AttachmentPanelView: View {
                 }
                 AttachmentOption(
                     icon: "paperclip",
-                    title: L10n.t("i18n_884"),
-                    subtitle: L10n.t("i18n_920")
+                    title: L10n.t("i18n_1018"),
+                    subtitle: L10n.t("i18n_1054")
                 ) {
                     presentationMode.wrappedValue.dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -97,8 +97,8 @@ struct AttachmentPanelView: View {
                 // v2.9.37：内置浏览器（AI 可控制，蓝框高亮）
                 AttachmentOption(
                     icon: "globe",
-                    title: L10n.t("i18n_885"),
-                    subtitle: L10n.t("i18n_921")
+                    title: L10n.t("i18n_1019"),
+                    subtitle: L10n.t("i18n_1055")
                 ) {
                     presentationMode.wrappedValue.dismiss()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {

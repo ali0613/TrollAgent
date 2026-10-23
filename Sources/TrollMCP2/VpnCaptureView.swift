@@ -66,13 +66,13 @@ struct VpnCaptureView: View {
                 )
                 // CA 证书：状态 + 点击生成
                 moduleCard(
-                    title: L10n.t("i18n_955"),
+                    title: L10n.t("i18n_1089"),
                     icon: "checkmark.shield.fill",
                     color: .green,
                     desc: caExists ? L10n.t("i18n_509") : L10n.t("i18n_510"),
                     trailing: AnyView(
                         Button(action: shareCert) {
-                            Text(caExists ? L10n.t("i18n_511") : L10n.t("i18n_1004"))
+                            Text(caExists ? L10n.t("i18n_511") : L10n.t("i18n_1138"))
                                 .font(.subheadline)
                                 .foregroundColor(caExists ? .green : .secondary)
                         }
@@ -83,7 +83,7 @@ struct VpnCaptureView: View {
                     title: L10n.t("i18n_513"),
                     icon: "doc.text.fill",
                     color: .blue,
-                    desc: L10n.t("i18n_956"),
+                    desc: L10n.t("i18n_1090"),
                     trailing: AnyView(
                         Button(action: { showLogs = true }) {
                             HStack(spacing: 4) {
@@ -114,7 +114,7 @@ struct VpnCaptureView: View {
                         Text(localProxyOn ? L10n.t("i18n_515") : L10n.t("i18n_516"))
                             .foregroundColor(.primary)
                         Spacer()
-                        Text(localProxyOn ? L10n.t("i18n_811") : L10n.t("i18n_518"))
+                        Text(localProxyOn ? L10n.t("i18n_945") : L10n.t("i18n_518"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -126,8 +126,8 @@ struct VpnCaptureView: View {
                 stepRow(1, L10n.t("i18n_520"), L10n.t("i18n_521"))
                 stepRow(2, L10n.t("i18n_522"), L10n.t("i18n_523"))
                 stepRow(3, L10n.t("i18n_524"), L10n.t("i18n_525"))
-                stepRow(4, L10n.t("i18n_438"), L10n.t("i18n_957"))
-                stepRow(5, L10n.t("i18n_526"), L10n.t("i18n_958"))
+                stepRow(4, L10n.t("i18n_438"), L10n.t("i18n_1091"))
+                stepRow(5, L10n.t("i18n_526"), L10n.t("i18n_1092"))
             }
 
             if !notice.isEmpty {
@@ -138,7 +138,7 @@ struct VpnCaptureView: View {
                 }
             }
         }
-        .navigationTitle(L10n.t("i18n_999"))
+        .navigationTitle(L10n.t("i18n_1133"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { refresh() }
         .sheet(isPresented: $showLogs) {
@@ -158,7 +158,7 @@ struct VpnCaptureView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(L10n.t("i18n_1016")) { showLogs = false }
+                        Button(L10n.t("i18n_1150")) { showLogs = false }
                     }
                 }
             }

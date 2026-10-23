@@ -362,9 +362,9 @@ struct AppDetailView: View {
         
             List {
                 Section(header: SettingSectionHeader(title: L10n.t("i18n_486"))) {
-                    LabeledRow(label: L10n.t("i18n_420"), value: app.name)
+                    LabeledRow(label: L10n.t("i18n_889"), value: app.name)
                     LabeledRow(label: "Bundle ID", value: app.bundleId)
-                    LabeledRow(label: L10n.t("i18n_376"), value: app.path)
+                    LabeledRow(label: L10n.t("i18n_918"), value: app.path)
                     if let container = AppCatalog.lookupContainer(bundleId: app.bundleId) {
                         LabeledRow(label: L10n.t("i18n_487"), value: container)
                     }
