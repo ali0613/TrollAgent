@@ -86,36 +86,44 @@ struct ToolCenterView: View {
             || def.displaySummary.localizedCaseInsensitiveContains(searchText)
     }
 
-    private var grouped: [(layer: ToolLayer, rows: [ToolRowItem])] {
-        var result: [(layer: ToolLayer, rows: [ToolRowItem])] = []
+    /// v6.6.0-fix36: 层 → 家族分组（封装层按前缀家族 = 大工具子命令；原生/Alpine 单组）
+    private var grouped: [(layer: ToolLayer, families: [(name: String, rows: [ToolRowItem])])] {
+        var result: [(layer: ToolLayer, families: [(name: String, rows: [ToolRowItem])])] = []
         for layer in ToolLayer.allCases {
-            var rows: [ToolRowItem] = []
+            var families: [(name: String, rows: [ToolRowItem])] = []
             switch layer {
             case .packaged:
-                // 封装工具层：平铺全部注册工具（注册 = 有 handler——无占位概念）
+                // 封装工具层：按前缀家族分组（大工具 → 子命令——container.write_text 归 container 家族）
+                var byFamily: [String: [ToolRowItem]] = [:]
                 for def in registry.definitions.sorted(by: { $0.name < $1.name }) {
                     guard passesFilter(def) else { continue }
+                    let family = def.name.contains(".") ? String(def.name.split(separator: ".").first ?? "") : def.name
                     var branch: String? = nil
                     if def.name == "shell.exec" {
                         branch = "统一环境执行（iOS 原生命令 + Alpine 工具链）"
                     }
-                    rows.append(ToolRowItem(def: def, branch: branch, isReal: true))
+                    byFamily[family, default: []].append(ToolRowItem(def: def, branch: branch, isReal: true))
+                }
+                for name in byFamily.keys.sorted() {
+                    families.append((name, byFamily[name] ?? []))
                 }
             case .native:
-                // 原生工具层：静态命令清单（搜索过滤）
+                var nativeRows: [ToolRowItem] = []
                 for (cmd, desc) in nativeCommands {
                     if !searchText.isEmpty && !cmd.localizedCaseInsensitiveContains(searchText) && !desc.localizedCaseInsensitiveContains(searchText) { continue }
-                    rows.append(ToolRowItem(def: ToolDefinition(name: cmd, summary: desc), branch: nil))
+                    nativeRows.append(ToolRowItem(def: ToolDefinition(name: cmd, summary: desc), branch: nil))
                 }
+                if !nativeRows.isEmpty { families.append(("原生命令", nativeRows)) }
             case .alpine:
-                // Alpine 工具层：静态命令清单（搜索过滤）
+                var alpineRows: [ToolRowItem] = []
                 for (cmd, desc) in alpineCommands {
                     if !searchText.isEmpty && !cmd.localizedCaseInsensitiveContains(searchText) && !desc.localizedCaseInsensitiveContains(searchText) { continue }
-                    rows.append(ToolRowItem(def: ToolDefinition(name: cmd, summary: desc), branch: nil))
+                    alpineRows.append(ToolRowItem(def: ToolDefinition(name: cmd, summary: desc), branch: nil))
                 }
+                if !alpineRows.isEmpty { families.append(("Alpine 命令", alpineRows)) }
             }
-            if !rows.isEmpty {
-                result.append((layer, rows))
+            if !families.isEmpty {
+                result.append((layer, families))
             }
         }
         return result
@@ -194,14 +202,21 @@ struct ToolCenterView: View {
 
                 ForEach(grouped, id: \.layer.rawValue) { item in
                     Section(header: VStack(alignment: .leading, spacing: 2) {
-                        Text("\(item.layer.rawValue)（\(item.rows.count)）")
+                        Text("\(item.layer.rawValue)（\(item.families.reduce(0) { $0 + $1.rows.count })）")
                             .font(.system(size: 15, weight: .bold))
                         Text(item.layer.subtitle)
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
                     }) {
-                        ForEach(item.rows) { row in
-                            ToolRow(def: row.def, branch: row.branch, isCore: registry.isCore(row.def.name), isReal: row.isReal)
+                        // v6.6.0-fix36: 大工具家族子 Section（container.write_text 归 container 家族）
+                        ForEach(item.families, id: \.name) { family in
+                            Section(header: Text(family.name)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.tmCyan)) {
+                                ForEach(family.rows) { row in
+                                    ToolRow(def: row.def, branch: row.branch, isCore: registry.isCore(row.def.name), isReal: row.isReal)
+                                }
+                            }
                         }
                     }
                 }
