@@ -92,7 +92,7 @@ enum L10n {
 
             // ===== 首页 =====
             "home_greeting": ["zh": "你好，我是 TrollAgent 坦克版 🔥", "en": "Hi, I'm TrollAgent Tank Edition 🔥"],
-            "home_subtitle": ["zh": "TrollStore 上的 AI 坦克车\n分析 · 注入 · 编译 · 控制\n原生 r2 · LLVM · lua · pandas 全进包", "en": "AI tank on TrollStore\nAnalyze · Inject · Build · Control\nNative r2 · LLVM · lua · pandas bundled"],
+            "home_subtitle": ["zh": "TrollStore 上的 AI 坦克车\n分析 · 注入 · 编译 · 控制\n统一环境 TrollRuntime · Alpine 完整工具链\npy3/node 芯片直跑", "en": "AI tank on TrollStore\nAnalyze · Inject · Build · Control\nUnified TrollRuntime · Full Alpine toolchain\npy3/node native acceleration"],
             "home_analyze_apps": ["zh": "分析我的应用", "en": "Analyze My Apps"],
             "home_analyze_apps_sub": ["zh": "扫描缓存、注入状态与已安装应用", "en": "Scan caches, injection state & installed apps"],
             "home_check_device": ["zh": "检查设备与内存", "en": "Check Device & Memory"],
@@ -130,7 +130,7 @@ enum L10n {
             "ob_next": ["zh": "下一步", "en": "Next"],
             "ob_done": ["zh": "开始使用", "en": "Get Started"],
             "ob_welcome_title": ["zh": "欢迎使用 TrollAgent 坦克版", "en": "Welcome to TrollAgent Tank Edition"],
-            "ob_welcome_sub": ["zh": "TrollStore 上的 AI 实验与 QA 工作台：一句话描述目标，AI 自动完成诊断、操作、验证与报告。坦克版内置 r2 / LLVM / lua / pandas 全套原生逆向工具，无需联网即可分析二进制。", "en": "An AI lab for TrollStore: describe a goal, and AI handles diagnosis, actions, verification and reporting. Tank Edition bundles native r2 / LLVM / lua / pandas for offline binary analysis."],
+            "ob_welcome_sub": ["zh": "TrollStore 上的 AI 实验与 QA 工作台：一句话描述目标，AI 自动完成诊断、操作、验证与报告。统一环境 TrollRuntime（Alpine 完整工具链），缺工具自动 apk 安装，py3/node 芯片直跑，可离线分析二进制。", "en": "An AI lab for TrollStore: describe a goal, and AI handles diagnosis, actions, verification and reporting. Unified TrollRuntime (full Alpine toolchain), missing tools auto-installed via apk, py3/node native acceleration, offline binary analysis."],
             "ob_cap_title": ["zh": "它能做什么", "en": "What it can do"],
             "ob_cap1": ["zh": "线上编译 tweak / IPA 并下载注入", "en": "Cloud-build tweaks / IPAs, download & inject"],
             "ob_cap2": ["zh": "H5GG 式内存搜索与修改", "en": "H5GG-style memory search & patch"],
