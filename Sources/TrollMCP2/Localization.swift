@@ -263,7 +263,7 @@ enum L10n {
             "ui_153": ["zh": "主导错误 %@", "en": "Top error %@"],
             "ui_154": ["zh": "最近失败：%@", "en": "Latest failure: %@"],
             "ui_155": ["zh": "%d 个", "en": "%d apps"],
-            "ui_156": ["zh": "%@ 次 · 成功 %@", "en": "%@ runs · %@ OK"],
+            "ui_156": ["zh": "%d 次 · 成功 %d", "en": "%d runs · %d OK"],
             "ui_157": ["zh": "第 %d/%d 轮", "en": "Round %d/%d"],
             "ui_158": ["zh": "执行过程（%d 步）", "en": "Execution (%d steps)"],
             "ui_159": ["zh": "型号标识 %@ · %@ · %@ · %@", "en": "Model %@ · %@ · %@ · %@"],
