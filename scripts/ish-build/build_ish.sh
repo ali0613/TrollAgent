@@ -440,8 +440,8 @@ GUARD_PATCH_PY
             -Dkernel=ish \
             -Dengine=asbestos \
             -Dguest_arch=arm64 \
-            # v7.0.1: JIT 关闭（fix21 开 JIT 后 fiber/gadgets 路径在回退模式触发 cpu_run_to_interrupt Bus error——真机 shell.exec 崩。
-            # iOS（TrollStore）map_dual 拿不到 exec 区域本就回退解释器——关掉无性能损失，且回到 fix21 之前的纯解释器路径）
+            -Djit=true \
+            # v7.0.3: 恢复 JIT + jit-fallback 补丁（jit_on 运行时化——map_dual 失败时回退纯解释器，等价 -Djit=false；成功时真 JIT）
     else
         # Reconfigure both options: an existing build-ios/ from before
         # b_ndebug was introduced would otherwise keep asserts enabled.

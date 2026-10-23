@@ -1,0 +1,105 @@
+diff --git a/asbestos/asbestos.c b/asbestos/asbestos.c
+index c5d287a..336be64 100644
+--- a/asbestos/asbestos.c
++++ b/asbestos/asbestos.c
+@@ -736,20 +736,23 @@ static bool fiber_prechain_patch_slot(struct fiber_block *source, int i, struct
+     if (target_addr != target->addr || PAGE(source->addr) != PAGE(target->addr))
+         return false;
+ #ifdef ISH_JIT
+-    if (!jit_chain_ok(source, i, target)) {
+-        if (jit_chain_refused(source, i, target)) {
+-            // The slot remains fake, but the native alternate is a real
+-            // pointer and needs the same invalidation ownership as a chain.
+-            list_remove_safe(&source->jumps_from_links[i]);
+-            list_add(&target->jumps_from[i], &source->jumps_from_links[i]);
++    if (jit_on) {
++        if (!jit_chain_ok(source, i, target)) {
++            if (jit_chain_refused(source, i, target)) {
++                // The slot remains fake, but the native alternate is a real
++                // pointer and needs the same invalidation ownership as a chain.
++                list_remove_safe(&source->jumps_from_links[i]);
++                list_add(&target->jumps_from[i], &source->jumps_from_links[i]);
++            }
++            return false;
+         }
+-        return false;
++        list_remove_safe(&source->jumps_from_links[i]);
+     }
+-    list_remove_safe(&source->jumps_from_links[i]);
+ #endif
+     *source->jump_ip[i] = (unsigned long) target->code;
+ #ifdef ISH_JIT
+-    jit_link(source, i, target);
++    if (jit_on)
++        jit_link(source, i, target);
+ #endif
+     source->jump_ip_is_fake[i] = false;
+     list_add(&target->jumps_from[i], &source->jumps_from_links[i]);
+@@ -830,7 +833,7 @@ static struct fiber_block *fiber_block_compile(addr_t ip, struct tlb *tlb) {
+     TRACE("%d %08x --- compiling:\n", current_pid(), ip);
+     gen_start(ip, &state);
+ #ifdef ISH_JIT
+-    struct jit_units *units = jit_units_begin();
++    struct jit_units *units = jit_units_begin();  // 内部 pthread_once(jit_init) 初始化 jit_on；off 时返回 NULL
+ #endif
+     while (!state.oom) {
+ #ifdef ISH_JIT
+@@ -875,7 +878,7 @@ static struct fiber_block *fiber_block_compile(addr_t ip, struct tlb *tlb) {
+ #endif
+     state.block->used = state.capacity;
+ #ifdef ISH_JIT
+-    jit_block(state.block, units);
++    jit_block(state.block, units);  // U==NULL 时安全返回
+ #endif
+     return state.block;
+ }
+@@ -894,7 +897,8 @@ static void fiber_block_disconnect(struct asbestos *asbestos, struct fiber_block
+             if (block->jump_ip[i] != NULL) {
+                 *block->jump_ip[i] = block->old_jump_ip[i];
+ #ifdef ISH_JIT
+-                jit_unlink(block, i);
++                if (jit_on)
++                    jit_unlink(block, i);
+ #endif
+ #ifdef GUEST_ARM64
+                 block->jump_ip_is_fake[i] = true;
+@@ -922,7 +926,8 @@ static void fiber_block_disconnect(struct asbestos *asbestos, struct fiber_block
+ static void fiber_block_free(struct asbestos *asbestos, struct fiber_block *block) {
+     fiber_block_disconnect(asbestos, block);
+ #ifdef ISH_JIT
+-    jit_block_free(block);
++    if (jit_on)
++        jit_block_free(block);
+ #endif
+     free(block);
+ }
+diff --git a/asbestos/guest-arm64/jit.c b/asbestos/guest-arm64/jit.c
+index 1ec6b76..6fc2433 100644
+--- a/asbestos/guest-arm64/jit.c
++++ b/asbestos/guest-arm64/jit.c
+@@ -47,7 +47,7 @@ extern void jit_fiber_ret_chain(void) __asm("fiber_ret_chain");
+ 
+ // ---------------------------------------------------------------- options
+ 
+-static bool jit_on;       // ISH_JIT=0 turns the translator off
++bool jit_on;              // ISH_JIT=0 turns the translator off (extern in jit.h)
+ static bool link_off;     // ISH_JIT_LINK=0: no direct links between blocks
+ static bool loop_off;     // ISH_JIT_LOOP=0: no register promotion in self-loops
+ static bool simd_on;      // ISH_JIT_SIMD=0: leave SIMD/FP instructions to the gadgets
+diff --git a/asbestos/guest-arm64/jit.h b/asbestos/guest-arm64/jit.h
+index a1a8255..81e072a 100644
+--- a/asbestos/guest-arm64/jit.h
++++ b/asbestos/guest-arm64/jit.h
+@@ -34,10 +34,10 @@
+ 
+ #ifdef ISH_JIT
+ struct fiber_frame;
+-extern __thread struct fiber_frame *jit_active_frame;
+-
+ #include <stdbool.h>
+ #include <stdint.h>
++extern __thread struct fiber_frame *jit_active_frame;
++extern bool jit_on;
+ #include "asbestos/gen.h"
+ 
+ #define JIT_MAX_UNITS 1100
