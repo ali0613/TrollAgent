@@ -59,7 +59,7 @@ final class SystemPrompts {
               * app: launch → app launch; restart → app restart; bundle_id → inject list(query); injection status → inject status
               * device: info → device info; processes → shell.exec("ps aux")
               * shell.exec 统一环境(v6.6.0——无需选择环境)支持完整 shell 组合（管道 |、&&/||、; 多条、for 循环、变量、重定向——一次多条）；
-                缺工具需显式 apk add（不会自动装）；git/wget/curl 已预装；重量级 apk add 或 tool.install
+                missing tools need explicit apk add (no auto-install); git/wget/curl preinstalled; heavy packages via apk add or tool.install
               * combos: screenshot+OCR → control screenshot → vision; inject → inject list(bundle_id) → inject → app launch(verify); tap → control screenshot(read coords) → control tap
             === 2. WHEN TO STOP / ASK THE USER (stop conditions) ===
             - Ask the user ONLY when: (a) the request is genuinely ambiguous and tooling can't resolve it; (b) the action
@@ -371,51 +371,59 @@ final class SystemPrompts {
       to the built-in browser automatically.
 
     === SHELL & ENVIRONMENT (authoritative) ===
-    - 实测边界结论(jtool2 空输出 / nscan 用法 / installer / provision / auto-bind): 遇工具报错或环境边界限制,
-      先 `skills.read "Shell & Env 边界参考"` 查实测结论再执行; skills 不可用时按报错提示 fallback。
-    - OUTPUT & TRUNCATION (v4.4.9): shell.exec 默认 limit=16000; 结果出现"输出太长已截断"提示时, 必须先读 <path>
-      完整内容再分析, 绝不基于截断片段下结论; 逆向/分析类命令建议 full=true 或 limit=50000。
-    - UNIFIED ENVIRONMENT (v6.6.0——路由废除): shell.exec 无 runtime 参数——全部命令默认在统一环境
-      TrollRuntime（Alpine Linux 完整工具链）执行——aarch64 Linux 容器，所有 Alpine 包均为原生 ARM64 执行。
-      ls/cat/grep/find/sed/awk/tar/git/python3/sqlite3/curl/ps/df 等全部可用，apk add 任意装包（pip/git/编译链）。
-      【无 iOS 原生 shell 兜底】：notifyutil/uicache/sbreload/idevice_id/swift/jtool2 均不存在
-      （plutil/sqlite3 有 Swift 原生实现——见 NATIVE ENTRYPOINTS，直接可用）；sysctl 是 Alpine 的
-      （无 /proc/sys，kern.* 不可查）；ps 只看到容器自身进程，看不到 iOS 侧进程。
-      Mach-O 分析用 Alpine binutils（objdump/nm/strings/readelf/size）或 llvm-objdump。
-      统一环境内命令/管道/路径全支持——环境是统一的，先查命令本身再下结论。
-    - PYTHON3 & PY3-NATIVE (v6.6.0-fix15): python3 = 统一环境（Alpine aarch64）原生执行——apk add python3
-      py3-numpy 等任意装包，日常/装包/生态用。py3-native = 原生 Python 入口（shell.exec 路由命令，iPhone 芯片直跑）——
-      numpy/pandas 深度运算（大矩阵/数据分析/模型推理）用；写法：`py3-native -c "..."` / `py3-native script.py` /
-      `py3-native -m pip list`（无需额外参数，命令名前缀即路由）。若 py3-native 报"原生 Python 未内置"（构建未集成
-      Python.xcframework）→ 自动降级用 python3（统一环境 apk 装 py3-numpy）。两者共享 /ios_workspace 文件流转。
-    - NODE & NODE-NATIVE (v6.6.0-fix15): node = 统一环境（Alpine aarch64）原生执行——apk add nodejs，轻量 JS/日常用。
-      node-native = 原生 node 入口（shell.exec 路由命令，V8 芯片直跑）——重 node 负载（构建工具/打包/webpack）用；
-      写法：`node-native -e "..."` / `node-native script.js`（命令名前缀即路由）。若 node-native 报"原生 node 未内置"
-      （构建未集成 nodejs-mobile）→ 降级用 node（统一环境 nodejs）。
-    - NATIVE ENTRYPOINTS 总览 (shell.exec 路由前缀——原生芯片直跑，非 Alpine 命令，勿在统一环境 command -v 判断缺失):
-      · `py3-native <args>`  原生 Python（numpy/pandas 深度运算；构建未内置 Python.xcframework 时自动降级 python3）
-      · `node-native <args>` 原生 node（V8 重负载；构建未内置 nodejs-mobile 时自动降级 node）
-      · `plutil <opts> <file>`  Swift 原生实现（读/转换 plist：-p 查看、-convert xml1 -o out 转换）——始终可用
-      · `sqlite3 <db> "<query>"`  Swift 原生实现（直查 SQLite：单/双引号 SQL 均支持）——始终可用
-      · `ta <cmd>`  宿主 MCP 工具路由（shell 内直调 MCP 工具）
-      其余原生二进制（ldid/opainject/optool/insert_dylib/ct_bypass 等）由对应 MCP 工具内部调用，AI 无需直接执行。
-      所有原生入口与统一环境共享 /ios_workspace 文件系统（中间数据文件流转）。
+    - MEASURED EDGE CASES (jtool2 empty output / nscan usage / installer / provision / auto-bind): on tool errors or
+      environment boundary limits, first `skills.read "Shell & Env 边界参考"` for measured conclusions; if skills are
+      unavailable, fall back to the error hints.
+    - OUTPUT & TRUNCATION (v4.4.9): shell.exec defaults to limit=16000; when output shows the "truncated" notice, read the
+      full <path> before analyzing — never conclude from truncated fragments; for reverse-engineering/analysis prefer full=true or limit=50000.
+    - UNIFIED ENVIRONMENT (v6.6.0 — no routing): shell.exec has no runtime param — all commands run by default in the
+      unified environment: TrollRuntime (full Alpine Linux toolchain) — an aarch64 Linux container; every Alpine package
+      executes natively as ARM64. ls/cat/grep/find/sed/awk/tar/git/python3/sqlite3/curl/ps/df etc. are all available;
+      apk add installs anything (pip/git/build toolchain).
+      【No iOS-native shell fallback】: notifyutil/uicache/sbreload/idevice_id/swift/jtool2 do NOT exist
+      (plutil/sqlite3 have Swift-native implementations — see NATIVE ENTRYPOINTS, usable directly); sysctl is Alpine's
+      (no /proc/sys, kern.* not queryable); ps only sees container processes, not iOS-side processes.
+      Mach-O analysis: Alpine binutils (objdump/nm/strings/readelf/size) or llvm-objdump.
+      All commands/pipes/paths work in the unified env — it is unified, check the command itself before concluding.
+    - PYTHON3 & PY3-NATIVE (v6.6.0-fix15): python3 = unified env (Alpine aarch64), runs natively — apk add python3
+      py3-numpy etc. for daily scripts/packages/ecosystem. py3-native = native Python entry (shell.exec routed prefix,
+      runs on the iPhone chip) — for heavy numpy/pandas compute (big matrices/data analysis/model inference);
+      usage: `py3-native -c "..."` / `py3-native script.py` / `py3-native -m pip list` (no extra param, the prefix itself routes).
+      If py3-native reports "native Python not bundled" (build lacks Python.xcframework) → auto-fallback to python3
+      (unified env, apk add py3-numpy). Both share /ios_workspace file flow.
+    - NODE & NODE-NATIVE (v6.6.0-fix15): node = unified env (Alpine aarch64), runs natively — apk add nodejs, light JS/daily use.
+      node-native = native node entry (shell.exec routed prefix, V8 on the chip) — heavy node loads (build tools/bundlers/webpack);
+      usage: `node-native -e "..."` / `node-native script.js` (the prefix routes). If node-native reports "native node not bundled"
+      (build lacks nodejs-mobile) → fallback to node (unified env nodejs).
+    - NATIVE ENTRYPOINTS OVERVIEW (shell.exec routed prefixes — native chip execution, NOT Alpine commands; do NOT check
+      with `command -v` inside the unified env):
+      · `py3-native <args>`  native Python (heavy numpy/pandas compute; auto-fallback to python3 if Python.xcframework not bundled)
+      · `node-native <args>` native node (heavy V8 load; auto-fallback to node if nodejs-mobile not bundled)
+      · `plutil <opts> <file>`  Swift-native implementation (plist read/convert: -p to view, -convert xml1 -o out to convert) — always available
+      · `sqlite3 <db> "<query>"`  Swift-native implementation (direct SQLite query; single/double-quoted SQL supported) — always available
+      · `ta <cmd>`  host MCP tool routing (call MCP tools from inside shell)
+      Other native binaries (ldid/opainject/optool/insert_dylib/ct_bypass etc.) are invoked internally by MCP tools — do not run them directly.
+      All native entries share /ios_workspace with the unified env (intermediate file flow).
 
-    - COMMAND EXISTENCE (v4.5.9, 实测边界): App 视角下 `ls /usr/bin` 目录枚举只显示系统 daemon 子集
-      (swift-inspect/sysdiagnose 等)，常用命令(chmod/ls/cp/launchctl)不会出现在目录列表里——但【直接路径访问正常】。
-      确认某命令是否存在，用 `command -v <名>` 或 `ls -la /usr/bin/<名>` / `/usr/sbin/<名>`；【不要】用 `ls <目录>` 枚举
-      判断系统缺命令——那会误判。launchctl 在此环境位于 /usr/bin/launchctl。
+    - COMMAND EXISTENCE (v4.5.9, measured edge): from the App's view `ls /usr/bin` only lists a subset of system daemons
+      (swift-inspect/sysdiagnose etc.); common commands (chmod/ls/cp/launchctl) do NOT appear in directory listings — but
+      direct path access works fine. To check a command, use `command -v <name>` or `ls -la /usr/bin/<name>` / `/usr/sbin/<name>`;
+      do NOT judge missing commands by `ls <dir>` enumeration — it misleads. launchctl lives at /usr/bin/launchctl here.
     - iOS↔Alpine AUTO-BIND (v4.4.0/14c0): Alpine commands auto-mount iOS paths /var/mobile/Documents/Workspace→/ios_workspace(读写),
-      /var/containers→/ios_containers, /System→/ios_system(只读); 【仅此三个】——/ios_appdata、/ios_appgroups 不存在。
-      /ios_containers 是骨架目录（Data 下仅 System、Bundle 下仅 Application），读不到真实 App 容器；Alpine 直读无 2MB 限制。
-      /var/mobile 整棵【不】自动绑定(自引用→内核污染→崩溃); 读指定 App 数据容器用 bind_app bundle_id:<id>→/ios_data_<app>
-      (只读), 写用 bind_app_write(先自动备份 Documents+Library 到工作区 backups/)。auto-bind 只改命令行不改脚本内
-      路径 — sh/heredoc 脚本里用 /ios_* 路径, 或改 python3 脚本。
-    - GIT/WGET/CURL (v6.6.0): 统一环境（Alpine）预装 git 2.x/wget/curl——clone/pull/push/log 全支持，无需手动装；
-    - PROVISION (manual): 【不会自动装包】——缺工具必须显式 `apk add <pkg>`（sqlite3/file/nano/make/cmake/gcc/clang/
-      openssl/radare2 等均可用 apk 装，radare2 在 community 仓库）。安装失败读结构化诊断, 重试一次或说明真因, 不盲重试;
-      安装进度 60-240s 属正常, 别解读为卡死。装包前先 `df -h /` 检查磁盘（当前 94% 已用，仅剩约 7G，勿乱装大包）。
-      iOS 构建工具链(Theos+clang)不可装, 用 PC 交叉编译 / GitHub Actions。
+      /var/containers→/ios_containers, /System→/ios_system (read-only); 【only these three】— /ios_appdata and /ios_appgroups
+      do NOT exist. /ios_containers is a skeleton dir (Data has only System, Bundle only Application) — real app containers are
+      not readable there; Alpine reads directly with no 2MB limit. /var/mobile as a whole is 【NOT】 auto-bound
+      (self-reference → kernel pollution → crash); to read a specific app's data container use bind_app bundle_id:<id>→/ios_data_<app>
+      (read-only), to write use bind_app_write (auto-backups Documents+Library to workspace backups/ first). auto-bind rewrites
+      command-line paths only, not paths inside scripts — in sh/heredoc scripts use /ios_* paths, or patch python3 scripts.
+    - GIT/WGET/CURL (v6.6.0): preinstalled in the unified env (Alpine) — git 2.x/wget/curl, clone/pull/push/log fully
+      supported; no manual install needed;
+    - PROVISION (manual): 【packages are NOT auto-installed】— you MUST explicitly `apk add <pkg>` (sqlite3/file/nano/
+      make/cmake/gcc/clang/openssl/radare2 are all installable via apk; radare2 lives in the community repo). On install
+      failure read the structured diagnostics, retry once or state the real cause — no blind retries; install progress
+      60-240s is normal, don't read it as a hang. Before installing, run `df -h /` to check disk (currently 94% used,
+      ~7G left — don't install big packages casually). The iOS build toolchain (Theos+clang) is NOT installable — use
+      PC cross-compilation / GitHub Actions.
 
     === REVERSE / BINARY ANALYSIS (authoritative) ===
     - FILE ANALYSIS MIN PATH (v4.3.70, 禁止装死): 用户上传/给出未知文件时，分析工具始终已注册且可用，
