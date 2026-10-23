@@ -65,11 +65,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             let spawnResult = InjectionManager.shared.spawnRootDetailed(helperPath, args: [pidStr], timeout: 10)
             logJIT("[JIT] jit_helper rc=\(spawnResult.code) timedOut=\(spawnResult.timedOut) signaled=\(spawnResult.signaled) stderr=\(spawnResult.stderr.prefix(200))\n")
             if spawnResult.code == 0 {
-                ("[appmain] JIT enabled via jit_helper (attach pid \(pidStr), rc=0) — no URL needed\n" as NSString).utf8String.map { fputs($0, stderr) }
+                ("[appmain] JIT helper rc=0; still scheduling URL as double-insurance (rc=0 ≠ kernel released JIT, proven by v7.0.4.5 SIGBUS)\n" as NSString).utf8String.map { fputs($0, stderr) }
             } else {
-                ("[appmain] jit_helper rc=\(spawnResult.code) stderr=\(spawnResult.stderr.prefix(120)) — falling back to TrollStore URL\n" as NSString).utf8String.map { fputs($0, stderr) }
-                scheduleTrollStoreJITURL()
+                ("[appmain] jit_helper rc=\(spawnResult.code) — falling back to TrollStore URL\n" as NSString).utf8String.map { fputs($0, stderr) }
             }
+            // v7.0.4.7: 无论 helper rc 都无条件调 URL（v7.0.4.5 实测 rc=0 但 JIT 未生效 → SIGBUS；URL 是 v7.0.3 验证的可靠路径）
+            scheduleTrollStoreJITURL()
         } else {
             logJIT("[JIT] WARN jit_helper not found in bundle\n")
             fputs("[appmain] WARN: jit_helper not found in bundle — falling back to TrollStore URL\n", stderr)
