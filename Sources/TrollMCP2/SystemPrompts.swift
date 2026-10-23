@@ -423,6 +423,8 @@ final class SystemPrompts {
       iOS 特有命令（plutil/sysctl/notifyutil 等 Alpine 无）内部自动原生兜底；其余全部命令统一在环境执行。
       统一环境内命令/管道/路径全支持，
       先查 auto-bind 路径/命令本身——环境是统一的。
+      退役组件不再存在（v6.6.0 已全部清除，勿寻找/勿使用）：CELF/elf-runner、静态 busybox 工具集、
+      iSH 模拟器环境、原生双环境路由——一律不存在，命令只可能在 TrollRuntime 执行。
     - PY3-NATIVE (v6.6.0-fix15——AI 按场景选): python3 默认统一环境（Alpine——生态完整 apk/pip）；
       numpy/pandas 深度运算（大矩阵/数据分析/模型）→ 显式 `py3-native`（原生 Python 芯片直跑——性能好）。
       轻量脚本/装包/生态用 python3；重计算用 py3-native。两者共享 Workspace 文件系统（中间数据文件流转）。
