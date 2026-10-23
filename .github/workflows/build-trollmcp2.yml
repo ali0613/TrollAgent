@@ -98,6 +98,18 @@ jobs:
             tools/sqlite_wipe.c -lsqlite3 -o Resources/bin/sqlite_wipe || { echo "SQLITE_WIPE FAILED"; exit 1; }
           ls -lh Resources/bin/sqlite_wipe
 
+      - name: Build jit_helper (self-bootstrap JIT, copy of TrollStore RootHelper/jit.m)
+        run: |
+          mkdir -p Resources/bin
+          xcrun -sdk iphoneos clang -arch arm64 -mios-version-min=14.0 \
+            tools/jit_helper.c -o Resources/bin/jit_helper || { echo "JIT_HELPER FAILED"; exit 1; }
+          if ldid -S "Support/bin-entitlements.plist" "Resources/bin/jit_helper" 2>/tmp/jit_sign.err; then
+            echo ">>> jit_helper ldid signed (full entitlements)"
+          else
+            echo "WARN: jit_helper ldid sign failed: $(cat /tmp/jit_sign.err)"
+          fi
+          ls -lh Resources/bin/jit_helper
+
       - name: Build opainject (arm64 slice for TrollStore)
         # v3.0.43：预置 opainject 只有 arm64e slice，TrollStore(arm64 进程) spawn 报 EBADARCH(85)，
         # device.fake/injection.mem/probe 全部失效。用 Theos 按 ARCHS=arm64 重编（源码 Makefile 默认 arm64+arm64e）。
