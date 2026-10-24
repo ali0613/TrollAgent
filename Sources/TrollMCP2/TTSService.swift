@@ -238,60 +238,77 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     private static func sha256Rounds(_ stateIn: [UInt32], _ words: [UInt32], firstRound: Int) -> [UInt32] {
         var (a,b,c,d,e,f,g,h) = (stateIn[0],stateIn[1],stateIn[2],stateIn[3],stateIn[4],stateIn[5],stateIn[6],stateIn[7])
-        let mask = u32Mask
         let constants = (firstRound == 14) ? sha256BlockConstants : sha256RoundConstants
         let aligned = min(64, ((firstRound + 7) / 8) * 8)
         for index in firstRound..<aligned {
             let rotE = UInt64(e) * 0x100000001
             let rotA = UInt64(a) * 0x100000001
-            let t1 = (UInt64(h) &+ ((rotE &>> 6) ^ (rotE &>> 11) ^ (rotE &>> 25)) &+ UInt64(g ^ (e & (f ^ g))) &+ UInt64(constants[index]) &+ UInt64(words[index])) & 0xFFFFFFFF
-            let t2 = (((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((a & b) | (c & (a | b)))) & 0xFFFFFFFF
-            let na = (t1 &+ t2) & mask
-            let nd = (UInt64(d) &+ t1) & mask
+            let sA = UInt64(h) &+ ((rotE &>> 6) ^ (rotE &>> 11) ^ (rotE &>> 25)) &+ UInt64(g ^ (e & (f ^ g))) &+ UInt64(constants[index]) &+ UInt64(words[index])
+            let t1 = sA & 0xFFFFFFFF
+            let sB = ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((a & b) | (c & (a | b)))
+            let t2 = sB & 0xFFFFFFFF
+            let na = UInt32((t1 &+ t2) & 0xFFFFFFFF)
+            let nd = UInt32((UInt64(d) &+ t1) & 0xFFFFFFFF)
             (a,b,c,d,e,f,g,h) = (na,a,b,c,nd,e,f,g)
         }
         var index = aligned
         while index < 64 {
+            // 轮 1
             var rotE = UInt64(e) * 0x100000001
             var rotA = UInt64(a) * 0x100000001
             var t1 = (UInt64(h) &+ ((rotE &>> 6) ^ (rotE &>> 11) ^ (rotE &>> 25)) &+ UInt64(g ^ (e & (f ^ g))) &+ UInt64(constants[index]) &+ UInt64(words[index])) & 0xFFFFFFFF
-            let d1 = (UInt64(d) &+ t1) & mask
-            let h1 = (t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((a & b) | (c & (a | b)))) & mask
+            let d1 = UInt32((UInt64(d) &+ t1) & 0xFFFFFFFF)
+            let h1Sum = t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((a & b) | (c & (a | b)))
+            let h1 = UInt32(h1Sum & 0xFFFFFFFF)
+            // 轮 2
             rotE = UInt64(d1) * 0x100000001
             rotA = UInt64(h1) * 0x100000001
             t1 = (UInt64(g) &+ ((rotE &>> 6) ^ (rotE &>> 11) ^ (rotE &>> 25)) &+ UInt64(f ^ (d1 & (e ^ f))) &+ UInt64(constants[index + 1]) &+ UInt64(words[index + 1])) & 0xFFFFFFFF
-            let c1 = (UInt64(c) &+ t1) & mask
-            let g1 = (t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((h1 & a) | (b & (h1 | a)))) & mask
+            let c1 = UInt32((UInt64(c) &+ t1) & 0xFFFFFFFF)
+            let g1Sum = t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((h1 & a) | (b & (h1 | a)))
+            let g1 = UInt32(g1Sum & 0xFFFFFFFF)
+            // 轮 3
             rotE = UInt64(c1) * 0x100000001
             rotA = UInt64(g1) * 0x100000001
             t1 = (UInt64(f) &+ ((rotE &>> 6) ^ (rotE &>> 11) ^ (rotE &>> 25)) &+ UInt64(e ^ (c1 & (d1 ^ e))) &+ UInt64(constants[index + 2]) &+ UInt64(words[index + 2])) & 0xFFFFFFFF
-            let b1 = (UInt64(b) &+ t1) & mask
-            let f1 = (t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((g1 & h1) | (a & (g1 | h1)))) & mask
+            let b1 = UInt32((UInt64(b) &+ t1) & 0xFFFFFFFF)
+            let f1Sum = t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((g1 & h1) | (a & (g1 | h1)))
+            let f1 = UInt32(f1Sum & 0xFFFFFFFF)
+            // 轮 4
             rotE = UInt64(b1) * 0x100000001
             rotA = UInt64(f1) * 0x100000001
             t1 = (UInt64(e) &+ ((rotE &>> 6) ^ (rotE &>> 11) ^ (rotE &>> 25)) &+ UInt64(d1 ^ (b1 & (c1 ^ d1))) &+ UInt64(constants[index + 3]) &+ UInt64(words[index + 3])) & 0xFFFFFFFF
-            let a1 = (UInt64(a) &+ t1) & mask
-            let e1 = (t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((f1 & g1) | (h1 & (f1 | g1)))) & mask
+            let a1 = UInt32((UInt64(a) &+ t1) & 0xFFFFFFFF)
+            let e1Sum = t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((f1 & g1) | (h1 & (f1 | g1)))
+            let e1 = UInt32(e1Sum & 0xFFFFFFFF)
+            // 轮 5
             rotE = UInt64(a1) * 0x100000001
             rotA = UInt64(e1) * 0x100000001
             t1 = (UInt64(d1) &+ ((rotE &>> 6) ^ (rotE &>> 11) ^ (rotE &>> 25)) &+ UInt64(c1 ^ (a1 & (b1 ^ c1))) &+ UInt64(constants[index + 4]) &+ UInt64(words[index + 4])) & 0xFFFFFFFF
-            let h2 = (UInt64(h1) &+ t1) & mask
-            let d2 = (t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((e1 & f1) | (g1 & (e1 | f1)))) & mask
+            let h2 = UInt32((UInt64(h1) &+ t1) & 0xFFFFFFFF)
+            let d2Sum = t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((e1 & f1) | (g1 & (e1 | f1)))
+            let d2 = UInt32(d2Sum & 0xFFFFFFFF)
+            // 轮 6
             rotE = UInt64(h2) * 0x100000001
             rotA = UInt64(d2) * 0x100000001
             t1 = (UInt64(c1) &+ ((rotE &>> 6) ^ (rotE &>> 11) ^ (rotE &>> 25)) &+ UInt64(b1 ^ (h2 & (a1 ^ b1))) &+ UInt64(constants[index + 5]) &+ UInt64(words[index + 5])) & 0xFFFFFFFF
-            let g2 = (UInt64(g1) &+ t1) & mask
-            let c2 = (t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((d2 & e1) | (f1 & (d2 | e1)))) & mask
+            let g2 = UInt32((UInt64(g1) &+ t1) & 0xFFFFFFFF)
+            let c2Sum = t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((d2 & e1) | (f1 & (d2 | e1)))
+            let c2 = UInt32(c2Sum & 0xFFFFFFFF)
+            // 轮 7
             rotE = UInt64(g2) * 0x100000001
             rotA = UInt64(c2) * 0x100000001
             t1 = (UInt64(b1) &+ ((rotE &>> 6) ^ (rotE &>> 11) ^ (rotE &>> 25)) &+ UInt64(a1 ^ (g2 & (h2 ^ a1))) &+ UInt64(constants[index + 6]) &+ UInt64(words[index + 6])) & 0xFFFFFFFF
-            let f2 = (UInt64(f1) &+ t1) & mask
-            let b2 = (t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((c2 & d2) | (e1 & (c2 | d2)))) & mask
+            let f2 = UInt32((UInt64(f1) &+ t1) & 0xFFFFFFFF)
+            let b2Sum = t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((c2 & d2) | (e1 & (c2 | d2)))
+            let b2 = UInt32(b2Sum & 0xFFFFFFFF)
+            // 轮 8
             rotE = UInt64(f2) * 0x100000001
             rotA = UInt64(b2) * 0x100000001
             t1 = (UInt64(a1) &+ ((rotE &>> 6) ^ (rotE &>> 11) ^ (rotE &>> 25)) &+ UInt64(h2 ^ (f2 & (g2 ^ h2))) &+ UInt64(constants[index + 7]) &+ UInt64(words[index + 7])) & 0xFFFFFFFF
-            let e2 = (UInt64(e1) &+ t1) & mask
-            let a2 = (t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((b2 & c2) | (d2 & (b2 | c2)))) & mask
+            let e2 = UInt32((UInt64(e1) &+ t1) & 0xFFFFFFFF)
+            let a2Sum = t1 &+ ((rotA &>> 2) ^ (rotA &>> 13) ^ (rotA &>> 22)) &+ UInt64((b2 & c2) | (d2 & (b2 | c2)))
+            let a2 = UInt32(a2Sum & 0xFFFFFFFF)
             (a,b,c,d,e,f,g,h) = (a2,b2,c2,d2,e2,f2,g2,h2)
             index += 8
         }
