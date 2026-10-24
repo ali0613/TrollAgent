@@ -520,7 +520,7 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     }
 
     private func ensureWS(_ cb: @escaping (URLSessionWebSocketTask?) -> Void) {
-        if let w = wsTask, w.state == .running || w.state == .waitingForConnectivity { cb(w); return }
+        if let w = wsTask { cb(w); return }   // 连接对象在就复用；异常时 receive/send 失败路径会自动 closeWS 重建
         closeWS()
         let gec = secMsGecV2()
         let connId = UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "")
