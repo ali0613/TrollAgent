@@ -1,9 +1,11 @@
 import Foundation
 import AVFoundation
 import Combine
+import CommonCrypto
 
 /// v4.4.19：Edge TTS 朗读服务（流水线预取版）。
-/// - 走 Cloudflare Worker 中转 `tts.trollagent.cc.cd`（国内裸连可用）
+/// v7.2.0：直连微软 Edge TTS（去掉 Cloudflare Worker 中转——tts.trollagent.cc.cd 被墙 SNI 阻断，
+/// speech.platform.bing.com 国内合规可达；照 edge-tts 原版：Sec-MS-GEC token + WebSocket 分片拼接）
 /// - 夹子音：zh-CN-XiaoyiNeural + pitch +30Hz（用户选定）
 /// - mp3 直接内存播放（AVAudioPlayer(data:)，不写文件 → 播完即丢）
 /// - **流水线预取**：边播放当前句、边在后台合成下一句，句间无缝（实测串行每句干等 2-3s 会卡，预取消除空洞）
@@ -26,7 +28,10 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     /// 当前手动朗读的消息 id（气泡喇叭高亮用；流式自动朗读不设）
     @Published var speakingId: String?
 
-    private let baseURL = "https://tts.trollagent.cc.cd/tts"
+    private static let trustedClientToken = "6A5AA1D4EAFF4E9FB37E23D68491D6F4"
+    private static let wsBaseURL = "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1"
+    private static let windowsTick: Int64 = 116444736000000000
+    private static let gecOffset: Int64 = Int64(0.6 * 1e7)
     private let voice = "zh-CN-XiaoyiNeural"
     // v4.5.7：语速提升 +10%（rate）；磁性——夹子音基调下调音高(pitch +30Hz→+15Hz)让声音更醇厚
     private let pitch = "+15Hz"
@@ -132,19 +137,119 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         pump()   // 播完 → 播下一句（已预取）+ 继续预取再下一句
     }
 
-    // MARK: - 合成
+    // MARK: - 合成（v7.2.0：直连微软 Edge TTS，照 edge-tts 原版）
+
+    /// edge-tts 的 Sec-MS-GEC 算法：tick = WINDOWS_TICK + 当前时间(1e7) - 偏移 → SHA256(tick+token) 大写
+    private func secMsGec() -> (gec: String, ts: String) {
+        let timestamp = Int64(Date().timeIntervalSince1970 * 1e7)
+        let tick = Self.windowsTick + timestamp - Self.gecOffset
+        let gec = sha256Hex("\(tick)\(Self.trustedClientToken)").uppercased()
+        return (gec, "\(timestamp - Self.gecOffset)")
+    }
+
+    private func sha256Hex(_ s: String) -> String {
+        let d = Data(s.utf8)
+        var h = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        d.withUnsafeBytes { _ = CC_SHA256($0.baseAddress, CC_LONG(d.count), &h) }
+        return h.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// SSML 文本转义（& < > " '）
+    private func xmlEscape(_ s: String) -> String {
+        var o = s.replacingOccurrences(of: "&", with: "&amp;")
+        o = o.replacingOccurrences(of: "<", with: "&lt;")
+        o = o.replacingOccurrences(of: ">", with: "&gt;")
+        o = o.replacingOccurrences(of: "\"", with: "&quot;")
+        o = o.replacingOccurrences(of: "'", with: "&apos;")
+        return o
+    }
 
     private func synthesize(_ text: String, completion: @escaping (Data?) -> Void) {
-        guard let url = URL(string: baseURL) else { completion(nil); return }
+        let (gec, gecTs) = secMsGec()
+        let connId = UUID().uuidString
+        guard let url = URL(string: "\(Self.wsBaseURL)?TrustedClientToken=\(Self.trustedClientToken)&ConnectionId=\(connId)") else {
+            completion(nil); return
+        }
         var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.timeoutInterval = 40
-        req.httpBody = try? JSONSerialization.data(withJSONObject: ["text": text, "voice": voice, "pitch": pitch, "rate": rate])
-        URLSession.shared.dataTask(with: req) { data, _, err in
-            guard err == nil, let data, data.count > 100 else { completion(nil); return }
-            completion(data)
-        }.resume()
+        req.setValue(gec, forHTTPHeaderField: "Sec-MS-GEC")
+        req.setValue(gecTs, forHTTPHeaderField: "Sec-MS-GEC-Timestamp")
+        req.setValue("chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold", forHTTPHeaderField: "Origin")
+        req.setValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.66 Safari/537.36 Edg/103.0.1264.44", forHTTPHeaderField: "User-Agent")
+
+        let session = URLSession(configuration: .ephemeral)
+        let ws = session.webSocketTask(with: req, subprotocols: ["speech-synthesis"])
+        ws.resume()
+
+        let ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='\(voice)'><prosody pitch='\(pitch)' rate='\(rate)' volume='+0%'>\(xmlEscape(text))</prosody></voice></speak>"
+        let msg: [String: Any] = [
+            "context": [
+                "synthesis": [
+                    "audio": [
+                        "metadataoptions": ["sentenceBoundaryEnabled": "false", "wordBoundaryEnabled": "true"],
+                        "outputFormat": "audio-24khz-48kbitrate-mono-mp3"
+                    ]
+                ]
+            ],
+            "message": [
+                "locale": "zh-CN", "market": "zh-CN",
+                "voice": voice, "service": "edge-tts",
+                "text": text, "ssml": ssml
+            ]
+        ]
+        guard let body = try? JSONSerialization.data(withJSONObject: msg),
+              let json = String(data: body, encoding: .utf8) else { completion(nil); return }
+        let payload = "X-Timestamp:\(Date().timeIntervalSince1970)\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.synthesize\r\n\r\n\(json)"
+
+        var audio = Data()
+        var finished = false
+        let timeoutWork = DispatchWorkItem { [weak ws] in
+            guard !finished else { return }
+            finished = true
+            ws?.cancel()
+            completion(nil)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 40, execute: timeoutWork)
+
+        func receiveLoop() {
+            ws.receive { result in
+                switch result {
+                case .success(let message):
+                    switch message {
+                    case .data(let d):
+                        audio.append(d)
+                        receiveLoop()
+                    case .string(let s):
+                        if s.contains("Path:turn.end") || s.contains("turn.end") {
+                            guard !finished else { return }
+                            finished = true
+                            timeoutWork.cancel()
+                            ws.cancel()
+                            completion(audio.count > 100 ? audio : nil)
+                        } else {
+                            receiveLoop()
+                        }
+                    @unknown default:
+                        receiveLoop()
+                    }
+                case .failure:
+                    guard !finished else { return }
+                    finished = true
+                    timeoutWork.cancel()
+                    completion(audio.count > 100 ? audio : nil)
+                }
+            }
+        }
+        ws.send(.string(payload)) { err in
+            if err != nil {
+                guard !finished else { return }
+                finished = true
+                timeoutWork.cancel()
+                ws.cancel()
+                completion(nil)
+            } else {
+                receiveLoop()
+            }
+        }
     }
 
     /// 按中文/英文句末标点与换行切分
