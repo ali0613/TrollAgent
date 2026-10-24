@@ -147,6 +147,8 @@ static BOOL HUDIsZh(void) {
     BOOL _listening;
     NSTimer *_silenceTimer;
     NSDate *_lastWordTime;
+    AVAudioPlayer *_ttsPlayer;            // v7.2.5：强持有播放器（局部变量会被 ARC 释放→朗读无声）
+    AVSpeechSynthesizer *_hintSpeaker;    // v7.2.5：强持有权限提示合成器
     CGFloat _charScale;        // v6.0.12：角色站姿放大系数（rabit 1.4 / cat 1.2 / girl 1.0）
     NSArray<UIImage *> *_liftFrames;   // v6.0.12：拖起悬空挣扎帧（lift1/lift2，拖拽时交替显示）
     NSArray<UIImage *> *_squatFrames;  // v6.0.12：蹲坐/跪姿帧集合（显示时按站姿缩小）
@@ -1879,6 +1881,7 @@ fest = HUDIsZh() ? @[@"周末啦！陪我玩一整天！", @"今天是个好日�
     // v6.0.17：蹲坐/跪姿帧整体 ×0.55——按用户最终定案（蹲坐原图比站姿大太多，缩到用户认可的协调比例）
     // v6.0.19：蹲坐/跪姿帧整体 ×0.7——用户从0.55回调（0.55太小说不清表情，0.7居中协调）
     if (_squatFrames && [_squatFrames containsObject:img]) size = size * 0.7f;
+    if (img == _sitImage) size = size * 0.7f;   // v7.2.5：坐姿帧（长按说话）同蹲坐比例缩小
     if (_liftFrames && [_liftFrames containsObject:img]) size = size * 0.8f;   // v6.0.14：悬空帧手脚张开占画面大，缩小显示使头部/手臂面积≈站姿
     CGFloat aspect = (img.size.height > 0) ? (img.size.width / img.size.height) : 1.0;
     CGFloat w = size * aspect;
@@ -2810,11 +2813,11 @@ static UIImage *softParticleImage(CGFloat size) {
 
 /// 权限被拒提示（系统 TTS 说一句）
 - (void)_speakLocalHint {
-    AVSpeechSynthesizer *s = [AVSpeechSynthesizer new];
+    if (!_hintSpeaker) _hintSpeaker = [AVSpeechSynthesizer new];   // 强持有，防 ARC 释放中断
     AVSpeechUtterance *u = [AVSpeechUtterance speechUtteranceWithString:@"请先允许麦克风和语音识别权限"];
     u.voice = [AVSpeechSynthesisVoice voiceWithLanguage:@"zh-CN"];
     u.rate = 0.5f;
-    [s speakUtterance:u];
+    [_hintSpeaker speakUtterance:u];
 }
 
 /// 真正开始录音 + 识别
@@ -3067,7 +3070,10 @@ Path:speech.synthesize
     [sess setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionDuckOthers error:&err];
     [sess setActive:YES error:&err];
     AVAudioPlayer *p = [[AVAudioPlayer alloc] initWithData:audio error:&err];
-    if (p) [p play];
+    if (p) {
+        _ttsPlayer = p;   // v7.2.5：强持有到播完/下一次，否则 ARC 释放 → 无声
+        [p play];
+    }
 }
 
 @end
