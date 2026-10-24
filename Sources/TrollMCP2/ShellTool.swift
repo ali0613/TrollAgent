@@ -1973,3 +1973,49 @@ final class ShellExecTool: MCPTool {
         return filtered.joined(separator: "\n")
     }
 }
+
+/// v7.2.0：系统侧 spawn 执行 Mach-O（jroot / 越狱二进制）——shell.exec 的互补通道。
+/// 背景：shell.exec 跑在 TrollRuntime Alpine 容器（Linux ELF 内核），执行 Apple Mach-O
+/// （越狱版 clang/ldid/dpkg-deb/Theos 产物）报 ENOEXEC「格式错误」——容器内核不认。
+/// 系统侧 posix_spawn（InjectionManager.spawnRootDetailed，App 内部跑 ldid//bin/ps 同机制）
+/// 在 iOS 系统侧执行 Mach-O，stdout/stderr 经管道拿回，完全可用。
+/// 规则：容器工具（apk 装的 ELF）用 shell.exec；越狱/Mach-O 工具用 system.exec_root。
+final class SystemExecRootTool: MCPTool {
+    let definition = ToolDefinition(
+        name: "system.exec_root",
+        summary: "Execute a binary on the iOS system side (root posix_spawn, NOT the Linux container). Use for: run jailbreak-native Mach-O tools from jroot — /var/jb/usr/bin/ldid, clang, dpkg-deb, theos binaries — which the container shell.exec CANNOT execute (TrollRuntime Alpine kernel is Linux/ELF, rejects Apple Mach-O with ENOEXEC format error). Also fine for /bin/ps, /usr/bin/otool, bundled ldid. Don't use for: normal commands (use shell.exec), apk-installed Linux tools (they are ELF, run in shell.exec). Example: user says 'sign this dylib with ldid' → system.exec_root path:/var/jb/usr/bin/ldid args:[\"-S\",\"/path/file\"] → Mach-O executes natively, stdout/stderr returned. stdout+stderr merged in output; exit=0 means success, nonzero means the tool itself failed (read its error).",
+        parameters: [
+            "path": "Absolute path of the Mach-O binary to execute (required)",
+            "args": "Optional array of argument strings (default empty)",
+            "timeout": "Optional timeout seconds (default 60, max 600)",
+            "limit": "Optional Int: result string truncation cap (default 16000 chars)",
+        ],
+        verified: true
+    )
+
+    func invoke(_ params: [String: Any]) throws -> [String: Any] {
+        guard let path = params["path"] as? String, !path.isEmpty else {
+            throw MCPError.invalidParams("path required")
+        }
+        let args = params["args"] as? [String] ?? []
+        let timeout = (params["timeout"] as? Double) ?? 60
+        let outLimit = (params["limit"] as? Int) ?? 16000
+
+        let r = InjectionManager.shared.spawnRootDetailed(path, args: args, timeout: min(timeout, 600))
+        var output = r.stdout
+        if !r.stderr.isEmpty {
+            output += output.isEmpty ? r.stderr : "\n" + r.stderr
+        }
+        if outLimit > 0 && output.count > outLimit {
+            output = String(output.prefix(outLimit)) + "\n…[truncated]"
+        }
+        AuditLog.shared.log("system.exec_root", detail: "path=\(path) exit=\(r.code) sig=\(r.signaled ? r.signal : 0) out=\(String(output.prefix(200)))")
+        var result: [String: Any] = [
+            "exit": Int(r.code),
+            "output": output,
+        ]
+        if r.timedOut { result["timed_out"] = true }
+        if r.signaled { result["signal"] = Int(r.signal) }
+        return result
+    }
+}
