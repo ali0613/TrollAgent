@@ -1983,15 +1983,41 @@ final class ShellExecTool: MCPTool {
 final class SystemExecRootTool: MCPTool {
     let definition = ToolDefinition(
         name: "system.exec_root",
-        summary: "Execute a binary on the iOS system side (root posix_spawn, NOT the Linux container). Use for: run jailbreak-native Mach-O tools from jroot — /var/jb/usr/bin/ldid, clang, dpkg-deb, theos binaries — which the container shell.exec CANNOT execute (TrollRuntime Alpine kernel is Linux/ELF, rejects Apple Mach-O with ENOEXEC format error). Also fine for /bin/ps, /usr/bin/otool, bundled ldid. Don't use for: normal commands (use shell.exec), apk-installed Linux tools (they are ELF, run in shell.exec). Example: user says 'sign this dylib with ldid' → system.exec_root path:/var/jb/usr/bin/ldid args:[\"-S\",\"/path/file\"] → Mach-O executes natively, stdout/stderr returned. stdout+stderr merged in output; exit=0 means success, nonzero means the tool itself failed (read its error).",
+        summary: "Execute a binary on the iOS system side (root posix_spawn, NOT the Linux container). Use for: run jailbreak-native Mach-O tools from jroot — /var/jb/usr/bin/ldid, clang, dpkg-deb, theos binaries — which the container shell.exec CANNOT execute (TrollRuntime Alpine kernel is Linux/ELF, rejects Apple Mach-O with ENOEXEC format error). Also fine for /bin/ps, /usr/bin/otool, bundled ldid. Only execute known trusted tool binaries (system/jroot tools or your own built Mach-O), never arbitrary files from /var/mobile. Don't use for: normal commands (use shell.exec), apk-installed Linux tools (they are ELF, run in shell.exec), scripts or ELF files (will be rejected — they belong in shell.exec). Example: user says 'sign this dylib with ldid' → system.exec_root path:/var/jb/usr/bin/ldid args:[\"-S\",\"/path/file\"] → Mach-O executes natively, stdout+stderr returned. exit=0 means success, nonzero means the tool itself failed (read its error). stdout/stderr are returned separately too (stdout may be binary, e.g. ldid -e bplist → raw_base64 has the exact bytes).",
         parameters: [
-            "path": "Absolute path of the Mach-O binary to execute (required)",
+            "path": "Absolute path of the Mach-O binary to execute (required). Must exist and be a real Mach-O (elf/script → rejected with a hint to use shell.exec)",
             "args": "Optional array of argument strings (default empty)",
             "timeout": "Optional timeout seconds (default 60, max 600)",
             "limit": "Optional Int: result string truncation cap (default 16000 chars)",
+            "env": "Optional dict of extra environment variables (default: PATH=/usr/bin:/bin:/usr/sbin:/sbin; pass {\"PATH\":\"/var/jb/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin\"} for jroot toolchains that need their own bin dir)",
         ],
         verified: true
     )
+
+    /// 与 shell.exec 一致的危险命令模式——root 权限下更严格，直接拒绝。
+    private static let dangerousArgsPatterns: [(NSRegularExpression, String)] = {
+        let raw: [(String, String)] = [
+            ("(^|[/ ])rm\\s+(-[a-z]*r[a-z]*)?\\s*\\s-?/?$|(^|[/ ])rm\\s+(-[a-z]*r[a-z]*)?\\s*/(\\s|$)", "rm -rf / (root wipe)"),
+            ("(^|[/ ])rm\\s+(-[a-z]*r[a-z]*)?\\s*~", "rm -rf ~"),
+            ("(^|[/ ])dd\\s+if=(/dev/|of=/dev/)", "dd raw device write"),
+            ("(^|[/ ])mkfs\\.", "mkfs filesystem format"),
+            ("(^|[/ ]):\\(\\)\\{", "fork bomb"),
+            ("(^|[/ ])shutdown\\b|(^|[/ ])reboot\\b|(^|[/ ])halt\\b", "system shutdown"),
+        ]
+        return raw.map { (try! NSRegularExpression(pattern: $0.0, options: [.caseInsensitive]), $0.1) }
+    }()
+
+    /// 读文件头判断是否 Mach-O
+    private static func machOType(of path: String) -> String? {
+        guard let h = try? Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe).prefix(4) else { return nil }
+        let b = [UInt8](h)
+        if b.count == 4 {
+            if b == [0xCF, 0xFA, 0xED, 0xFE] || b == [0xFE, 0xED, 0xFA, 0xCF] ||
+               b == [0xCA, 0xFE, 0xBA, 0xBE] { return "macho" }
+            if b == [0x7F, 0x45, 0x4C, 0x46] { return "elf" }
+        }
+        return "other"
+    }
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
         guard let path = params["path"] as? String, !path.isEmpty else {
@@ -2000,8 +2026,33 @@ final class SystemExecRootTool: MCPTool {
         let args = params["args"] as? [String] ?? []
         let timeout = (params["timeout"] as? Double) ?? 60
         let outLimit = (params["limit"] as? Int) ?? 16000
+        let extraEnv = params["env"] as? [String: String]
 
-        let r = InjectionManager.shared.spawnRootDetailed(path, args: args, timeout: min(timeout, 600))
+        // 1) 文件必须存在
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir) else {
+            throw MCPError.invalidParams("path not found: \(path) — confirm the binary exists (check with shell.exec \"ls\"; jroot paths only exist on jailbroken devices)")
+        }
+        if isDir.boolValue {
+            throw MCPError.invalidParams("path is a directory: \(path) — pass the binary file path")
+        }
+        // 2) 必须真是 Mach-O（ELF/脚本 → 指回 shell.exec，防误用）
+        let kind = SystemExecRootTool.machOType(of: path)
+        if kind == "elf" {
+            throw MCPError.invalidParams("\(path) is a Linux ELF binary — run it with shell.exec, NOT system.exec_root (system.exec_root only executes Apple Mach-O)")
+        }
+        if kind != "macho" {
+            throw MCPError.invalidParams("\(path) is not a Mach-O binary (script/unknown format) — system.exec_root executes Mach-O only; scripts go through shell.exec")
+        }
+        // 3) 危险参数检测（root 权限直接拒绝）
+        let joinedArgs = args.joined(separator: " ")
+        for (re, why) in SystemExecRootTool.dangerousArgsPatterns {
+            if re.firstMatch(in: joinedArgs, options: [], range: NSRange(location: 0, length: (joinedArgs as NSString).length)) != nil {
+                throw MCPError.invalidParams("refused: \(why) — system.exec_root runs as root; destructive ops are blocked. Use a safe operation instead.")
+            }
+        }
+
+        let r = InjectionManager.shared.spawnRootDetailed(path, args: args, timeout: min(timeout, 600), extraEnv: extraEnv)
         var output = r.stdout
         if !r.stderr.isEmpty {
             output += output.isEmpty ? r.stderr : "\n" + r.stderr
@@ -2014,6 +2065,12 @@ final class SystemExecRootTool: MCPTool {
             "exit": Int(r.code),
             "output": output,
         ]
+        // 分开返回，供解析（ldid -e 等取 stdout；二进制输出用 raw_base64）
+        if !r.stdout.isEmpty { result["stdout"] = r.stdout }
+        if !r.stderr.isEmpty { result["stderr"] = r.stderr }
+        if !r.rawStdout.isEmpty {
+            result["raw_base64"] = r.rawStdout.base64EncodedString()
+        }
         if r.timedOut { result["timed_out"] = true }
         if r.signaled { result["signal"] = Int(r.signal) }
         return result

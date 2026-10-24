@@ -511,8 +511,10 @@ final class InjectionManager {
     /// - stdout/stderr 分离：解析类命令 (ldid -e 等）可只取 stdout，根治"stderr 噪音混进结果"
     /// - 超时：默认 60s，超时 SIGKILL → code=-2，调用方可报 [TOOL_TIMEOUT]
     /// - signal/exit 区分：被信号杀死的命令 → signaled=true + signal 号，而非误报 exit code
+    /// v7.2.0：extraEnv 可选——追加/覆盖子进程环境变量（jroot 工具链需要 PATH 含
+    /// /var/jb/usr/bin 时传入）。默认 nil 行为与旧版完全一致。
     /// 保持 v2.9.57 的非阻塞 pipe + DispatchSource 异步读取 + waitpid 同步等待。
-    func spawnRootDetailed(_ path: String, args: [String], timeout: Double = 60) -> SpawnResult {
+    func spawnRootDetailed(_ path: String, args: [String], timeout: Double = 60, extraEnv: [String: String]? = nil) -> SpawnResult {
         // v2.9.281：argv[0] 放可执行路径 (posix_spawn 程序名惯例）。之前 argv[0]=args[0]
         // 导致 trollstorehelper 的 main (从 argv[1] 解析 cmd）把命令参数当成命令：
         // install/uninstall/refresh-all 全部假OK返回 0，实际从未执行 (小红书装不上根因）。
@@ -565,6 +567,9 @@ final class InjectionManager {
         }
         envBuilder["DISABLE_TWEAKS"] = "1"
         envBuilder["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
+        if let extra = extraEnv {
+            for (k, v) in extra { envBuilder[k] = v }
+        }
         var env: [UnsafeMutablePointer<CChar>?] = envBuilder.map { strdup("\($0.key)=\($0.value)") }
         env.append(nil)
         defer { for p in env where p != nil { free(p) } }
