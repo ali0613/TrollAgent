@@ -26,19 +26,26 @@ jobs:
       # v4.5.x: bump 版本号（patch +1，CFBundleVersion +1），commit [skip ci] 写回 main。
       # 目的：构建产物版本每次递增（7.1.0 → 7.1.1 → ...），App 内"检查更新"（读 main 分支
       # Support/Info.plist / jsDelivr @main / release title）能识别新版。[skip ci] 防循环触发。
+      # set -x + 逐步 echo：上轮 exit 1 无任何输出，必须能看到每一步。
       - name: Bump version and persist to main
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -x
           VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Support/Info.plist)
+          echo "VER=$VER"
           IFS=. read -r MAJ MIN PAT <<< "$VER"
           PAT="${PAT:-0}"
           NEW="$MAJ.$MIN.$((PAT+1))"
+          echo "NEW=$NEW"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW" Support/Info.plist
           BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion")
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $((BUILD+1))" Support/Info.plist
+          echo "BUILD=$((BUILD+1))"
           git add Support/Info.plist
           git -c user.name="TrollAgent CI" -c user.email="ci@trollagent.local" \
             commit -m "chore: bump version to $NEW [skip ci]"
-          git push origin main
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
           echo ">>> version bumped to $NEW (build $((BUILD+1)))"
 
       - name: Install tools
