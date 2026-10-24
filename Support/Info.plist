@@ -107,7 +107,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>TrollAgent 需要位置信息以支持定位工具</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>TrollAgent 需要麦克风以支持语音输入</string>
+	<string>TrollAgent 需要麦克风权限用于按住说话（语音对话）。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>TrollAgent 需要相册以选择待识别的图片</string>
 	<key>NSRemindersUsageDescription</key>
@@ -115,7 +115,7 @@
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>TrollAgent 需要屏幕录制权限以支持 AI 控制 App 时的屏幕截图验证</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>TrollAgent 需要语音识别以支持转写功能</string>
+	<string>TrollAgent 需要语音识别权限用于把说的话转成文字。</string>
 	<key>TSRootBinaries</key>
 	<array>
 		<string>bin/insert_dylib</string>

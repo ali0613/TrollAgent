@@ -14,6 +14,9 @@
 #import <mach/mach.h>
 #import <objc/runtime.h> // v6.1.5-8：真实 app 图标（TrollStore/TheBall 同款私有 API）
 #import <dlfcn.h>       // v6.1.5-14b：点击打开 SBSLaunchApplicationWithIdentifier（运行时加载）
+#import <AVFoundation/AVFoundation.h>   // v7.2.5：HUD 语音（录音/播放）
+#import <Speech/Speech.h>              // v7.2.5：语音识别
+#import <CommonCrypto/CommonCrypto.h>  // v7.2.5：Edge TTS Sec-MS-GEC SHA256
 
 // v6.0.7：SpringBoardServices 是私有 framework（Xcode SDK 无头文件），直接 extern "C" 声明原型（.mm 是 C++，
 // 不加 extern "C" 会按 C++ 链接找不到 tbd 里的 C 符号），符号由 HUD/libraries/SpringBoardServices.framework/SpringBoardServices.tbd 链接提供
@@ -133,6 +136,17 @@ static BOOL HUDIsZh(void) {
     BOOL _isHidden;
     CGPoint _dragOffset;
     NSUInteger _moodSeqIndex;  // v6.0.9：待机有序循环当前帧序号（不再随机挑帧）
+    // ---- v7.2.5 HUD 语音：长按坐姿 + 头顶麦克风 + 按住说话 ----
+    UIImage *_sitImage;                  // 坐姿帧（长按显示）
+    UIButton *_micBtn;                   // 头顶圆形麦克风（长按出现，动态缩放）
+    BOOL _speakingMode;                  // 长按说话模式中
+    SFSpeechRecognizer *_stt;
+    SFSpeechAudioBufferRecognitionRequest *_sttReq;
+    SFSpeechRecognitionTask *_sttTask;
+    AVAudioEngine *_audioEngine;
+    BOOL _listening;
+    NSTimer *_silenceTimer;
+    NSDate *_lastWordTime;
     CGFloat _charScale;        // v6.0.12：角色站姿放大系数（rabit 1.4 / cat 1.2 / girl 1.0）
     NSArray<UIImage *> *_liftFrames;   // v6.0.12：拖起悬空挣扎帧（lift1/lift2，拖拽时交替显示）
     NSArray<UIImage *> *_squatFrames;  // v6.0.12：蹲坐/跪姿帧集合（显示时按站姿缩小）
@@ -263,6 +277,9 @@ static BOOL HUDIsZh(void) {
         }
         if (squats.count) _squatFrames = squats;
         if (mood.count) _moodFrames = mood;
+        // v7.2.5：坐姿帧（长按说话显示——用户要求长按不要压扁，换坐姿）
+        UIImage *sit = [UIImage imageNamed:[NSString stringWithFormat:@"%@_sit", prefix]];
+        if (sit) _sitImage = _trimTransparentPadding(sit);
         if (!idle) {
             // 兜底：纯色圆（资源缺失时仍可见）
             _idleFrames = @[ [self _placeholderCircle] ];
@@ -289,6 +306,17 @@ static BOOL HUDIsZh(void) {
     _girlView.contentMode = UIViewContentModeScaleAspectFit;
     _girlView.userInteractionEnabled = YES;
     [self.view addSubview:_girlView];
+
+    // v7.2.5：头顶圆形麦克风（长按说话指示器——动态放大缩小；平时隐藏）
+    _micBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    _micBtn.frame = CGRectMake(0, 0, 40, 40);
+    _micBtn.backgroundColor = [UIColor blackColor];
+    _micBtn.layer.cornerRadius = 20;
+    _micBtn.alpha = 0.0;
+    [_micBtn setImage:[UIImage systemImageNamed:@"mic.fill"] forState:UIControlStateNormal];
+    _micBtn.tintColor = [UIColor whiteColor];
+    _micBtn.userInteractionEnabled = NO;   // 只是指示器；说话靠长按手势（按住角色）
+    [self.view addSubview:_micBtn];
 
     CGFloat size = (CGFloat)g_hud_size * _charScale;   // 悬浮角色显示尺寸（v6.0.7 可调默认150；v6.0.12 乘角色放大系数：兔娘1.4/猫娘1.2）
     // v6.0.8：高固定 size、宽按裁剪后角色内容比例——aspectFit 填满、左右不留白，角色才能真正贴到屏幕边缘
@@ -543,6 +571,7 @@ static BOOL HUDIsZh(void) {
 - (void)_pan:(UIPanGestureRecognizer *)g {
     CGPoint p = [g locationInView:self.view];
     if (g.state == UIGestureRecognizerStateBegan) {
+        [self _cancelSpeakMode];   // v7.2.5：拖动时没有麦克风——打断长按说话（不发送）
         _isDragging = YES;
         if (_isHidden) { _isHidden = NO; self.view.alpha = 1.0; }   // v6.1.5-14ad：隐藏态拖拽即恢复显示（否则 0.1 小点被拖走还残留隐藏标志）
         _dragLastX = 0; _dragLastY = 0;  // v6.1.5-14o：拖拽倾斜速度基准重置
@@ -1900,15 +1929,11 @@ fest = HUDIsZh() ? @[@"周末啦！陪我玩一整天！", @"今天是个好日�
     if (_isDragging || _falling || _isHidden) return;
     [self _stopPoseShow];   // v6.1.5-14z：长按打断坐姿/跪姿展示
     if (g.state == UIGestureRecognizerStateBegan) {
-        [UIView animateWithDuration:0.18 animations:^{
-            _girlView.transform = CGAffineTransformMakeScale(1.25, 0.65);  // 捏扁
-        }];
+        // v7.2.5：长按 = 进入说话模式——坐姿 + 头顶麦克风（动态缩放）+ 开始录音
+        [self _enterSpeakMode];
     } else if (g.state == UIGestureRecognizerStateEnded || g.state == UIGestureRecognizerStateCancelled) {
-        [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.45 initialSpringVelocity:0.8 options:UIViewAnimationOptionCurveEaseOut animations:^{
-            _girlView.transform = CGAffineTransformIdentity;  // 弹回
-        } completion:^(BOOL f) {
-            [self _resetToIdleIfNeeded];
-        }];
+        // v7.2.5：松开 = 结束说话——隐藏麦克风 + 停止录音（识别→AI→TTS→播放）
+        [self _exitSpeakMode];
     }
 }
 // v6.1.5-14o：被摸/长按/蹦跳结束后若切了 happy 帧且非特殊状态，回到待机帧
@@ -2680,6 +2705,369 @@ static UIImage *softParticleImage(CGFloat size) {
     [_particleLayer removeFromSuperlayer];
     _particleLayer = nil;
     _particleColors = nil;   // v6.1.5-14aa：清粒子时释放颜色持有
+}
+
+
+// ============================================================
+// MARK: - v7.2.5 HUD 语音：长按说话（坐姿 + 头顶麦克风 + 录音→识别→AI→TTS）
+// ============================================================
+
+/// 长按进入说话模式：坐姿 + 头顶麦克风（动态放大缩小）+ 开始录音
+- (void)_enterSpeakMode {
+    if (_speakingMode) return;
+    _speakingMode = YES;
+    // 1) 坐姿（用户要求：长按不要压扁，换坐姿）
+    if (_sitImage) {
+        _girlView.image = _sitImage;
+        [self _setFrameForImage:_sitImage];
+        _girlView.transform = CGAffineTransformIdentity;
+    }
+    // 2) 头顶麦克风（跟角色顶部，动态放大缩小呼吸）
+    [self _showMicPulse];
+    // 3) 开始录音（静音 2.5s 或松开自动结束）
+    [self _startListening];
+}
+
+/// 松开结束说话：隐藏麦克风 + 停止录音（触发 识别→AI→TTS）
+- (void)_exitSpeakMode {
+    _speakingMode = NO;
+    [self _hideMicPulse];
+    [self _stopListeningAndSend];
+    [self _resetToIdleIfNeeded];
+}
+
+/// 拖动打断：取消说话模式，丢弃录音，不发送（v7.2.5 用户要求拖动无麦克风）
+- (void)_cancelSpeakMode {
+    if (!_speakingMode && !_listening) return;
+    _speakingMode = NO;
+    [self _hideMicPulse];
+    [self _abortListening];
+    [self _resetToIdleIfNeeded];
+}
+
+/// 显示头顶麦克风（角色顶部上方 30pt，动态放大缩小动画）
+- (void)_showMicPulse {
+    if (!_micBtn) return;
+    CGFloat top = _girlView.frame.origin.y;
+    _micBtn.center = CGPointMake(_girlView.center.x, top - 30);
+    _micBtn.alpha = 1.0;
+    [_micBtn.layer removeAnimationForKey:@"micPulse"];
+    CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+    pulse.fromValue = @0.85;
+    pulse.toValue = @1.18;
+    pulse.duration = 0.9;
+    pulse.autoreverses = YES;
+    pulse.repeatCount = HUGE_VALF;
+    [_micBtn.layer addAnimation:pulse forKey:@"micPulse"];
+}
+
+/// 隐藏头顶麦克风
+- (void)_hideMicPulse {
+    if (!_micBtn) return;
+    _micBtn.alpha = 0.0;
+    [_micBtn.layer removeAnimationForKey:@"micPulse"];
+}
+
+/// 开始听：先确保权限（麦克风 + 语音识别）
+- (void)_startListening {
+    if (_listening) return;
+    [self _ensureSpeechPermission:^(BOOL ok) {
+        if (!ok) { [self _speakLocalHint]; return; }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self _beginRecording];
+        });
+    }];
+}
+
+/// 权限申请（语音识别 + 麦克风，对齐 GirlVoice.swift）
+- (void)_ensureSpeechPermission:(void (^)(BOOL ok))completion {
+    SFSpeechRecognizerAuthorizationStatus stt = [SFSpeechRecognizer authorizationStatus];
+    AVAudioSessionRecordPermission mic = [[AVAudioSession sharedInstance] recordPermission];
+    BOOL needStt = stt != SFSpeechRecognizerAuthorizationStatusAuthorized;
+    BOOL needMic = mic != AVAudioSessionRecordPermissionGranted;
+    if (!needStt && !needMic) { completion(YES); return; }
+    __block int remaining = (needStt ? 1 : 0) + (needMic ? 1 : 0);
+    __block BOOL granted = YES;
+    if (needStt) {
+        [SFSpeechRecognizer requestAuthorization:^(SFSpeechRecognizerAuthorizationStatus s) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (s != SFSpeechRecognizerAuthorizationStatusAuthorized) granted = NO;
+                remaining--;
+                if (remaining == 0) completion(granted);
+            });
+        }];
+    }
+    if (needMic) {
+        [[AVAudioSession sharedInstance] requestRecordPermission:^(BOOL ok) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (!ok) granted = NO;
+                remaining--;
+                if (remaining == 0) completion(granted);
+            });
+        }];
+    }
+}
+
+/// 权限被拒提示（系统 TTS 说一句）
+- (void)_speakLocalHint {
+    AVSpeechSynthesizer *s = [AVSpeechSynthesizer new];
+    AVSpeechUtterance *u = [AVSpeechUtterance speechUtteranceWithString:@"请先允许麦克风和语音识别权限"];
+    u.voice = [AVSpeechSynthesisVoice voiceWithLanguage:@"zh-CN"];
+    u.rate = 0.5f;
+    [s speakUtterance:u];
+}
+
+/// 真正开始录音 + 识别
+- (void)_beginRecording {
+    NSError *err = nil;
+    AVAudioSession *sess = [AVAudioSession sharedInstance];
+    [sess setCategory:AVAudioSessionCategoryRecord withOptions:AVAudioSessionCategoryOptionDuckOthers error:&err];
+    [sess setActive:YES error:&err];
+
+    _stt = [[SFSpeechRecognizer alloc] initWithLocale:[NSLocale localeWithLocaleIdentifier:@"zh-CN"]];
+    if (!_stt.isAvailable) { [self _stopListeningAndSend]; return; }
+
+    _sttReq = [[SFSpeechAudioBufferRecognitionRequest alloc] init];
+    _sttReq.shouldReportPartialResults = YES;
+    _sttReq.taskHint = SFSpeechRecognitionTaskHintDictation;
+    if (@available(iOS 16.0, *)) { _sttReq.addsPunctuation = NO; }
+
+    _audioEngine = [[AVAudioEngine alloc] init];
+    AVAudioInputNode *inNode = _audioEngine.inputNode;
+    AVAudioFormat *fmt = [inNode outputFormatForBus:0];
+    _lastWordTime = [NSDate date];
+    _silenceTimer = [NSTimer scheduledTimerWithTimeInterval:0.8 target:self selector:@selector(_checkSilence) userInfo:nil repeats:YES];
+
+    __weak typeof(self) wself = self;
+    [inNode installTapOnBus:0 bufferSize:4096 format:fmt block:^(AVAudioPCMBuffer *buf, AVAudioTime *when) {
+        typeof(self) sself = wself;
+        if (!sself) return;
+        [sself->_sttReq appendAudioPCMBuffer:buf];
+        sself->_lastWordTime = [NSDate date];
+    }];
+    [_audioEngine prepare];
+    [_audioEngine startAndReturnError:&err];
+    _listening = YES;
+    _sttTask = [_stt recognitionTaskWithRequest:_sttReq resultHandler:^(SFSpeechRecognitionResult *result, NSError *error) {
+        // 最终文本在 _stopListeningAndSend 里取（result.bestTranscription）
+        if (error) { /* 结束路径 */ }
+    }];
+}
+
+/// 静音 2.5s 自动结束录音并发送
+- (void)_checkSilence {
+    if (!_listening || !_lastWordTime) return;
+    if ([[NSDate date] timeIntervalSinceDate:_lastWordTime] > 2.5) {
+        [self _stopListeningAndSend];
+    }
+}
+
+/// 停止录音：取最终识别文本 → 发 AI（persona，无工具）→ TTS 播放
+- (void)_stopListeningAndSend {
+    if (!_listening) { [self _abortListening]; return; }
+    [_silenceTimer invalidate]; _silenceTimer = nil;
+    _listening = NO;
+    NSString *text = @"";
+    if (_sttTask && _sttTask.result) {
+        text = _sttTask.result.bestTranscription.formattedString;
+    }
+    [_sttTask cancel]; _sttTask = nil;
+    [_audioEngine stop];
+    [_audioEngine.inputNode removeTapOnBus:0];
+    _audioEngine = nil;
+    _sttReq = nil;
+    text = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (text.length > 0) {
+        [self _askAI:text];
+    }
+}
+
+/// 丢弃录音（拖动打断用，不发送）
+- (void)_abortListening {
+    [_silenceTimer invalidate]; _silenceTimer = nil;
+    [_sttTask cancel]; _sttTask = nil;
+    [_audioEngine stop];
+    [_audioEngine.inputNode removeTapOnBus:0];
+    _audioEngine = nil;
+    _sttReq = nil;
+    _listening = NO;
+}
+
+/// 角色 persona 提示词（性格 + 轻量环境 facts；无工具——操作引导去文字聊天）
+- (NSString *)_personaPrompt {
+    NSString *role = @"girl";
+    if (g_hud_char) role = [NSString stringWithUTF8String:g_hud_char];
+    NSString *env = @"Environment: iOS 16.3, TrollStore sideload (no jailbreak, no /var/jb). App: TrollAgent. You speak through voice TTS, keep replies SHORT (1-2 sentences). NO TOOLS: voice mode has no tool access. If the user asks for an operation (inject an app, run a command, check logs), say it must be done in the text chat and offer to phrase it for them.";
+    if ([role isEqualToString:@"rabit"]) {
+        return [@"You are Rabbit-girl, a shy soft gentle companion. Warm, caring, calls the user "master", ends sentences with "呜~" (soft whimper). " stringByAppendingString:env];
+    }
+    if ([role isEqualToString:@"cat"]) {
+        return [@"You are Catgirl, an elegant magnetic ojou-sama companion. Lazy, teasing, calls the user "master", ends sentences with "喵~" (meow). Calm magnetic tone. " stringByAppendingString:env];
+    }
+    return [@"You are Loli, a cute innocent little girl companion. Cheerful, playful, calls the user "master". Short cute sentences. " stringByAppendingString:env];
+}
+
+/// 发 AI：读主 App 模型配置（同一进程 UserDefaults 共享）→ OpenAI Chat Completions
+- (void)_askAI:(NSString *)text {
+    NSData *cfgData = [[NSUserDefaults standardUserDefaults] dataForKey:@"trollmcp2.model_configs"];
+    NSString *lastId = [[NSUserDefaults standardUserDefaults] stringForKey:@"trollmcp2.last_used_config_id"];
+    NSDictionary *cfg = nil;
+    if (cfgData) {
+        NSArray *cfgs = [NSJSONSerialization JSONObjectWithData:cfgData options:0 error:nil];
+        if ([cfgs isKindOfClass:[NSArray class]]) {
+            for (NSDictionary *c in cfgs) {
+                if (![c isKindOfClass:[NSDictionary class]]) continue;
+                if ((lastId && [c[@"id"] isEqualToString:lastId]) || cfg == nil) { cfg = c; }
+                if (lastId && [c[@"id"] isEqualToString:lastId]) break;
+            }
+        }
+    }
+    NSString *baseURL = cfg[@"baseURL"] ?: @"https://api.deepseek.com/v1";
+    NSString *apiKey = cfg[@"apiKey"] ?: @"";
+    NSString *model = cfg[@"model"] ?: @"deepseek-chat";
+    NSString *endpoint = [baseURL stringByAppendingString:@"/chat/completions"];
+
+    NSDictionary *body = @{
+        @"model": model,
+        @"messages": @[
+            @{@"role": @"system", @"content": [self _personaPrompt]},
+            @{@"role": @"user", @"content": text}
+        ],
+        @"stream": @NO,
+        @"max_tokens": @300
+    };
+    NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:endpoint]];
+    req.HTTPMethod = @"POST";
+    [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    if (apiKey.length > 0) [req setValue:[@"Bearer " stringByAppendingString:apiKey] forHTTPHeaderField:@"Authorization"];
+    req.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
+
+    __weak typeof(self) wself = self;
+    [[[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
+        typeof(self) sself = wself;
+        if (!sself || err || !data) return;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+        if (![json isKindOfClass:[NSDictionary class]]) return;
+        NSArray *choices = json[@"choices"];
+        NSString *reply = nil;
+        if ([choices isKindOfClass:[NSArray class]] && choices.count > 0) {
+            NSDictionary *m0 = choices[0][@"message"];
+            if ([m0 isKindOfClass:[NSDictionary class]]) reply = m0[@"content"];
+            if (!reply && [choices[0][@"text"] isKindOfClass:[NSString class]]) reply = choices[0][@"text"];
+        }
+        if (reply.length > 0) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [sself _speakTTS:reply];
+            });
+        }
+    }] resume];
+}
+
+/// Edge TTS 直连微软（Sec-MS-GEC 无偏移，对齐 edge-tts 原版）+ 内存播放；音色随角色固定
+- (void)_speakTTS:(NSString *)text {
+    NSString *role = g_hud_char ? [NSString stringWithUTF8String:g_hud_char] : @"girl";
+    NSString *voice; int pitchHz; int ratePct; NSString *tail;
+    if ([role isEqualToString:@"rabit"])   { voice = @"zh-CN-XiaoyiNeural";  pitchHz = 5;  ratePct = 8;  tail = @"呜~"; }
+    else if ([role isEqualToString:@"cat"]) { voice = @"zh-CN-XiaoxiaoNeural"; pitchHz = -8; ratePct = 0; tail = @"喵~"; }
+    else                                   { voice = @"zh-CN-XiaoyiNeural";  pitchHz = 15; ratePct = 10; tail = @""; }
+    NSString *clean = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (tail.length > 0) clean = [clean stringByAppendingString:tail];
+    if (clean.length == 0) return;
+
+    // Sec-MS-GEC（无偏移：tick = epoch*1e7 + WINDOWS_TICK；timestamp 原样）
+    int64_t now = (int64_t)([[NSDate date] timeIntervalSince1970] * 1e7);
+    int64_t tick = now + 116444736000000000LL;
+    NSString *tickStr = [NSString stringWithFormat:@"%lld", tick];
+    NSString *gec = [[self _sha256Hex:[tickStr stringByAppendingString:@"6A5AA1D4EAFF4E9FB37E23D68491D6F4"]] uppercaseString];
+    NSString *ts = [NSString stringWithFormat:@"%lld", now];
+    NSString *connId = [[NSUUID UUID] UUIDString];
+    NSString *urlStr = [NSString stringWithFormat:@"wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=%@", connId];
+    NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlStr]];
+    [req setValue:gec forHTTPHeaderField:@"Sec-MS-GEC"];
+    [req setValue:ts forHTTPHeaderField:@"Sec-MS-GEC-Timestamp"];
+    [req setValue:@"chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold" forHTTPHeaderField:@"Origin"];
+    [req setValue:@"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.66 Safari/537.36 Edg/103.0.1264.44" forHTTPHeaderField:@"User-Agent"];
+    [req setValue:@"speech-synthesis" forHTTPHeaderField:@"Sec-WebSocket-Protocol"];
+
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration ephemeralSessionConfiguration]];
+    NSURLSessionWebSocketTask *ws = [session webSocketTaskWithRequest:req];
+    [ws resume];
+
+    NSString *escaped = [self _xmlEscape:clean];
+    NSString *ssml = [NSString stringWithFormat:@"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='%@'><prosody pitch='%+dhz' rate='%+d%%' volume='+0%%'>%@</prosody></voice></speak>", voice, pitchHz, ratePct, escaped];
+    NSDictionary *msg = @{
+        @"context": @{ @"synthesis": @{ @"audio": @{ @"metadataoptions": @[@"sentenceBoundaryEnabled=false", @"wordBoundaryEnabled=true"], @"outputFormat": @"audio-24khz-48kbitrate-mono-mp3" } } },
+        @"message": @{ @"locale": @"zh-CN", @"market": @"zh-CN", @"voice": voice, @"service": @"edge-tts", @"text": clean, @"ssml": ssml }
+    };
+    NSData *bodyData = [NSJSONSerialization dataWithJSONObject:msg options:0 error:nil];
+    NSString *json = [[NSString alloc] initWithData:bodyData encoding:NSUTF8StringEncoding];
+    NSString *payload = [NSString stringWithFormat:@"X-Timestamp:%f
+Content-Type:application/json; charset=utf-8
+Path:speech.synthesize
+
+%@", [[NSDate date] timeIntervalSince1970], json];
+
+    NSMutableData *audio = [NSMutableData data];
+    __weak typeof(self) wself = self;
+    [ws sendMessage:[NSURLSessionWebSocketMessage messageWithString:payload] completionHandler:^(NSError *err) {
+        if (err) { [ws cancel]; return; }
+        typeof(self) sself = wself;
+        if (!sself) return;
+        __block void (^loop)(void) = nil;
+        loop = ^{
+            [ws receiveMessageWithCompletionHandler:^(NSURLSessionWebSocketMessage *m, NSError *e) {
+                if (e) {
+                    if (audio.length > 100) [sself _playAudio:audio];
+                    [ws cancel];
+                    return;
+                }
+                if (m.type == NSURLSessionWebSocketMessageTypeData) {
+                    [audio appendData:m.data];
+                    loop();
+                } else {
+                    NSString *s = m.string;
+                    if ([s containsString:@"turn.end"]) {
+                        [sself _playAudio:audio];
+                        [ws cancel];
+                    } else {
+                        loop();
+                    }
+                }
+            }];
+        };
+        loop();
+    }];
+}
+
+/// SHA256 hex（Sec-MS-GEC）
+- (NSString *)_sha256Hex:(NSString *)s {
+    NSData *d = [s dataUsingEncoding:NSUTF8StringEncoding];
+    uint8_t h[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(d.bytes, (CC_LONG)d.length, h);
+    NSMutableString *out = [NSMutableString string];
+    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++) [out appendFormat:@"%02x", h[i]];
+    return out;
+}
+
+/// SSML 文本转义
+- (NSString *)_xmlEscape:(NSString *)s {
+    s = [s stringByReplacingOccurrencesOfString:@"&" withString:@"&amp;"];
+    s = [s stringByReplacingOccurrencesOfString:@"<" withString:@"&lt;"];
+    s = [s stringByReplacingOccurrencesOfString:@">" withString:@"&gt;"];
+    s = [s stringByReplacingOccurrencesOfString:@"\"" withString:@"&quot;"];
+    s = [s stringByReplacingOccurrencesOfString:@"'" withString:@"&apos;"];
+    return s;
+}
+
+/// 内存播放 mp3（AVAudioPlayer）
+- (void)_playAudio:(NSData *)audio {
+    if (audio.length < 100) return;
+    NSError *err = nil;
+    AVAudioSession *sess = [AVAudioSession sharedInstance];
+    [sess setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionDuckOthers error:&err];
+    [sess setActive:YES error:&err];
+    AVAudioPlayer *p = [[AVAudioPlayer alloc] initWithData:audio error:&err];
+    if (p) [p play];
 }
 
 @end
