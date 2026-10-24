@@ -418,56 +418,51 @@ final class UpdateManager: ObservableObject {
         }
     }
 
-    /// v4.3.35: 自动安装——优先 trollstorehelper 静默安装(同 app install/inject_package 通道)，
-    /// 不再只弹系统分享菜单让用户手动"用 TrollStore 打开"。
+    /// v4.6.x: 更新安装改为 TrollStore URL scheme 接管（对齐 Reynard 思路，根治自覆盖闪退/半覆盖）。
+    /// 背景：trollstorehelper install 装的是本 App 自己——helper 安装前先杀运行中进程，
+    /// 本 App 被 kill → 闪退 + 后续 UI 全部丢失；若安装/注册失败则半覆盖（TrollStore 不显示）。
+    /// TrollStore 2 的 trollstore://install/?url= 支持 file:// 本地包，TrollStore 自己完成
+    /// 杀进程→安装→注册→失败回滚，全程它的 UI，不会闪退/半覆盖。
     func installIPA(at url: URL) {
-        // 1) 找 trollstorehelper（v4.3.64：懒查单 App 路径，不再全量枚举——对齐 TrollFools 干净枚举）
-        var helper = "/var/usr/bin/trollstorehelper"
-        let tsPath = AppCatalog.lookupBundlePath(bundleId: "com.opa334.TrollStore") ?? ""
-        if !tsPath.isEmpty {
-            let candidates = [tsPath + "/trollstorehelper", tsPath + "/TrollStore.app/trollstorehelper",
-                              (tsPath as NSString).deletingLastPathComponent + "/trollstorehelper"]
-            helper = candidates.first { FileManager.default.fileExists(atPath: $0) } ?? helper
-        }
-        if FileManager.default.fileExists(atPath: helper) {
-            let (code, out) = InjectionManager.shared.spawnRoot(helper, args: ["install", "installd", "force", url.path], timeout: 240)
-            // v4.3.24: 184=app has additional encrypted binaries (子 framework 加密由系统解密, 非致命) 182=developer mode
-            if code == 0 || code == 184 || code == 182 {
-                isDownloading = false
-                downloadedIPAURL = nil
-                updateAvailable = false
-                // v4.3.39：已自动安装 → 红点熄灭
-                hasUpdateRedDot = false
-                var suffix = ""
-                if code == 184 { suffix = L10n.t("i18n_666") }
-                else if code == 182 { suffix = " (developer mode)" }
-                installMessage = L10n.t("i18n_667", latestVersion ?? "", suffix)
-                return
-            }
-            // 2) 静默安装失败 → 记录失败码与 helper 输出（诊断关键：170 容器失败/171 非TS且未force/
-            //    177 标记失败/178 复制失败/181 注册失败容器已删），再降级分享菜单。
-            //    v4.5.x：失败后 App 可能处于"已终止/半覆盖"状态（helper 会先杀运行中 App 再替换），
-            //    必须让用户知道需要重新安装，而不是默默弹个只有"保存到文件"的菜单。
-            let outSummary = String(out.prefix(300))
-            AuditLog.shared.log("update.install_failed", detail: "code=\(code) helper=\(helper) out=\(outSummary)")
-            NetworkLog.shared.log("update.install_failed code=\(code)")
-            DispatchQueue.main.async {
-                self.installFailureCode = code
-                self.errorMessage = L10n.t("i18n_670", code)
-                SharePresenter.present([url]) { [weak self] completed, error in
-                    if let error = error {
-                        self?.errorMessage = L10n.t("i18n_668", code, error.localizedDescription)
+        // 1) URL scheme 优先：本地包 file:// 交给 TrollStore 安装
+        //    (LSApplicationQueriesSchemes 已声明 trollstore + apple-magnifier → canOpenURL 才有效）
+        let scheme = "trollstore://install/?url="
+        let encoded = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+            ?? url.absoluteString
+        if let schemeURL = URL(string: scheme + encoded),
+           UIApplication.shared.canOpenURL(schemeURL) {
+            UIApplication.shared.open(schemeURL) { [weak self] ok in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    if ok {
+                        // 已交给 TrollStore：熄灭红点，提示安装完成前别打开
+                        self.isDownloading = false
+                        self.downloadedIPAURL = nil
+                        self.updateAvailable = false
+                        self.hasUpdateRedDot = false
+                        self.installMessage = L10n.t("i18n_1230", self.latestVersion ?? "")
+                    } else {
+                        // open 被系统拒绝 → 兜底分享菜单
+                        self.errorMessage = L10n.t("i18n_1232")
+                        self.fallbackShareInstall(url)
                     }
                 }
             }
             return
         }
-        // 3) 无 trollstorehelper → 分享菜单兜底 (UI 必须主线程)
+        // 2) scheme 不可用（TrollStore 未开 URL Scheme Enabled / 老 TrollStore）→ 分享菜单兜底
+        //    （分享菜单里有 TrollStore 的 OpenIn / 保存安装包——用户可手动走 TrollStore）
         DispatchQueue.main.async {
-            SharePresenter.present([url]) { [weak self] completed, error in
-                if let error = error {
-                    self?.errorMessage = L10n.t("i18n_669", error.localizedDescription)
-                }
+            self.errorMessage = L10n.t("i18n_1231")
+            self.fallbackShareInstall(url)
+        }
+    }
+
+    /// 分享菜单兜底：TrollStore OpenIn 或保存安装包（不再 spawnRoot 自装——自装=闪退根因）
+    private func fallbackShareInstall(_ url: URL) {
+        SharePresenter.present([url]) { [weak self] completed, error in
+            if let error = error {
+                self?.errorMessage = L10n.t("i18n_669", error.localizedDescription)
             }
         }
     }

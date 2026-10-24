@@ -926,6 +926,10 @@ enum L10n {
             tbl["i18n_668"] = ["zh": "静默安装失败(exit %d), 分享调起也失败: %@", "en": "Silent install failed (exit %d), share fallback also failed: %@"]
             tbl["i18n_669"] = ["zh": "安装调起失败: %@", "en": "Install invocation failed: %@"]
             tbl["i18n_670"] = ["zh": "静默安装失败（exit %d），App 可能已退出或未安装完整——请用「保存到文件」重新安装", "en": "Silent install failed (exit %d), the app may be closed or not fully installed — reinstall via Save to Files"]
+            // v4.6.x：更新安装改走 TrollStore URL scheme（对齐 Reynard，根治自装闪退/半覆盖）
+            tbl["i18n_1230"] = ["zh": "已交给 TrollStore 安装 v%@——安装完成前请不要打开本 App，完成后重新打开即新版本", "en": "Handed off to TrollStore for v%@ — don't open this app until install finishes; relaunch for the new version"]
+            tbl["i18n_1231"] = ["zh": "未检测到 TrollStore URL Scheme（TrollStore 设置里需开启 URL Scheme Enabled），已打开分享菜单——选 TrollStore 或保存安装包", "en": "TrollStore URL Scheme not detected (enable URL Scheme Enabled in TrollStore settings); share sheet opened — choose TrollStore or save the package"]
+            tbl["i18n_1232"] = ["zh": "系统拒绝了安装请求，已打开分享菜单兜底", "en": "System rejected the install request; share sheet opened as fallback"]
             tbl["i18n_973"] = ["zh": "用户", "en": "User"]
             tbl["i18n_979"] = ["zh": "系统", "en": "System"]
             tbl["i18n_672"] = ["zh": "缓存 · 钥匙串 · 广告符 · 数据容器 · AI 清理", "en": "Caches · keychain · IDFA · containers · AI cleanup"]
