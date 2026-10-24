@@ -2,6 +2,8 @@ import SwiftUI
 
 /// v7.0.4：聊天框终端按钮 → 简易终端（统一环境 TrollRuntime shell.exec）
 /// 无需内核启动（Asbestos 翻译器直接执行）——黑底等宽终端 UI，命令带 30s 超时。
+/// v7.1.7：视觉重构——macOS 终端质感：圆角卡片 + 头栏三圆点 + 深蓝黑渐变底 +
+/// 输入胶囊 + 命令/输出/错误三色层级 + 上下键历史导航。
 struct TerminalView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var input = ""
@@ -17,53 +19,156 @@ struct TerminalView: View {
         let isError: Bool
     }
 
+    // 配色常量（暗黑终端经典）
+    private let bgTop = Color(red: 0.055, green: 0.065, blue: 0.085)      // 深蓝黑顶
+    private let bgBottom = Color(red: 0.035, green: 0.045, blue: 0.065)   // 深蓝黑底
+    private let promptGreen = Color(red: 0.45, green: 0.92, blue: 0.62)   // 提示符绿
+    private let cmdGreen = Color(red: 0.62, green: 1.0, blue: 0.74)       // 命令亮绿
+    private let errorRed = Color(red: 1.0, green: 0.32, blue: 0.33)       // 错误红
+    private let outputWhite = Color(white: 0.92)                          // 输出暖白
+
     var body: some View {
         CompatNav {
             VStack(spacing: 0) {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ForEach(lines) { l in
-                                Text(l.text)
-                                    .font(.system(.body, design: .monospaced))
-                                    .foregroundColor(l.isCmd ? .green : (l.isError ? Color(red: 1.0, green: 0.3, blue: 0.3) : .white))
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
+                // ── 头栏：三圆点 + 状态 ──
+                HStack(spacing: 8) {
+                    Circle().fill(Color(red: 1.0, green: 0.36, blue: 0.32)).frame(width: 9, height: 9)
+                    Circle().fill(Color(red: 0.95, green: 0.77, blue: 0.25)).frame(width: 9, height: 9)
+                    Circle().fill(Color(red: 0.32, green: 0.87, blue: 0.42)).frame(width: 9, height: 9)
+                    Spacer()
+                    if busy {
+                        HStack(spacing: 5) {
+                            ProgressView().controlSize(.mini)
+                            Text(L10n.t("i18n_1245"))
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(promptGreen)
                         }
-                        .padding(10)
-                    }
-                    .background(Color.black)
-                    .onChange(of: lines.count) { _ in
-                        withAnimation { proxy.scrollTo(lines.last?.id, anchor: .bottom) }
+                    } else {
+                        Circle().fill(promptGreen).frame(width: 7, height: 7)
                     }
                 }
-                HStack(spacing: 8) {
+                .padding(.horizontal, 12)
+                .frame(height: 38)
+                .background(Color(white: 0.045))
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Color(white: 0.1)).frame(height: 0.5)
+                }
+
+                // ── 输出区 ──
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 5) {
+                            ForEach(lines) { l in
+                                HStack(alignment: .top, spacing: 6) {
+                                    if l.isCmd {
+                                        Text("❯")
+                                            .font(.system(.body, design: .monospaced))
+                                            .foregroundColor(promptGreen)
+                                            .frame(width: 18, alignment: .trailing)
+                                    } else if l.isError {
+                                        Text("✗")
+                                            .font(.system(.body, design: .monospaced))
+                                            .foregroundColor(errorRed)
+                                            .frame(width: 18, alignment: .trailing)
+                                    } else {
+                                        // 输出行：无符号，缩进对齐
+                                        Color.clear.frame(width: 18)
+                                    }
+                                    Text(l.text)
+                                        .font(.system(size: 13.5, design: .monospaced))
+                                        .foregroundColor(l.isCmd ? cmdGreen : (l.isError ? errorRed : outputWhite))
+                                        .textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.vertical, l.isCmd ? 1 : 0)
+                                }
+                                .padding(.horizontal, 12)
+                                .background(l.isCmd ? Color.white.opacity(0.035) : Color.clear)
+                                .cornerRadius(4)
+                            }
+                        }
+                        .padding(.vertical, 8)
+                        .id("bottom")
+                    }
+                    .background(
+                        LinearGradient(colors: [bgTop, bgBottom],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
+                    .onChange(of: lines.count) { _ in
+                        withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("bottom", anchor: .bottom) }
+                    }
+                }
+
+                // ── 输入栏：胶囊 ──
+                HStack(spacing: 10) {
                     Text("$")
-                        .foregroundColor(.green)
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(size: 15, weight: .bold, design: .monospaced))
+                        .foregroundColor(promptGreen)
                     TextField(L10n.t("i18n_282"), text: $input)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundColor(.white)
+                        .font(.system(size: 14.5, design: .monospaced))
+                        .foregroundColor(outputWhite)
+                        .tint(promptGreen)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .focused($focused)
+                        .submitLabel(.run)
                         .onSubmit { run() }
-                    if busy {
-                        ProgressView().controlSize(.small)
+                    if !input.isEmpty {
+                        Button {
+                            input = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(Color(white: 0.4))
+                        }
                     }
+                    Button {
+                        run()
+                    } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(busy ? Color(white: 0.3) : promptGreen)
+                    }
+                    .disabled(busy || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .padding(10)
-                .background(Color(white: 0.13))
+                .padding(.horizontal, 12)
+                .frame(height: 46)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(white: 0.06))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                        )
+                )
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color(white: 0.03))
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Color(white: 0.1)).frame(height: 0.5)
+                }
             }
-            .navigationTitle(L10n.t("i18n_315"))
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(L10n.t("ui_177")) { presentationMode.wrappedValue.dismiss() }
+                    Button {
+                        presentationMode.wrappedValue.dismiss()
+                    } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(Color(white: 0.75))
+                    }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(L10n.t("i18n_283")) { lines.removeAll() }
+                    Button {
+                        withAnimation { lines.removeAll() }
+                        lines.append(TermLine(text: L10n.t("i18n_1195"), isCmd: false, isError: false))
+                        lines.append(TermLine(text: L10n.t("i18n_284"), isCmd: false, isError: false))
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(Color(white: 0.75))
+                    }
                 }
             }
         }
@@ -77,7 +182,7 @@ struct TerminalView: View {
     private func run() {
         let cmd = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cmd.isEmpty, !busy else { return }
-        lines.append(TermLine(text: "$ \(cmd)", isCmd: true, isError: false))
+        lines.append(TermLine(text: cmd, isCmd: true, isError: false))
         history.append(cmd)
         input = ""
         busy = true

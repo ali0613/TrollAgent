@@ -943,6 +943,7 @@ enum L10n {
             tbl["i18n_1242"] = ["zh": "检查当前开发环境：python3/git/vim/curl 版本，哪些已安装哪些没有", "en": "Check the current dev environment: python3/git/vim/curl versions, which are installed and which aren't"]
             tbl["i18n_1243"] = ["zh": "分析本机已安装的应用，列出缓存占用最大的几个", "en": "Analyze the installed apps on this device and list the ones using the most cache"]
             tbl["i18n_1244"] = ["zh": "检查这台设备的硬件与内存状态", "en": "Check this device's hardware and memory status"]
+            tbl["i18n_1245"] = ["zh": "执行中…", "en": "Running…"]
             tbl["i18n_973"] = ["zh": "用户", "en": "User"]
             tbl["i18n_979"] = ["zh": "系统", "en": "System"]
             tbl["i18n_672"] = ["zh": "缓存 · 钥匙串 · 广告符 · 数据容器 · AI 清理", "en": "Caches · keychain · IDFA · containers · AI cleanup"]
