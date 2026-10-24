@@ -182,8 +182,10 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             p.delegate = self
             player = p
             isSpeaking = true
-            p.play()
+            let ok = p.play()
+            ttsLog("play: data=\(data.count) play()=\(ok)")
         } catch {
+            ttsLog("FAIL: play error=\(error.localizedDescription)")
             player = nil
             pump()   // 播放失败，跳过继续下一个
         }
@@ -221,17 +223,35 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         return o
     }
 
+
+    // MARK: - v7.2.5 TTS 调试日志（写 /var/mobile/Documents/tts_debug.log，用户复现后发我定位）
+    private func ttsLog(_ s: String) {
+        let line = "[TTS] \(Date()) \(s)\n"
+        if let url = URL(string: "file:///var/mobile/Documents/tts_debug.log") {
+            if let fh = try? FileHandle(forWritingTo: url) {
+                fh.seekToEndOfFile()
+                fh.write(line.data(using: .utf8) ?? Data())
+                try? fh.close()
+            } else {
+                try? line.data(using: .utf8)?.write(to: url)
+            }
+        }
+    }
+
     private func synthesize(_ text: String, completion: @escaping (Data?) -> Void) {
+        ttsLog("synthesize start: voice=\(voicePreset.voice) pitch=\(voicePreset.pitch) rate=\(voicePreset.rate) text_len=\(text.count)")
         let (gec, gecTs) = secMsGec()
         let connId = UUID().uuidString
         // v7.2.1：按当前音色档位取声线/音高/语速
         let v = voicePreset.voice, p = voicePreset.pitch, r = voicePreset.rate
         guard let url = URL(string: "\(Self.wsBaseURL)?TrustedClientToken=\(Self.trustedClientToken)&ConnectionId=\(connId)") else {
+            ttsLog("FAIL: bad URL")
             completion(nil); return
         }
         var req = URLRequest(url: url)
         req.setValue(gec, forHTTPHeaderField: "Sec-MS-GEC")
         req.setValue(gecTs, forHTTPHeaderField: "Sec-MS-GEC-Timestamp")
+        ttsLog("ws url=\(url.absoluteString.prefix(80)) gec=\(gec.prefix(12))... ts=\(gecTs)")
         req.setValue("chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold", forHTTPHeaderField: "Origin")
         req.setValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.66 Safari/537.36 Edg/103.0.1264.44", forHTTPHeaderField: "User-Agent")
         // v7.2.2：theos SDK 无 webSocketTask(with:subprotocols:)（iOS15+ 重载），改单参 + 子协议 header 透传
@@ -278,21 +298,25 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
                     switch message {
                     case .data(let d):
                         audio.append(d)
+                        if audio.count % 8192 == 0 { self.ttsLog("recv data bytes=\(audio.count)") }
                         receiveLoop()
                     case .string(let s):
                         if s.contains("Path:turn.end") || s.contains("turn.end") {
+                            self.ttsLog("turn.end received, total bytes=\(audio.count)")
                             guard !finished else { return }
                             finished = true
                             timeoutWork.cancel()
                             ws.cancel()
                             completion(audio.count > 100 ? audio : nil)
                         } else {
+                            self.ttsLog("recv string prefix=\(s.prefix(60))")
                             receiveLoop()
                         }
                     @unknown default:
                         receiveLoop()
                     }
-                case .failure:
+                case .failure(let e):
+                    self.ttsLog("FAIL: ws receive error=\(e.localizedDescription) bytes=\(audio.count)")
                     guard !finished else { return }
                     finished = true
                     timeoutWork.cancel()
@@ -301,13 +325,15 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             }
         }
         ws.send(.string(payload)) { err in
-            if err != nil {
+            if let err = err {
+                self.ttsLog("FAIL: ws.send error=\(err.localizedDescription)")
                 guard !finished else { return }
                 finished = true
                 timeoutWork.cancel()
                 ws.cancel()
                 completion(nil)
             } else {
+                self.ttsLog("ws.send OK (waiting audio)")
                 receiveLoop()
             }
         }
