@@ -370,7 +370,7 @@ struct ChatView: View {
                         subtitle: L10n.t("home_analyze_apps_sub"),
                         colors: [.tmCyan, .blue]
                     ) {
-                        runQuickPrompt("Analyze the installed apps on this device and list the ones using the most cache")
+                        runQuickPrompt(L10n.t("i18n_1243"))
                     }
                     QuickActionCard(
                         icon: "memorychip",
@@ -378,7 +378,7 @@ struct ChatView: View {
                         subtitle: L10n.t("home_check_device_sub"),
                         colors: [.green, .tmTeal]
                     ) {
-                        runQuickPrompt("Check this device's hardware and memory status")
+                        runQuickPrompt(L10n.t("i18n_1244"))
                     }
                 }
                 .padding(.horizontal, 20)
