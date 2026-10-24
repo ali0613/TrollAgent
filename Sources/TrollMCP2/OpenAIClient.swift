@@ -276,6 +276,20 @@ final class OpenAIClient {
             performAnthropic(messages: messages, tools: tools, completion: completion)
             return
         }
+        // v4.5.x：看门狗标志与任务须在 dataTask 闭包之前声明（Swift 禁止闭包捕获未声明局部变量）。
+        // 调度仍放函数尾部（asyncAfter 与超时窗口一致）；触发时 cancel dataTask → error 分支识别 watchdogFired 走降级链。
+        var watchdogFired = false
+        let watchdog = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            if self.cancelled || watchdogFired { return }
+            watchdogFired = true
+            let headersReceived = self.activeTask?.response != nil ? "yes" : "no"
+            NetworkLog.shared.log("\(self.config.name) L\(level) no progress in \(Int(Self.watchdogSeconds(for: self.currentReasoningLevel)))s (response-headers-received: \(headersReceived))")
+            if Date() > self.overallDeadline {
+                NetworkLog.shared.log("\(self.config.name) L\(level) watchdog hit overallDeadline (\(Int(self.overallBudget))s), failing fast")
+            }
+            self.activeTask?.cancel()
+        }
         // v2.9.0：手动选择 Responses 协议，或降级链走到 L5
         // v2.9.53：L5 默认走流式 (SSE），逐字显示 + done后解析
         if level == 5 || config.apiProtocol == "OpenAI Responses" {
@@ -467,23 +481,10 @@ final class OpenAIClient {
             completion(.failure(NSError(domain: "OpenAIClient", code: status,
                 userInfo: [NSLocalizedDescriptionKey: "Request rejected (HTTP \(status), tried up to level \(level)·\(self.levelName(level)))\n\(String(failMsg.prefix(300)))\(hint)"])))
         }
-        // v4.5.x：响应进度看门狗——L0-L4 非流式。中转返回部分响应后挂起时
+        // v4.5.x：看门狗——响应挂起（中转半响应：响应头已到但 body 未完成）时，
         // URLSession timeoutInterval (25s) 不再触发，此看门狗到点强制 cancel → 走降级链。
         // 阈值随推理档位放宽，避免误杀 reasoning 模型正常思考期。
-        var watchdogFired = false
-        let watchdog = DispatchWorkItem { [weak self] in
-            guard let self = self else { return }
-            if self.cancelled || watchdogFired { return }
-            watchdogFired = true
-            // v4.5.x：响应头到达状态——URLSessionTask.response 在收到响应头后非 nil。
-            // yes = 中转已发响应头但 body 未完成（半响应挂起）；no = 纯等待（中转完全没回）。
-            let headersReceived = self.activeTask?.response != nil
-            if Date() > self.overallDeadline {
-                NetworkLog.shared.log("\(self.config.name) L\(level) watchdog hit overallDeadline (\(Int(self.overallBudget))s), failing fast")
-            }
-            NetworkLog.shared.log("\(self.config.name) L\(level) no progress in \(Int(Self.watchdogSeconds(for: self.currentReasoningLevel)))s (response-headers-received: \(headersReceived ? "yes" : "no")), cancelling to trigger fallback")
-            self.activeTask?.cancel()
-        }
+        // 声明已上移到函数开头（dataTask 闭包之前）；此处仅调度。
         activeTask = task
         task.resume()
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.watchdogSeconds(for: currentReasoningLevel), execute: watchdog)
