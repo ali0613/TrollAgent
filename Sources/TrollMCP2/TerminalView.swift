@@ -110,7 +110,6 @@ struct TerminalView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .focused($focused)
-                        .submitLabel(.run)
                         .onSubmit { run() }
                     if !input.isEmpty {
                         Button {
