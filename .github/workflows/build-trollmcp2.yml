@@ -45,6 +45,9 @@ jobs:
           git add Support/Info.plist
           git -c user.name="TrollAgent CI" -c user.email="ci@trollagent.local" \
             commit -m "chore: bump version to $NEW [skip ci]"
+          # v4.5.x：并发防撞——构建期间用户可能又 push 新代码（rebase 前 push 会被
+          # fetch first 拒绝 → 构建红）。先 rebase 到远程最新再 push，保证 bump 一定落盘。
+          git pull --rebase "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
           git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
           echo ">>> version bumped to $NEW (build $((BUILD+1)))"
 
