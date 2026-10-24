@@ -66,6 +66,17 @@ final class GirlCompanion: ObservableObject {
 
 // MARK: - 表情帧（对应 Resources/girl_*.png 或 rabit_*.png，build-ipa.sh 打进 App 根，Bundle.main 读）
 
+extension GirlCharacter {
+    /// v7.2.2：每个角色固定音色（语音对话自动跟随，不做手动切换）
+    var voicePreset: VoicePreset {
+        switch self {
+        case .loli: return .loli
+        case .rabit: return .bunny
+        case .cat: return .cat
+        }
+    }
+}
+
 enum GirlExpression: String {
     case idle    // 正常/待机
     case happy   // 开心（点击）
@@ -103,7 +114,7 @@ struct GirlCompanionView: View {
     }
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {   // v7.2.2：角色脚底 8pt 放麦克风角标
             // 小女孩本体
             Group {
                 if let img = UIImage(named: expression.imageName(for: companion.selectedCharacter)) {
@@ -153,40 +164,33 @@ struct GirlCompanionView: View {
         }
     }
 
-    // MARK: - 麦克风说话按钮
+    // MARK: - 麦克风说话按钮（v7.2.2：圆形脚底角标——常态 35% 透明，说话青色 + 波纹扩散）
 
     private var micButton: some View {
         Button(action: toggleMic) {
-            HStack(spacing: 5) {
+            ZStack {
+                // 波纹（录音时向外扩散）
                 if voice.isListening {
-                    // 录音中：红点脉冲 + "听你说"
                     Circle()
-                        .fill(Color.red)
-                        .frame(width: 7, height: 7)
-                        .scaleEffect(voice.isListening ? 1.2 : 1.0)
-                        .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: voice.isListening)
-                    Text(L10n.t("i18n_843"))
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                } else {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white)
-                    Text(L10n.t("i18n_844"))
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
+                        .stroke(Color.cyan.opacity(0.55), lineWidth: 2.5)
+                        .frame(width: 40, height: 40)
+                        .scaleEffect(voice.isListening ? 1.7 : 1.0)
+                        .opacity(voice.isListening ? 0 : 0.7)
+                        .animation(.easeOut(duration: 0.9).repeatForever(autoreverses: false), value: voice.isListening)
                 }
+                // 底圆
+                Circle()
+                    .fill(voice.isListening ? Color.cyan.opacity(0.9) : Color.black.opacity(0.35))
+                    .frame(width: 40, height: 40)
+                // 麦克风图标
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                Capsule().fill(voice.isListening ? Color.red.opacity(0.85) : Color.pink.opacity(0.75))
-            )
-            .shadow(color: Color.black.opacity(0.12), radius: 5, x: 0, y: 3)
+            .frame(width: 44, height: 44)
         }
         .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel("语音说话")
     }
 
     // MARK: - 交互
@@ -212,6 +216,8 @@ struct GirlCompanionView: View {
     /// 识别到文本 → 发 AI（复用聊天发送链路，回复自动流式显示 + 朗读 → 口型帧）
     private func askAI(_ text: String) {
         guard let cfg = ModelStore.shared.defaultConfig else { return }
+        // v7.2.2：音色随当前角色固定（萝莉/猫娘御姐/兔娘各自绑定）
+        tts.voicePreset = companion.selectedCharacter.voicePreset
         // 语音对话需要听到回复 → 若喇叭关着自动打开
         if !tts.speakerEnabled {
             tts.speakerEnabled = true
