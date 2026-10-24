@@ -39,7 +39,7 @@ jobs:
           NEW="$MAJ.$MIN.$((PAT+1))"
           echo "NEW=$NEW"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW" Support/Info.plist
-          BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion")
+          BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Support/Info.plist)
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $((BUILD+1))" Support/Info.plist
           echo "BUILD=$((BUILD+1))"
           git add Support/Info.plist
