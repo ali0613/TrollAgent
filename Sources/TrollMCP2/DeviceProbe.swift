@@ -125,7 +125,12 @@ final class DeviceProbe: ObservableObject {
 
         // v2.9.156：ready 不再依赖 taskForPid——静态injected (insert_dylib+ct_bypass 重签名）
         // 与进程端口无关；TrollStore 非越狱拿不到其他进程端口是常态，不应导致"环境异常"
-        let ready = trollStore && amfidBypassInferred
+        // v4.5.x：ready 误报修复——iOS 17 非越狱 TrollStore 下 detectTrollStore()
+        // 全链 miss（TROLLSTORE env 只在经 helper 启动时注入、/.TrollStore 与 /var/jb
+        // 仅越狱存在、TrollStore 2 系统级安装不在 AppCatalog/容器扫描）→ 分项全绿却
+        // 红横幅"本机环境异常"。兜底用 entitlementsOK（签名权限生效=环境就绪）：
+        // TrollStore 签名的 app 必有 noSandbox/bundleWrite/root persona 之一。
+        let ready = amfidBypassInferred && (trollStore || entitlementsOK)
 
         // v2.9.67：收集增强设备信息
         let modelIdentifier = Self.deviceModelIdentifier()
