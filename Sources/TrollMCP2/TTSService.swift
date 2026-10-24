@@ -232,9 +232,11 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         req.setValue(gecTs, forHTTPHeaderField: "Sec-MS-GEC-Timestamp")
         req.setValue("chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold", forHTTPHeaderField: "Origin")
         req.setValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.66 Safari/537.36 Edg/103.0.1264.44", forHTTPHeaderField: "User-Agent")
+        // v7.2.2：theos SDK 无 webSocketTask(with:subprotocols:)（iOS15+ 重载），改单参 + 子协议 header 透传
+        req.setValue("speech-synthesis", forHTTPHeaderField: "Sec-WebSocket-Protocol")
 
         let session = URLSession(configuration: .ephemeral)
-        let ws = session.webSocketTask(with: req, subprotocols: ["speech-synthesis"])
+        let ws = session.webSocketTask(with: req)
         ws.resume()
 
         let ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='\(v)'><prosody pitch='\(p)' rate='\(r)' volume='+0%'>\(xmlEscape(text))</prosody></voice></speak>"
