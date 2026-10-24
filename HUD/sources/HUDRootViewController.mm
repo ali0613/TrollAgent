@@ -3012,30 +3012,29 @@ static UIImage *softParticleImage(CGFloat size) {
 
     NSMutableData *audio = [NSMutableData data];
     __weak typeof(self) wself = self;
-    [ws sendMessage:payload completionHandler:^(NSError *err) {
+    [ws sendMessage:[[NSURLSessionWebSocketMessage alloc] initWithString:payload] completionHandler:^(NSError *err) {
         if (err) { [ws cancel]; return; }
         typeof(self) sself = wself;
         if (!sself) return;
         __block void (^loop)(void) = nil;
         loop = ^{
-            [ws receiveWithCompletionHandler:^(NSData *data, NSString *string, NSError *e) {
+            [ws receiveMessageWithCompletionHandler:^(NSURLSessionWebSocketMessage *m, NSError *e) {
                 if (e) {
                     if (audio.length > 100) [sself _playAudio:audio];
                     [ws cancel];
                     return;
                 }
-                if (data.length > 0) {
-                    [audio appendData:data];
+                if (m.type == NSURLSessionWebSocketMessageTypeData) {
+                    [audio appendData:m.data];
                     loop();
-                } else if (string) {
-                    if ([string containsString:@"turn.end"]) {
+                } else {
+                    NSString *s = m.string;
+                    if (s && [s containsString:@"turn.end"]) {
                         [sself _playAudio:audio];
                         [ws cancel];
                     } else {
                         loop();
                     }
-                } else {
-                    loop();
                 }
             }];
         };
