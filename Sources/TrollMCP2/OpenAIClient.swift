@@ -333,6 +333,7 @@ final class OpenAIClient {
         }
 
         let task = session.dataTask(with: request) { data, response, error in
+            watchdog.cancel()
             if self.cancelled {
                 completion(.failure(NSError(domain: "OpenAIClient", code: -999,
                     userInfo: [NSLocalizedDescriptionKey: "Request cancelled"])))
@@ -340,6 +341,22 @@ final class OpenAIClient {
             }
             if let error = error {
                 let err = error as NSError
+                // v4.5.x：看门狗触发（响应挂起——中转返回部分响应后无更多数据，
+                // URLSession timeoutInterval 不再触发 -1001）→ 与用户取消区分，走降级链
+                if watchdogFired {
+                    let next = self.nextLevel(after: level, hasTools: tools != nil && !(tools?.isEmpty ?? true), avoidL5: avoidL5)
+                    if next <= self.maxLevel {
+                        let remain = max(0, Int(self.overallDeadline.timeIntervalSinceNow))
+                        NetworkLog.shared.log("\(self.config.name) L\(level) response stalled (watchdog \(Int(Self.watchdogSeconds(for: self.currentReasoningLevel)))s) → auto-fallback to L\(next) (\(self.levelName(next)))")
+                        onStatus?(L10n.t("status_timeout_simplify", next, self.maxLevel, remain))
+                        self.attempt(level: next, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
+                        return
+                    }
+                    let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
+                    completion(.failure(NSError(domain: "OpenAIClient", code: -1001,
+                        userInfo: [NSLocalizedDescriptionKey: "Request stalled: no response within \(Int(Self.watchdogSeconds(for: self.currentReasoningLevel)))s, tried all compat levels (total \(el)ms). The relay may have hung — retry or check the model config."])))
+                    return
+                }
                 // v2.8.6：网络超时 (不是 408 HTTP 状态，而是 URLSession 的 -1001）
                 // 也可能是中转对完整载荷处理太慢/卡死，降级到轻量载荷很可能OK。
                 let isTimeout = (err.code == NSURLErrorTimedOut
@@ -450,8 +467,23 @@ final class OpenAIClient {
             completion(.failure(NSError(domain: "OpenAIClient", code: status,
                 userInfo: [NSLocalizedDescriptionKey: "Request rejected (HTTP \(status), tried up to level \(level)·\(self.levelName(level)))\n\(String(failMsg.prefix(300)))\(hint)"])))
         }
+        // v4.5.x：响应进度看门狗——L0-L4 非流式。中转返回部分响应后挂起时
+        // URLSession timeoutInterval (25s) 不再触发，此看门狗到点强制 cancel → 走降级链。
+        // 阈值随推理档位放宽，避免误杀 reasoning 模型正常思考期。
+        var watchdogFired = false
+        let watchdog = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            if self.cancelled || watchdogFired { return }
+            watchdogFired = true
+            if Date() > self.overallDeadline {
+                NetworkLog.shared.log("\(self.config.name) L\(level) watchdog hit overallDeadline (\(Int(self.overallBudget))s), failing fast")
+            }
+            NetworkLog.shared.log("\(self.config.name) L\(level) no progress in \(Int(Self.watchdogSeconds(for: self.currentReasoningLevel)))s, cancelling to trigger fallback")
+            self.activeTask?.cancel()
+        }
         activeTask = task
         task.resume()
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.watchdogSeconds(for: currentReasoningLevel), execute: watchdog)
     }
 
     // MARK: - 载荷构建
@@ -523,6 +555,19 @@ final class OpenAIClient {
         case 4: return "max"
         case 5: return "none"
         default: return "medium"
+        }
+    }
+
+    /// v4.5.x：响应看门狗阈值（秒）——按推理档位放宽。
+    /// reasoning 模型思考期无输出是正常状态，max 档思考可达 90s+，阈值必须分档避免误杀。
+    /// none/low 45s：日志实证 low 档 119s 挂起 = 异常（中转挂起），45s 足够且不误伤。
+    private static func watchdogSeconds(for reasoningLevel: Int) -> TimeInterval {
+        switch reasoningLevel {
+        case 0: return 45   // low
+        case 1: return 60   // medium
+        case 2, 3: return 90  // high / xhigh
+        case 4: return 120  // max
+        default: return 45  // none
         }
     }
 
@@ -1321,16 +1366,37 @@ final class OpenAIClient {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: firstByteTimer)
 
+        // v4.5.x：流式 idle 看门狗——首字节后流中途挂起 (中转不关连接但不再推事件）时，
+        // 每收到一个 SSE 事件重置；间隔 > 30s → 掐断并回落 (复用 guardedCompletion 防双 done）。
+        var idleTimer: DispatchWorkItem?
+        func resetIdleWatchdog() {
+            idleTimer?.cancel()
+            let t = DispatchWorkItem { [weak self] in
+                guard let self = self else { return }
+                if self.cancelled || fellBackToNonStream { return }
+                NetworkLog.shared.log("\(self.config.name): 流式 idle 超时 (30s 无 SSE 事件)，掐断回落")
+                streamSession.invalidateAndCancel()
+                guardedCompletion(.failure(NSError(domain: "OpenAIClient", code: -3040,
+                    userInfo: [NSLocalizedDescriptionKey: "Stream stalled: no SSE event for 30s"])))
+            }
+            idleTimer = t
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30, execute: t)
+        }
+
         delegate.onEvent = { [weak self] raw in
             guard let self = self else { return }
             if !firstByteReceived {
                 firstByteReceived = true
                 firstByteTimer.cancel()
+                // v4.5.x：首字节到达后启用 idle 看门狗（流中途挂起保护）
+                resetIdleWatchdog()
                 // v2.9.88：链路可视化 —— 首字节到达即上报"已连接，开始流式接收"
                 let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
                 NetworkLog.shared.log("\(self.config.name): 流式首字节 (\(el)ms)")
                 onStatus?(L10n.t("status_connected", Double(el) / 1000.0))
             }
+            // v4.5.x：每个 SSE 事件刷新 idle 看门狗
+            resetIdleWatchdog()
             if fellBackToNonStream { return }
             guard let ev = self.parseSSEEvent(raw) else { return }
             let type = ev.type
@@ -1381,6 +1447,7 @@ final class OpenAIClient {
         delegate.onComplete = { [weak self] error in
             guard let self = self else { return }
             firstByteTimer.cancel()
+            idleTimer?.cancel()
             streamSession.invalidateAndCancel()
             // v2.9.54：已降级到非流式，不重复执行 completion
             if fellBackToNonStream { return }
