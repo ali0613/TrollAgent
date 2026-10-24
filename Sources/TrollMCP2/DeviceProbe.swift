@@ -105,22 +105,18 @@ final class DeviceProbe: ObservableObject {
         let entitlementsOK = ent.noSandbox || bundleWriteOK || spawnIsRoot  // 内部记录用，不影响 ready 和 UI 显示
 
         var checks: [Check] = []
-        // v3.0.2: 去掉 TrollStore 已安装 / Entitlements 权限 / TrollFools 已安装 三个检测 (包已是 tipa，检测无意义）
-        let tfpDetail: String
-        if taskForPid {
-            tfpDetail = L10n.t("i18n_1202")
-        } else if ent.taskForPidAllow {
-            // v2.9.156：签名已授予 task_for_pid-allow → 绿勾；实测被拦是 TrollStore
-            // 非越狱常态 (不影响静态注入），如实写进说明
-            tfpDetail = L10n.t("i18n_1203")
-        } else {
-            tfpDetail = L10n.t("i18n_1204")
-        }
-        checks.append(Check(label: L10n.t("i18n_1198"), passed: ent.taskForPidAllow || taskForPid, detail: tfpDetail, infoOnly: false))
+        // v4.5.x：精简检测项——task_for_pid 在非越狱 TrollStore 必受限（系统拦截）且不决定
+        // 注入可用性（静态注入与进程端口无关），不再展示误导性"绿勾受限"；注入二进制是包内
+        // 自带资产（缺了只能重装包，用户无法操作修复），从 4 项合并为 1 项。
+        // 保留：容器读写（用户可操作：Edit Entitlements 重装）+ amfid 综合结论。
         checks.append(Check(label: L10n.t("i18n_1199"), passed: containerWrite, detail: containerWrite ? L10n.t("i18n_1205") : L10n.t("i18n_1206"), infoOnly: false))
-        for (name, ok) in injectionBinaries.sorted(by: { $0.key < $1.key }) {
-            checks.append(Check(label: L10n.t("i18n_1200", name), passed: ok, detail: ok ? L10n.t("i18n_1207") : L10n.t("i18n_1208"), infoOnly: false))
+        let allBinsOK = !injectionBinaries.isEmpty && injectionBinaries.values.allSatisfy { $0 }
+        var toolchainDetail = L10n.t("i18n_1207")
+        if !allBinsOK {
+            let missing = injectionBinaries.filter { !$0.value }.keys.joined(separator: ", ")
+            toolchainDetail = L10n.t("i18n_1217", missing)
         }
+        checks.append(Check(label: L10n.t("i18n_1216"), passed: allBinsOK, detail: toolchainDetail, infoOnly: false))
         checks.append(Check(label: L10n.t("i18n_1201"), passed: amfidBypassInferred, detail: amfidBypassInferred ? L10n.t("i18n_1209") : L10n.t("i18n_1210"), infoOnly: false))
 
         // v2.9.156：ready 不再依赖 taskForPid——静态injected (insert_dylib+ct_bypass 重签名）

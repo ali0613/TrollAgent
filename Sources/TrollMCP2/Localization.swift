@@ -1267,6 +1267,9 @@ enum L10n {
             tbl["i18n_1213"] = ["zh": "Bundle 写入已验证", "en": "Bundle write verified"]
             tbl["i18n_1214"] = ["zh": "persona 以 uid=0 启动", "en": "persona spawn uid=0"]
             tbl["i18n_1215"] = ["zh": "注入需要 TrollStore 设置里开启 Edit Entitlements，然后卸载重装本 App（覆盖安装不会重新应用权限）", "en": "Injection needs 'Edit Entitlements' enabled in TrollStore settings, then uninstall/reinstall this app (over-install won't reapply permissions)."]
+            // v4.5.x：环境检测精简——注入二进制合并为一项（包内自带，缺了只能重装）
+            tbl["i18n_1216"] = ["zh": "注入工具链", "en": "Injection toolchain"]
+            tbl["i18n_1217"] = ["zh": "缺失：%@（重装包恢复）", "en": "Missing: %@ (reinstall to restore)"]
             tbl["i18n_1020"] = ["zh": "逆向专家模式", "en": "Reverse-Engineering Expert"]
             tbl["i18n_1021"] = ["zh": "渗透工程师模式", "en": "Pentesting Engineer"]
             tbl["i18n_1022"] = ["zh": "游戏修改模式", "en": "Game Modding Mode"]
