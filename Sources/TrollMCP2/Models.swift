@@ -1450,7 +1450,7 @@ final class ConversationStore: ObservableObject {
                                               toolMessages: toolMessages, newlyDisclosed: newlyDisclosed,
                                               config: config, tools: tools,
                                               disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel,
-                                              thinkText: thinkText, toolDuration: toolDuration)
+                                              thinkText: thinkText, toolDuration: toolDuration, personaPrompt: personaPrompt)
                 }
             }
         }
@@ -1463,7 +1463,8 @@ final class ConversationStore: ObservableObject {
                                       toolMessages: [ChatMessage], newlyDisclosed: [String],
                                       config: ModelConfig, tools: [[String: Any]]?,
                                       disclosed: [String], depth: Int, reasoningLevel: Int,
-                                      thinkText: String = "", toolDuration: Double = 0) {
+                                      thinkText: String = "", toolDuration: Double = 0,
+                                      personaPrompt: String? = nil) {
         switch result {
         case .success(let r):
             let rawContent = Self.jsonString(r)
