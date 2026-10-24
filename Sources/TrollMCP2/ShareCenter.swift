@@ -44,6 +44,16 @@ final class ShareCenter: ObservableObject {
             alert.addAction(UIAlertAction(title: L10n.t("i18n_869"), style: .default) { _ in
                 self.saveToFiles(url)
             })
+            // v4.5.x：tipa/ipa 加"用 TrollStore 安装"——apple-magnifier:// URL scheme 直调
+            // TrollStore 安装，不渲染 App 图标列表（v4.3.51 移除的 presentOpenInMenu 在
+            // 侧载环境 MobileIcons/CoreImage SIGSEGV，与 ShareSheet 同一崩溃点；此路安全）。
+            // 修复：更新静默安装失败降级到此菜单时只能"存储到文件"，用户无法直达安装。
+            let ext = url.pathExtension.lowercased()
+            if ext == "tipa" || ext == "ipa" {
+                alert.addAction(UIAlertAction(title: L10n.t("i18n_1079"), style: .default) { _ in
+                    self.openInTrollStore(url)
+                })
+            }
             // v4.3.51：移除"用其他 App 打开"——UIDocumentInteractionController.presentOpenInMenu
             // 内部渲染"能打开此文件的全部 App 图标列表"，本设备侧载环境 MobileIcons 渲染
             // 列表图标时 CoreImage SIGSEGV（实测崩溃，与 ShareSheet 同一崩溃点）。
