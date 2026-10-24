@@ -409,6 +409,9 @@ final class SystemPrompts {
       unified environment: TrollRuntime (full Alpine Linux toolchain), an aarch64 Linux container; every Alpine package
       executes natively as ARM64. ls/cat/grep/find/sed/awk/tar/git/python3/sqlite3/curl/ps/df etc. are all available;
       apk add installs anything (pip/git/build toolchain).
+      LARGE DOWNLOADS (>20MB): prefer the `download` tool (url + optional path) — URLSession download with a live
+      percent progress bar in the UI, no 120s cap. In shell, use `wget -c` / `curl -C -` (resume) for big files;
+      download commands (curl -o/-O/--output, wget) get a 300s timeout, other commands cap at 120s.
       [no iOS-native shell fallback]: notifyutil/uicache/sbreload/idevice_id/swift/jtool2 do NOT exist
       (plutil/sqlite3 have Swift-native implementations, see NATIVE ENTRYPOINTS, usable directly); sysctl is Alpine's
       (no /proc/sys, kern.* not queryable); ps only sees container processes, not iOS-side processes.

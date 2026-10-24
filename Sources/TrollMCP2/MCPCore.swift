@@ -381,7 +381,9 @@ public final class ToolRegistry: ObservableObject {
         // app_write_file 原生直写先备份）——否则"小白一句话分析/改 App 数据"时 AI 看不到这些工具
         "bind_app", "bind_app_write", "app_write_file",
         // v4.3.66：GitHub CI 工具（tool.install 触发 CI 后的查进度/取产物闭环）
-        "github"
+        "github",
+        // v4.5.x：大文件下载（URLSession + 进度条）
+        "download"
     ]
 
     /// v2.9.31：常驻核心工具名集合 (UI 用只读访问）
@@ -1148,6 +1150,8 @@ public final class ToolRegistry: ObservableObject {
         register(AuditTool())
         // v3.1.44: verify 大工具 + 子命令 (合并 2 个 verify.* 工具）
         register(VerifyExecTool())
+        // v4.5.x: 大文件下载工具（URLSession + 进度条，避开 shell.exec 120s 上限）
+        register(DownloadTool())
         // v3.1.44: 删旧的 2 个 verify.* 工具 (已合并到 verify 大工具）
         // fix3cy10: wifi 系统代理控制（AI 一键开/关 HTTP(S) 代理 → 本地 MITM，不断网抓包）
         register(WifiProxyExecTool())

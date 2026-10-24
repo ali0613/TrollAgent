@@ -78,7 +78,10 @@ final class ShellExecTool: MCPTool {
         
         // v4.3.13: 默认超时 30→20s（收紧）。解释器 CPU 开销高，长命令/死循环触发 watchdog 有风险；
         // v6.6.0: 统一环境 Asbestos（无 x86 模拟）。收紧默认超时 + kill 兜底。
-        let timeout = min(max((params["timeout"] as? Double) ?? 20, 1), 120)
+        // v4.5.x: 下载命令（curl -o/-O/--output、wget 拉 URL）放宽到 300s——大文件下载超过 120s 会被 SIGKILL 掐断。
+        let rawCmd = (params["command"] as? String) ?? ""
+        let isDownloadCmd = Self.isDownloadCommand(rawCmd)
+        let timeout = min(max((params["timeout"] as? Double) ?? 20, 1), isDownloadCmd ? 300 : 120)
         
         // v6.6.0: 统一环境——移除 runtime 参数（auto/ios/alpine 路由废除）。
         // 全部命令默认走 Alpine Linux 完整工具链（Asbestos）；iOS 特有命令自动原生兜底（内部）。
@@ -358,6 +361,15 @@ final class ShellExecTool: MCPTool {
         }
         let (rout, rexit, rtimed) = TrollRuntimeEngine.exec(body, timeout: timeout)
         return (rout, rexit, rtimed, note)
+    }
+
+    /// v4.5.x：下载命令检测——curl 带 -o/-O/--output 输出到文件，或 wget 拉 URL。
+    /// 命中则 shell.exec 超时上限放宽到 300s（大文件下载不被 120s SIGKILL 掐断）。
+    static func isDownloadCommand(_ cmd: String) -> Bool {
+        let c = cmd.lowercased()
+        let isCurlOut = c.contains("curl") && (c.contains(" -o ") || c.contains(" -O ") || c.contains(" --output ") || c.contains("--output="))
+        let isWgetUrl = c.contains("wget") && (c.contains("http://") || c.contains("https://"))
+        return isCurlOut || isWgetUrl
     }
 
     static func containsShellSyntax(_ command: String) -> Bool {
@@ -1622,7 +1634,7 @@ final class ShellExecTool: MCPTool {
     
     /// v4.4.6: 下载进度委托——URLSessionDownloadDelegate 把字节进度映射到 InstallationRegistry。
     /// onProgress: 0..1；onComplete(location, error)；totalBytes 记录已下载字节数（完成摘要用）。
-    private final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
+    final class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
         var onProgress: ((Double) -> Void)?
         var onComplete: ((URL?, Error?) -> Void)?
         var totalBytes: Int64 = 0

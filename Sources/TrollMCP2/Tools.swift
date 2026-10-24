@@ -791,3 +791,85 @@ final class GitHubExecTool: MCPTool {
         }
     }
 }
+
+// MARK: - v4.5.x: DownloadTool —— 大文件下载（URLSession + 实时进度条）
+
+/// 大文件下载工具。shell.exec 的 curl 受 120s 上限限制，大文件（>20MB）会超时被 SIGKILL；
+/// 本工具走 URLSessionDownloadTask（无 120s 限制），进度经 InstallationRegistry.setFraction
+/// 实时渲染到 UI（"下载中 N/100"），用户与 AI 都能看到。
+final class DownloadTool: MCPTool {
+    let definition = ToolDefinition(
+        name: "download",
+        summary: "Download a large file (tool/binary/IPA/archive) to the workspace with live percent progress shown in the UI. Use for: big downloads (>20MB) where shell.exec curl would hit the 120s cap. Don't use for: small files (use shell.exec curl), apk packages (use tool.install). Example: user says 'download jtool2 to workspace' → download.",
+        parameters: [
+            "url": "Direct download URL (http/https)",
+            "path": "Optional absolute save path (default: Workspace/<filename>)",
+        ],
+        verified: true, category: "network")
+
+    func invoke(_ params: [String: Any]) throws -> [String: Any] {
+        guard let urlStr = params["url"] as? String,
+              let url = URL(string: urlStr),
+              url.scheme == "http" || url.scheme == "https" else {
+            throw MCPError.invalidParams("url required (http/https)")
+        }
+        let fileName = url.lastPathComponent.isEmpty ? "download.bin" : url.lastPathComponent
+        let destPath: String
+        if let p = params["path"] as? String, !p.isEmpty {
+            destPath = p
+        } else {
+            destPath = Workspace.root.appendingPathComponent(fileName).path
+        }
+
+        // 进度注册——UI 进度条（串行引擎全局单例，与 apk 安装同机制）
+        let key = "download \(fileName)"
+        InstallationRegistry.shared.start(key: key)
+        InstallationRegistry.shared.setFraction(0, phase: L10n.t("i18n_853"), line: fileName)
+
+        let sem = DispatchSemaphore(value: 0)
+        let delegate = ShellExecTool.DownloadProgressDelegate()
+        var result: (URL?, Error?) = (nil, nil)
+        delegate.onProgress = { f in
+            InstallationRegistry.shared.setFraction(f, phase: L10n.t("i18n_853"), line: fileName)
+        }
+        delegate.onComplete = { loc, err in
+            result = (loc, err)
+            sem.signal()
+        }
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let task = session.downloadTask(with: url)
+        let start = Date()
+        task.resume()
+        _ = sem.wait(timeout: .now() + 600)   // 10 分钟硬上限（无 120s 限制）
+        session.invalidateAndCancel()
+
+        if let err = result.1 {
+            InstallationRegistry.shared.finish(ok: false, summary: err.localizedDescription)
+            throw MCPError.invalidParams("download failed: \(err.localizedDescription)")
+        }
+        guard let tmp = result.0 else {
+            InstallationRegistry.shared.finish(ok: false, summary: "download timed out")
+            throw MCPError.invalidParams("download timed out after 600s")
+        }
+        do {
+            let destURL = URL(fileURLWithPath: destPath)
+            try FileManager.default.createDirectory(at: destURL.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: tmp, to: destURL)
+        } catch {
+            InstallationRegistry.shared.finish(ok: false, summary: error.localizedDescription)
+            throw MCPError.invalidParams("move failed: \(error.localizedDescription)")
+        }
+        let attrs = try? FileManager.default.attributesOfItem(atPath: destPath)
+        let bytes = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+        let elapsed = Int(Date().timeIntervalSince(start))
+        InstallationRegistry.shared.finish(ok: true, summary: "\(fileName) \(bytes) bytes")
+        return [
+            "ok": true,
+            "path": destPath,
+            "fileName": fileName,
+            "bytes": bytes,
+            "elapsedSeconds": elapsed,
+        ]
+    }
+}
