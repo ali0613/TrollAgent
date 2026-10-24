@@ -131,7 +131,7 @@ final class DeviceProbe: ObservableObject {
                 if code == 0, out.contains("packet-tunnel-provider") {
                     vpnDetail = L10n.t("i18n_1219") + " · packet-tunnel-provider ✓"
                 } else if code == 0 {
-                    vpnDetail = L10n.t("i18n_1219") + " · packet-tunnel-provider ✗（NE 可能拒载）"
+                    vpnDetail = L10n.t("i18n_1219") + L10n.t("i18n_1228")
                     vpnOK = false
                 }
             }

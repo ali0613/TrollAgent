@@ -1281,6 +1281,7 @@ enum L10n {
             tbl["i18n_1225"] = ["zh": "非越狱 TrollStore", "en": "Non-jailbroken TrollStore"]
             tbl["i18n_1226"] = ["zh": "越狱（rootless）", "en": "Jailbroken (rootless)"]
             tbl["i18n_1227"] = ["zh": "未识别", "en": "Unknown"]
+            tbl["i18n_1228"] = ["zh": " · packet-tunnel-provider ✗（NE 可能拒载）", "en": " · packet-tunnel-provider ✗ (NE may reject)"]
             tbl["i18n_1020"] = ["zh": "逆向专家模式", "en": "Reverse-Engineering Expert"]
             tbl["i18n_1021"] = ["zh": "渗透工程师模式", "en": "Pentesting Engineer"]
             tbl["i18n_1022"] = ["zh": "游戏修改模式", "en": "Game Modding Mode"]
