@@ -46,6 +46,9 @@ final class GirlCompanion: ObservableObject {
     @Published var selectedCharacter: GirlCharacter {
         didSet { UserDefaults.standard.set(selectedCharacter.rawValue, forKey: "trollmcp2.girl_character") }
     }
+    // v7.2.3：悬浮角色姿态——麦克风按钮只在 .standing 显示
+    // （吸附 wallSnap / 攀爬 climbing / 惊恐 fear 时自动隐藏，见 setPose）
+    @Published var pose: GirlPose = .standing
     // v6.0.28：悬浮尺寸可调
     @Published var floatSize: Double {
         didSet { UserDefaults.standard.set(floatSize, forKey: "trollmcp2.girl_float_size") }
@@ -62,6 +65,21 @@ final class GirlCompanion: ObservableObject {
         floatSize = (savedSize > 0) ? savedSize : 200
         bubbleStyle = UserDefaults.standard.integer(forKey: "trollmcp2.bubble_style")
     }
+
+    /// v7.2.3：设置角色姿态。非站立姿态（吸附/攀爬/惊恐）→ 麦克风按钮自动隐藏。
+    /// 吸附检测 / 攀爬 / 惊吓交互接入时调用此方法切换，其余逻辑不动。
+    func setPose(_ newPose: GirlPose) {
+        guard pose != newPose else { return }
+        pose = newPose
+    }
+}
+
+/// v7.2.3：悬浮角色姿态。当前仅有站立（吸附/攀爬/惊恐由未来交互接入触发）。
+enum GirlPose {
+    case standing    // 站立 → 显示麦克风
+    case wallSnap    // 吸附墙壁 → 隐藏麦克风
+    case climbing    // 攀爬 → 隐藏麦克风
+    case fear        // 高空惊恐 → 隐藏麦克风
 }
 
 // MARK: - 表情帧（对应 Resources/girl_*.png 或 rabit_*.png，build-ipa.sh 打进 App 根，Bundle.main 读）
@@ -133,9 +151,9 @@ struct GirlCompanionView: View {
     }
 
     // v7.2.3 设计原则（用户拍板）：麦克风按钮【只在站立姿态显示】。
-    // 当前仅有站立姿态 → 恒 true；未来新增姿态（趴墙/蹲墙/高空惊恐等）
-    // 时，这里返回 false 即自动隐藏按钮，其余不动。
-    private var isStanding: Bool { true }
+    // 吸附/攀爬/惊恐（wallSnap/climbing/fear）→ isStanding=false → 按钮隐藏。
+    // 真实来源 = companion.pose（交互接入 setPose 即自动切换）。
+    private var isStanding: Bool { companion.pose == .standing }
 
     var body: some View {
         VStack(spacing: 8) {   // v7.2.2：角色脚底 8pt 放麦克风角标
