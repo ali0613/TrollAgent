@@ -20,15 +20,11 @@ jobs:
     # v4.4.8-fix3w: needs native-llvm（LLVM 单工具 + jtool2；下载 continue-on-error，失败不出这些工具但出包）
     needs: [native-python, native-wheels, native-nmap, native-llvm, native-node]
     runs-on: macos-latest
-    env:
-      # v4.5.x: 版本单一来源 = Support/Info.plist（每次构建前 bump + commit [skip ci] 写回 main）。
-      # 不再写死 RELEASE_VERSION——旧实现产物版本永远 7.0.4，且 App 检查更新读仓库源文件版本，
-      # 永远判定"已是最新"。现在产物版本=仓库源文件版本=每次递增。
     steps:
       - uses: actions/checkout@v4
 
       # v4.5.x: bump 版本号（patch +1，CFBundleVersion +1），commit [skip ci] 写回 main。
-      # 目的：构建产物版本每次递增（7.0.5 → 7.0.6 → ...），App 内"检查更新"（读 main 分支
+      # 目的：构建产物版本每次递增（7.1.0 → 7.1.1 → ...），App 内"检查更新"（读 main 分支
       # Support/Info.plist / jsDelivr @main / release title）能识别新版。[skip ci] 防循环触发。
       - name: Bump version and persist to main
         run: |
