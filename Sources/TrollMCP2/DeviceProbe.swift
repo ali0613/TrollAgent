@@ -89,17 +89,17 @@ final class DeviceProbe: ObservableObject {
         let spawnIsRoot = (rootDiag["is_root"] as? Bool) ?? false
         let entDetail: String
         if ent.noSandbox {
-            var parts: [String] = ["active (signature has no-sandbox)"]
+            var parts: [String] = [L10n.t("i18n_1211")]
             parts.append(ent.summary)
-            if bundleWriteOK { parts.append("Bundle write verified") }
-            if spawnIsRoot { parts.append("persona spawn uid=0") }
+            if bundleWriteOK { parts.append(L10n.t("i18n_1213")) }
+            if spawnIsRoot { parts.append(L10n.t("i18n_1214")) }
             entDetail = parts.joined(separator: "\n")
         } else {
-            var parts: [String] = ["no-sandbox not detected (sandbox still active)"]
+            var parts: [String] = [L10n.t("i18n_1212")]
             parts.append(ent.summary)
-            if bundleWriteOK { parts.append("Bundle write verified") }
-            if spawnIsRoot { parts.append("persona spawn uid=0") }
-            parts.append("Injection needs 'Edit Entitlements' enabled in TrollStore settings, then uninstall/reinstall this app (over-install won't reapply permissions).")
+            if bundleWriteOK { parts.append(L10n.t("i18n_1213")) }
+            if spawnIsRoot { parts.append(L10n.t("i18n_1214")) }
+            parts.append(L10n.t("i18n_1215"))
             entDetail = parts.joined(separator: "\n")
         }
         let entitlementsOK = ent.noSandbox || bundleWriteOK || spawnIsRoot  // 内部记录用，不影响 ready 和 UI 显示
@@ -108,20 +108,20 @@ final class DeviceProbe: ObservableObject {
         // v3.0.2: 去掉 TrollStore 已安装 / Entitlements 权限 / TrollFools 已安装 三个检测 (包已是 tipa，检测无意义）
         let tfpDetail: String
         if taskForPid {
-            tfpDetail = "Measured: can get other processes' ports, process-level operations work"
+            tfpDetail = L10n.t("i18n_1202")
         } else if ent.taskForPidAllow {
             // v2.9.156：签名已授予 task_for_pid-allow → 绿勾；实测被拦是 TrollStore
             // 非越狱常态 (不影响静态注入），如实写进说明
-            tfpDetail = "Signed with task_for_pid-allow; on TrollStore non-jailbroken env, fetching process ports is blocked by the system — static injection unaffected, process-level memory ops limited"
+            tfpDetail = L10n.t("i18n_1203")
         } else {
-            tfpDetail = "No task_for_pid-allow, process-level ops limited"
+            tfpDetail = L10n.t("i18n_1204")
         }
-        checks.append(Check(label: "task_for_pid permission", passed: ent.taskForPidAllow || taskForPid, detail: tfpDetail, infoOnly: false))
-        checks.append(Check(label: "App container arbitrary read/write", passed: containerWrite, detail: containerWrite ? "AppDataContainers permission active, can write any app sandbox" : "can't write other app containers (missing entitlement)", infoOnly: false))
+        checks.append(Check(label: L10n.t("i18n_1198"), passed: ent.taskForPidAllow || taskForPid, detail: tfpDetail, infoOnly: false))
+        checks.append(Check(label: L10n.t("i18n_1199"), passed: containerWrite, detail: containerWrite ? L10n.t("i18n_1205") : L10n.t("i18n_1206"), infoOnly: false))
         for (name, ok) in injectionBinaries.sorted(by: { $0.key < $1.key }) {
-            checks.append(Check(label: "Injection binary \(name)", passed: ok, detail: ok ? "Bundled and executable" : "Missing or not executable", infoOnly: false))
+            checks.append(Check(label: L10n.t("i18n_1200", name), passed: ok, detail: ok ? L10n.t("i18n_1207") : L10n.t("i18n_1208"), infoOnly: false))
         }
-        checks.append(Check(label: "amfid bypass (inferred)", passed: amfidBypassInferred, detail: amfidBypassInferred ? "ct_bypass re-sign + injection tools + container r/w all ready, dylib injection chain works" : "conditions insufficient, unsigned dylib may fail to load", infoOnly: false))
+        checks.append(Check(label: L10n.t("i18n_1201"), passed: amfidBypassInferred, detail: amfidBypassInferred ? L10n.t("i18n_1209") : L10n.t("i18n_1210"), infoOnly: false))
 
         // v2.9.156：ready 不再依赖 taskForPid——静态injected (insert_dylib+ct_bypass 重签名）
         // 与进程端口无关；TrollStore 非越狱拿不到其他进程端口是常态，不应导致"环境异常"
