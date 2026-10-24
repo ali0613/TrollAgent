@@ -132,6 +132,11 @@ struct GirlCompanionView: View {
         }
     }
 
+    // v7.2.3 设计原则（用户拍板）：麦克风按钮【只在站立姿态显示】。
+    // 当前仅有站立姿态 → 恒 true；未来新增姿态（趴墙/蹲墙/高空惊恐等）
+    // 时，这里返回 false 即自动隐藏按钮，其余不动。
+    private var isStanding: Bool { true }
+
     var body: some View {
         VStack(spacing: 8) {   // v7.2.2：角色脚底 8pt 放麦克风角标
             // 小女孩本体
@@ -157,8 +162,10 @@ struct GirlCompanionView: View {
                 voice.onPermissionDenied = { [self] in self.deniedHint = true }
             }
 
-            // 说话按钮（麦克风）
-            micButton
+            // 说话按钮（麦克风）——v7.2.3：只在站立姿态显示
+            if isStanding {
+                micButton
+            }
         }
         .onReceive(tts.$isSpeaking) { speaking in
             withAnimation(.easeInOut(duration: 0.25)) {
