@@ -2665,8 +2665,8 @@ static UIImage *softParticleImage(CGFloat size) {
         cell.velocityRange = 18;
         cell.yAcceleration = -6;          // 轻柔上飘（放缓）
         cell.emissionRange = M_PI * 2;
-        cell.scale = 0.22;            // v6.1.5-14bo：0.32→0.22（用户仍嫌大，继续缩小）
-        cell.scaleRange = 0.08;       // v6.1.5-14bo：0.12→0.08 同步收窄
+        cell.scale = 0.066;           // v7.1.10：0.22→0.066（用户要求再小 70%，0.22×0.3）
+        cell.scaleRange = 0.024;      // v7.1.10：0.08→0.024 同步收窄（×0.3）
         cell.scaleSpeed = -0.015;         // 越飘越小
         cell.alphaSpeed = -0.07;          // 缓慢淡出
         cell.spin = 0;                    // 光点不旋转
