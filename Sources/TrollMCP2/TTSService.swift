@@ -10,6 +10,51 @@ import CommonCrypto
 /// - mp3 直接内存播放（AVAudioPlayer(data:)，不写文件 → 播完即丢）
 /// - **流水线预取**：边播放当前句、边在后台合成下一句，句间无缝（实测串行每句干等 2-3s 会卡，预取消除空洞）
 /// - 手动朗读(speakForced)打断当前自动朗读，只播指定文本
+/// v7.2.1：三档音色预设（萝莉 / 猫娘御姐 / 兔娘）——用户试听定稿：
+/// 萝莉 = Xiaoyi +15Hz +10%（原配置）
+/// 猫娘 = Xiaoxiao -8Hz +0% 磁性御姐 + 句尾「喵~」
+/// 兔娘 = Xiaoyi +5Hz +8% 温软 + 句尾「呜~」
+/// 注意：微软 Edge TTS 现仅开放 Xiaoxiao/Xiaoyi 两个中文女声，档位靠音高/语速/口癖区分。
+enum VoicePreset: String, CaseIterable {
+    case loli, cat, bunny
+
+    var voice: String {
+        switch self {
+        case .loli, .bunny: return "zh-CN-XiaoyiNeural"
+        case .cat: return "zh-CN-XiaoxiaoNeural"
+        }
+    }
+    var pitch: String {
+        switch self {
+        case .loli: return "+15Hz"
+        case .cat: return "-8Hz"
+        case .bunny: return "+5Hz"
+        }
+    }
+    var rate: String {
+        switch self {
+        case .loli: return "+10%"
+        case .cat: return "+0%"
+        case .bunny: return "+8%"
+        }
+    }
+    /// 句尾口癖（整段只在末尾加一次，避免每句都加很吵）
+    var tailCatchphrase: String {
+        switch self {
+        case .loli: return ""
+        case .cat: return "喵~"
+        case .bunny: return "呜~"
+        }
+    }
+    var displayName: String {
+        switch self {
+        case .loli: return "萝莉音"
+        case .cat: return "猫娘音·御姐"
+        case .bunny: return "兔娘音"
+        }
+    }
+}
+
 final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     static let shared = TTSService()
 
@@ -22,6 +67,12 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             }
         }
     }
+    /// v7.2.1：当前音色档位（长按全局喇叭切换，持久化）
+    @Published var voicePreset: VoicePreset {
+        didSet {
+            UserDefaults.standard.set(voicePreset.rawValue, forKey: "trollmcp2.tts_voice")
+        }
+    }
     @Published var isSpeaking = false {
         didSet { if !isSpeaking { speakingId = nil } }
     }
@@ -32,10 +83,6 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private static let wsBaseURL = "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1"
     private static let windowsTick: Int64 = 116444736000000000
     private static let gecOffset: Int64 = Int64(0.6 * 1e7)
-    private let voice = "zh-CN-XiaoyiNeural"
-    // v4.5.7：语速提升 +10%（rate）；磁性——夹子音基调下调音高(pitch +30Hz→+15Hz)让声音更醇厚
-    private let pitch = "+15Hz"
-    private let rate = "+10%"
 
     /// 待合成文本队列（有序，按句切分）
     private var pendingTexts: [String] = []
@@ -46,21 +93,29 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     private override init() {
         speakerEnabled = UserDefaults.standard.bool(forKey: "trollmcp2.tts_enabled")
+        voicePreset = VoicePreset(rawValue: UserDefaults.standard.string(forKey: "trollmcp2.tts_voice") ?? "") ?? .loli
         super.init()
     }
 
     // MARK: - 对外
 
+    /// v7.2.1：整段句尾加一次口癖（喵~/呜~）——自动朗读的句子流最后一句自然带上
+    private func withCatchphrase(_ t: String) -> String {
+        let p = voicePreset.tailCatchphrase
+        guard !p.isEmpty else { return t }
+        return t.trimmingCharacters(in: .whitespacesAndNewlines) + p
+    }
+
     /// 自动朗读（受全局喇叭开关控制）：流式分句送进来，排队流水线播放
     func speak(_ text: String) {
         guard speakerEnabled else { return }
-        enqueueSentences(cleanForSpeech(text))
+        enqueueSentences(cleanForSpeech(withCatchphrase(text)))
     }
 
     /// 手动朗读（无视开关，打断当前自动朗读，只播这段）——整段已完整，一次合成后连续播完（实测100字3s/500字约6s，比逐句更快）
     func speakForced(id: String?, _ text: String) {
         stopInternal()
-        let t = cleanForSpeech(text).trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = cleanForSpeech(withCatchphrase(text)).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
         speakingId = id
         isSynthBusy = true
@@ -167,6 +222,8 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private func synthesize(_ text: String, completion: @escaping (Data?) -> Void) {
         let (gec, gecTs) = secMsGec()
         let connId = UUID().uuidString
+        // v7.2.1：按当前音色档位取声线/音高/语速
+        let v = voicePreset.voice, p = voicePreset.pitch, r = voicePreset.rate
         guard let url = URL(string: "\(Self.wsBaseURL)?TrustedClientToken=\(Self.trustedClientToken)&ConnectionId=\(connId)") else {
             completion(nil); return
         }
@@ -180,7 +237,7 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         let ws = session.webSocketTask(with: req, subprotocols: ["speech-synthesis"])
         ws.resume()
 
-        let ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='\(voice)'><prosody pitch='\(pitch)' rate='\(rate)' volume='+0%'>\(xmlEscape(text))</prosody></voice></speak>"
+        let ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='\(v)'><prosody pitch='\(p)' rate='\(r)' volume='+0%'>\(xmlEscape(text))</prosody></voice></speak>"
         let msg: [String: Any] = [
             "context": [
                 "synthesis": [
@@ -192,7 +249,7 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             ],
             "message": [
                 "locale": "zh-CN", "market": "zh-CN",
-                "voice": voice, "service": "edge-tts",
+                "voice": v, "service": "edge-tts",
                 "text": text, "ssml": ssml
             ]
         ]
