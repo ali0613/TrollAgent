@@ -402,34 +402,34 @@ struct ChatView: View {
 
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                     miniCard("hammer.fill", L10n.t("home_quick_compile"), L10n.t("home_quick_compile_sub"), [.orange, .tmBrown], promptId: "developer") {
-                        runQuickPrompt("Compile a test tweak (HelloWorld) on GitHub, then download the dylib to the workspace")
+                        runQuickPrompt(L10n.t("i18n_1233"))
                     }
                     miniCard("syringe.fill", L10n.t("home_quick_inject"), L10n.t("home_quick_inject_sub"), [.green, .tmTeal], promptId: "reverse") {
-                        runQuickPrompt("List installed apps, pick one to test dylib injection and verify its load state")
+                        runQuickPrompt(L10n.t("i18n_1234"))
                     }
                     miniCard("memorychip.fill", L10n.t("home_quick_memory"), L10n.t("home_quick_memory_sub"), [.purple, .tmIndigo], promptId: "gamehacker") {
-                        runQuickPrompt("Check whether the memory-modification tool (MemoryTweak) is ready and explain its usage")
+                        runQuickPrompt(L10n.t("i18n_1235"))
                     }
                     miniCard("cursorarrow.click.2", L10n.t("home_quick_ui"), L10n.t("home_quick_ui_sub"), [.tmCyan, .blue], promptId: "uicontrol") {
-                        runQuickPrompt("Inject ControlAgent into Xiaohongshu, then read its UI tree")
+                        runQuickPrompt(L10n.t("i18n_1236"))
                     }
                     miniCard("stethoscope", L10n.t("home_quick_env"), L10n.t("home_quick_env_sub"), [.tmCyan, .teal], promptId: "qa") {
-                        runQuickPrompt("Do a full environment check: TrollStore, injection toolchain, Entitlements and network connectivity, output a health report")
+                        runQuickPrompt(L10n.t("i18n_1237"))
                     }
                     miniCard("antenna.radiowaves.left.and.right", L10n.t("home_quick_capture"), L10n.t("home_quick_capture_sub"), [.orange, .red], promptId: "pentester") {
-                        runQuickPrompt("Packet-capture Xiaohongshu once, list the request log and suspicious fields")
+                        runQuickPrompt(L10n.t("i18n_1238"))
                     }
                     miniCard("trash.circle.fill", L10n.t("home_quick_clean"), L10n.t("home_quick_clean_sub"), [.purple, .blue], promptId: "privacy") {
-                        runQuickPrompt("Scan app caches on this device and clean the biggest ones (back up before cleaning)")
+                        runQuickPrompt(L10n.t("i18n_1239"))
                     }
                     miniCard("globe", L10n.t("home_quick_browser"), L10n.t("home_quick_browser_sub"), [.red, .orange], promptId: "default") {
-                        runQuickPrompt("Open the built-in browser at bing.com and tell me what's on the page")
+                        runQuickPrompt(L10n.t("i18n_1240"))
                     }
                     miniCard("bolt.fill", L10n.t("home_quick_automation"), L10n.t("home_quick_automation_sub"), [.blue, .purple], promptId: "default") {
-                        runQuickPrompt("Create an automation task: ping every 5 minutes and alert me on failure")
+                        runQuickPrompt(L10n.t("i18n_1241"))
                     }
                     miniCard("wrench.and.screwdriver.fill", L10n.t("home_quick_dev"), L10n.t("home_quick_dev_sub"), [.green, .blue], promptId: "developer") {
-                        runQuickPrompt("Check the current dev environment: python3/git/vim/curl versions, which are installed and which aren't")
+                        runQuickPrompt(L10n.t("i18n_1242"))
                     }
                 }
                 .padding(.horizontal, 20)
