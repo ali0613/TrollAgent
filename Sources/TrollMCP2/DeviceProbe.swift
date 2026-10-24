@@ -138,11 +138,25 @@ final class DeviceProbe: ObservableObject {
         }
         checks.append(Check(label: L10n.t("i18n_1218"), passed: vpnOK, detail: vpnDetail, infoOnly: false))
 
-        // 静默安装助手：TrollStore 部署的系统 helper
+        // 静默安装助手：TrollStore 部署的 helper。
+        // 系统位 /var/usr/bin/trollstorehelper（TrollStore 1 系）+ TrollStore.app 容器内
+        // （TrollStore 2：com.opa334.TrollStore 路径）——与 AppDecryptTools 运行时查找顺序一致。
         let helperPath = "/var/usr/bin/trollstorehelper"
-        let helperOK = FileManager.default.isExecutableFile(atPath: helperPath)
+        var helperOK = FileManager.default.isExecutableFile(atPath: helperPath)
+        var helperDetail = helperOK ? L10n.t("i18n_1222") : L10n.t("i18n_1223")
+        if !helperOK {
+            let tsPath = AppCatalog.list().first { $0.bundleId == "com.opa334.TrollStore" }?.path ?? ""
+            if !tsPath.isEmpty {
+                let candidates = [tsPath + "/trollstorehelper", tsPath + "/TrollStore.app/trollstorehelper",
+                                  (tsPath as NSString).deletingLastPathComponent + "/trollstorehelper"]
+                if let found = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+                    helperOK = true
+                    helperDetail = L10n.t("i18n_1222")
+                }
+            }
+        }
         checks.append(Check(label: L10n.t("i18n_1221"), passed: helperOK,
-                            detail: helperOK ? L10n.t("i18n_1222") : L10n.t("i18n_1223"), infoOnly: false))
+                            detail: helperOK ? helperDetail : L10n.t("i18n_1223"), infoOnly: false))
 
         // 环境类型（信息项，解释功能差异——如进程级操作仅越狱可用）
         let jailbroken = FileManager.default.fileExists(atPath: "/var/jb")
