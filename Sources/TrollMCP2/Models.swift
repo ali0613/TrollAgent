@@ -653,11 +653,6 @@ final class ConversationStore: ObservableObject {
     /// ChatView 用它给这些消息开打字机——它们 isStreaming=false 且内容在出现前已定好，
     /// 只能靠"本轮刚产出"这一信号触发逐字显示。请求整体结束后清空。
     var liveProducedID: UUID?
-    /// v3.5.5：自适应纠正（对齐 Codex/agent-harness "机制决定行为"）——
-    /// 模型直接发 tool_calls 但本轮没写可见正文解说时，不执行工具，注入纠正消息重跑一轮，
-    /// 逼模型先写"先解说后执行"的正文。此字段为待注入的纠正消息（仅进 API 请求，不显示为 UI 气泡）。
-    /// v3.5.5：连续纠正次数——同一 tool 决策最多纠正 2 次仍不解说就放行执行，避免死循环。
-    private var narrationCorrectionCount = 0
     /// v3.5.6：工具参数 schema 预校验——模型调工具但缺必填参数时，不执行，注入纠正消息重跑
     /// 一轮逼它补齐再调（对齐 harness "机制决定行为"，治"invalid params required 盲试"老毛病）。
     private var pendingParamCorrection: String? = nil
@@ -810,8 +805,6 @@ final class ConversationStore: ObservableObject {
         requestSessionId = selectedId   // v4.5.8：永不清除的锁定兜底 (防 activeConvId 清 nil 后写错会话）
         // v3.4.9：新请求开始，清掉上一轮的"刚产出"标记（避免旧消息被重新打字）
         liveProducedID = nil
-        // v3.5.5：新任务开始，重置"先解说后执行"自适应纠正状态（避免跨任务计数器残留）
-        narrationCorrectionCount = 0
         // v3.5.16：新请求开始，清除上次的停止标志（让 runLoop 可继续）
         stopRequested = false
         // v3.5.6：重置工具参数预校验纠正状态
@@ -1185,30 +1178,12 @@ final class ConversationStore: ObservableObject {
                        let nc = narrationContent, !nc.isEmpty {
                         visibleText = nc
                     }
-                    // v3.5.5：自适应纠正（对齐 Codex / agent-harness "机制决定行为"）——
-                    // 模型直接发 tool_calls 但本轮没写可见正文解说时，不执行工具，注入纠正消息
-                    // 重跑一轮逼它先写"先解说后执行"的正文。这不是提示词，是机制：模型不解说就不放行。
-                    let visibleTrim = visibleText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    // v3.5.10：解说纠正上限 2→4（用户要求加强硬门槛"先解说后执行"）——
-                    // 模型不解说就不放行，给到 4 次机会逼它写正文；仍不写则由 running 步骤卡兜底可见性。
-                    if visibleTrim.isEmpty && self.narrationCorrectionCount < 4 {
-                        self.narrationCorrectionCount += 1
-
-                        // 清掉本轮只挂了思考、没写正文的孤立消息，避免"卡在思考中"的观感，再重跑
-                        if let sid = self.streamingMessageId,
-                           let ci = self.activeConvIndex,
-                           let mi = self.conversations[ci].messages.firstIndex(where: { $0.id == sid }),
-                           self.conversations[ci].messages[mi].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            self.conversations[ci].messages.remove(at: mi)
-                        }
-                        self.thinkBuffer = ""
-                        self.streamingMessageId = nil
-                        self.liveProducedID = nil
-                        // 重跑下一轮（depth+1 防死循环；narrationCorrectionCount 上限 4 防无限纠正）
-                        self.runLoop(config: config, tools: tools, disclosed: disclosed, depth: depth + 1, reasoningLevel: reasoningLevel)
-                        return
-                    }
-                    self.narrationCorrectionCount = 0
+                    // v4.5.x：去掉"解说纠正"硬门槛（对齐大厂事件流方案）——
+                    // 旧实现(v3.5.5/v3.5.10)：模型发 tool_calls 但没写正文解说时，不执行工具，
+                    // 注入纠正消息重跑一轮，上限 4 次。实测模型(L0 chat/completions)工具轮
+                    // content 为空是 API 层常态 → 永远重跑到上限 → 每次请求固定 5 轮、token 烧 5 倍。
+                    // 大厂(Claude Code/Codex)不惩罚：模型说什么就做什么，工具照常执行，
+                    // 解说由 thinking 黄泡 + 工具步骤卡片事件流呈现。这里直接放行。
                     // v3.5.4：正文解说只取模型自己写在 content 里的文本；模型若光思考没写正文解说，
                     // 正文就保持空(6.A)——不再用 reasoning 自动合成解说（用户明确：▶ 开始执行那种
                     // 机械合成是误解；思考归思考进黄泡，正文只放 AI 自己说的话，空就空着）。
