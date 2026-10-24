@@ -1158,7 +1158,7 @@ final class ConversationStore: ObservableObject {
                     // v3.5.3：文本工具调用兜底——模型把 shell.exec("...")/shell_exec(...) 写成文本
                     // (而非结构化 tool_call) 时，系统本不执行、任务卡死。这里检测最终文本里的文本式
                     // shell 调用，提取命令并真正执行，继续 agent 循环（提示词兜底不住，代码兜底保证）。
-                    self.runTextualShellIfNeeded(text: text, config: config, tools: tools, disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel)
+                    self.runTextualShellIfNeeded(text: text, config: config, tools: tools, disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
                     // v3.1.70：整条请求链 (含工具递归）结束——解除活动会话绑定
                     self.activeConvId = nil
                 case .success(.toolCalls(let calls, let thinking, let narrationContent)):
@@ -1333,7 +1333,7 @@ final class ConversationStore: ObservableObject {
 
     /// v3.5.3：执行文本兜底提取出的 shell 命令，把结果作为 tool 消息上屏并继续 agent 循环，
     /// 让模型看到结果后能继续下一步（而非卡死在"写了文本没执行"）。
-    private func runTextualShellIfNeeded(text: String, config: ModelConfig, tools: [[String: Any]]?, disclosed: [String], depth: Int, reasoningLevel: Int) {
+    private func runTextualShellIfNeeded(text: String, config: ModelConfig, tools: [[String: Any]]?, disclosed: [String], depth: Int, reasoningLevel: Int, personaPrompt: String? = nil) {
         guard let cmd = Self.extractTextualShellCommand(from: text) else { return }
         let cmdCopy = cmd
         DispatchQueue.global().async {
@@ -1371,7 +1371,8 @@ final class ConversationStore: ObservableObject {
                                   disclosed: [String],
                                   depth: Int,
                                   reasoningLevel: Int,
-                                  thinkText: String = "") {
+                                  thinkText: String = "",
+                                  personaPrompt: String? = nil) {
         // 一次一个硬约束已在 .toolCalls 源头把批次裁成 prefix(1)，这里 calls.count==1，
         // 执行完 index=1 >= calls.count 即回模型。
         if index >= calls.count {
@@ -1495,7 +1496,7 @@ final class ConversationStore: ObservableObject {
             // v3.1.66：tool_search 已删除，全量加载所有工具，无需披露机制。
             self.processToolCalls(calls, index: index + 1, toolMessages: next, newlyDisclosed: nextDisclosed,
                                   config: config, tools: tools, disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel,
-                                  thinkText: thinkText)
+                                  thinkText: thinkText, personaPrompt: personaPrompt)
         case .failure(let err as MCPError):
             // v2.9.125：failed也输出结构化 JSON (对齐 CLI 返回协议），AI 可直接解析分类与下一步
             var next = toolMessages
@@ -1520,7 +1521,7 @@ final class ConversationStore: ObservableObject {
                                  ok: false))
             self.processToolCalls(calls, index: index + 1, toolMessages: next, newlyDisclosed: newlyDisclosed,
                                   config: config, tools: tools, disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel,
-                                  thinkText: thinkText)
+                                  thinkText: thinkText, personaPrompt: personaPrompt)
         case .failure(let err):
             var next = toolMessages
             // v3.0.77：智能错误诊断——AI 看到错误就知道为什么failed、下一步该做什么
@@ -1561,7 +1562,7 @@ final class ConversationStore: ObservableObject {
                                  ok: false))
             self.processToolCalls(calls, index: index + 1, toolMessages: next, newlyDisclosed: newlyDisclosed,
                                   config: config, tools: tools, disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel,
-                                  thinkText: thinkText)
+                                  thinkText: thinkText, personaPrompt: personaPrompt)
         }
     }
 
