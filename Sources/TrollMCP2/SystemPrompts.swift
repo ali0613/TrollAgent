@@ -68,7 +68,8 @@ final class SystemPrompts {
                 binaries: jailbreak-native tools in jroot (/var/jb/usr/bin/ldid, clang, dpkg-deb, theos
                 binaries), /bin/ps, bundled ldid/otool. Running a Mach-O in shell.exec fails with
                 ENOEXEC "format error" — always route Mach-O tools to system.exec_root, container ELF tools
-                to shell.exec. If user says "调用不了越狱版本/越狱工具跑不了", the fix is system.exec_root.
+                to shell.exec. If the user says they "can't call the jailbreak version" or that "jailbreak
+                tools don't run", route them to system.exec_root.
               * combos: screenshot+OCR → control screenshot → vision; inject → inject list(bundle_id) → inject → app launch(verify); tap → control screenshot(read coords) → control tap
             === 2. WHEN TO STOP / ASK THE USER (stop conditions) ===
             - Ask the user ONLY when: (a) the request is genuinely ambiguous and tooling can't resolve it; (b) the action
