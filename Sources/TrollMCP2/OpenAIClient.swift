@@ -475,10 +475,13 @@ final class OpenAIClient {
             guard let self = self else { return }
             if self.cancelled || watchdogFired { return }
             watchdogFired = true
+            // v4.5.x：响应头到达状态——URLSessionTask.response 在收到响应头后非 nil。
+            // yes = 中转已发响应头但 body 未完成（半响应挂起）；no = 纯等待（中转完全没回）。
+            let headersReceived = self.activeTask?.response != nil
             if Date() > self.overallDeadline {
                 NetworkLog.shared.log("\(self.config.name) L\(level) watchdog hit overallDeadline (\(Int(self.overallBudget))s), failing fast")
             }
-            NetworkLog.shared.log("\(self.config.name) L\(level) no progress in \(Int(Self.watchdogSeconds(for: self.currentReasoningLevel)))s, cancelling to trigger fallback")
+            NetworkLog.shared.log("\(self.config.name) L\(level) no progress in \(Int(Self.watchdogSeconds(for: self.currentReasoningLevel)))s (response-headers-received: \(headersReceived ? "yes" : "no")), cancelling to trigger fallback")
             self.activeTask?.cancel()
         }
         activeTask = task
