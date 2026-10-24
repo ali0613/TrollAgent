@@ -310,7 +310,7 @@ static BOOL HUDIsZh(void) {
     // v7.2.5：头顶圆形麦克风（长按说话指示器——动态放大缩小；平时隐藏）
     _micBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     _micBtn.frame = CGRectMake(0, 0, 40, 40);
-    _micBtn.backgroundColor = [UIColor blackColor];
+    _micBtn.backgroundColor = [UIColor systemRedColor];   // v7.2.5：亮红色背景
     _micBtn.layer.cornerRadius = 20;
     _micBtn.alpha = 0.0;
     [_micBtn setImage:[UIImage systemImageNamed:@"mic.fill"] forState:UIControlStateNormal];
