@@ -149,6 +149,7 @@ static BOOL HUDIsZh(void) {
     NSDate *_lastWordTime;
     AVAudioPlayer *_ttsPlayer;            // v7.2.5：强持有播放器（局部变量会被 ARC 释放→朗读无声）
     AVSpeechSynthesizer *_hintSpeaker;    // v7.2.5：强持有权限提示合成器
+    SFSpeechRecognitionResult *_sttResult; // v7.2.5：识别结果缓存（theos SDK 的 SFSpeechRecognitionTask 无 result 属性）
     CGFloat _charScale;        // v6.0.12：角色站姿放大系数（rabit 1.4 / cat 1.2 / girl 1.0）
     NSArray<UIImage *> *_liftFrames;   // v6.0.12：拖起悬空挣扎帧（lift1/lift2，拖拽时交替显示）
     NSArray<UIImage *> *_squatFrames;  // v6.0.12：蹲坐/跪姿帧集合（显示时按站姿缩小）
@@ -2851,9 +2852,10 @@ static UIImage *softParticleImage(CGFloat size) {
     [_audioEngine prepare];
     [_audioEngine startAndReturnError:&err];
     _listening = YES;
+    __weak typeof(self) rwself = self;
     _sttTask = [_stt recognitionTaskWithRequest:_sttReq resultHandler:^(SFSpeechRecognitionResult *result, NSError *error) {
-        // 最终文本在 _stopListeningAndSend 里取（result.bestTranscription）
-        if (error) { /* 结束路径 */ }
+        typeof(self) rsself = rwself;
+        if (rsself && result) rsself->_sttResult = result;   // 缓存最终结果（task 无 result 属性）
     }];
 }
 
@@ -2871,10 +2873,11 @@ static UIImage *softParticleImage(CGFloat size) {
     [_silenceTimer invalidate]; _silenceTimer = nil;
     _listening = NO;
     NSString *text = @"";
-    if (_sttTask && _sttTask.result) {
-        text = _sttTask.result.bestTranscription.formattedString;
+    if (_sttResult) {
+        text = _sttResult.bestTranscription.formattedString;
     }
     [_sttTask cancel]; _sttTask = nil;
+    _sttResult = nil;
     [_audioEngine stop];
     [_audioEngine.inputNode removeTapOnBus:0];
     _audioEngine = nil;
@@ -2889,6 +2892,7 @@ static UIImage *softParticleImage(CGFloat size) {
 - (void)_abortListening {
     [_silenceTimer invalidate]; _silenceTimer = nil;
     [_sttTask cancel]; _sttTask = nil;
+    _sttResult = nil;
     [_audioEngine stop];
     [_audioEngine.inputNode removeTapOnBus:0];
     _audioEngine = nil;
@@ -2902,12 +2906,12 @@ static UIImage *softParticleImage(CGFloat size) {
     if (g_hud_char) role = [NSString stringWithUTF8String:g_hud_char];
     NSString *env = @"Environment: iOS 16.3, TrollStore sideload (no jailbreak, no /var/jb). App: TrollAgent. You speak through voice TTS, keep replies SHORT (1-2 sentences). NO TOOLS: voice mode has no tool access. If the user asks for an operation (inject an app, run a command, check logs), say it must be done in the text chat and offer to phrase it for them.";
     if ([role isEqualToString:@"rabit"]) {
-        return [@"You are Rabbit-girl, a shy soft gentle companion. Warm, caring, calls the user "master", ends sentences with "呜~" (soft whimper). " stringByAppendingString:env];
+        return [@"You are Rabbit-girl, a shy soft gentle companion. Warm, caring, calls the user \"master\", ends sentences with \"呜~\" (soft whimper). " stringByAppendingString:env];
     }
     if ([role isEqualToString:@"cat"]) {
-        return [@"You are Catgirl, an elegant magnetic ojou-sama companion. Lazy, teasing, calls the user "master", ends sentences with "喵~" (meow). Calm magnetic tone. " stringByAppendingString:env];
+        return [@"You are Catgirl, an elegant magnetic ojou-sama companion. Lazy, teasing, calls the user \"master\", ends sentences with \"喵~\" (meow). Calm magnetic tone. " stringByAppendingString:env];
     }
-    return [@"You are Loli, a cute innocent little girl companion. Cheerful, playful, calls the user "master". Short cute sentences. " stringByAppendingString:env];
+    return [@"You are Loli, a cute innocent little girl companion. Cheerful, playful, calls the user \"master\". Short cute sentences. " stringByAppendingString:env];
 }
 
 /// 发 AI：读主 App 模型配置（同一进程 UserDefaults 共享）→ OpenAI Chat Completions
@@ -3004,37 +3008,34 @@ static UIImage *softParticleImage(CGFloat size) {
     };
     NSData *bodyData = [NSJSONSerialization dataWithJSONObject:msg options:0 error:nil];
     NSString *json = [[NSString alloc] initWithData:bodyData encoding:NSUTF8StringEncoding];
-    NSString *payload = [NSString stringWithFormat:@"X-Timestamp:%f
-Content-Type:application/json; charset=utf-8
-Path:speech.synthesize
-
-%@", [[NSDate date] timeIntervalSince1970], json];
+    NSString *payload = [NSString stringWithFormat:@"X-Timestamp:%f\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.synthesize\r\n\r\n%@", [[NSDate date] timeIntervalSince1970], json];
 
     NSMutableData *audio = [NSMutableData data];
     __weak typeof(self) wself = self;
-    [ws sendMessage:[NSURLSessionWebSocketMessage messageWithString:payload] completionHandler:^(NSError *err) {
+    [ws sendMessage:payload completionHandler:^(NSError *err) {
         if (err) { [ws cancel]; return; }
         typeof(self) sself = wself;
         if (!sself) return;
         __block void (^loop)(void) = nil;
         loop = ^{
-            [ws receiveMessageWithCompletionHandler:^(NSURLSessionWebSocketMessage *m, NSError *e) {
+            [ws receiveWithCompletionHandler:^(NSData *data, NSString *string, NSError *e) {
                 if (e) {
                     if (audio.length > 100) [sself _playAudio:audio];
                     [ws cancel];
                     return;
                 }
-                if (m.type == NSURLSessionWebSocketMessageTypeData) {
-                    [audio appendData:m.data];
+                if (data.length > 0) {
+                    [audio appendData:data];
                     loop();
-                } else {
-                    NSString *s = m.string;
-                    if ([s containsString:@"turn.end"]) {
+                } else if (string) {
+                    if ([string containsString:@"turn.end"]) {
                         [sself _playAudio:audio];
                         [ws cancel];
                     } else {
                         loop();
                     }
+                } else {
+                    loop();
                 }
             }];
         };
