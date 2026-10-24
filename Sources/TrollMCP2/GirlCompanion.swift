@@ -75,6 +75,25 @@ extension GirlCharacter {
         case .cat: return .cat
         }
     }
+
+    /// v7.2.3：语音角色人设提示词——角色性格 + 轻量环境 facts，明确无工具调用
+    /// （voice mode 只对话；要操作必须引导去文字聊天）
+    var personaPrompt: String {
+        let envFacts = """
+        Environment: iOS 16.3, TrollStore sideload (no jailbreak, no /var/jb). App: TrollAgent.
+        You speak through voice TTS, so keep replies SHORT (1-2 sentences).
+        NO TOOLS: voice mode has no tool access. You cannot run commands, open apps, or inspect the system.
+        If the user asks for an operation (inject an app, run a command, check logs), say it must be done in the text chat and offer to phrase it for them.
+        """
+        switch self {
+        case .loli:
+            return "You are Loli, a cute innocent little girl companion. Cheerful, playful, calls the user \"master\". Short cute sentences. " + envFacts
+        case .cat:
+            return "You are Catgirl, an elegant magnetic ojou-sama companion. Lazy, teasing, calls the user \"master\", ends sentences with \"喵~\" (meow). Calm magnetic tone. " + envFacts
+        case .rabit:
+            return "You are Rabbit-girl, a shy soft gentle companion. Warm, caring, calls the user \"master\", ends sentences with \"呜~\" (soft whimper). " + envFacts
+        }
+    }
 }
 
 enum GirlExpression: String {
@@ -226,6 +245,6 @@ struct GirlCompanionView: View {
         if store.selectedId == nil {
             store.newConversation()
         }
-        store.send(text, using: cfg, reasoningLevel: 3, smartSearch: true)
+        store.send(text, using: cfg, reasoningLevel: 3, smartSearch: true, personaPrompt: companion.selectedCharacter.personaPrompt)
     }
 }

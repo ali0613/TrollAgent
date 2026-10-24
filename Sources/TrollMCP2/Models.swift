@@ -791,7 +791,8 @@ final class ConversationStore: ObservableObject {
     }
 
     func send(_ text: String, using config: ModelConfig, imageDataURLs: [String]? = nil,
-              reasoningLevel: Int = 0, smartSearch: Bool = true) {
+              reasoningLevel: Int = 0, smartSearch: Bool = true, personaPrompt: String? = nil) {
+        // v7.2.3：personaPrompt 非空 = 语音角色对话模式——系统提示词替换为角色人设，且不带任何工具调用
         // v2.9.97：记住最近使用的模型，顶栏/下次启动立即恢复
         ModelStore.shared.markUsed(config.id.uuidString)
         // v2.9.82：请求开始——首次要通知权限 + 开启后台任务延长
@@ -821,7 +822,11 @@ final class ConversationStore: ObservableObject {
         isLoading = true
 
         // v3.1.66：全量加载所有工具 (tool_search 已删除，不再渐进式披露）
-        var baseTools = config.apiProtocol == "Anthropic Messages" ? nil : ToolRegistry.shared.enabledOpenAIToolSchema()
+        var baseTools: [[String: Any]]? = config.apiProtocol == "Anthropic Messages" ? nil : ToolRegistry.shared.enabledOpenAIToolSchema()
+        // v7.2.3：语音角色模式不带工具（人设对话，无 schema 注入）
+        if personaPrompt != nil {
+            baseTools = nil
+        }
         // v2.9.20：智能搜索开关真实生效——关闭时从工具集移除 web.search / knowledge.search / web.fetch
         if !smartSearch {
             let exclude = Set(["web.search", "knowledge.search", "web.fetch"])
@@ -834,8 +839,8 @@ final class ConversationStore: ObservableObject {
         }
         // v3.1.66：全量加载，disclosed 机制已不再新增工具 (tool_search 已删），
         // 保留仅为兼容会话内已授权工具 schema 的持久注入。
-        let preDisclosed = ToolRegistry.shared.approvedToolNames()
-        runLoop(config: config, tools: baseTools, disclosed: preDisclosed, depth: 0, reasoningLevel: reasoningLevel)
+        let preDisclosed: [String] = personaPrompt == nil ? ToolRegistry.shared.approvedToolNames() : []
+        runLoop(config: config, tools: baseTools, disclosed: preDisclosed, depth: 0, reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
     }
 
     // MARK: - v2.9.87 网络恢复自动重试
@@ -849,7 +854,7 @@ final class ConversationStore: ObservableObject {
         return isNetworkError && !AppLifecycleMonitor.shared.isNetworkAvailable
     }
 
-    private func scheduleRetryAfterNetworkRestore(config: ModelConfig, tools: [[String: Any]]?, disclosed: [String], depth: Int, reasoningLevel: Int) {
+    private func scheduleRetryAfterNetworkRestore(config: ModelConfig, tools: [[String: Any]]?, disclosed: [String], depth: Int, reasoningLevel: Int, personaPrompt: String? = nil) {
         retriedNetworkOnce = true
         retryObserver = NotificationCenter.default.addObserver(
             forName: AppLifecycleMonitor.networkRestored,
@@ -862,7 +867,7 @@ final class ConversationStore: ObservableObject {
             }
             self.statusText = "Network restored, auto-retrying…"
             self.isLoading = true
-            self.runLoop(config: config, tools: tools, disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel)
+            self.runLoop(config: config, tools: tools, disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
         }
     }
 
@@ -912,7 +917,7 @@ final class ConversationStore: ObservableObject {
         }
     }
 
-    private func runLoop(config: ModelConfig, tools: [[String: Any]]?, disclosed: [String], depth: Int, reasoningLevel: Int = 0) {
+    private func runLoop(config: ModelConfig, tools: [[String: Any]]?, disclosed: [String], depth: Int, reasoningLevel: Int = 0, personaPrompt: String? = nil) {
         // v3.5.16：用户点了「停止」——立即停，不再继续递归 (修复"停止后还在发消息")
         if stopRequested {
             isLoading = false
@@ -966,9 +971,14 @@ final class ConversationStore: ObservableObject {
         // v2.9.138：模块化 system prompt 组装 (稳定前缀工程）——
         // 稳定块 (系统指令→开发者指令）在前、动态状态块 (设备/App/工作区/会话）在后，
         // 稳定前缀保持字节一致 → 官方 API 前缀缓存可直接matched (Anthropic/OpenAI）。
-        history.insert(ChatMessage(role: "system", content: SystemPrompts.shared.selected.content), at: 0)
-        if let devInstr = DeveloperInstructionStore.shared.defaultInjectionContent(), !devInstr.isEmpty {
-            history.insert(ChatMessage(role: "system", content: "Developer instructions below, always follow:\n" + devInstr), at: 0)
+        // v7.2.3：语音角色模式用 persona 替换主系统提示词（角色人设 + 轻量环境 facts，无工具说明）
+        if let persona = personaPrompt, !persona.isEmpty {
+            history.insert(ChatMessage(role: "system", content: persona), at: 0)
+        } else {
+            history.insert(ChatMessage(role: "system", content: SystemPrompts.shared.selected.content), at: 0)
+            if let devInstr = DeveloperInstructionStore.shared.defaultInjectionContent(), !devInstr.isEmpty {
+                history.insert(ChatMessage(role: "system", content: "Developer instructions below, always follow:\n" + devInstr), at: 0)
+            }
         }
         // 动态状态块：最新信息放最后，不影响稳定前缀缓存
         history.insert(ChatMessage(role: "system", content: Self.dynamicStatePrompt()), at: 0)
@@ -1141,7 +1151,7 @@ final class ConversationStore: ObservableObject {
                         self.streamingMessageId = nil
                         self.liveProducedID = nil
                         self.thinkBuffer = ""
-                        self.runLoop(config: config, tools: tools, disclosed: disclosed, depth: depth + 1, reasoningLevel: reasoningLevel)
+                        self.runLoop(config: config, tools: tools, disclosed: disclosed, depth: depth + 1, reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
                         return
                     }
                     self.emptyReplyCorrectionCount = 0
@@ -1249,7 +1259,7 @@ final class ConversationStore: ObservableObject {
                     // v2.9.87：网络类错误 + 当前确认断网 → 等网络恢复自动重试一次
                     if self.shouldRetryOnNetworkRestore(nsErr) {
                         self.statusText = "Network unavailable, auto-retrying after recovery…"
-                        self.scheduleRetryAfterNetworkRestore(config: config, tools: tools, disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel)
+                        self.scheduleRetryAfterNetworkRestore(config: config, tools: tools, disclosed: disclosed, depth: depth, reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
                         return
                     }
                     // v2.9.82：failed通知 (后台时）
@@ -1347,7 +1357,7 @@ final class ConversationStore: ObservableObject {
                 self.appendToCurrent(tm)
                 self.liveProducedID = tm.id
                 // 继续 agent 循环，模型看到结果后可决定下一步
-                self.runLoop(config: config, tools: tools, disclosed: disclosed, depth: depth + 1, reasoningLevel: reasoningLevel)
+                self.runLoop(config: config, tools: tools, disclosed: disclosed, depth: depth + 1, reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
             }
         }
     }
@@ -1368,7 +1378,7 @@ final class ConversationStore: ObservableObject {
             // v3.4.1：工具气泡已在 handleDispatchResult 逐条实时上屏（对齐 OpenMinis 逐步展示），
             // 不再攒批到最后统一追加 —— 边做边说更接近"直播"。
             let merged = Array(Set(disclosed + newlyDisclosed))
-            self.runLoop(config: config, tools: tools, disclosed: merged, depth: depth + 1, reasoningLevel: reasoningLevel)
+            self.runLoop(config: config, tools: tools, disclosed: merged, depth: depth + 1, reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
             return
         }
         let call = calls[index]
@@ -1401,7 +1411,7 @@ final class ConversationStore: ObservableObject {
                     }
                 }
                 // 不执行工具，回模型补齐参数（depth+1 防死循环；paramCorrectionCount 上限 2）
-                self.runLoop(config: config, tools: tools, disclosed: disclosed, depth: depth + 1, reasoningLevel: reasoningLevel)
+                self.runLoop(config: config, tools: tools, disclosed: disclosed, depth: depth + 1, reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
                 return
             }
             self.paramCorrectionCount = 0
