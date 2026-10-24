@@ -19,6 +19,8 @@ final class UpdateManager: ObservableObject {
     @Published var downloadedIPAURL: URL?
     /// v4.3.35：自动安装成功提示（副标题/状态行显示"已自动安装"）
     @Published var installMessage: String?
+    /// v4.5.x：最近一次静默安装失败码（170/171/177/178/181 等），UI 可显示具体原因
+    @Published var installFailureCode: Int32?
     /// v4.3.30：本次检查命中的源（GitHub / jsDelivr / 镜像），副标题可显示
     @Published var lastSource: String?
 
@@ -437,8 +439,16 @@ final class UpdateManager: ObservableObject {
                 installMessage = L10n.t("i18n_667", latestVersion ?? "", suffix)
                 return
             }
-            // 2) 静默安装失败 → 降级分享菜单(用户手动选 TrollStore 打开)。分享 UI 必须主线程
+            // 2) 静默安装失败 → 记录失败码与 helper 输出（诊断关键：170 容器失败/171 非TS且未force/
+            //    177 标记失败/178 复制失败/181 注册失败容器已删），再降级分享菜单。
+            //    v4.5.x：失败后 App 可能处于"已终止/半覆盖"状态（helper 会先杀运行中 App 再替换），
+            //    必须让用户知道需要重新安装，而不是默默弹个只有"保存到文件"的菜单。
+            let outSummary = String(out.prefix(300))
+            AuditLog.shared.log("update.install_failed", detail: "code=\(code) helper=\(helper) out=\(outSummary)")
+            NetworkLog.shared.log("update.install_failed code=\(code)")
             DispatchQueue.main.async {
+                self.installFailureCode = code
+                self.errorMessage = L10n.t("i18n_670", code)
                 SharePresenter.present([url]) { [weak self] completed, error in
                     if let error = error {
                         self?.errorMessage = L10n.t("i18n_668", code, error.localizedDescription)
