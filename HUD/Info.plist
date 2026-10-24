@@ -20,6 +20,10 @@
 	<string>6.0.30</string>
 	<key>CFBundleVersion</key>
 	<string>225</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>长按语音需要麦克风权限</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>长按语音需要语音识别权限</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>weixin</string>
