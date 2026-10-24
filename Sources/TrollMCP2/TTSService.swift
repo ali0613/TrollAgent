@@ -82,7 +82,9 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private static let trustedClientToken = "6A5AA1D4EAFF4E9FB37E23D68491D6F4"
     private static let wsBaseURL = "wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1"
     private static let windowsTick: Int64 = 116444736000000000
-    private static let gecOffset: Int64 = Int64(0.6 * 1e7)
+    // v7.2.4：原版 edge-tts 算法【无偏移】——tick = epoch刻度 + WINDOWS_TICK；
+    // 旧版多减 0.6e7 导致 Sec-MS-GEC 与微软校验不符 → 403 → 合成失败无声音（用户实测聊天界面播放无声根因）
+    private static let gecOffset: Int64 = 0
 
     /// 待合成文本队列（有序，按句切分）
     private var pendingTexts: [String] = []
@@ -197,9 +199,9 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     /// edge-tts 的 Sec-MS-GEC 算法：tick = WINDOWS_TICK + 当前时间(1e7) - 偏移 → SHA256(tick+token) 大写
     private func secMsGec() -> (gec: String, ts: String) {
         let timestamp = Int64(Date().timeIntervalSince1970 * 1e7)
-        let tick = Self.windowsTick + timestamp - Self.gecOffset
+        let tick = Self.windowsTick + timestamp
         let gec = sha256Hex("\(tick)\(Self.trustedClientToken)").uppercased()
-        return (gec, "\(timestamp - Self.gecOffset)")
+        return (gec, "\(timestamp)")
     }
 
     private func sha256Hex(_ s: String) -> String {

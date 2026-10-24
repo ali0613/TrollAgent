@@ -22,6 +22,7 @@ struct ChatView: View {
     // UIKit 方案真机稳定。标记位 + sheet onDismiss 触发，保证面板完全关闭后再 present（不再猜时间延迟）。
     @State private var pendingFilePick = false
     @State private var showModelPicker = false  // v2.9.36：聊天框切换上游模型
+    @State private var showVoicePicker = false  // v7.2.4：长按全局喇叭切音色（萝莉/猫娘御姐/兔娘）——聊天界面可改，HUD 角色音色固定不变
     @State private var showToolCenter = false  // v6.1.5-14bm：/tools 打开工具中心
     @State private var showTerminal = false  // v7.0.4：终端按钮 → 简易终端
     // v3.3.4：输入框 + 号展开"应用/相册/文件/浏览器"快捷行（点 + 变 x 收起）
@@ -112,11 +113,17 @@ struct ChatView: View {
                     } else {
                         HStack(spacing: 14) {
                             // v4.4.18：全局朗读开关——开着时 AI 流式回复自动朗读
-                            // v7.2.2：音色随悬浮角色固定（萝莉/猫娘/兔娘各自绑定），不再手动切换
+                            // v7.2.4：长按弹音色切换（萝莉/猫娘御姐/兔娘）；点按仍切换开关。HUD 角色音色固定，聊天界面独立可改。
                             Button(action: { withAnimation { tts.speakerEnabled.toggle() } }) {
                                 Image(systemName: tts.speakerEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")   // v6.1.5-14bg：关闭态用带斜杠喇叭（标准静音图标），不再普通喇叭灰显
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundColor(tts.speakerEnabled ? .tmCyan : .secondary)
+                            }
+                            .simultaneousGesture(LongPressGesture().onEnded { _ in showVoicePicker = true })
+                            .confirmationDialog("音色：\(tts.voicePreset.displayName)", isPresented: $showVoicePicker, titleVisibility: .visible) {
+                                ForEach(VoicePreset.allCases, id: \.self) { v in
+                                    Button(v.displayName) { withAnimation { tts.voicePreset = v } }
+                                }
                             }
                             // 勾选/选择按钮
                             Button(action: enterSelection) {
