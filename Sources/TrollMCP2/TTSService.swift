@@ -92,6 +92,12 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private var readyChunks: [Data] = []
     private var player: AVAudioPlayer?
     private var isSynthBusy = false
+    /// v7.1.33：WS 长连接复用（根治逐句合成高频握手被微软限流/静默断）——同一连接串行收发，断线自动重连
+    private var wsTask: URLSessionWebSocketTask?
+    private var wsSession: URLSession?
+    private var sentenceCompletion: ((Data?) -> Void)?
+    private var currentAudio = Data()
+    private var sentenceTimeout: DispatchWorkItem?
 
     private override init() {
         speakerEnabled = UserDefaults.standard.bool(forKey: "trollmcp2.tts_enabled")
@@ -481,8 +487,16 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
 
     // MARK: - v7.2.5 TTS 调试日志（写 /var/mobile/Documents/tts_debug.log，用户复现后发我定位）
+    /// v7.1.33：内存环形缓冲（UI 长按顶部喇叭直接看最近日志，绕开沙箱读文件通道）
+    @Published var recentTTSLogs: [String] = []
     private func ttsLog(_ s: String) {
         let line = "[TTS] \(Date()) \(s)\n"
+        // 内存缓冲（UI 可见）
+        DispatchQueue.main.async {
+            self.recentTTSLogs.append(line)
+            if self.recentTTSLogs.count > 40 { self.recentTTSLogs.removeFirst(self.recentTTSLogs.count - 40) }
+        }
+        // 文件落盘（保留原有通道）
         if let url = URL(string: "file:///var/mobile/Documents/tts_debug.log") {
             if let fh = try? FileHandle(forWritingTo: url) {
                 fh.seekToEndOfFile()
@@ -494,15 +508,25 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
     }
 
-    private func synthesize(_ text: String, completion: @escaping (Data?) -> Void) {
-        ttsLog("synthesize start: voice=\(voicePreset.voice) pitch=\(voicePreset.pitch) rate=\(voicePreset.rate) text_len=\(text.count)")
-        // v7.2.6：v2 Sec-MS-GEC（cs64-sha256）+ 版本号，URL query 传（edge-tts 2.x 实证）
+    // MARK: - v7.1.33 WS 长连接（复用同一条 WebSocket 串行合成，根治逐句高频握手被微软限流；断线自动重连）
+
+    private func closeWS() {
+        sentenceTimeout?.cancel()
+        sentenceTimeout = nil
+        wsTask?.cancel()
+        wsTask = nil
+        wsSession?.invalidateAndCancel()
+        wsSession = nil
+    }
+
+    private func ensureWS(_ cb: @escaping (URLSessionWebSocketTask?) -> Void) {
+        if let w = wsTask, w.state == .running || w.state == .waiting { cb(w); return }
+        closeWS()
         let gec = secMsGecV2()
         let connId = UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: "")
-        let v = fullVoiceName, p = voicePreset.pitch, r = voicePreset.rate
         guard let url = URL(string: "\(Self.wsBaseURL)?TrustedClientToken=\(Self.trustedClientToken)&ConnectionId=\(connId)&Sec-MS-GEC=\(gec)&Sec-MS-GEC-Version=\(Self.gecVersion)") else {
-            ttsLog("FAIL: bad URL")
-            completion(nil); return
+            ttsLog("FAIL: bad WS URL")
+            cb(nil); return
         }
         var req = URLRequest(url: url)
         // edge-tts 2.x WSS_HEADERS 全套（UA Chrome143 / Cookie muid / zstd）
@@ -516,30 +540,29 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         var muid = ""
         for _ in 0..<32 { muid += String(format: "%02X", Int.random(in: 0...255)) }
         req.setValue("muid=\(muid);", forHTTPHeaderField: "Cookie")
-        ttsLog("ws url=\(url.absoluteString.prefix(90)) gec=\(gec.prefix(20))...")
-
         let session = URLSession(configuration: .ephemeral)
         let ws = session.webSocketTask(with: req)
         ws.resume()
+        wsSession = session
+        wsTask = ws
+        ttsLog("ws connected conn=\(connId.prefix(8)) gec=\(gec.prefix(16))...")
+        cb(ws)
+    }
 
-        let ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='\(v)'><prosody pitch='\(p)' rate='\(r)' volume='+0%'>\(xmlEscape(text))</prosody></voice></speak>"
-        let jsDate = jsDateString()
-        // edge-tts 2.x：先 speech.config（设 outputFormat），再 SSML 直发（Path:ssml，X-Timestamp 带 Z）
-        let configPayload = "X-Timestamp:\(jsDate)\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"true\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}\r\n"
-        let ssmlPayload = "X-RequestId:\(UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: ""))\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:\(jsDate)Z\r\nPath:ssml\r\n\r\n\(ssml)"
+    private func finishSentence(_ data: Data?) {
+        let cb = sentenceCompletion
+        sentenceCompletion = nil
+        currentAudio = Data()
+        sentenceTimeout?.cancel()
+        sentenceTimeout = nil
+        cb?(data)
+    }
 
-        var audio = Data()
-        var finished = false
-        let timeoutWork = DispatchWorkItem { [weak ws] in
-            guard !finished else { return }
-            finished = true
-            ws?.cancel()
-            completion(nil)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 45, execute: timeoutWork)
-
-        func receiveLoop() {
-            ws.receive { result in
+    private func startReceiveLoop() {
+        guard let ws = wsTask else { finishSentence(nil); return }
+        ws.receive { [weak self] result in
+            guard let self else { return }
+            DispatchQueue.main.async {
                 switch result {
                 case .success(let message):
                     switch message {
@@ -549,56 +572,78 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
                             let hl = (Int(d[d.startIndex]) << 8) | Int(d[d.startIndex + 1])
                             let start = d.startIndex + 2 + hl
                             if start <= d.endIndex {
-                                audio.append(d.subdata(in: start..<d.endIndex))
+                                self.currentAudio.append(d.subdata(in: start..<d.endIndex))
                             }
                         }
-                        if audio.count % 8192 < 4096 { self.ttsLog("recv audio bytes=\(audio.count)") }
-                        receiveLoop()
+                        if self.currentAudio.count % 8192 < 4096 { self.ttsLog("recv audio bytes=\(self.currentAudio.count)") }
+                        self.startReceiveLoop()
                     case .string(let s):
                         if s.contains("Path:turn.end") || s.contains("turn.end") {
-                            self.ttsLog("turn.end received, total bytes=\(audio.count)")
-                            guard !finished else { return }
-                            finished = true
-                            timeoutWork.cancel()
-                            ws.cancel()
-                            completion(audio.count > 100 ? audio : nil)
+                            self.ttsLog("turn.end bytes=\(self.currentAudio.count)")
+                            self.finishSentence(self.currentAudio.count > 100 ? self.currentAudio : nil)
                         } else {
                             self.ttsLog("recv string: \(s.prefix(50))")
-                            receiveLoop()
+                            self.startReceiveLoop()
                         }
                     @unknown default:
-                        receiveLoop()
+                        self.startReceiveLoop()
                     }
                 case .failure(let e):
-                    self.ttsLog("FAIL: ws receive error=\(e.localizedDescription) bytes=\(audio.count)")
-                    guard !finished else { return }
-                    finished = true
-                    timeoutWork.cancel()
-                    completion(audio.count > 100 ? audio : nil)
+                    self.ttsLog("FAIL: ws recv error=\(e.localizedDescription) bytes=\(self.currentAudio.count)")
+                    self.closeWS()
+                    self.finishSentence(self.currentAudio.count > 100 ? self.currentAudio : nil)
                 }
             }
         }
-        ws.send(.string(configPayload)) { err in
-            if let err = err {
-                self.ttsLog("FAIL: ws.send config error=\(err.localizedDescription)")
-                guard !finished else { return }
-                finished = true
-                timeoutWork.cancel()
-                ws.cancel()
-                completion(nil)
-            } else {
-                self.ttsLog("speech.config sent, sending ssml...")
-                ws.send(.string(ssmlPayload)) { err2 in
-                    if let err2 = err2 {
-                        self.ttsLog("FAIL: ws.send ssml error=\(err2.localizedDescription)")
-                        guard !finished else { return }
-                        finished = true
-                        timeoutWork.cancel()
-                        ws.cancel()
-                        completion(nil)
-                    } else {
-                        self.ttsLog("ssml sent (waiting audio)")
-                        receiveLoop()
+    }
+
+    private func synthesize(_ text: String, completion: @escaping (Data?) -> Void) {
+        ttsLog("synthesize: voice=\(voicePreset.voice) pitch=\(voicePreset.pitch) rate=\(voicePreset.rate) text_len=\(text.count) ws=\(wsTask?.state.rawValue ?? -1)")
+        let v = fullVoiceName, p = voicePreset.pitch, r = voicePreset.rate
+        ensureWS { ws in
+            DispatchQueue.main.async {
+                guard let ws else {
+                    self.ttsLog("FAIL: no ws")
+                    completion(nil); return
+                }
+                self.sentenceCompletion = completion
+                self.currentAudio = Data()
+                let ssml = "<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='\(v)'><prosody pitch='\(p)' rate='\(r)' volume='+0%'>\(self.xmlEscape(text))</prosody></voice></speak>"
+                let jsDate = self.jsDateString()
+                // edge-tts 2.x：先 speech.config（设 outputFormat），再 SSML 直发（Path:ssml，X-Timestamp 带 Z）
+                let configPayload = "X-Timestamp:\(jsDate)\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"true\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}\r\n"
+                let ssmlPayload = "X-RequestId:\(UUID().uuidString.lowercased().replacingOccurrences(of: "-", with: ""))\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:\(jsDate)Z\r\nPath:ssml\r\n\r\n\(ssml)"
+                // 句级超时 20s（复用连接卡死会堵队列，超时重置连接放行下一句）
+                let tw = DispatchWorkItem { [weak self] in
+                    self?.ttsLog("FAIL: sentence timeout 20s")
+                    self?.closeWS()
+                    self?.finishSentence(nil)
+                }
+                self.sentenceTimeout = tw
+                DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: tw)
+                ws.send(.string(configPayload)) { [weak self] err in
+                    guard let self else { return }
+                    DispatchQueue.main.async {
+                        if let err = err {
+                            self.ttsLog("FAIL: ws.send config error=\(err.localizedDescription)")
+                            self.closeWS()
+                            self.finishSentence(nil)
+                        } else {
+                            self.ttsLog("speech.config sent, sending ssml...")
+                            ws.send(.string(ssmlPayload)) { [weak self] err2 in
+                                guard let self else { return }
+                                DispatchQueue.main.async {
+                                    if let err2 = err2 {
+                                        self.ttsLog("FAIL: ws.send ssml error=\(err2.localizedDescription)")
+                                        self.closeWS()
+                                        self.finishSentence(nil)
+                                    } else {
+                                        self.ttsLog("ssml sent (waiting audio)")
+                                        self.startReceiveLoop()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -23,6 +23,7 @@ struct ChatView: View {
     @State private var pendingFilePick = false
     @State private var showModelPicker = false  // v2.9.36：聊天框切换上游模型
     @State private var showVoicePicker = false  // v7.2.4：长按全局喇叭切音色（萝莉/猫娘御姐/兔娘）——聊天界面可改，HUD 角色音色固定不变
+    @State private var showTTSLogs = false  // v7.1.33：长按喇叭弹窗里的"TTS 诊断日志"——UI 直接看最近合成/播放日志（绕开沙箱读文件通道）
     @State private var showToolCenter = false  // v6.1.5-14bm：/tools 打开工具中心
     @State private var showTerminal = false  // v7.0.4：终端按钮 → 简易终端
     // v3.3.4：输入框 + 号展开"应用/相册/文件/浏览器"快捷行（点 + 变 x 收起）
@@ -124,6 +125,9 @@ struct ChatView: View {
                                 ForEach(VoicePreset.allCases, id: \.self) { v in
                                     Button(v.displayName) { withAnimation { tts.voicePreset = v } }
                                 }
+                                // v7.1.33：TTS 诊断日志（最近 40 条合成/播放记录，复现无声后直接看卡点）
+                                Button("TTS 诊断日志") { showTTSLogs = true }
+                                Button("取消", role: .cancel) {}
                             }
                             // 勾选/选择按钮
                             Button(action: enterSelection) {
@@ -291,6 +295,22 @@ struct ChatView: View {
         // v7.0.4：聊天框终端按钮 → 简易终端（统一环境 shell.exec）
         .sheet(isPresented: $showTerminal) {
             TerminalView()
+        }
+        // v7.1.33：TTS 诊断日志面板（最近 40 条合成/播放记录）
+        .sheet(isPresented: $showTTSLogs) {
+            NavigationView {
+                ScrollView {
+                    Text(tts.recentTTSLogs.isEmpty ? "暂无日志（还没触发过朗读）\n复现步骤：开顶部喇叭 → 发消息等 AI 回复 → 再回来长按喇叭选诊断" : tts.recentTTSLogs.joined())
+                        .font(.system(.caption2, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle("TTS 诊断日志")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("完成") { showTTSLogs = false } }
+                }
+            }
         }
         // v6.1.5-14bm：/tools → 工具中心（三层工具总览，给用户看）
         .sheet(isPresented: $showToolCenter) {
