@@ -1469,17 +1469,35 @@ struct MessageBubble: View {
     }
     // v4.4.20：自动朗读——用 autoSpokenUpTo 增量读"没读过"的部分；流式/非流式 onAppear+onChange 双触发共用，防重复
     // 句子边界：句末标点切分；无标点长段攒够 60 字也强制读（防一直憋着不读）
-    private func autoSpeak(_ full: String) {
+    // v7.1.38：朗读位置改全局持久化（UserDefaults by messageId）——修 v4.5.7 移除 onAppear 后
+    // 非流式/先完成的消息 onChange 不触发导致"顶部自动朗读完全不发声"；持久化+时间窗防历史消息复读。
+    private static var spokenPosCache: [String: Int] = [:]
+    private static func spokenPos(for id: UUID) -> Int {
+        let key = id.uuidString
+        if let c = spokenPosCache[key] { return c }
+        let v = (UserDefaults.standard.dictionary(forKey: "tts.spokenPositions")?[key] as? Int) ?? 0
+        spokenPosCache[key] = v
+        return v
+    }
+    private static func setSpoken(_ n: Int, for id: UUID) {
+        let key = id.uuidString
+        spokenPosCache[key] = n
+        var d = UserDefaults.standard.dictionary(forKey: "tts.spokenPositions") ?? [:]
+        d[key] = n
+        UserDefaults.standard.set(d, forKey: "tts.spokenPositions")
+    }
+    private func autoSpeak(_ full: String, for id: UUID) {
+        let spoken = Self.spokenPos(for: id)
         let chars = Array(full)
-        if autoSpokenUpTo >= chars.count { return }
-        var boundary = autoSpokenUpTo
+        if spoken >= chars.count { return }
+        var boundary = spoken
         while boundary < chars.count {
             let isPunct = "。！？!?\n…".contains(chars[boundary])
-            let overLimit = (boundary - autoSpokenUpTo) >= 60
+            let overLimit = (boundary - spoken) >= 60
             if isPunct || overLimit {
-                let sentence = String(chars[autoSpokenUpTo...boundary]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let sentence = String(chars[spoken...boundary]).trimmingCharacters(in: .whitespacesAndNewlines)
                 if !sentence.isEmpty { TTSService.shared.speak(sentence) }
-                autoSpokenUpTo = boundary + 1
+                Self.setSpoken(boundary + 1, for: id)
             }
             boundary += 1
         }
@@ -1705,12 +1723,17 @@ struct MessageBubble: View {
                     }
                 }
                 .frame(maxWidth: isUser ? nil : .infinity, alignment: .leading)
-                // v4.5.7：移除 onAppear 自动朗读——重开 App/切换会话时历史 assistant 消息
-                // 会触发 autoSpeak(全文) 复读(用户反馈)。只留 onChange 流式增量朗读新回复；
-                // 历史/完成消息不复读，需要时点气泡喇叭手动朗读。
+                // v7.1.38：自动朗读双触发——onAppear 补读（非流式/挂载前已完成的回复）+ onChange 流式增量；
+                // 全局持久化朗读位置 + 5 分钟时间窗，历史消息（重开 App/切会话）不复读。
+                .onAppear {
+                    if message.role == "assistant", !message.isTool, TTSService.shared.speakerEnabled,
+                       Date().timeIntervalSince(message.timestamp) < 300 {
+                        autoSpeak(message.content, for: message.id)
+                    }
+                }
                 .onChange(of: message.content) { newContent in
                     guard message.role == "assistant", !message.isTool, TTSService.shared.speakerEnabled else { return }
-                    autoSpeak(newContent)
+                    autoSpeak(newContent, for: message.id)
                 }
             }
         }
