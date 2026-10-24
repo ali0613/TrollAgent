@@ -1278,8 +1278,10 @@ public final class ToolRegistry: ObservableObject {
         // v3.1.64: 删 PhoneExecTool (用得少，用系统电话 App 打电话）
         // v3.1.61: 删旧的电话工具 (已合并到 PhoneExecTool）
         // v3.1.64: 删 SkillsSetEnabledTool (用 shell.exec 修改配置文件代替）
-        // v3.6.19l: 恢复注册 skills.* —— 之前注释说"用 shell.exec 代替"但 shell.exec 并无 skills 子命令，
-        //           导致 AI 永远拿不到 skills.list/read/set_enabled 工具，"AI 说调用不了技能"。恢复后按需加载机制真正生效。
+        // v3.6.19l: re-register skills.* — the earlier comment said "replaced by shell.exec",
+        //           but shell.exec has no skills subcommand, so the AI could never obtain
+        //           skills.list/read/set_enabled and would report "can't call skills".
+        //           With them restored, the on-demand loading mechanism actually works.
         register(SkillsListTool())        // v2.9.17：技能可被 AI 发现（按需搜索，不塞全量）
         register(SkillsReadTool())        // v2.9.17：技能可被 AI 读取（完整指令）
         register(SkillsSetEnabledTool())  // 技能启停
