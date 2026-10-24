@@ -368,6 +368,8 @@ public final class ToolRegistry: ObservableObject {
         "ssh", "diagnose", "knowledge", "location", "macro", "app", "control",
         "inject", "automation", "network.capture", "server", "project", "browser",
         "shell.exec", "reminder", "rescue",
+        // v7.2.0：系统侧 Mach-O 执行（jroot 越狱工具）——默认启用，AI 可直接调
+        "system.exec_root",
         // v4.3.65：统一工具安装闭环
         "tool.install", "env.setup_re",
         // v4.3.65：补齐"已注册但漏在白名单外"的分析工具——否则 AI 看不到 db/file/package，
