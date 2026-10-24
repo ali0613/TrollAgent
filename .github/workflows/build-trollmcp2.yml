@@ -21,9 +21,29 @@ jobs:
     needs: [native-python, native-wheels, native-nmap, native-llvm, native-node]
     runs-on: macos-latest
     env:
-      RELEASE_VERSION: 7.0.4   # v7.0.4: 自动启用 JIT（ptrace 自开 + URL fallback——免手动开 TrollStore JIT）   # v7.0.3: 恢复 -Djit=true + jit-fallback 补丁（jit_on 运行时化——map 失败回退纯解释器不崩）   # v7.0.2: 回退 pty stdio→realfs 管道（v7.0.0 对齐 rcarmo 的 pty 集成引入 shell.exec 挂死——关 JIT 后不崩但 echo hi 都超时 137）
+      # v4.5.x: 版本单一来源 = Support/Info.plist（每次构建前 bump + commit [skip ci] 写回 main）。
+      # 不再写死 RELEASE_VERSION——旧实现产物版本永远 7.0.4，且 App 检查更新读仓库源文件版本，
+      # 永远判定"已是最新"。现在产物版本=仓库源文件版本=每次递增。
     steps:
       - uses: actions/checkout@v4
+
+      # v4.5.x: bump 版本号（patch +1，CFBundleVersion +1），commit [skip ci] 写回 main。
+      # 目的：构建产物版本每次递增（7.0.5 → 7.0.6 → ...），App 内"检查更新"（读 main 分支
+      # Support/Info.plist / jsDelivr @main / release title）能识别新版。[skip ci] 防循环触发。
+      - name: Bump version and persist to main
+        run: |
+          VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Support/Info.plist)
+          IFS=. read -r MAJ MIN PAT <<< "$VER"
+          PAT="${PAT:-0}"
+          NEW="$MAJ.$MIN.$((PAT+1))"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $NEW" Support/Info.plist
+          BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion")
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $((BUILD+1))" Support/Info.plist
+          git add Support/Info.plist
+          git -c user.name="TrollAgent CI" -c user.email="ci@trollagent.local" \
+            commit -m "chore: bump version to $NEW [skip ci]"
+          git push origin main
+          echo ">>> version bumped to $NEW (build $((BUILD+1)))"
 
       - name: Install tools
         # fix3cy26：ldid-procursus（TrollStore 社区版）——saurik ldid 会静默嵌空 entitlements，

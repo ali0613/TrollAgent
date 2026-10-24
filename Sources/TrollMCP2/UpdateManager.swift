@@ -110,12 +110,13 @@ final class UpdateManager: ObservableObject {
                     return
                 }
                 self.latestRunId = latestRun["id"] as? Int
-                let sha = (latestRun["head_sha"] as? String) ?? ""
-                let title = (latestRun["display_title"] as? String) ?? ""
                 // 顺手记下 artifact 下载 URL（下载链第一候选）
                 self.fetchArtifactDownloadURL(runId: self.latestRunId)
-                self.fetchVersionAtSHA(sha, title: title, currentVersion: currentVersion,
-                                       source: "GitHub", completion: completion)
+                // v4.5.x：版本必须读 Release title（构建产物 RELEASE_VERSION 注入的产物版本，
+                // 如 "TrollAgent latest (v7.0.4.123)"）——旧实现读 raw Support/Info.plist（仓库源文件
+                // 6.1.0，从未随构建递增），远端永远小于本地产物版本 → 检查更新永远判定"已是最新"。
+                self.fetchLatestReleaseVersion(currentVersion: currentVersion,
+                                               source: "GitHub", completion: completion)
             }
         }
     }
@@ -202,8 +203,8 @@ final class UpdateManager: ObservableObject {
                 let title = (latestRun["display_title"] as? String) ?? ""
                 self.latestRunId = runId
                 self.fetchArtifactDownloadURL(runId: runId)
-                // 经镜像读 raw plist
-                guard let plistURL = URL(string: "\(mirror)https://raw.githubusercontent.com/\(self.repo)/\(sha)/Support/Info.plist") else {
+                // 经镜像读 main 分支 plist（v4.5.x：版本由 CI bump 写回 main，head_sha 快照是旧版本）
+                guard let plistURL = URL(string: "\(mirror)https://raw.githubusercontent.com/\(self.repo)/main/Support/Info.plist") else {
                     self.tryMirror(index: index + 1, mirrors: mirrors, parts: parts,
                                    currentVersion: currentVersion, completion: completion)
                     return
@@ -234,31 +235,34 @@ final class UpdateManager: ObservableObject {
         completion?(false)
     }
 
-    /// 从 GitHub 最新构建 commit 的 Support/Info.plist 读版本号（v4.3.29 起；artifact 名无版本号）
-    private func fetchVersionAtSHA(_ sha: String, title: String, currentVersion: String,
-                                   source: String, completion: ((Bool) -> Void)?) {
-        guard !sha.isEmpty, let url = URL(string: "https://raw.githubusercontent.com/\(repo)/\(sha)/Support/Info.plist") else {
-            let v = extractVersion(from: title)
-            if v == title {
-                checkViaJsDelivr(currentVersion: currentVersion, completion: completion)
-            } else {
-                applyVersion(v, currentVersion: currentVersion, source: source, completion: completion)
-            }
+    /// v4.5.x：从 GitHub latest release 的 title 读构建产物版本（"TrollAgent latest (v7.0.4.123)"）。
+    /// 产物版本由 CI RELEASE_VERSION 注入并随 run_number 递增——这是"检查更新"识别新版的唯一正确来源。
+    private func fetchLatestReleaseVersion(currentVersion: String, source: String,
+                                           completion: ((Bool) -> Void)?) {
+        guard let url = URL(string: "https://api.github.com/repos/\(repo)/releases/latest") else {
+            checkViaJsDelivr(currentVersion: currentVersion, completion: completion)
             return
         }
         perform(url) { [weak self] data, status, _ in
             DispatchQueue.main.async {
                 guard let self = self else { return }
-                if status == 200, let data = data, let v = self.parseVersion(from: data) {
+                guard status == 200, let data = data,
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let name = (json["name"] as? String) ?? (json["tag_name"] as? String) else {
+                    self.checkViaJsDelivr(currentVersion: currentVersion, completion: completion)
+                    return
+                }
+                let v = self.extractVersion(from: name)
+                if v != name {
                     self.applyVersion(v, currentVersion: currentVersion, source: source, completion: completion)
                 } else {
-                    // raw 不可达 → 换源链继续
                     self.checkViaJsDelivr(currentVersion: currentVersion, completion: completion)
                 }
             }
         }
     }
 
+    /// 从 GitHub 最新构建 commit 的 Support/Info.plist 读版本号（v4.3.29 起；artifact 名无版本号）
     private func parseVersion(from data: Data) -> String? {
         if let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] {
             return plist["CFBundleShortVersionString"] as? String
@@ -278,7 +282,8 @@ final class UpdateManager: ObservableObject {
     }
 
     private func extractVersion(from name: String) -> String {
-        let pattern = #"v?(\d+\.\d+\.\d+)"#
+        // v4.5.x：支持 3/4 段（产物版本可能形如 7.0.4.123 / 7.0.5）
+        let pattern = #"v?(\d+\.\d+\.\d+(?:\.\d+)?)"#
         if let regex = try? NSRegularExpression(pattern: pattern),
            let match = regex.firstMatch(in: name, range: NSRange(name.startIndex..., in: name)),
            let range = Range(match.range(at: 1), in: name) {
