@@ -17,6 +17,7 @@
 #import <AVFoundation/AVFoundation.h>   // v7.2.5：HUD 语音（录音/播放）
 #import <Speech/Speech.h>              // v7.2.5：语音识别
 #import <CommonCrypto/CommonCrypto.h>  // v7.2.5：Edge TTS Sec-MS-GEC SHA256
+#import <vector>              // v7.2.6：v2 Sec-MS-GEC DRM（edge-tts 2.x）
 
 // v6.0.7：SpringBoardServices 是私有 framework（Xcode SDK 无头文件），直接 extern "C" 声明原型（.mm 是 C++，
 // 不加 extern "C" 会按 C++ 链接找不到 tbd 里的 C 符号），符号由 HUD/libraries/SpringBoardServices.framework/SpringBoardServices.tbd 链接提供
@@ -119,6 +120,208 @@ static BOOL HUDIsZh(void) {
     NSString *lang = [NSString stringWithContentsOfFile:@"/var/mobile/Documents/app_language.txt" encoding:NSUTF8StringEncoding error:nil];
     return !(lang && [lang hasPrefix:@"en"]);
 }
+
+
+// ================= v2 Sec-MS-GEC（edge-tts 2.x DRM 完整移植，2026-10-25 实证：v1 算法 403，v2+长voice+SSML直发 才出音频） =================
+namespace hud_v2 {
+static const uint32_t M32 = 0xFFFFFFFFu;
+static uint32_t rol16(uint32_t v) { return ((v << 16) | (v >> 16)) & M32; }
+static uint32_t s0(uint32_t v) { return ((v >> 7) ^ (v << 25) ^ (v >> 18) ^ (v << 14) ^ (v >> 3)) & M32; }
+static uint32_t s1(uint32_t v) { return ((v >> 17) ^ (v << 15) ^ (v >> 19) ^ (v << 13) ^ (v >> 10)) & M32; }
+static const uint32_t SH_INIT[8] = {0x6A09E667,0xBB67AE85,0x3C6EF372,0xA54FF53A,0x510E527F,0x9B05688C,0x1F83D9AB,0x5BE0CD19};
+static const uint32_t SH_STATE[8] = {0xFD9FBEA2,0x91243CE7,0xBE499094,0xCD2E1E0A,0x6C006F49,0x04BD35AB,0xFEB0A7E4,0x03EFFBD2};
+static const uint32_t SH_SCHED[14] = {0xEB24BF9E,0x1558691F,0xA0C09EE2,0x0CFA32BA,0xA622EE8C,0xD1DD9491,0xC0DD25A0,0xF9E70AB6,0xF0C31573,0x7058CE4E,0x7188E606,0x00E5AB33,0xD258B060,0x72766564};
+static const uint32_t SH_RC[64] = {0x428A2F98,0x71374491,0xB5C0FBCF,0xE9B5DBA5,0x3956C25B,0x59F111F1,0x923F82A4,0xAB1C5ED5,0xD807AA98,0x12835B01,0x243185BE,0x550C7DC3,0x72BE5D74,0x80DEB1FE,0x9BDC06A7,0xC19BF174,0xE49B69C1,0xEFBE4786,0x0FC19DC6,0x240CA1CC,0x2DE92C6F,0x4A7484AA,0x5CB0A9DC,0x76F988DA,0x983E5152,0xA831C66D,0xB00327C8,0xBF597FC7,0xC6E00BF3,0xD5A79147,0x06CA6351,0x14292967,0x27B70A85,0x2E1B2138,0x4D2C6DFC,0x53380D13,0x650A7354,0x766A0ABB,0x81C2C92E,0x92722C85,0xA2BFE8A1,0xA81A664B,0xC24B8B70,0xC76C51A3,0xD192E819,0xD6990624,0xF40E3585,0x106AA070,0x19A4C116,0x1E376C08,0x2748774C,0x34B0BCB5,0x391C0CB3,0x4ED8AA4A,0x5B9CCA4F,0x682E6FF3,0x748F82EE,0x78A5636F,0x84C87814,0x8CC70208,0x90BEFFFA,0xA4506CEB,0xBEF9A3F7,0xC67178F2};
+static const uint32_t SH_ADJ = 0xC9DC06A7;
+static uint32_t SH_BLOCK[64];
+static const uint32_t SH_S0A = 0x059C0B80, SH_S1A = 0x000B92C0;
+static const uint32_t CS64C0[14] = {0xE82E91B1,0x44DE24C6,0x3BEB65BC,0xC89C5933,0x8D1EC211,0x314EF5D5,0xE92491B1,0xF0A5B9D5,0x06064CF3,0xDA79FA60,0xBED20560,0x89F9C9F8,0x35FA38C6,0xCB49E3C6};
+static const uint32_t CS64C1[14] = {0xB32700D0,0x88DFF51D,0x29514038,0xB328CBDF,0xD405B4D5,0x26E55F3C,0x607801C6,0x82B2C1FB,0xFA51A3DA,0x207CC464,0x3C3C74F3,0xD2D14B61,0xBB04A2C1,0xC5626167};
+static const uint32_t CS64F = 0x82893933, CS64A0 = 0xF2F90B1A, CS64A1 = 0x0B1A0000;
+static bool shBlockInit = false;
+static void ensureBlock() {
+    if (shBlockInit) return;
+    for (int i = 0; i < 14; i++) SH_BLOCK[i] = SH_RC[i];
+    SH_BLOCK[14] = SH_ADJ;
+    for (int i = 15; i < 64; i++) SH_BLOCK[i] = SH_RC[i];
+    shBlockInit = true;
+}
+static void expand(std::vector<uint32_t> &words, int first) {
+    for (int index = first; index < 64; index++) {
+        uint32_t x = words[index-2], y = words[index-15];
+        words.push_back((s1(x) + words[index-7] + s0(y) + words[index-16]) & M32);
+    }
+}
+static void rounds(const uint32_t stateIn[8], const std::vector<uint32_t> &words, int firstRound, uint32_t out[8]) {
+    uint32_t a=stateIn[0],b=stateIn[1],c=stateIn[2],d=stateIn[3],e=stateIn[4],f=stateIn[5],g=stateIn[6],h=stateIn[7];
+    ensureBlock();
+    const uint32_t *consts = (firstRound == 14) ? SH_BLOCK : SH_RC;
+    int aligned = (firstRound + 7) / 8 * 8; if (aligned > 64) aligned = 64;
+    for (int index = firstRound; index < aligned; index++) {
+        uint64_t rotE = (uint64_t)e * 0x100000001ULL, rotA = (uint64_t)a * 0x100000001ULL;
+        uint32_t t1 = (uint32_t)(((uint64_t)h + ((rotE>>6)^(rotE>>11)^(rotE>>25)) + (uint64_t)(g ^ (e & (f ^ g))) + consts[index] + words[index]) & 0xFFFFFFFFULL);
+        uint32_t t2 = (uint32_t)((((rotA>>2)^(rotA>>13)^(rotA>>22)) + (uint64_t)((a & b) | (c & (a | b)))) & 0xFFFFFFFFULL);
+        uint32_t na = (t1 + t2) & M32, nd = (d + t1) & M32;
+        // 寄存器轮换：a'=na, b'=旧a, c'=旧b, d'=旧c, e'=nd, f'=旧e, g'=旧f, h'=旧g
+        uint32_t oa=a, ob=b, oc=c, oe=e, of=f, og=g;
+        a=na; b=oa; c=ob; d=oc; e=nd; f=oe; g=of; h=og;
+    }
+    int index = aligned;
+    while (index < 64) {
+        uint64_t rotE = (uint64_t)e * 0x100000001ULL, rotA = (uint64_t)a * 0x100000001ULL;
+        uint32_t t1 = (uint32_t)(((uint64_t)h + ((rotE>>6)^(rotE>>11)^(rotE>>25)) + (uint64_t)(g ^ (e & (f ^ g))) + consts[index] + words[index]) & 0xFFFFFFFFULL);
+        d = (d + t1) & M32;
+        h = (uint32_t)((t1 + ((rotA>>2)^(rotA>>13)^(rotA>>22)) + (uint64_t)((a & b) | (c & (a | b)))) & 0xFFFFFFFFULL);
+        rotE = (uint64_t)d * 0x100000001ULL; rotA = (uint64_t)h * 0x100000001ULL;
+        t1 = (uint32_t)(((uint64_t)g + ((rotE>>6)^(rotE>>11)^(rotE>>25)) + (uint64_t)(f ^ (d & (e ^ f))) + consts[index+1] + words[index+1]) & 0xFFFFFFFFULL);
+        c = (c + t1) & M32;
+        g = (uint32_t)((t1 + ((rotA>>2)^(rotA>>13)^(rotA>>22)) + (uint64_t)((h & a) | (b & (h | a)))) & 0xFFFFFFFFULL);
+        rotE = (uint64_t)c * 0x100000001ULL; rotA = (uint64_t)g * 0x100000001ULL;
+        t1 = (uint32_t)(((uint64_t)f + ((rotE>>6)^(rotE>>11)^(rotE>>25)) + (uint64_t)(e ^ (c & (d ^ e))) + consts[index+2] + words[index+2]) & 0xFFFFFFFFULL);
+        b = (b + t1) & M32;
+        f = (uint32_t)((t1 + ((rotA>>2)^(rotA>>13)^(rotA>>22)) + (uint64_t)((g & h) | (a & (g | h)))) & 0xFFFFFFFFULL);
+        rotE = (uint64_t)b * 0x100000001ULL; rotA = (uint64_t)f * 0x100000001ULL;
+        t1 = (uint32_t)(((uint64_t)e + ((rotE>>6)^(rotE>>11)^(rotE>>25)) + (uint64_t)(d ^ (b & (c ^ d))) + consts[index+3] + words[index+3]) & 0xFFFFFFFFULL);
+        a = (a + t1) & M32;
+        e = (uint32_t)((t1 + ((rotA>>2)^(rotA>>13)^(rotA>>22)) + (uint64_t)((f & g) | (h & (f | g)))) & 0xFFFFFFFFULL);
+        rotE = (uint64_t)a * 0x100000001ULL; rotA = (uint64_t)e * 0x100000001ULL;
+        t1 = (uint32_t)(((uint64_t)d + ((rotE>>6)^(rotE>>11)^(rotE>>25)) + (uint64_t)(c ^ (a & (b ^ c))) + consts[index+4] + words[index+4]) & 0xFFFFFFFFULL);
+        h = (h + t1) & M32;
+        d = (uint32_t)((t1 + ((rotA>>2)^(rotA>>13)^(rotA>>22)) + (uint64_t)((e & f) | (g & (e | f)))) & 0xFFFFFFFFULL);
+        rotE = (uint64_t)h * 0x100000001ULL; rotA = (uint64_t)d * 0x100000001ULL;
+        t1 = (uint32_t)(((uint64_t)c + ((rotE>>6)^(rotE>>11)^(rotE>>25)) + (uint64_t)(b ^ (h & (a ^ b))) + consts[index+5] + words[index+5]) & 0xFFFFFFFFULL);
+        g = (g + t1) & M32;
+        c = (uint32_t)((t1 + ((rotA>>2)^(rotA>>13)^(rotA>>22)) + (uint64_t)((d & e) | (f & (d | e)))) & 0xFFFFFFFFULL);
+        rotE = (uint64_t)g * 0x100000001ULL; rotA = (uint64_t)c * 0x100000001ULL;
+        t1 = (uint32_t)(((uint64_t)b + ((rotE>>6)^(rotE>>11)^(rotE>>25)) + (uint64_t)(a ^ (g & (h ^ a))) + consts[index+6] + words[index+6]) & 0xFFFFFFFFULL);
+        f = (f + t1) & M32;
+        b = (uint32_t)((t1 + ((rotA>>2)^(rotA>>13)^(rotA>>22)) + (uint64_t)((c & d) | (e & (c | d)))) & 0xFFFFFFFFULL);
+        rotE = (uint64_t)f * 0x100000001ULL; rotA = (uint64_t)b * 0x100000001ULL;
+        t1 = (uint32_t)(((uint64_t)a + ((rotE>>6)^(rotE>>11)^(rotE>>25)) + (uint64_t)(h ^ (f & (g ^ h))) + consts[index+7] + words[index+7]) & 0xFFFFFFFFULL);
+        e = (e + t1) & M32;
+        a = (uint32_t)((t1 + ((rotA>>2)^(rotA>>13)^(rotA>>22)) + (uint64_t)((b & c) | (d & (b | c)))) & 0xFFFFFFFFULL);
+        index += 8;
+    }
+    out[0]=a;out[1]=b;out[2]=c;out[3]=d;out[4]=e;out[5]=f;out[6]=g;out[7]=h;
+}
+static void shaInit(const uint8_t seed[7], uint32_t out[8]) {
+    std::vector<uint32_t> words;
+    words.reserve(64);
+    for (int i = 0; i < 14; i++) words.push_back(0);
+    words.push_back(((uint32_t)seed[0] << 16) | ((uint32_t)seed[1] << 8) | seed[2]);
+    words.push_back(((uint32_t)seed[3] << 24) | ((uint32_t)seed[4] << 16) | ((uint32_t)seed[5] << 8) | seed[6]);
+    for (int index = 16; index < 30; index++) {
+        uint32_t value = SH_SCHED[index-16];
+        if (index - 2 >= 14) value += (index == 16) ? (s1(words[index-2]) ^ SH_S1A) : s1(words[index-2]);
+        if (index - 7 >= 14) value += words[index-7];
+        if (index - 15 >= 14) value += (index == 29) ? (s0(words[index-15]) ^ SH_S0A) : s0(words[index-15]);
+        words.push_back(value & M32);
+    }
+    words.push_back((s1(words[28]) + words[23] + s0(words[15]) + words[14] + SH_ADJ - SH_RC[14]) & M32);
+    expand(words, 31);
+    uint32_t working[8];
+    rounds(SH_STATE, words, 14, working);
+    for (int i = 0; i < 8; i++) out[i] = (SH_INIT[i] + working[i]) & M32;
+}
+static void shaDigest(const std::vector<uint8_t> &data, uint8_t out[32]) {
+    size_t length = 57 + data.size();
+    std::vector<uint8_t> padded(data.begin() + 7, data.end());
+    padded.push_back(0x80);
+    int padCount = (55 - (int)length) % 64; if (padCount < 0) padCount += 64;
+    padded.insert(padded.end(), padCount, 0);
+    uint64_t lenBits = (uint64_t)length * 8;
+    for (int i = 56; i >= 0; i -= 8) padded.push_back((uint8_t)((lenBits >> i) & 0xFF));
+    uint32_t state[8];
+    shaInit(&data[0], state);
+    for (size_t off = 0; off < padded.size(); off += 64) {
+        std::vector<uint32_t> words(16);
+        for (int i = 0; i < 16; i++) {
+            size_t o = off + i * 4;
+            words[i] = ((uint32_t)padded[o] << 24) | ((uint32_t)padded[o+1] << 16) | ((uint32_t)padded[o+2] << 8) | padded[o+3];
+        }
+        expand(words, 16);
+        uint32_t working[8];
+        rounds(state, words, 0, working);
+        for (int i = 0; i < 8; i++) state[i] = (state[i] + working[i]) & M32;
+    }
+    for (int i = 0; i < 8; i++) {
+        out[i*4] = (uint8_t)(state[i] >> 24); out[i*4+1] = (uint8_t)(state[i] >> 16);
+        out[i*4+2] = (uint8_t)(state[i] >> 8); out[i*4+3] = (uint8_t)state[i];
+    }
+}
+static std::vector<uint32_t> wordsLe4Even(const std::vector<uint8_t> &data) {
+    std::vector<uint8_t> padded = data;
+    while (padded.size() % 4 != 0) padded.push_back(0);
+    std::vector<uint32_t> words;
+    for (size_t i = 0; i < padded.size(); i += 4)
+        words.push_back((uint32_t)padded[i] | ((uint32_t)padded[i+1] << 8) | ((uint32_t)padded[i+2] << 16) | ((uint32_t)padded[i+3] << 24));
+    if (words.size() % 2 == 1) words.push_back(0);
+    return words;
+}
+static void cs64Digest(const std::vector<uint8_t> &data, const uint8_t digest[32], uint32_t out[2]) {
+    uint32_t keyA = ((uint32_t)digest[0] | ((uint32_t)digest[1] << 8) | ((uint32_t)digest[2] << 16) | ((uint32_t)digest[3] << 24)) | 1;
+    uint32_t keyB = ((uint32_t)digest[4] | ((uint32_t)digest[5] << 8) | ((uint32_t)digest[6] << 16) | ((uint32_t)digest[7] << 24)) | 1;
+    uint32_t factors[2] = { (keyA * CS64F) & M32, (keyB * CS64F) & M32 };
+    std::vector<uint32_t> terms, offsets;
+    for (int i = 0; i < 14; i++) { terms.push_back((CS64C0[i] * factors[i % 2]) & M32); offsets.push_back(CS64C1[i]); }
+    std::vector<uint8_t> d2; d2.push_back(0x00); d2.insert(d2.end(), data.begin(), data.end());
+    std::vector<uint32_t> words = wordsLe4Even(d2);
+    for (size_t i = 0; i < words.size(); i++) {
+        uint32_t term = (words[i] * (i % 2 == 0 ? keyA : keyB)) & M32;
+        uint32_t off = (rol16(words[i]) * (i % 2 == 0 ? 0xEF0569FB : 0xC31713DB)) & M32;
+        if (i == 0) { term = (term + (CS64A0 * factors[0])) & M32; off = (off + CS64A1) & M32; }
+        terms.push_back(term); offsets.push_back(off);
+    }
+    uint32_t swapAcc = 0, swapLast = 0, state = 0, acc = 0;
+    for (size_t i = 0; i < terms.size(); i += 2) {
+        uint32_t x = terms[i], y = terms[i+1];
+        uint32_t t = rol16((offsets[i] + x) & M32); uint32_t q = (t * 0x76F50F34) & M32;
+        swapAcc = (swapAcc + ((rol16(q) * 0xC3EFEA97) + q)) & M32;
+        t = rol16((offsets[i+1] + y) & M32); q = (t * 0x1881CE3C) & M32;
+        swapLast = ((rol16(q) * 0x35BD1EC9) + q) & M32;
+        swapAcc = (swapAcc + swapLast) & M32;
+        state = (state * keyA + x) & M32;
+        state = (rol16(state) * 0xCF98B111) & M32;
+        state = (rol16(state) * 0x87085B9F) & M32;
+        state = (rol16(state) * 0x12CEB96D) & M32;
+        state = (rol16(state) * 0x257E1D83) & M32;
+        acc = (acc + state) & M32;
+        uint32_t tt = (state * keyB + y) & M32;
+        tt = (rol16(tt) * 0xA27416F5) & M32;
+        tt = (rol16(tt) * 0xD38396FF) & M32;
+        state = (rol16((rol16(tt) * 0x7C932B89) & M32) * 0xBFA49F69) & M32;
+        acc = (acc + state) & M32;
+    }
+    out[0] = swapLast ^ state; out[1] = swapAcc ^ acc;
+}
+static NSString *secMsGecV2(double unixTs) {
+    double ticks = unixTs + 11644473600.0;
+    ticks -= fmod(ticks, 300.0);
+    ticks *= 1e7;
+    NSString *str = [NSString stringWithFormat:@"%.0f%@", ticks, @"6A5AA1D4EAFF4E9FB37E23D68491D6F4"];
+    std::vector<uint8_t> data(str.UTF8String, str.UTF8String + str.length);
+    uint8_t digest[32];
+    shaDigest(data, digest);
+    uint32_t cs[2];
+    cs64Digest(data, digest, cs);
+    // edge-tts 输出为小端 hex（struct.pack('<II')）
+    NSString *csHex = [NSString stringWithFormat:@"%02X%02X%02X%02X%02X%02X%02X%02X",
+                       cs[0] & 0xFF, (cs[0] >> 8) & 0xFF, (cs[0] >> 16) & 0xFF, cs[0] >> 24,
+                       cs[1] & 0xFF, (cs[1] >> 8) & 0xFF, (cs[1] >> 16) & 0xFF, cs[1] >> 24];
+    NSMutableString *shaHex = [NSMutableString string];
+    for (int i = 0; i < 32; i++) [shaHex appendFormat:@"%02X", digest[i]];
+    return [csHex stringByAppendingFormat:@"-%@", shaHex];
+}
+static NSString *jsDateString() {
+    NSCalendar *cal = [NSCalendar calendarWithIdentifier:NSCalendarIdentifierGregorian];
+    cal.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:0];
+    NSDateComponents *c = [cal components:NSCalendarUnitWeekday|NSCalendarUnitMonth|NSCalendarUnitDay|NSCalendarUnitYear|NSCalendarUnitHour|NSCalendarUnitMinute|NSCalendarUnitSecond fromDate:[NSDate date]];
+    static NSArray *wd = @[@"Sun",@"Mon",@"Tue",@"Wed",@"Thu",@"Fri",@"Sat"];
+    static NSArray *mo = @[@"Jan",@"Feb",@"Mar",@"Apr",@"May",@"Jun",@"Jul",@"Aug",@"Sep",@"Oct",@"Nov",@"Dec"];
+    return [NSString stringWithFormat:@"%@ %@ %02ld %04ld %02ld:%02ld:%02ld GMT+0000 (Coordinated Universal Time)",
+            wd[c.weekday-1], mo[c.month-1], (long)c.day, (long)c.year, (long)c.hour, (long)c.minute, (long)c.second];
+}
+} // namespace hud_v2
 
 @implementation HUDRootViewController {
     UIImageView *_girlView;
@@ -2977,68 +3180,83 @@ static UIImage *softParticleImage(CGFloat size) {
     if ([role isEqualToString:@"rabit"])   { voice = @"zh-CN-XiaoyiNeural";  pitchHz = 5;  ratePct = 8;  tail = @"呜~"; }
     else if ([role isEqualToString:@"cat"]) { voice = @"zh-CN-XiaoxiaoNeural"; pitchHz = -8; ratePct = 0; tail = @"喵~"; }
     else                                   { voice = @"zh-CN-XiaoyiNeural";  pitchHz = 15; ratePct = 10; tail = @""; }
+    // v7.2.6：微软 2.x 只认长 voice 名（短名 turn.start 后静默无音频）
+    NSString *fullVoice = [voice isEqualToString:@"zh-CN-XiaoxiaoNeural"]
+        ? @"Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)"
+        : @"Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoyiNeural)";
     NSString *clean = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (tail.length > 0) clean = [clean stringByAppendingString:tail];
     if (clean.length == 0) return;
 
-    // Sec-MS-GEC（无偏移：tick = epoch*1e7 + WINDOWS_TICK；timestamp 原样）
-    int64_t now = (int64_t)([[NSDate date] timeIntervalSince1970] * 1e7);
-    int64_t tick = now + 116444736000000000LL;
-    NSString *tickStr = [NSString stringWithFormat:@"%lld", tick];
-    NSString *gec = [[self _sha256Hex:[tickStr stringByAppendingString:@"6A5AA1D4EAFF4E9FB37E23D68491D6F4"]] uppercaseString];
-    NSString *ts = [NSString stringWithFormat:@"%lld", now];
-    NSString *connId = [[NSUUID UUID] UUIDString];
-    NSString *urlStr = [NSString stringWithFormat:@"wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=%@", connId];
+    // v7.2.6：v2 Sec-MS-GEC（cs64-sha256，5 分钟取整）→ URL query + 版本号（edge-tts 2.x 实证）
+    NSString *gec = hud_v2::secMsGecV2([[NSDate date] timeIntervalSince1970]);
+    NSString *connId = [[[NSUUID UUID] UUIDString] lowercaseString];
+    connId = [connId stringByReplacingOccurrencesOfString:@"-" withString:@""];
+    NSString *urlStr = [NSString stringWithFormat:@"wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=%@&Sec-MS-GEC=%@&Sec-MS-GEC-Version=2-143.0.3650.75", connId, gec];
     NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlStr]];
-    [req setValue:gec forHTTPHeaderField:@"Sec-MS-GEC"];
-    [req setValue:ts forHTTPHeaderField:@"Sec-MS-GEC-Timestamp"];
+    // edge-tts 2.x WSS_HEADERS 全套（UA Chrome143 / Cookie muid / zstd；无 Sec-MS-GEC header）
+    [req setValue:@"no-cache" forHTTPHeaderField:@"Pragma"];
+    [req setValue:@"no-cache" forHTTPHeaderField:@"Cache-Control"];
     [req setValue:@"chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold" forHTTPHeaderField:@"Origin"];
-    [req setValue:@"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.66 Safari/537.36 Edg/103.0.1264.44" forHTTPHeaderField:@"User-Agent"];
-    [req setValue:@"speech-synthesis" forHTTPHeaderField:@"Sec-WebSocket-Protocol"];
+    [req setValue:@"13" forHTTPHeaderField:@"Sec-WebSocket-Version"];
+    [req setValue:@"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0" forHTTPHeaderField:@"User-Agent"];
+    [req setValue:@"gzip, deflate, br, zstd" forHTTPHeaderField:@"Accept-Encoding"];
+    [req setValue:@"en-US,en;q=0.9" forHTTPHeaderField:@"Accept-Language"];
+    NSMutableString *muid = [NSMutableString string];
+    for (int i = 0; i < 32; i++) [muid appendFormat:@"%02X", arc4random_uniform(256)];
+    [req setValue:[NSString stringWithFormat:@"muid=%@;", muid] forHTTPHeaderField:@"Cookie"];
 
     NSURLSession *session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration ephemeralSessionConfiguration]];
     NSURLSessionWebSocketTask *ws = [session webSocketTaskWithRequest:req];
     [ws resume];
 
     NSString *escaped = [self _xmlEscape:clean];
-    NSString *ssml = [NSString stringWithFormat:@"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='%@'><prosody pitch='%+dhz' rate='%+d%%' volume='+0%%'>%@</prosody></voice></speak>", voice, pitchHz, ratePct, escaped];
-    NSDictionary *msg = @{
-        @"context": @{ @"synthesis": @{ @"audio": @{ @"metadataoptions": @[@"sentenceBoundaryEnabled=false", @"wordBoundaryEnabled=true"], @"outputFormat": @"audio-24khz-48kbitrate-mono-mp3" } } },
-        @"message": @{ @"locale": @"zh-CN", @"market": @"zh-CN", @"voice": voice, @"service": @"edge-tts", @"text": clean, @"ssml": ssml }
-    };
-    NSData *bodyData = [NSJSONSerialization dataWithJSONObject:msg options:0 error:nil];
-    NSString *json = [[NSString alloc] initWithData:bodyData encoding:NSUTF8StringEncoding];
-    NSString *payload = [NSString stringWithFormat:@"X-Timestamp:%f\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.synthesize\r\n\r\n%@", [[NSDate date] timeIntervalSince1970], json];
+    NSString *ssml = [NSString stringWithFormat:@"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='%@'><prosody pitch='%+dhz' rate='%+d%%' volume='+0%%'>%@</prosody></voice></speak>", fullVoice, pitchHz, ratePct, escaped];
+    // v7.2.6：先 speech.config（设 outputFormat），再 SSML 直发（Path:ssml，X-Timestamp 带 Z）
+    NSString *jsDate = hud_v2::jsDateString();
+    NSString *configPayload = [NSString stringWithFormat:@"X-Timestamp:%@\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"true\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}\r\n", jsDate];
+    NSString *ssmlPayload = [NSString stringWithFormat:@"X-RequestId:%@\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:%@Z\r\nPath:ssml\r\n\r\n%@", [[[NSUUID UUID] UUIDString] lowercaseString], jsDate, ssml];
 
     NSMutableData *audio = [NSMutableData data];
     __weak typeof(self) wself = self;
-    [ws sendMessage:[[NSURLSessionWebSocketMessage alloc] initWithString:payload] completionHandler:^(NSError *err) {
+    [ws sendMessage:[[NSURLSessionWebSocketMessage alloc] initWithString:configPayload] completionHandler:^(NSError *err) {
         if (err) { [ws cancel]; return; }
         typeof(self) sself = wself;
         if (!sself) return;
-        __block void (^loop)(void) = nil;
-        loop = ^{
-            [ws receiveMessageWithCompletionHandler:^(NSURLSessionWebSocketMessage *m, NSError *e) {
-                if (e) {
-                    if (audio.length > 100) [sself _playAudio:audio];
-                    [ws cancel];
-                    return;
-                }
-                if (m.type == NSURLSessionWebSocketMessageTypeData) {
-                    [audio appendData:m.data];
-                    loop();
-                } else {
-                    NSString *s = m.string;
-                    if (s && [s containsString:@"turn.end"]) {
-                        [sself _playAudio:audio];
+        [ws sendMessage:[[NSURLSessionWebSocketMessage alloc] initWithString:ssmlPayload] completionHandler:^(NSError *err2) {
+            if (err2) { [ws cancel]; return; }
+            __block void (^loop)(void) = nil;
+            loop = ^{
+                [ws receiveMessageWithCompletionHandler:^(NSURLSessionWebSocketMessage *m, NSError *e) {
+                    if (e) {
+                        if (audio.length > 100) [sself _playAudio:audio];
                         [ws cancel];
-                    } else {
-                        loop();
+                        return;
                     }
-                }
-            }];
-        };
-        loop();
+                    if (m.type == NSURLSessionWebSocketMessageTypeData) {
+                        // 音频 BINARY 帧：前 2 字节 header 长度 + header + 音频（edge-tts 同样剥离）
+                        NSData *d = m.data;
+                        if (d.length >= 2) {
+                            const uint8_t *b = (const uint8_t *)d.bytes;
+                            int hl = (b[0] << 8) | b[1];
+                            if (2 + hl <= (int)d.length) {
+                                [audio appendData:[d subdataWithRange:NSMakeRange(2 + hl, d.length - 2 - hl)]];
+                            }
+                        }
+                        loop();
+                    } else {
+                        NSString *s = m.string;
+                        if (s && [s containsString:@"turn.end"]) {
+                            if (audio.length > 100) [sself _playAudio:audio];
+                            [ws cancel];
+                        } else {
+                            loop();
+                        }
+                    }
+                }];
+            };
+            loop();
+        }];
     }];
 }
 
