@@ -1270,6 +1270,17 @@ enum L10n {
             // v4.5.x：环境检测精简——注入二进制合并为一项（包内自带，缺了只能重装）
             tbl["i18n_1216"] = ["zh": "注入工具链", "en": "Injection toolchain"]
             tbl["i18n_1217"] = ["zh": "缺失：%@（重装包恢复）", "en": "Missing: %@ (reinstall to restore)"]
+            // v4.5.x：环境检测新增——VPN 扩展 / 静默安装助手 / 环境类型
+            tbl["i18n_1218"] = ["zh": "VPN 隧道扩展", "en": "VPN Tunnel Extension"]
+            tbl["i18n_1219"] = ["zh": "VpnTunnel.appex 就绪", "en": "VpnTunnel.appex ready"]
+            tbl["i18n_1220"] = ["zh": "VpnTunnel.appex 缺失（重装包恢复）", "en": "VpnTunnel.appex missing (reinstall to restore)"]
+            tbl["i18n_1221"] = ["zh": "静默安装助手", "en": "Silent Install Helper"]
+            tbl["i18n_1222"] = ["zh": "trollstorehelper 就绪", "en": "trollstorehelper ready"]
+            tbl["i18n_1223"] = ["zh": "trollstorehelper 缺失（TrollStore 未部署，重装 TrollStore 或本包）", "en": "trollstorehelper missing (TrollStore not deployed, reinstall TrollStore or this package)"]
+            tbl["i18n_1224"] = ["zh": "环境类型", "en": "Environment Type"]
+            tbl["i18n_1225"] = ["zh": "非越狱 TrollStore", "en": "Non-jailbroken TrollStore"]
+            tbl["i18n_1226"] = ["zh": "越狱（rootless）", "en": "Jailbroken (rootless)"]
+            tbl["i18n_1227"] = ["zh": "未识别", "en": "Unknown"]
             tbl["i18n_1020"] = ["zh": "逆向专家模式", "en": "Reverse-Engineering Expert"]
             tbl["i18n_1021"] = ["zh": "渗透工程师模式", "en": "Pentesting Engineer"]
             tbl["i18n_1022"] = ["zh": "游戏修改模式", "en": "Game Modding Mode"]

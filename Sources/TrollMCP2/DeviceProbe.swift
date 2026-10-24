@@ -118,6 +118,40 @@ final class DeviceProbe: ObservableObject {
         }
         checks.append(Check(label: L10n.t("i18n_1216"), passed: allBinsOK, detail: toolchainDetail, infoOnly: false))
         checks.append(Check(label: L10n.t("i18n_1201"), passed: amfidBypassInferred, detail: amfidBypassInferred ? L10n.t("i18n_1209") : L10n.t("i18n_1210"), infoOnly: false))
+        // v4.5.x：新增检测——VPN 隧道扩展（NE 载入前提）/ 静默安装助手 / 环境类型（信息）
+        // VPN：VpnTunnel.appex 存在 + 内置 ldid 实测签名含 packet-tunnel-provider。
+        // ldid 读取失败（非越狱 spawn 受限）时按"存在"判定，不误红。
+        var vpnOK = false
+        var vpnDetail = L10n.t("i18n_1220")
+        if let appexBin = TrustEnabler.vpnTunnelBinaryPath() {
+            vpnOK = true
+            vpnDetail = L10n.t("i18n_1219")
+            if let ldidPath = InjectionManager.shared.binaryPath("ldid") {
+                let (code, out) = InjectionManager.shared.spawnRoot(ldidPath, args: ["-e", appexBin], timeout: 15)
+                if code == 0, out.contains("packet-tunnel-provider") {
+                    vpnDetail = L10n.t("i18n_1219") + " · packet-tunnel-provider ✓"
+                } else if code == 0 {
+                    vpnDetail = L10n.t("i18n_1219") + " · packet-tunnel-provider ✗（NE 可能拒载）"
+                    vpnOK = false
+                }
+            }
+        }
+        checks.append(Check(label: L10n.t("i18n_1218"), passed: vpnOK, detail: vpnDetail, infoOnly: false))
+
+        // 静默安装助手：TrollStore 部署的系统 helper
+        let helperPath = "/var/usr/bin/trollstorehelper"
+        let helperOK = FileManager.default.isExecutableFile(atPath: helperPath)
+        checks.append(Check(label: L10n.t("i18n_1221"), passed: helperOK,
+                            detail: helperOK ? L10n.t("i18n_1222") : L10n.t("i18n_1223"), infoOnly: false))
+
+        // 环境类型（信息项，解释功能差异——如进程级操作仅越狱可用）
+        let jailbroken = FileManager.default.fileExists(atPath: "/var/jb")
+            || FileManager.default.fileExists(atPath: "/private/preboot/jb")
+        let envType: String
+        if jailbroken { envType = L10n.t("i18n_1226") }
+        else if trollStore { envType = L10n.t("i18n_1225") }
+        else { envType = L10n.t("i18n_1227") }
+        checks.append(Check(label: L10n.t("i18n_1224"), passed: true, detail: envType, infoOnly: true))
 
         // v2.9.156：ready 不再依赖 taskForPid——静态injected (insert_dylib+ct_bypass 重签名）
         // 与进程端口无关；TrollStore 非越狱拿不到其他进程端口是常态，不应导致"环境异常"
