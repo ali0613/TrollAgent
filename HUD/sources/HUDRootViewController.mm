@@ -2979,7 +2979,7 @@ static UIImage *softParticleImage(CGFloat size) {
 - (void)_startListening {
     if (_listening) return;
     [self _ensureSpeechPermission:^(BOOL ok) {
-        if (!ok) { [self _speakLocalHint]; return; }
+        if (!ok) { [self _speakLocalHint:@"请先允许麦克风和语音识别权限"]; return; }
         dispatch_async(dispatch_get_main_queue(), ^{
             [self _beginRecording];
         });
@@ -3015,10 +3015,12 @@ static UIImage *softParticleImage(CGFloat size) {
     }
 }
 
-/// 权限被拒提示（系统 TTS 说一句）
-- (void)_speakLocalHint {
+/// 权限被拒/链路失败语音提示（本地系统 TTS——不依赖网络；v7.1.44 参数化文案）
+- (void)_speakLocalHint:(NSString *)msg {
+    if (!msg || msg.length == 0) msg = @"出错了，请重试";
     if (!_hintSpeaker) _hintSpeaker = [AVSpeechSynthesizer new];   // 强持有，防 ARC 释放中断
-    AVSpeechUtterance *u = [AVSpeechUtterance speechUtteranceWithString:@"请先允许麦克风和语音识别权限"];
+    [_hintSpeaker stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
+    AVSpeechUtterance *u = [AVSpeechUtterance speechUtteranceWithString:msg];
     u.voice = [AVSpeechSynthesisVoice voiceWithLanguage:@"zh-CN"];
     u.rate = 0.5f;
     [_hintSpeaker speakUtterance:u];
@@ -3071,24 +3073,49 @@ static UIImage *softParticleImage(CGFloat size) {
 }
 
 /// 停止录音：取最终识别文本 → 发 AI（persona，无工具）→ TTS 播放
+/// v7.1.44：识别结果未就绪（说完立即松手/识别器延迟）时不再静默丢弃——
+/// finish 等 final result（最多 1.5s），仍空则本地语音提示"没听清"
 - (void)_stopListeningAndSend {
     if (!_listening) { [self _abortListening]; return; }
     [_silenceTimer invalidate]; _silenceTimer = nil;
     _listening = NO;
+    [_audioEngine stop];
+    [_audioEngine.inputNode removeTapOnBus:0];
+    _audioEngine = nil;
+
     NSString *text = @"";
     if (_sttResult) {
         text = _sttResult.bestTranscription.formattedString;
     }
-    [_sttTask cancel]; _sttTask = nil;
-    _sttResult = nil;
-    [_audioEngine stop];
-    [_audioEngine.inputNode removeTapOnBus:0];
-    _audioEngine = nil;
-    _sttReq = nil;
     text = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (text.length > 0) {
+        [self _finishListeningCleanup];
         [self _askAI:text];
+        return;
     }
+    // 识别器可能还在消化音频——finish 等 final result
+    [_sttTask finish];
+    __weak typeof(self) wself = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        typeof(self) sself = wself;
+        if (!sself) return;
+        NSString *late = @"";
+        if (sself->_sttResult) late = sself->_sttResult.bestTranscription.formattedString;
+        late = [late stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        [sself _finishListeningCleanup];
+        if (late.length > 0) {
+            [sself _askAI:late];
+        } else {
+            [sself _speakLocalHint:@"没听清，请再按住说一次"];
+        }
+    });
+}
+
+/// v7.1.44：识别任务清理（cancel + 清缓存）——从 _stopListeningAndSend 抽出，避免延迟分支重复
+- (void)_finishListeningCleanup {
+    [_sttTask cancel]; _sttTask = nil;
+    _sttResult = nil;
+    _sttReq = nil;
 }
 
 /// 丢弃录音（拖动打断用，不发送）
@@ -3185,6 +3212,10 @@ static UIImage *softParticleImage(CGFloat size) {
             } else {
                 [line writeToFile:logPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
             }
+            // v7.1.44：不再静默——本地语音提示一句（用户至少知道失败了，日志细节可让 AI 读）
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [sself _speakLocalHint:@"刚才那句话没收到回复，请再试一次"];
+            });
             return;
         }
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
@@ -3251,11 +3282,26 @@ static UIImage *softParticleImage(CGFloat size) {
     NSMutableData *audio = [NSMutableData data];
     __weak typeof(self) wself = self;
     [ws sendMessage:[[NSURLSessionWebSocketMessage alloc] initWithString:configPayload] completionHandler:^(NSError *err) {
-        if (err) { [ws cancel]; return; }
+        if (err) {
+            [ws cancel];
+            // v7.1.44：WS 连不上 → 本地语音提示（原静默，用户以为没回复）
+            dispatch_async(dispatch_get_main_queue(), ^{
+                typeof(self) hs = wself;
+                [hs _speakLocalHint:@"语音服务连不上，请稍后再试"];
+            });
+            return;
+        }
         typeof(self) sself = wself;
         if (!sself) return;
         [ws sendMessage:[[NSURLSessionWebSocketMessage alloc] initWithString:ssmlPayload] completionHandler:^(NSError *err2) {
-            if (err2) { [ws cancel]; return; }
+            if (err2) {
+                [ws cancel];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    typeof(self) hs = wself;
+                    [hs _speakLocalHint:@"语音合成失败，请稍后再试"];
+                });
+                return;
+            }
             __block void (^loop)(void) = nil;
             loop = ^{
                 [ws receiveMessageWithCompletionHandler:^(NSURLSessionWebSocketMessage *m, NSError *e) {
@@ -3278,7 +3324,15 @@ static UIImage *softParticleImage(CGFloat size) {
                     } else {
                         NSString *s = m.string;
                         if (s && [s containsString:@"turn.end"]) {
-                            if (audio.length > 100) [sself _playAudio:audio];
+                            if (audio.length > 100) {
+                                [sself _playAudio:audio];
+                            } else {
+                                // v7.1.44：turn.end 但无音频 → 提示（原静默无声）
+                                dispatch_async(dispatch_get_main_queue(), ^{
+                                    typeof(self) hs = wself;
+                                    [hs _speakLocalHint:@"回复没有合成出声音"];
+                                });
+                            }
                             [ws cancel];
                         } else {
                             loop();
@@ -3322,6 +3376,9 @@ static UIImage *softParticleImage(CGFloat size) {
     if (p) {
         _ttsPlayer = p;   // v7.2.5：强持有到播完/下一次，否则 ARC 释放 → 无声
         [p play];
+    } else {
+        // v7.1.44：播放器创建失败 → 提示（原静默）
+        [self _speakLocalHint:@"播放失败，请重试"];
     }
 }
 
