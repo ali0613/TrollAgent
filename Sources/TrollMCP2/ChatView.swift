@@ -1487,7 +1487,7 @@ struct MessageBubble: View {
         UserDefaults.standard.set(d, forKey: "tts.spokenPositions")
     }
     private func autoSpeak(_ full: String, for id: UUID) {
-        let spoken = Self.spokenPos(for: id)
+        var spoken = Self.spokenPos(for: id)
         let chars = Array(full)
         if spoken >= chars.count { return }
         var boundary = spoken
@@ -1497,6 +1497,9 @@ struct MessageBubble: View {
             if isPunct || overLimit {
                 let sentence = String(chars[spoken...boundary]).trimmingCharacters(in: .whitespacesAndNewlines)
                 if !sentence.isEmpty { TTSService.shared.speak(sentence) }
+                // v7.1.40 fix：切完一句必须前移 spoken，否则循环继续用旧起点切片 →
+                // 多句回复入队「句1 / 句1+2 / 句1+2+3…」全部重复第一句（用户实测「循环重复第一句话」根因）
+                spoken = boundary + 1
                 Self.setSpoken(boundary + 1, for: id)
             }
             boundary += 1
@@ -1706,12 +1709,21 @@ struct MessageBubble: View {
                                 .strokeBorder(isSelected ? (isUser ? Color.white : Color.blue) : Color.clear, lineWidth: 2)
                         )
                     // v4.4.18：朗读喇叭按钮（assistant 消息）——点一下朗读这条全文；长按仍保留选字复制
+                    // v7.1.40：正在播这条时再点 = 停止（关闭声音）；全局开关关闭时点击不发声（斜杠灰显）
                     if !isUser && !message.isTool {
                         HStack(spacing: 6) {
-                            Button(action: { TTSService.shared.speakForced(id: message.id.uuidString, message.content) }) {
-                                Image(systemName: TTSService.shared.speakingId == message.id.uuidString ? "speaker.wave.2.fill" : "speaker.wave.2")
+                            let isSpeakingThis = TTSService.shared.speakingId == message.id.uuidString
+                            let soundOff = !TTSService.shared.speakerEnabled
+                            Button(action: {
+                                if isSpeakingThis {
+                                    TTSService.shared.stop()
+                                } else if !soundOff {
+                                    TTSService.shared.speakForced(id: message.id.uuidString, message.content)
+                                }
+                            }) {
+                                Image(systemName: soundOff ? "speaker.slash.fill" : (isSpeakingThis ? "speaker.wave.2.fill" : "speaker.wave.2"))
                                     .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(TTSService.shared.speakingId == message.id.uuidString ? .tmCyan : .secondary)
+                                    .foregroundColor(isSpeakingThis ? .tmCyan : .secondary)
                                     .padding(.vertical, 6)
                                     .contentShape(Rectangle())
                             }

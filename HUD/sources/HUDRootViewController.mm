@@ -3117,10 +3117,15 @@ static UIImage *softParticleImage(CGFloat size) {
     return [@"You are Loli, a cute innocent little girl companion. Cheerful, playful, calls the user \"master\". Short cute sentences. " stringByAppendingString:env];
 }
 
-/// 发 AI：读主 App 模型配置（同一进程 UserDefaults 共享）→ OpenAI Chat Completions
+/// 发 AI：读主 App 模型配置（App Group suite 共享——HUD 独立进程，standardUserDefaults 是
+/// 进程自己的域读不到主 App 的配置 → 兜底 deepseek 但 apiKey 为空 → 401 静默无回复）→ OpenAI Chat Completions
 - (void)_askAI:(NSString *)text {
-    NSData *cfgData = [[NSUserDefaults standardUserDefaults] dataForKey:@"trollmcp2.model_configs"];
-    NSString *lastId = [[NSUserDefaults standardUserDefaults] stringForKey:@"trollmcp2.last_used_config_id"];
+    NSUserDefaults *appGroup = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"];
+    NSData *cfgData = [appGroup dataForKey:@"trollmcp2.model_configs"];
+    NSString *lastId = [appGroup stringForKey:@"trollmcp2.last_used_config_id"];
+    // 兼容回退：老版本主 App 只写进程级 standard
+    if (!cfgData) cfgData = [[NSUserDefaults standardUserDefaults] dataForKey:@"trollmcp2.model_configs"];
+    if (!lastId) lastId = [[NSUserDefaults standardUserDefaults] stringForKey:@"trollmcp2.last_used_config_id"];
     NSDictionary *cfg = nil;
     if (cfgData) {
         NSArray *cfgs = [NSJSONSerialization JSONObjectWithData:cfgData options:0 error:nil];
@@ -3136,6 +3141,12 @@ static UIImage *softParticleImage(CGFloat size) {
     NSString *apiKey = cfg[@"apiKey"] ?: @"";
     NSString *model = cfg[@"model"] ?: @"deepseek-chat";
     NSString *endpoint = [baseURL stringByAppendingString:@"/chat/completions"];
+    // v7.1.40：诊断日志——定位无回复是配置缺失/网络失败/鉴权失败哪一环（写 HUD 可读的 Documents/tts_debug.log）
+    NSMutableString *diag = [NSMutableString stringWithFormat:@"[HUD _askAI] cfgData=%@ lastId=%@ cfgFound=%d base=%@ model=%@ keyLen=%lu",
+                             cfgData ? @"yes" : @"NO", lastId ? lastId : @"nil", cfg != nil, baseURL, model,
+                             (unsigned long)apiKey.length];
+    if (!cfgData) [diag appendString:@" | ROOTCAUSE: model_configs missing from app-group defaults (main app must write group.com.ai.iosxcode)"];
+    if (apiKey.length == 0) [diag appendString:@" | WARN: apiKey empty -> 401"];
 
     NSDictionary *body = @{
         @"model": model,
@@ -3153,9 +3164,29 @@ static UIImage *softParticleImage(CGFloat size) {
     req.HTTPBody = [NSJSONSerialization dataWithJSONObject:body options:0 error:nil];
 
     __weak typeof(self) wself = self;
+    NSString *diagCopy = [diag copy];
     [[[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
         typeof(self) sself = wself;
-        if (!sself || err || !data) return;
+        if (!sself) return;
+        NSHTTPURLResponse *http = (NSHTTPURLResponse *)resp;
+        long status = [http isKindOfClass:[NSHTTPURLResponse class]] ? (long)http.statusCode : 0;
+        if (err || !data || status >= 400) {
+            // v7.1.40：失败落盘诊断（HUD 独立进程无 UI 面板，写 tts_debug.log 供 App 内 AI 读）
+            NSString *line = [NSString stringWithFormat:@"[HUD _askAI FAIL] %@ http=%ld err=%@ body=%@\n",
+                              diagCopy, status, err ? err.localizedDescription : @"nil",
+                              data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"nil"];
+            NSLog(@"%@", line);
+            NSString *logPath = @"/var/mobile/Documents/tts_debug.log";
+            NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:logPath];
+            if (fh) {
+                [fh seekToEndOfFile];
+                [fh writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+                [fh closeFile];
+            } else {
+                [line writeToFile:logPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+            }
+            return;
+        }
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
         if (![json isKindOfClass:[NSDictionary class]]) return;
         NSArray *choices = json[@"choices"];

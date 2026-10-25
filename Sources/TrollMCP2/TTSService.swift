@@ -120,8 +120,10 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         enqueueSentences(cleanForSpeech(withCatchphrase(text)))
     }
 
-    /// 手动朗读（无视开关，打断当前自动朗读，只播这段）——整段已完整，一次合成后连续播完（实测100字3s/500字约6s，比逐句更快）
+    /// 手动朗读（受全局喇叭开关控制——v7.1.40：全局关闭=全部静音，气泡喇叭也不再出声；
+    /// 打断当前自动朗读，只播这段）——整段已完整，一次合成后连续播完（实测100字3s/500字约6s，比逐句更快）
     func speakForced(id: String?, _ text: String) {
+        guard speakerEnabled else { return }
         stopInternal()
         let t = cleanForSpeech(withCatchphrase(text)).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }

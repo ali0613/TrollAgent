@@ -183,11 +183,20 @@ final class ModelStore: ObservableObject {
     private let key = "trollmcp2.model_configs"    // v2.9.97：记住最近一次使用的模型，顶栏立即显示用户上次用的配置，不再回退到第一个 (旧 gpt4o）
     private let lastUsedKey = "trollmcp2.last_used_config_id"
 
+    // v7.1.40：模型配置双写 App Group（group.com.ai.iosxcode）——HUD 是独立进程
+    // （bundle ch.xxtou.hudapp），读 standardUserDefaults 只能拿到进程自己的域，拿不到
+    // 主 App 写入的 model_configs → _askAI 兜底到 deepseek 但 apiKey 为空 → 401 静默无回复。
+    // 两侧 entitlements 都含 application-groups，suite 通道可用；读优先 suite，回退 standard（兼容老版本）。
+    private var suitePrefs: UserDefaults? { UserDefaults(suiteName: "group.com.ai.iosxcode") }
+
     init() { load() }
 
     var lastUsedConfigId: String? {
-        get { UserDefaults.standard.string(forKey: lastUsedKey) }
-        set { UserDefaults.standard.set(newValue, forKey: lastUsedKey) }
+        get { suitePrefs?.string(forKey: lastUsedKey) ?? UserDefaults.standard.string(forKey: lastUsedKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: lastUsedKey)
+            suitePrefs?.set(newValue, forKey: lastUsedKey)
+        }
     }
 
     func markUsed(_ id: String) {
@@ -195,38 +204,41 @@ final class ModelStore: ObservableObject {
     }
 
     func load() {
-        let ud = UserDefaults.standard
-        guard let data = ud.data(forKey: key),
-              let decoded = try? JSONDecoder().decode([ModelConfig].self, from: data) else {
-            // v2.9.107：主数据损坏时从备份restored (最多试 4 份）
-            for i in 0...3 {
-                if let bak = ud.data(forKey: "\(key).bak.\(i)"),
-                   let decoded = try? JSONDecoder().decode([ModelConfig].self, from: bak) {
-                    configs = decoded
-                    break
-                }
-            }
+        let suite = suitePrefs
+        let std = UserDefaults.standard
+        // suite 主数据（HUD 同源）优先；缺失时回退 standard（老版本主 App 写入）
+        let data = suite?.data(forKey: key) ?? std.data(forKey: key)
+        if let d = data, let decoded = try? JSONDecoder().decode([ModelConfig].self, from: d) {
+            configs = decoded
             return
         }
-        configs = decoded
-    }
-
-    /// v2.9.107：原子写前备份轮换 (保留最近 4 份）
-    private func rotateBackup() {
-        let ud = UserDefaults.standard
-        guard let current = ud.data(forKey: key) else { return }
-        for i in stride(from: 2, through: 0, by: -1) {
-            if let old = ud.data(forKey: "\(key).bak.\(i)") {
-                ud.set(old, forKey: "\(key).bak.\(i + 1)")
+        // v2.9.107：主数据损坏时从备份restored (最多试 4 份）——suite 优先，standard 兜底
+        for i in 0...3 {
+            let bak = suite?.data(forKey: "\(key).bak.\(i)") ?? std.data(forKey: "\(key).bak.\(i)")
+            if let bak, let decoded = try? JSONDecoder().decode([ModelConfig].self, from: bak) {
+                configs = decoded
+                break
             }
         }
-        ud.set(current, forKey: "\(key).bak.0")
+    }
+
+    /// v2.9.107：原子写前备份轮换 (保留最近 4 份）——备份域与 save 写入域一致（suite）
+    private func rotateBackup() {
+        let suite = suitePrefs
+        let std = UserDefaults.standard
+        guard let current = suite?.data(forKey: key) ?? std.data(forKey: key) else { return }
+        for i in stride(from: 2, through: 0, by: -1) {
+            let old = suite?.data(forKey: "\(key).bak.\(i)") ?? std.data(forKey: "\(key).bak.\(i)")
+            if let old { suite?.set(old, forKey: "\(key).bak.\(i + 1)") }
+        }
+        suite?.set(current, forKey: "\(key).bak.0")
     }
 
     func save() {
         if let data = try? JSONEncoder().encode(configs) {
             rotateBackup()
             UserDefaults.standard.set(data, forKey: key)
+            suitePrefs?.set(data, forKey: key)   // v7.1.40：双写 App Group 供 HUD 独立进程读取
         }
     }
 
