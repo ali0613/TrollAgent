@@ -69,16 +69,20 @@
     [self _log:@"connect host=%@ port=%@ req=%luB", host, port, (unsigned long)_pendingHandshake.length];
 
     // Network.framework C API：secure_tcp = TLS 默认（SNI/证书校验系统处理）
+    // 17.5 SDK 签名：nw_parameters_create_secure_tcp(configure_tls_block, configure_tcp_block)
+    // 两参均 _Nonnull——传 NULL 可能 create 失败返回 nil → 无任何状态回调（7.1.70 实测：state handler 一次都没触发）
+    nw_parameters_configure_protocol_block_t noop = ^(nw_protocol_options_t options) {};
     nw_endpoint_t ep = nw_endpoint_create_host([host UTF8String], [[port stringValue] UTF8String]);
-    nw_parameters_t params = nw_parameters_create_secure_tcp(NW_PARAMETERS_DISABLE_PROTOCOL, NULL);
+    nw_parameters_t params = nw_parameters_create_secure_tcp(noop, noop);
     _conn = nw_connection_create(ep, params);
+    [self _log:@"nw create: ep=%d params=%d conn=%d", ep ? 1 : 0, params ? 1 : 0, _conn ? 1 : 0];
     // 17.5 SDK：receive/send 无 queue 参数，回调走 connection 队列（此处设为主队列）
     nw_connection_set_queue(_conn, dispatch_get_main_queue());
     __weak WSClient *wSelf = self;
     nw_connection_set_state_changed_handler(_conn, ^(nw_connection_state_t state, nw_error_t error) {
         WSClient *s = wSelf;
         if (!s) return;
-        [s _log:@"nw state=%d", (int)state];
+        [s _log:@"nw state=%d err=%d", (int)state, error ? 1 : 0];
         if (state == nw_connection_state_ready) {
             [s _log:@"nw ready — TLS done, sending handshake"];
             [s _sendRawData:[s->_pendingHandshake dataUsingEncoding:NSUTF8StringEncoding] tag:@"handshake"];
@@ -88,6 +92,7 @@
         }
     });
     nw_connection_start(_conn);
+    [self _log:@"nw start called"];
 
     // 10s 握手超时保护（主线程不阻塞）
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
