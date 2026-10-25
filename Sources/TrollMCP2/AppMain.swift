@@ -85,6 +85,17 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // load() 永不执行 → 共享配置文件不写 → HUD 读 sharedFile=NO 401 无回复（17:21 实测根因）
         _ = ModelStore.shared
         ToolRegistry.shared.registerBuiltinTools()
+        // v7.1.75：注册 MCP 入口工具（user.mcp_list / user.mcp_call，AI 调用时动态发现工具）
+        MCPClientManager.shared.registerEntryTools()
+        // v7.1.75：启动后台连接已启用的 MCP 服务器（缓存工具清单，AI 开箱即用）
+        DispatchQueue.global(qos: .userInitiated).async {
+            let mcp = MCPClientManager.shared
+            for i in 0..<mcp.servers.count where mcp.servers[i].enabled {
+                var cfg = mcp.servers[i]
+                _ = mcp.refreshServer(&cfg)
+                mcp.servers[i] = cfg
+            }
+        }
         // v2.9.145：启动探测移到后台——DeviceProbe.run() 含 spawnRoot/文件遍历，
         // 主线程同步跑会卡死启动被看门狗杀（表现为"装完打开就闪退"）
         DispatchQueue.global(qos: .userInitiated).async {

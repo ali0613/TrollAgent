@@ -311,6 +311,18 @@ public final class ToolRegistry: ObservableObject {
         lock.unlock()
     }
 
+    /// v7.1.75：按前缀移除工具（MCP 客户端注销服务器时用）。
+    /// 同时清掉 apiNameToOriginal 里指向这些工具名的映射，避免 openAISchema 撞残留。
+    public func removeTools(prefix: String) {
+        lock.lock()
+        let matched = tools.keys.filter { $0.hasPrefix(prefix) }
+        for name in matched {
+            tools.removeValue(forKey: name)
+        }
+        apiNameToOriginal = apiNameToOriginal.filter { !$0.key.hasPrefix(prefix) }
+        lock.unlock()
+    }
+
     /// v3.0.71：外部 dylib 注册工具 (AI 自我进化——AI 写 dylib 注入自己，注册新工具）
     public func registerExternalTool(_ def: ToolDefinition, handler: @escaping ([String: Any]) throws -> [String: Any]) {
         // v3.0.90：安全检查——AI 自写工具的规则

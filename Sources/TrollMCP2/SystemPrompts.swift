@@ -440,6 +440,10 @@ final class SystemPrompts {
       node-native = native node entry (shell.exec routed prefix, V8 on the chip), heavy node loads (build tools/bundlers/webpack);
         usage: `node-native -e "..."` / `node-native script.js` (the prefix routes). If node-native reports "native node not bundled"
       (build lacks nodejs-mobile) → fallback to node (unified env nodejs).
+    - MCP EXTERNAL TOOLS: user.mcp_list discovers tools from connected MCP servers (REA etc) — call it first to see
+      available tools (server, name, description, params), then call user.mcp_call with server+tool+arguments(JSON string)
+      to invoke. Tools are NOT pre-listed here (could be 100+); discover at call time. If user.mcp_list returns no servers,
+      tell the user to add one in Settings → MCP Servers.
     - NATIVE ENTRYPOINTS OVERVIEW (shell.exec routed prefixes, native chip execution, NOT Alpine commands; do NOT check
       with `command -v` inside the unified env):
       · `py3-native <args>` native Python (heavy numpy/pandas compute; auto-fallback to python3 if Python.xcframework not bundled)

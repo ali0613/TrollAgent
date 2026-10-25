@@ -116,6 +116,14 @@ struct SettingsView: View {
     private func makeGroups() -> [SettingsGroup] {
         var groups: [SettingsGroup] = []
 
+        // v7.1.75：MCP 服务器（外部工具接入）
+        groups.append(SettingsGroup(header: L10n.t("mcp_servers"), items: [
+            SettingsItem(title: L10n.t("mcp_servers"),
+                         subtitle: "\(MCPClientManager.shared.servers.count) server\(MCPClientManager.shared.servers.count == 1 ? "" : "s")",
+                         icon: "server.rack", color: .purple,
+                         destination: AnyView(MCPManagerView()))
+        ]))
+
         // 模型
         groups.append(SettingsGroup(header: L10n.t("sec_models"), items: [
             SettingsItem(title: L10n.t("row_model_api"),
