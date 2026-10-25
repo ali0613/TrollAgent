@@ -3058,6 +3058,11 @@ static UIImage *softParticleImage(CGFloat size) {
     df.dateFormat = @"HH:mm:ss.SSS";
     NSString *line = [NSString stringWithFormat:@"[%@] %@\n", [df stringFromDate:[NSDate date]], msg];
     NSString *logPath = [self _diagLogPath];
+    // v7.1.50：日志轮转——超 512KB 重置（HUD 高频链路日志，防无限增长导致主 App 关于页读大文件卡 UI）
+    NSDictionary *fa = [[NSFileManager defaultManager] attributesOfItemAtPath:logPath error:nil];
+    if ([fa[NSFileSize] longLongValue] > 512 * 1024) {
+        [[NSFileManager defaultManager] removeItemAtPath:logPath error:nil];
+    }
     NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:logPath];
     if (fh) {
         [fh seekToEndOfFile];

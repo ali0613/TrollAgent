@@ -206,11 +206,14 @@ final class ModelStore: ObservableObject {
         var last_used_config_id: String?
     }
 
-    /// v7.1.47：把当前配置同步到 App Group 容器文件（HUD 独立进程可靠读取通道）
+    /// v7.1.47/49：把当前配置同步到共享文件（HUD 独立进程可靠读取通道）
+    /// v7.1.50：后台异步写——主线程同步磁盘 IO 会卡死 UI（用户实测 7.1.49：开关 HUD/关于页假死黑屏，
+    /// 根因即 load/save/markUsed 每次同步写文件 + 关于页同步读大日志，主线程被 IO 阻塞）
     private func syncSharedConfigFile() {
         guard let url = sharedConfigFileURL else { return }
         let payload = SharedConfigPayload(configs: configs, last_used_config_id: lastUsedConfigId)
-        if let data = try? JSONEncoder().encode(payload) {
+        guard let data = try? JSONEncoder().encode(payload) else { return }
+        DispatchQueue.global(qos: .utility).async {
             try? data.write(to: url, options: .atomic)
         }
     }

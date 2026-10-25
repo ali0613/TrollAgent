@@ -12,15 +12,32 @@ struct AboutAuthorView: View {
 
     private func reloadDiag() {
         // v7.1.49：日志在 /var/mobile/Documents/tts_debug.log（App Group 容器在 no-sandbox 进程不可用）
-        let path = "/var/mobile/Documents/tts_debug.log"
-        if let s = try? String(contentsOfFile: path, encoding: .utf8), !s.isEmpty {
-            diagLog = s
-            diagError = nil
-        } else {
-            diagLog = ""
-            diagError = "日志不存在或为空（HUD 长按语音测一次后这里才会有内容）"
+        // v7.1.50：后台线程读 + 只取末尾 24KB——主线程同步读大文件/渲染大文本会卡死 UI（7.1.49 实测假死黑屏）
+        DispatchQueue.global(qos: .userInitiated).async {
+            let path = "/var/mobile/Documents/tts_debug.log"
+            var text = ""
+            if let h = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) {
+                let max = 24 * 1024
+                if let end = try? h.seekToEnd() {
+                    let len = Int(end)
+                    if len > max, let _ = try? h.seek(toOffset: UInt64(len - max)) {
+                        // 已定位到末尾 max 字节起点
+                    }
+                }
+                text = String(data: h.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                try? h.close()
+            }
+            DispatchQueue.main.async {
+                if !text.isEmpty {
+                    diagLog = text
+                    diagError = nil
+                } else {
+                    diagLog = ""
+                    diagError = "日志不存在或为空（HUD 长按语音测一次后这里才会有内容）"
+                }
+                diagLoaded = true
+            }
         }
-        diagLoaded = true
     }
 
     private func bundleImage(_ name: String, _ ext: String) -> UIImage? {
