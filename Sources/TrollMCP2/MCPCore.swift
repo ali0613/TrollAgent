@@ -379,7 +379,7 @@ public final class ToolRegistry: ObservableObject {
         "artifact", "device", "memory", "assistant_memory", "verify", "container",
         "ssh", "diagnose", "knowledge", "location", "macro", "app", "control",
         "inject", "automation", "network.capture", "server", "project", "browser",
-        "shell.exec", "reminder", "rescue",
+        "shell.exec", "shell.stop", "reminder", "rescue",
         // v7.2.0：系统侧 Mach-O 执行（jroot 越狱工具）——默认启用，AI 可直接调
         "system.exec_root",
         // v4.3.65：统一工具安装闭环
