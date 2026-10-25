@@ -187,7 +187,31 @@ final class ModelStore: ObservableObject {
     // （bundle ch.xxtou.hudapp），读 standardUserDefaults 只能拿到进程自己的域，拿不到
     // 主 App 写入的 model_configs → _askAI 兜底到 deepseek 但 apiKey 为空 → 401 静默无回复。
     // 两侧 entitlements 都含 application-groups，suite 通道可用；读优先 suite，回退 standard（兼容老版本）。
+    // v7.1.47 修正：实测两侧都是 no-sandbox 进程——UserDefaults(suiteName:) 的 suite 文件
+    // 落在各自 data 容器的 Library/Preferences/group.com.ai.iosxcode.plist（物理隔离，互不可见），
+    // HUD 读 suite 一直是 cfgData=NO。可靠通道改为 App Group 容器【文件】：
+    // containerURLForSecurityApplicationGroupIdentifier 是文件系统真实共享路径（no-sandbox 也可访问），
+    // 主 App 写 trollmcp2_model_configs.json（configs + last_used_config_id），HUD 优先读该文件。
     private var suitePrefs: UserDefaults? { UserDefaults(suiteName: "group.com.ai.iosxcode") }
+
+    private var sharedConfigFileURL: URL? {
+        guard let u = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.ai.iosxcode") else { return nil }
+        return u.appendingPathComponent("trollmcp2_model_configs.json")
+    }
+
+    private struct SharedConfigPayload: Codable {
+        var configs: [ModelConfig]
+        var last_used_config_id: String?
+    }
+
+    /// v7.1.47：把当前配置同步到 App Group 容器文件（HUD 独立进程可靠读取通道）
+    private func syncSharedConfigFile() {
+        guard let url = sharedConfigFileURL else { return }
+        let payload = SharedConfigPayload(configs: configs, last_used_config_id: lastUsedConfigId)
+        if let data = try? JSONEncoder().encode(payload) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
 
     init() { load() }
 
@@ -196,6 +220,7 @@ final class ModelStore: ObservableObject {
         set {
             UserDefaults.standard.set(newValue, forKey: lastUsedKey)
             suitePrefs?.set(newValue, forKey: lastUsedKey)
+            syncSharedConfigFile()   // v7.1.47：切换模型立即同步共享文件（HUD 下次语音即用新配置）
         }
     }
 
@@ -216,6 +241,7 @@ final class ModelStore: ObservableObject {
             // 启动时一次性把 standard 数据补写进 suite（幂等；后续 save() 继续双写）。
             if suiteData == nil { suite?.set(d, forKey: key) }
             migrateLegacyPrefs(suite: suite, std: std)
+            syncSharedConfigFile()   // v7.1.47：启动即同步共享文件（老用户升级后 HUD 立即可用，不等下次 save）
             return
         }
         // v2.9.107：主数据损坏时从备份restored (最多试 4 份）——suite 优先，standard 兜底
@@ -225,6 +251,7 @@ final class ModelStore: ObservableObject {
                 configs = decoded
                 if suiteData == nil { suite?.set(bak, forKey: key) }
                 migrateLegacyPrefs(suite: suite, std: std)
+                syncSharedConfigFile()
                 break
             }
         }
@@ -254,6 +281,7 @@ final class ModelStore: ObservableObject {
             rotateBackup()
             UserDefaults.standard.set(data, forKey: key)
             suitePrefs?.set(data, forKey: key)   // v7.1.40：双写 App Group 供 HUD 独立进程读取
+            syncSharedConfigFile()               // v7.1.47：同步 App Group 容器文件（HUD 可靠通道）
         }
     }
 

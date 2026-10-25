@@ -3192,21 +3192,33 @@ static UIImage *softParticleImage(CGFloat size) {
 /// 发 AI：读主 App 模型配置（App Group suite 共享——HUD 独立进程，standardUserDefaults 是
 /// 进程自己的域读不到主 App 的配置 → 兜底 deepseek 但 apiKey 为空 → 401 静默无回复）→ OpenAI Chat Completions
 - (void)_askAI:(NSString *)text {
+    // v7.1.47：优先读 App Group 容器 JSON 文件（可靠通道）——主 App 与 HUD 都是 no-sandbox 进程，
+    // UserDefaults(suiteName:) 各自落自己 data 容器（物理隔离，实测 suite 一直 cfgData=NO 401 无回复）。
+    // containerURLForSecurityApplicationGroupIdentifier 是文件系统真实共享路径（no-sandbox 也可访问）。
+    NSDictionary *payload = nil;
+    NSURL *sharedURL = [[NSFileManager defaultManager] containerURLForSecurityApplicationGroupIdentifier:@"group.com.ai.iosxcode"];
+    if (sharedURL) {
+        NSData *jd = [NSData dataWithContentsOfFile:[[sharedURL path] stringByAppendingPathComponent:@"trollmcp2_model_configs.json"]];
+        if (jd) payload = [NSJSONSerialization JSONObjectWithData:jd options:0 error:nil];
+    }
     NSUserDefaults *appGroup = [[NSUserDefaults alloc] initWithSuiteName:@"group.com.ai.iosxcode"];
     NSData *cfgData = [appGroup dataForKey:@"trollmcp2.model_configs"];
     NSString *lastId = [appGroup stringForKey:@"trollmcp2.last_used_config_id"];
+    NSArray *cfgs = nil;
+    if ([payload isKindOfClass:[NSDictionary class]]) {
+        cfgs = payload[@"configs"];
+        if (!lastId && [payload[@"last_used_config_id"] isKindOfClass:[NSString class]])
+            lastId = payload[@"last_used_config_id"];
+    }
+    if (!cfgs && cfgData) cfgs = [NSJSONSerialization JSONObjectWithData:cfgData options:0 error:nil];
     // 兼容回退：老版本主 App 只写进程级 standard
-    if (!cfgData) cfgData = [[NSUserDefaults standardUserDefaults] dataForKey:@"trollmcp2.model_configs"];
     if (!lastId) lastId = [[NSUserDefaults standardUserDefaults] stringForKey:@"trollmcp2.last_used_config_id"];
     NSDictionary *cfg = nil;
-    if (cfgData) {
-        NSArray *cfgs = [NSJSONSerialization JSONObjectWithData:cfgData options:0 error:nil];
-        if ([cfgs isKindOfClass:[NSArray class]]) {
-            for (NSDictionary *c in cfgs) {
-                if (![c isKindOfClass:[NSDictionary class]]) continue;
-                if ((lastId && [c[@"id"] isEqualToString:lastId]) || cfg == nil) { cfg = c; }
-                if (lastId && [c[@"id"] isEqualToString:lastId]) break;
-            }
+    if (cfgs) {
+        for (NSDictionary *c in cfgs) {
+            if (![c isKindOfClass:[NSDictionary class]]) continue;
+            if ((lastId && [c[@"id"] isEqualToString:lastId]) || cfg == nil) { cfg = c; }
+            if (lastId && [c[@"id"] isEqualToString:lastId]) break;
         }
     }
     NSString *baseURL = cfg[@"baseURL"] ?: @"https://api.deepseek.com/v1";
@@ -3214,10 +3226,11 @@ static UIImage *softParticleImage(CGFloat size) {
     NSString *model = cfg[@"model"] ?: @"deepseek-chat";
     NSString *endpoint = [baseURL stringByAppendingString:@"/chat/completions"];
     // v7.1.40：诊断日志——定位无回复是配置缺失/网络失败/鉴权失败哪一环（写 HUD 可读的 Documents/tts_debug.log）
-    NSMutableString *diag = [NSMutableString stringWithFormat:@"[HUD _askAI] cfgData=%@ lastId=%@ cfgFound=%d base=%@ model=%@ keyLen=%lu",
-                             cfgData ? @"yes" : @"NO", lastId ? lastId : @"nil", cfg != nil, baseURL, model,
+    // v7.1.47：加共享文件通道状态
+    NSMutableString *diag = [NSMutableString stringWithFormat:@"[HUD _askAI] sharedFile=%@ suite=%@ lastId=%@ cfgFound=%d base=%@ model=%@ keyLen=%lu",
+                             payload ? @"yes" : @"NO", cfgData ? @"yes" : @"NO", lastId ? lastId : @"nil", cfg != nil, baseURL, model,
                              (unsigned long)apiKey.length];
-    if (!cfgData) [diag appendString:@" | ROOTCAUSE: model_configs missing from app-group defaults (main app must write group.com.ai.iosxcode)"];
+    if (!payload && !cfgData) [diag appendString:@" | ROOTCAUSE: config missing — main app must write App Group container trollmcp2_model_configs.json (open main app once)"];
     if (apiKey.length == 0) [diag appendString:@" | WARN: apiKey empty -> 401"];
 
     NSDictionary *body = @{
