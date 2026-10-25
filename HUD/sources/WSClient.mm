@@ -114,6 +114,11 @@
     [self _log:@"sendHandshake entry hs=%d pending=%d out=%@", _handshakeSent ? 1 : 0, _pendingHandshake ? 1 : 0, _out ? @"ok" : @"nil"];
     if (!_pendingHandshake) { [self _log:@"sendHandshake: pending=nil, skip"]; return; }
     if (_handshakeSent) { [self _log:@"sendHandshake: already sent, skip"]; return; }
+    // v7.1.66：流未 Open 绝不写（NSStream TLS 未就绪时 write 会阻塞主线程 → HUD 冻结无法拖动）
+    if (_out.streamStatus != NSStreamStatusOpen) {
+        [self _log:@"stream not open (status=%ld), defer", (long)_out.streamStatus];
+        return;
+    }
     NSData *hd = [_pendingHandshake dataUsingEncoding:NSUTF8StringEncoding];
     [self _log:@"before write hd=%lu", (unsigned long)hd.length];
     NSInteger w = [_out write:(const uint8_t *)hd.bytes maxLength:hd.length];
@@ -352,6 +357,11 @@
 }
 
 - (void)_sendRawFrame:(uint8_t)opcode payload:(NSData *)payload masked:(BOOL)masked {
+    // v7.1.66：流未 Open 不写（防 TLS 未就绪 write 阻塞主线程）
+    if (_out.streamStatus != NSStreamStatusOpen) {
+        [self _log:@"frame send skip: status=%ld opcode=%u", (long)_out.streamStatus, opcode];
+        return;
+    }
     NSMutableData *frame = [NSMutableData data];
     uint8_t b0 = 0x80 | opcode;  // FIN=1
     [frame appendBytes:&b0 length:1];
