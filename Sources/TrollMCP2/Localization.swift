@@ -177,7 +177,7 @@ enum L10n {
             tbl["row_sys_prompts"] = ["zh": "系统指令", "en": "System Prompts"]
             tbl["row_inject"] = ["zh": "注入与自动化", "en": "Injection & Automation"]
             tbl["row_inject_sub"] = ["zh": "全应用 · 策略 · 自动化", "en": "Apps · Policy · Automation"]
-            tbl["row_remote"] = ["zh": "远程控制", "en": "Remote Control"]
+            tbl["row_remote"] = ["zh": "应用控制", "en": "App Control"]
             tbl["row_remote_sub"] = ["zh": "AI 控制任意 App UI", "en": "AI controls any app UI"]
             tbl["row_github"] = ["zh": "GitHub 账号", "en": "GitHub Account"]
             tbl["row_downloads"] = ["zh": "下载管理", "en": "Downloads"]
@@ -204,7 +204,7 @@ enum L10n {
             tbl["row_lang"] = ["zh": "语言 / Language", "en": "Language / 语言"]
 
             // ===== 子页面标题 =====
-            tbl["page_remote"] = ["zh": "远程控制", "en": "Remote Control"]
+            tbl["page_remote"] = ["zh": "应用控制", "en": "App Control"]
             tbl["page_remote_sub"] = ["zh": "AI 控制任意 App 的 UI：读取界面、点击、输入、滑动", "en": "AI controls any app UI: read, tap, type, swipe"]
             tbl["page_inject"] = ["zh": "注入与自动化", "en": "Injection & Automation"]
             tbl["inject_subtitle"] = ["zh": "{n} 个应用 · 搜索/分类/版本/索引", "en": "{n} apps · search / category / version / index"]
@@ -439,7 +439,7 @@ enum L10n {
             tbl["ui_146"] = ["zh": "默认指令（标「默认」）会在每次 AI 请求时作为 system 消息注入，AI 将遵循其中的约定。长按指令可设默认/编辑/删除。", "en": "Default instructions (marked 'Default') are injected as system messages in every AI request and AI follows them. Long-press a instruction to set default / edit / delete."]
             tbl["ui_147"] = ["zh": "🚑 紧急恢复（Residue 式）", "en": "🚑 Emergency restore (Residue-style)"]
             // v2.9.139：AI 控制中心
-            tbl["ui_172"] = ["zh": "AI 控制中心", "en": "AI Control Center"]
+            tbl["ui_172"] = ["zh": "宏控中心", "en": "Macro Control Center"]
             tbl["ui_173"] = ["zh": "执行计划", "en": "Plan"]
             tbl["ui_174"] = ["zh": "执行日志", "en": "Execution Log"]
             tbl["ui_175"] = ["zh": "执行结果", "en": "Result"]

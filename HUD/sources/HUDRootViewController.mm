@@ -2878,10 +2878,10 @@ static UIImage *softParticleImage(CGFloat size) {
 // v7.1.46：发射区=角色全身范围（原脚底一条线/窄矩形→视觉像单点；现从角色身体范围多点向上冒）
 - (void)_refreshAmbientPosition {
     if (_particleLayer) {
+        // v7.1.72：粒子从脚下平行扇形往上飘——发射点=角色脚底中线、窄条发射区
         _particleLayer.emitterPosition = CGPointMake(_girlView.center.x,
-                                                     _girlView.center.y);
-        _particleLayer.emitterSize = CGSizeMake(_girlView.frame.size.width * 1.2 + 30,
-                                                _girlView.frame.size.height * 0.9);
+                                                     _girlView.frame.origin.y + _girlView.frame.size.height);
+        _particleLayer.emitterSize = CGSizeMake(_girlView.frame.size.width * 1.0, 2);
     }
 }
 
@@ -2905,11 +2905,11 @@ static UIImage *softParticleImage(CGFloat size) {
         cell.color = col.CGColor;
         cell.birthRate = 2.2;         // v6.1.5-14ao：3.2→2.2（14am 提太高像蒸汽机，回调）
         cell.lifetime = 7;
-        cell.velocity = 20;
+        cell.velocity = 26;           // v7.1.72：20→26（脚下发射，略提速度让扇形展开明显）
         cell.velocityRange = 18;
         cell.yAcceleration = -6;          // 轻柔上飘（放缓）
         cell.emissionLongitude = -M_PI_2;  // v7.1.46：发射方向向上（0 度=右，-90°=上）
-        cell.emissionRange = M_PI / 6;     // v7.1.46：±30° 锥形向上，杜绝向下飘（原 2π 全方向）
+        cell.emissionRange = M_PI / 3;     // v7.1.72：π/6→π/3（±60° 扇形从脚下向上散开，用户要求扇形）
         cell.scale = 0.066;           // v7.1.10：0.22→0.066（用户要求再小 70%，0.22×0.3）
         cell.scaleRange = 0.024;      // v7.1.10：0.08→0.024 同步收窄（×0.3）
         cell.scaleSpeed = -0.015;         // 越飘越小

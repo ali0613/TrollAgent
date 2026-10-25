@@ -149,6 +149,7 @@ struct ApprovalSheet: View {
 
 struct ConversationTranscriptView: View {
     @ObservedObject private var store = ConversationStore.shared
+    @State private var showingClearConfirm = false
 
     private var messages: [ChatMessage] {
         guard let idx = store.selectedIndex else { return [] }
@@ -193,8 +194,13 @@ struct ConversationTranscriptView: View {
             .listStyle(.insetGrouped)
             .toolbar {
                 if !messages.isEmpty {
-                    Button(L10n.t("btn_clear")) { store.clearCurrent() }
+                    // v7.1.72：清空按钮=清掉全部会话（聊天框侧边栏同步清空，用户要求联动）
+                    Button(L10n.t("btn_clear")) { showingClearConfirm = true }
                 }
+            }
+            .confirmationDialog(L10n.t("i18n_400"), isPresented: $showingClearConfirm, titleVisibility: .visible) {
+                Button(L10n.t("btn_clear"), role: .destructive) { store.clearAll() }
+                Button(L10n.t("ui_40"), role: .cancel) {}
             }
         }
         .background(Color(.systemGroupedBackground))

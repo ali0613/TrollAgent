@@ -847,6 +847,15 @@ final class ConversationStore: ObservableObject {
         sortAndSave()
     }
 
+    /// v7.1.72：清空全部会话——设置→会话记录"清空"同时清掉聊天框侧边栏全部会话（同一数据源）
+    func clearAll() {
+        conversations.removeAll()
+        selectedId = nil
+        save()
+        // v6.0.28：清空会话同样停掉 TTS 队列，避免残留音频读旧内容
+        TTSService.shared.stop()
+    }
+
     func delete(at offsets: IndexSet) {
         conversations.remove(atOffsets: offsets)
         if selectedId != nil && !conversations.contains(where: { $0.id == selectedId }) {
