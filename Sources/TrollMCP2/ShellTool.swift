@@ -79,9 +79,18 @@ final class ShellExecTool: MCPTool {
         // v4.3.13: 默认超时 30→20s（收紧）。解释器 CPU 开销高，长命令/死循环触发 watchdog 有风险；
         // v6.6.0: 统一环境 Asbestos（无 x86 模拟）。收紧默认超时 + kill 兜底。
         // v4.5.x: 下载命令（curl -o/-O/--output、wget 拉 URL）放宽到 300s——大文件下载超过 120s 会被 SIGKILL 掐断。
+        // v7.1.79: timeout 解析容错——AI 可能传数字(120)或字符串("120")，统一解析；
+        // 之前只认 Double，字符串会静默回落默认 20s（用户实测 timeout=60/120 无效的根因）。
+        // 结果回显 timeout_used，让 AI/用户直接看到真实生效值，消除"以为传了其实没有"的黑盒。
         let rawCmd = (params["command"] as? String) ?? ""
         let isDownloadCmd = Self.isDownloadCommand(rawCmd)
-        let timeout = min(max((params["timeout"] as? Double) ?? 20, 1), isDownloadCmd ? 300 : 120)
+        var timeoutVal = 20.0
+        if let d = params["timeout"] as? Double {
+            timeoutVal = d
+        } else if let s = params["timeout"] as? String, let d = Double(s) {
+            timeoutVal = d
+        }
+        let timeout = min(max(timeoutVal, 1), isDownloadCmd ? 300 : 120)
         
         // v6.6.0: 统一环境——移除 runtime 参数（auto/ios/alpine 路由废除）。
         // 全部命令默认走 Alpine Linux 完整工具链（Asbestos）；iOS 特有命令自动原生兜底（内部）。
@@ -200,6 +209,7 @@ final class ShellExecTool: MCPTool {
                 "exit_code": finalExit,
                 "stdout": stdout,
                 "cwd": TrollRuntimeEngine.cwd,
+                "timeout_used": timeout,
                 "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Unified environment (Alpine Linux — TrollRuntime). Missing tools auto-install via apk add and retry once."
             ]
             if finalTimed { result["timed_out"] = true }
