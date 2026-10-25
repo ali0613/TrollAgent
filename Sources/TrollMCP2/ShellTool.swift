@@ -2019,6 +2019,85 @@ final class SystemExecRootTool: MCPTool {
         return "other"
     }
 
+    // MARK: - v7.1.42 签名自动化——AMFI 代码签名强制：Mach-O 必须有效签名（越狱也走 trust cache/签名，下载的裸二进制无 LC_CODE_SIGNATURE 会被系统拒绝执行）。exec_root 执行前自动检测、缺失自动 ldid -S 补签。
+
+    /// 是否在沙箱可写区（只对这些路径自动补签——系统路径 /usr/bin、/var/jb 不动，那些要么已签、要么越狱 trust cache 管）
+    private static func isAutoSignablePath(_ path: String) -> Bool {
+        let home = NSHomeDirectory()
+        let roots = [home + "/", home + "/Documents/", "/var/mobile/Documents/"]
+        return roots.contains { path.hasPrefix($0) }
+    }
+
+    /// 解析 Mach-O 找 LC_CODE_SIGNATURE（load command 0x1D）——支持 64 位 thin 与 fat 多 slice（iOS arm64 为 LE）
+    private static func hasCodeSignature(of path: String) -> Bool {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe) else { return false }
+        return hasCodeSignature(in: data, offset: 0)
+    }
+
+    private static func hasCodeSignature(in data: Data, offset: Int) -> Bool {
+        let b = [UInt8](data)
+        guard offset + 4 <= b.count else { return false }
+        func u32(_ i: Int, le: Bool) -> UInt32 {
+            if le { return UInt32(b[i]) | UInt32(b[i+1]) << 8 | UInt32(b[i+2]) << 16 | UInt32(b[i+3]) << 24 }
+            return UInt32(b[i]) << 24 | UInt32(b[i+1]) << 16 | UInt32(b[i+2]) << 8 | UInt32(b[i+3])
+        }
+        let mb = [b[offset], b[offset+1], b[offset+2], b[offset+3]]
+        let le: Bool
+        switch mb {
+        case [0xCF, 0xFA, 0xED, 0xFE]: le = true        // MH_MAGIC_64 (LE on disk)
+        case [0xFE, 0xED, 0xFA, 0xCF]: le = false       // MH_MAGIC_64 BE
+        case [0xBE, 0xBA, 0xFE, 0xCA]: le = true        // FAT_MAGIC LE
+        case [0xCA, 0xFE, 0xBA, 0xBE]: le = false       // FAT_MAGIC BE
+        default: return false
+        }
+        if mb == [0xCF, 0xFA, 0xED, 0xFE] || mb == [0xFE, 0xED, 0xFA, 0xCF] {
+            // 64 位 thin：header 32 字节，load commands 从 32 开始
+            guard offset + 32 <= b.count else { return false }   // 防短文件越界（魔数匹配但 header 不完整）
+            let ncmds = Int(u32(offset + 16, le: le))
+            let sizeofcmds = Int(u32(offset + 20, le: le))
+            guard ncmds > 0, sizeofcmds > 0, offset + 32 + sizeofcmds <= b.count else { return false }
+            var off = offset + 32
+            for _ in 0..<ncmds {
+                guard off + 8 <= b.count else { break }
+                let cmd = u32(off, le: le)
+                let cmdsize = Int(u32(off + 4, le: le))
+                if cmdsize < 8 { break }
+                if cmd == 0x1D { return true }          // LC_CODE_SIGNATURE
+                off += cmdsize
+            }
+            return false
+        }
+        // fat：每个 slice 各自检查（全部有签名才算已签）
+        guard offset + 8 <= b.count else { return false }   // 防短文件越界
+        let nfat = Int(u32(offset + 4, le: le))
+        guard nfat > 0 else { return false }
+        for i in 0..<min(nfat, 64) {
+            let base = offset + 8 + i * 20
+            guard base + 16 <= b.count else { return false }
+            let sliceOff = Int(u32(base + 8, le: le))
+            if !hasCodeSignature(in: data, offset: sliceOff) { return false }
+        }
+        return true
+    }
+
+    /// 自动补签：找内置 ldid（bundle bin/ 优先，/var/jb 兜底），ldid -S（可带 entitlements）签名目标文件
+    private static func autoSign(_ path: String, entitlements: String?) throws {
+        let candidates = [
+            Bundle.main.bundlePath + "/bin/ldid",
+            Bundle.main.bundlePath + "/Resources/bin/ldid",
+            "/var/jb/usr/bin/ldid",
+        ]
+        guard let ldid = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            throw MCPError.invalidParams("auto-sign failed: no bundled ldid found (looked in bin/, Resources/bin/, /var/jb/usr/bin) — sign manually with ldid -S then retry")
+        }
+        let flag = entitlements.flatMap { "-S\($0)" } ?? "-S"
+        let r = InjectionManager.shared.spawnRootDetailed(ldid, args: [flag, path], timeout: 30)
+        if r.code != 0 {
+            let detail = r.stderr.isEmpty ? r.stdout : r.stderr
+            throw MCPError.invalidParams("auto-sign failed (ldid exit \(r.code)): \(String(detail.prefix(500))) — file unchanged, fix signature issues and retry")
+        }
+    }
+
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
         guard let path = params["path"] as? String, !path.isEmpty else {
             throw MCPError.invalidParams("path required")
@@ -2027,6 +2106,7 @@ final class SystemExecRootTool: MCPTool {
         let timeout = (params["timeout"] as? Double) ?? 60
         let outLimit = (params["limit"] as? Int) ?? 16000
         let extraEnv = params["env"] as? [String: String]
+        let signEntitlements = params["signEntitlements"] as? String   // v7.1.42：可选，ldid -S<file> 用
 
         // 1) 文件必须存在
         var isDir: ObjCBool = false
@@ -2050,6 +2130,11 @@ final class SystemExecRootTool: MCPTool {
             if re.firstMatch(in: joinedArgs, options: [], range: NSRange(location: 0, length: (joinedArgs as NSString).length)) != nil {
                 throw MCPError.invalidParams("refused: \(why) — system.exec_root runs as root; destructive ops are blocked. Use a safe operation instead.")
             }
+        }
+        // 3.5) v7.1.42：签名自动化——沙箱可写区的 Mach-O 若缺 LC_CODE_SIGNATURE 先自动 ldid -S 补签
+        //（AMFI 强制：无签名/无效签名的 Mach-O 即使越狱也会被拒绝执行；系统路径不自动签）
+        if SystemExecRootTool.isAutoSignablePath(path), !SystemExecRootTool.hasCodeSignature(of: path) {
+            try SystemExecRootTool.autoSign(path, entitlements: signEntitlements)
         }
 
         let r = InjectionManager.shared.spawnRootDetailed(path, args: args, timeout: min(timeout, 600), extraEnv: extraEnv)
