@@ -52,6 +52,15 @@ enum TrollRuntimeEngine {
         cish_killpg(p, Int32(SIGKILL))
     }
 
+    /// v7.1.80: shell.stop 工具——AI 主动中断后台任务（background=true 启动的 pid）。
+    /// 与 interruptCurrent 不同：可杀任意 guest pid（后台 job），不依赖 currentPid。
+    static func stopPid(_ pid: Int) {
+        ShellDiag.log("shell.stop: pid \(pid)")
+        cish_killpg(pid, Int32(SIGTERM))
+        Thread.sleep(forTimeInterval: 0.5)
+        cish_killpg(pid, Int32(SIGKILL))
+    }
+
     private static var rootfsDir: String {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("alpine-rootfs").path

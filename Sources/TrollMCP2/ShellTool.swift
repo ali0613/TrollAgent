@@ -40,6 +40,7 @@ final class ShellExecTool: MCPTool {
         parameters: [
             "command": "Shell command to execute (required)",
             "timeout": "Timeout seconds (default 20, max 120)",
+            "background": "Optional Bool: true=launch command in background, returns immediately with background_pid (no 20s kill). You must redirect the job's output yourself: `cmd > /ios_workspace/job.log 2>&1`. Then poll progress via short shell.exec (e.g. `tail -5 /ios_workspace/job.log`) and stop it with shell.stop pid=<pid> when you judge it stalled. Use for: installs/downloads/builds (>20s). Avoid reading big iOS files inside background commands (bridge stdin not usable).",
             "reset_cwd": "Optional Bool: reset working dir to default (default false)",
             "limit": "Optional Int: result string truncation cap (default 16000 chars, covers most analysis output; if not enough use full=true). If diagnostics output is trimmed and the body is invisible, pass limit=20000 or higher; full=true returns the complete untruncated result",
             "full": "Optional Bool: true=return the complete untruncated result (use with care — large output fills the context)",
@@ -194,7 +195,13 @@ final class ShellExecTool: MCPTool {
                         "stdout": guardMsg,
                         "hint": "This command runs in the unified env (TrollRuntime) but the iOS path isn't readable (only Workspace/Containers/System three dirs are bound, files have no 2MB limit). Fix: ① copy to Workspace first: `cp <file> /var/mobile/Documents/Workspace/`, then read it via Alpine /ios_workspace; ② for app data containers use bind_app bundle_id:<id> (read-only) → /ios_data_<app>; ③ for binaries use file analyze / binary.symbols."]
             }
-            let (output, exitCode, timedOut) = TrollRuntimeEngine.exec(boundCmd, timeout: timeout)
+            // v7.1.80: background 模式——命令后台启动立即返回 pid，绕开默认 20s 上限。
+            // AI 轮询日志文件判断进度，卡死时 shell.stop pid=<pid> 主动中断。
+            let background = (params["background"] as? Bool) ?? false
+            let execCmd = background ? "( \(boundCmd) & echo __BG_PID=$! )" : boundCmd
+            // 背景模式命令本身立即返回（sh 等 echo 就退），timeout 只影响 echo 输出，给足余量
+            let execTimeout = background ? max(timeout, 30) : timeout
+            let (output, exitCode, timedOut) = TrollRuntimeEngine.exec(execCmd, timeout: execTimeout)
             // v6.6.0: Alpine 工具裁剪（幂等）——统一后原生覆盖极少，不影响主环境工具链
             _ = ShellExecTool.shrinkAlpineRootfs()            // P3 按需补给：Alpine 输出显示缺工具(command not found)且命中白名单 → 自动 apk add 并重跑一次，
             // 免 agent 反复探测缺什么、也避免"先探测→再装→再跑"的多轮试探。
@@ -213,6 +220,18 @@ final class ShellExecTool: MCPTool {
                 "hint": (provisionNote.isEmpty ? "" : provisionNote) + "Unified environment (Alpine Linux — TrollRuntime). Missing tools auto-install via apk add and retry once."
             ]
             if finalTimed { result["timed_out"] = true }
+            // v7.1.80: background 模式回显 pid——AI 用 shell.stop pid=<pid> 主动中断
+            if background {
+                let nsStdout = stdout as NSString
+                let r = nsStdout.range(of: "__BG_PID=(\\d+)", options: .regularExpression)
+                if r.location != NSNotFound {
+                    let pidStr = nsStdout.substring(with: r).replacingOccurrences(of: "__BG_PID=", with: "")
+                    if let pid = Int(pidStr) {
+                        result["background_pid"] = pid
+                        result["hint"] = "Background job pid=\(pid) running (not subject to 20s cap). Poll progress via `tail /ios_workspace/job.log`; stop it via shell.stop pid=\(pid)."
+                    }
+                }
+            }
             AuditLog.shared.log("shell.exec (alpine auto)", detail: String(trimmed.prefix(100)))
             return result
         }
@@ -2022,6 +2041,30 @@ final class ShellExecTool: MCPTool {
             line.range(of: noisePattern, options: .regularExpression) == nil
         }
         return filtered.joined(separator: "\n")
+    }
+}
+
+/// v7.1.80：主动中断工具——AI 发觉命令卡死时调用（配合 shell.exec background 模式）。
+/// 参数 pid 可选：传 = 杀指定后台任务；缺省 = 中断当前正在执行的命令。
+final class ShellStopTool: MCPTool {
+    let definition = ToolDefinition(
+        name: "shell.stop",
+        summary: "Stop a running command. Params: pid (optional Int). Use for: cancelling a long-running background job you started with shell.exec background=true when you judge it stalled (poll its log first: no progress for a while = stalled). Without pid, interrupts the currently executing command. Sends SIGTERM then SIGKILL to the guest process group.",
+        parameters: [
+            "pid": "Optional Int: guest process id returned as background_pid from shell.exec background=true. Omit to interrupt the current running command.",
+        ],
+        verified: true
+    )
+
+    func invoke(_ params: [String: Any]) throws -> [String: Any] {
+        if let pid = params["pid"] as? Int, pid > 0 {
+            TrollRuntimeEngine.stopPid(pid)
+            return ["stopped": true, "pid": pid,
+                    "hint": "Sent SIGTERM/SIGKILL to guest pid \(pid). Verify it's gone: `ps | grep <cmd>` or check its log stopped advancing."]
+        }
+        TrollRuntimeEngine.interruptCurrent()
+        return ["stopped": true, "current": true,
+                "hint": "Interrupted the current running command."]
     }
 }
 

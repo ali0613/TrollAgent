@@ -1253,6 +1253,7 @@ public final class ToolRegistry: ObservableObject {
         // v3.1.64: 删 ScanQRTool (AI 是文字对话，不能扫码）
         // v3.1.33: 删 ProcessListTool (用 shell ps 代替）
         register(ShellExecTool())   // v3.0.28：内置终端，执行 shell 命令
+        register(ShellStopTool())   // v7.1.80：AI 主动中断后台/当前命令（配合 background 模式）
         register(SystemExecRootTool()) // v7.2.0：系统侧 spawn 执行 Mach-O（jroot 越狱工具）
 
         // M5.5 内置浏览器 (v2.9.37：AI 可控，蓝框高亮元素；v2.9.88：+wait/text/scroll/submit）
