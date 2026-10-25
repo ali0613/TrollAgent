@@ -3064,9 +3064,15 @@ static UIImage *softParticleImage(CGFloat size) {
     va_list ap; va_start(ap, fmt);
     NSString *msg = [[NSString alloc] initWithFormat:fmt arguments:ap];
     va_end(ap);
-    NSDateFormatter *df = [NSDateFormatter new];
-    df.dateFormat = @"HH:mm:ss.SSS";
+    // v7.1.65：NSDateFormatter 挪 static（每次 new 很贵）+ NSLog 双通道
+    static NSDateFormatter *df = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        df = [NSDateFormatter new];
+        df.dateFormat = @"HH:mm:ss.SSS";
+    });
     NSString *line = [NSString stringWithFormat:@"[%@] %@\n", [df stringFromDate:[NSDate date]], msg];
+    NSLog(@"[HUD] %@", line);
     NSString *logPath = [self _diagLogPath];
     // v7.1.50：日志轮转——超 512KB 重置（HUD 高频链路日志，防无限增长导致主 App 关于页读大文件卡 UI）
     NSDictionary *fa = [[NSFileManager defaultManager] attributesOfItemAtPath:logPath error:nil];

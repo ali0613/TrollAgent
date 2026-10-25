@@ -115,13 +115,20 @@
     if (!_pendingHandshake) { [self _log:@"sendHandshake: pending=nil, skip"]; return; }
     if (_handshakeSent) { [self _log:@"sendHandshake: already sent, skip"]; return; }
     NSData *hd = [_pendingHandshake dataUsingEncoding:NSUTF8StringEncoding];
+    [self _log:@"before write hd=%lu", (unsigned long)hd.length];
     NSInteger w = [_out write:(const uint8_t *)hd.bytes maxLength:hd.length];
+    [self _log:@"after write w=%ld", (long)w];
     if (w > 0) {
         _handshakeSent = YES;
         [self _log:@"handshake sent %lu bytes (wrote %ld)", (unsigned long)hd.length, (long)w];
         if (w < (NSInteger)hd.length) [self _fail:@"handshake partial write"];
     } else {
-        [self _log:@"handshake write pending (wrote %ld) — will retry on HasSpaceAvailable", (long)w];
+        [self _log:@"handshake write pending (wrote %ld) — scheduling retry", (long)w];
+        __weak WSClient *wSelf = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            WSClient *s = wSelf;
+            if (s) [s _sendHandshakeIfNeeded:nil];
+        });
     }
 }
 
@@ -409,13 +416,23 @@
     if (self.onClose) self.onClose(e);
 }
 
+// v7.1.65：直写 tts_debug.log（双通道，不依赖 onLog/VC 链路）——日志中断时仍有证据
 - (void)_log:(NSString *)fmt, ... {
-    if (!self.onLog) return;
     va_list ap;
     va_start(ap, fmt);
     NSString *line = [[NSString alloc] initWithFormat:fmt arguments:ap];
     va_end(ap);
-    self.onLog(line);
+    NSString *p = @"/var/mobile/Documents/tts_debug.log";
+    NSString *entry = [NSString stringWithFormat:@"[ws] %@\n", line];
+    NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:p];
+    if (fh) {
+        [fh seekToEndOfFile];
+        [fh writeData:[entry dataUsingEncoding:NSUTF8StringEncoding]];
+        [fh closeFile];
+    } else {
+        [entry writeToFile:p atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    }
+    if (self.onLog) self.onLog(line);
 }
 
 @end
