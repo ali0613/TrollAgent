@@ -36,6 +36,8 @@ static BOOL _passthrough = NO;
 - (void)unlockShow;
 - (void)registerNotifications;
 - (void)_appendHudLog:(NSString *)line; // v6.1.5-7：诊断日志写 /tmp/hud_fan.log
+// v7.1.60：强持有 WSClient，防止 _speakTTS 返回后 ARC 释放导致 NSStream 悬空 runloop 闪退
+@property (nonatomic, strong) WSClient *hudWS;
 @end
 
 // v6.0.8：裁剪掉 UIImage 四周透明留白，返回角色实际内容图（无背景留白，角色才能贴到屏幕边缘）。
@@ -3348,6 +3350,9 @@ static UIImage *softParticleImage(CGFloat size) {
         @"Cookie": [NSString stringWithFormat:@"muid=%@;", muid],
     };
     WSClient *wc = [[WSClient alloc] initWithURLString:urlStr headers:wsHeaders];
+    // v7.1.60：强持有直到会话结束（onClose 释放），根因修复——此前局部释放后
+    // NSStream 悬空在 runloop → EXC_BAD_ACCESS 闪退（TLS applied 后戛然而止）
+    self.hudWS = wc;
     [self _hudDiagLog:@"speakTTS: voice=%@ gec=%@ ws=resumed(deflate)", voice, gec];
 
     NSString *escaped = [self _xmlEscape:clean];
@@ -3383,6 +3388,7 @@ static UIImage *softParticleImage(CGFloat size) {
                 });
             }
             [wcWeak close];
+            sself.hudWS = nil;   // v7.1.60：正常结束同样释放
         }
     };
     wc.onBinary = ^(NSData *d) {
@@ -3401,6 +3407,7 @@ static UIImage *softParticleImage(CGFloat size) {
         if (!sself) return;
         [sself _hudDiagLog:@"speakTTS: ws closed err=%@ audioBytes=%lu frames=%d", err, (unsigned long)audio.length, audioFrames];
         if (audio.length > 100) [sself _playAudio:audio];
+        sself.hudWS = nil;   // v7.1.60：会话结束释放（触发 WSClient dealloc 安全关闭）
     };
     [wc connect];
     // 握手完成后发送 config/ssml（WSClient 内部排队，onOpen 即 flush）

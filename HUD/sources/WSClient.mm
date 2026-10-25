@@ -71,10 +71,16 @@
     CFReadStreamSetProperty((__bridge CFReadStreamRef)_in, (__bridge CFStringRef)@"kCFStreamPropertySSLSettings", (__bridge CFDictionaryRef)tlsSettings);
     CFWriteStreamSetProperty((__bridge CFWriteStreamRef)_out, (__bridge CFStringRef)@"kCFStreamPropertySSLSettings", (__bridge CFDictionaryRef)tlsSettings);
     [self _log:@"TLS settings applied"];
+    // v7.1.60：逐步行日志，精确定位 open 崩溃点
     _in.delegate = self; _out.delegate = self;
+    [self _log:@"delegate set"];
     [_in scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
     [_out scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
-    [_in open]; [_out open];
+    [self _log:@"scheduled, opening…"];
+    [_in open];
+    [self _log:@"in opened"];
+    [_out open];
+    [self _log:@"out opened, connect returns"];
     // 预构握手请求（含 permessage-deflate）
     NSString *path = [NSString stringWithFormat:@"%@?%@", u.path, u.query ?: @""];
     unsigned char keyBytes[16];
@@ -355,6 +361,12 @@
     [_in removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
     [_out removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
     _in = nil; _out = nil;
+}
+
+// v7.1.60：关键——对象释放前必须从 runloop 摘掉 stream。
+// 之前 wc 在 _speakTTS 返回后被 ARC 释放，stream 悬空在 runloop 上 → EXC_BAD_ACCESS 闪退
+- (void)dealloc {
+    if (!_closed) [self close];
 }
 
 - (void)_fail:(NSString *)err {
