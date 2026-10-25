@@ -1,41 +1,32 @@
-// WSClient.mm — 最小 WebSocket 客户端（RFC6455 客户端掩码帧 + permessage-deflate RFC7692）
-// v7.1.55：edge-tts v2 实测要求 permessage-deflate 压缩协商；iOS URLSessionWebSocketTask 不支持压缩扩展
-// → 合成阶段被服务器断连（Socket is not connected / audioBytes=0，用户 18:52/19:14/19:15 日志实锤）。
-// 实现：NSStream TLS 连接 → HTTP Upgrade（Sec-WebSocket-Key/Accept 校验 + Sec-WebSocket-Extensions）→
-// 帧收发（FIN/RSV/opcode/mask/len）→ RSV1=1 消息 zlib raw inflate 解压 → onText/onBinary 回调。
-// 发送不压缩（permessage-deflate 逐方向独立，服务器不强求客户端压缩）。
+// WSClient.mm — 最小 WebSocket 客户端（RFC6455 + permessage-deflate RFC7692）
+// v7.1.55：edge-tts v2 实测要求 permessage-deflate（无压缩 iOS URLSessionWebSocketTask 合成阶段被断连 0 音频）
+// v7.1.67：传输层从 NSStream 彻底重写为 NWConnection（Network.framework）。
+//   根因：NSStream 在 TLS 未完全就绪时 [_out write:] 会同步阻塞主线程（CFNetwork 内部等待 TLS 完成），
+//   表现为日志在 write 后戛然而止 + HUD 界面冻结无法拖动（用户 23:16 实测 + 卡死反馈）。
+//   NWConnection 全异步：state==ready（TLS 已就绪）后才发送握手，主线程永不阻塞。
+// 实现：NWConnection TLS → HTTP Upgrade（Sec-WebSocket-Key/Accept + Sec-WebSocket-Extensions）→
+// 帧收发（FIN/RSV/opcode/mask/len）→ RSV1=1 消息 zlib raw inflate → onText/onBinary 回调。
 
 #include <zlib.h>
 #include <string.h>
-#import <CFNetwork/CFNetwork.h>   // kCFStreamPropertySSLPeerName / kCFStreamSSLValidatesCertificateChain / CFStreamCreatePairWithSocketToHost
+#import <Network/Network.h>
 #import "WSClient.h"
-
-@interface WSClient () <NSStreamDelegate>
-@end
 
 @implementation WSClient {
     NSString *_urlString;
     NSDictionary *_headers;
-    NSInputStream *_in;
-    NSOutputStream *_out;
+    NWConnection *_conn;
     NSMutableData *_inBuf;      // 已读但未解析完的字节
     BOOL _handshakeDone;
-    BOOL _handshakeSent;        // v7.1.61：握手请求已发送（OpenCompleted 发送）
+    BOOL _handshakeSent;        // 握手请求已发送
     BOOL _closed;
     // 帧解析状态机
-    BOOL _expectExtLen;
-    uint64_t _payloadLen;
-    int _payloadBytesRead;
-    unsigned char _maskKey[4];
-    BOOL _hasMask;
-    uint8_t _opcode;
-    uint8_t _finRsv;
+    uint8_t _msgOpcode;         // 当前消息起始帧 opcode（continuation 交付判定用）
     NSMutableData *_payloadBuf;
     int _inflateWindowBits;
     BOOL _serverDeflate;        // 服务端回 permessage-deflate
     NSString *_pendingHandshake;
     NSMutableArray *_sendQueue; // 握手完成前暂存待发文本
-    uint8_t _msgOpcode;         // 当前消息起始帧 opcode（continuation 交付判定用）
 }
 
 - (instancetype)initWithURLString:(NSString *)urlString headers:(NSDictionary *)headers {
@@ -54,34 +45,9 @@
 - (void)connect {
     NSURL *u = [NSURL URLWithString:_urlString];
     NSString *host = u.host;
-    if (host.length == 0) { [self _fail:@"bad url host"]; return; }   // v7.1.59：NULL host 会崩 CF
+    if (host.length == 0) { [self _fail:@"bad url host"]; return; }
     NSNumber *port = u.port ?: @443;
-    CFReadStreamRef r = NULL; CFWriteStreamRef w = NULL;
-    CFStreamCreatePairWithSocketToHost(NULL, (__bridge CFStringRef)host, port.intValue, &r, &w);
-    if (!r || !w) { [self _fail:@"socket create failed"]; return; }
-    _in = (__bridge_transfer NSInputStream *)r;
-    _out = (__bridge_transfer NSOutputStream *)w;
-    [self _log:@"connect host=%@ port=%d streams=%@/%@", host, port.intValue, _in ? @"ok" : @"nil", _out ? @"ok" : @"nil"];
-    // TLS：SNI + 校验证书链（bing 正规证书）。用字符串字面量（iOS 17.5 SDK 已移除
-    // NSStreamSocketSecurityLevelTLSv1_2 / kCFStreamPropertySSLPeerName 等常量声明）。
-    // 注意：value 直接是 SSLSettings 字典（PeerName/Validates），不能再套一层。
-    NSDictionary *tlsSettings = @{
-        @"kCFStreamSSLPeerName": host,
-        @"kCFStreamSSLValidatesCertificateChain": @YES,
-    };
-    CFReadStreamSetProperty((__bridge CFReadStreamRef)_in, (__bridge CFStringRef)@"kCFStreamPropertySSLSettings", (__bridge CFDictionaryRef)tlsSettings);
-    CFWriteStreamSetProperty((__bridge CFWriteStreamRef)_out, (__bridge CFStringRef)@"kCFStreamPropertySSLSettings", (__bridge CFDictionaryRef)tlsSettings);
-    [self _log:@"TLS settings applied"];
-    // v7.1.60：逐步行日志，精确定位 open 崩溃点
-    _in.delegate = self; _out.delegate = self;
-    [self _log:@"delegate set"];
-    [_in scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
-    [_out scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
-    [self _log:@"scheduled, opening…"];
-    [_in open];
-    [self _log:@"in opened"];
-    [_out open];
-    [self _log:@"out opened, connect returns"];
+
     // 预构握手请求（含 permessage-deflate）
     NSString *path = [NSString stringWithFormat:@"%@?%@", u.path, u.query ?: @""];
     unsigned char keyBytes[16];
@@ -99,91 +65,59 @@
     }];
     [req appendString:@"\r\n"];
     _pendingHandshake = [req copy];
-    // v7.1.63：请求构造完立刻兜底尝试（此前在构造前调用=空转，只能依赖流事件）
-    [self _sendHandshakeIfNeeded:_in];
-    // v7.1.63：10 秒握手超时保护（事件不来直接报错，不永久卡死）
+    [self _log:@"connect host=%@ port=%@ req=%luB", host, port, (unsigned long)_pendingHandshake.length];
+
+    // NWConnection（TLS 异步传输层）
+    NWEndpoint *ep = [NWEndpoint hostWithPort:host port:(uint16_t)port.unsignedIntValue];
+    NWParameters *params = [[NWParameters alloc] initWithTLS];
+    [params setAllowMultipath:NO];
+    _conn = [[NWConnection alloc] initWithEndpoint:ep parameters:params];
     __weak WSClient *wSelf = self;
+    _conn.stateUpdateHandler = ^(NWConnectionState state) {
+        WSClient *s = wSelf;
+        if (!s) return;
+        [s _log:@"nw state=%ld", (long)state];
+        switch (state) {
+            case NWConnectionStateReady:
+                [s _log:@"nw ready — TLS done, sending handshake"];
+                [s _sendRawData:[s->_pendingHandshake dataUsingEncoding:NSUTF8StringEncoding] tag:@"handshake"];
+                [s _receiveLoop];
+                break;
+            case NWConnectionStateFailed:
+            case NWConnectionStateCancelled:
+                if (!s->_closed) {
+                    [s _fail:@"nw connection failed/cancelled"];
+                }
+                break;
+            default:
+                break;
+        }
+    };
+    [_conn start];
+
+    // 10s 握手超时保护（主线程不阻塞，正常触发）
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         WSClient *s = wSelf;
         if (s && !s->_handshakeDone && !s->_closed) [s _fail:@"handshake timeout"];
     });
 }
 
-// v7.1.64：无条件入口日志 + write 未就绪时 200ms 自循环重试（彻底不依赖流事件）
-- (void)_sendHandshakeIfNeeded:(NSStream *)aStream {
-    [self _log:@"sendHandshake entry hs=%d pending=%d out=%@", _handshakeSent ? 1 : 0, _pendingHandshake ? 1 : 0, _out ? @"ok" : @"nil"];
-    if (!_pendingHandshake) { [self _log:@"sendHandshake: pending=nil, skip"]; return; }
-    if (_handshakeSent) { [self _log:@"sendHandshake: already sent, skip"]; return; }
-    // v7.1.66：流未 Open 绝不写（NSStream TLS 未就绪时 write 会阻塞主线程 → HUD 冻结无法拖动）
-    if (_out.streamStatus != NSStreamStatusOpen) {
-        [self _log:@"stream not open (status=%ld), defer", (long)_out.streamStatus];
-        return;
-    }
-    NSData *hd = [_pendingHandshake dataUsingEncoding:NSUTF8StringEncoding];
-    [self _log:@"before write hd=%lu", (unsigned long)hd.length];
-    NSInteger w = [_out write:(const uint8_t *)hd.bytes maxLength:hd.length];
-    [self _log:@"after write w=%ld", (long)w];
-    if (w > 0) {
-        _handshakeSent = YES;
-        [self _log:@"handshake sent %lu bytes (wrote %ld)", (unsigned long)hd.length, (long)w];
-        if (w < (NSInteger)hd.length) [self _fail:@"handshake partial write"];
-    } else {
-        [self _log:@"handshake write pending (wrote %ld) — scheduling retry", (long)w];
-        __weak WSClient *wSelf = self;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            WSClient *s = wSelf;
-            if (s) [s _sendHandshakeIfNeeded:nil];
-        });
-    }
-}
-
-- (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode {
-    if (_closed) return;
-    switch (eventCode) {
-        case NSStreamEventOpenCompleted:
-            [self _log:@"stream open completed"];
-            [self _sendHandshakeIfNeeded:aStream];
-            break;
-        case NSStreamEventHasSpaceAvailable:
-            [self _log:@"out stream has space"];
-            [self _sendHandshakeIfNeeded:aStream];
-            break;
-        case NSStreamEventHasBytesAvailable: {
-            if (!_handshakeDone) {
-                // 先读握手响应
-                uint8_t tmp[4096];
-                NSInteger n = [_in read:tmp maxLength:sizeof(tmp)];
-                [self _log:@"handshake read n=%ld", (long)n];
-                if (n > 0) {
-                    [_inBuf appendBytes:tmp length:n];
-                    [self _tryFinishHandshake];
-                }
-            } else {
-                uint8_t tmp[8192];
-                NSInteger n = [_in read:tmp maxLength:sizeof(tmp)];
-                [self _log:@"frame read n=%ld buf=%lu", (long)n, (unsigned long)_inBuf.length];
-                if (n > 0) {
-                    [_inBuf appendBytes:tmp length:n];
-                    [self _processFrames];
-                } else if (n == 0) {
-                    [self _fail:@"stream closed"];
-                }
-            }
-            break;
+// 接收循环：NWConnection 全异步回调，数据到达即解析
+- (void)_receiveLoop {
+    __weak WSClient *wSelf = self;
+    [_conn receiveWithMinimumIncompleteLength:1 maximumLength:65536 completion:^(NSData *data, NWContentContext *ctx, BOOL isComplete, NSError *error) {
+        WSClient *s = wSelf;
+        if (!s || s->_closed) return;
+        if (error) { [s _log:@"recv error: %@", error.localizedDescription]; [s _fail:error.localizedDescription]; return; }
+        if (data.length > 0) {
+            [s _log:@"recv %lu bytes", (unsigned long)data.length];
+            [s->_inBuf appendData:data];
+            if (!s->_handshakeDone) [s _tryFinishHandshake];
+            else [s _processFrames];
         }
-        case NSStreamEventErrorOccurred: {
-            NSError *e = aStream.streamError;
-            [self _log:@"stream error: %@", e ? e.localizedDescription : @"unknown"];
-            [self _fail:e ? e.localizedDescription : @"stream error"];
-            break;
-        }
-        case NSStreamEventEndEncountered:
-            [self _log:@"stream ended"];
-            [self _fail:@"stream ended"];
-            break;
-        default:
-            break;
-    }
+        if (isComplete) { [s _fail:@"stream ended"]; return; }
+        [s _receiveLoop];
+    }];
 }
 
 #pragma mark - 握手
@@ -207,7 +141,6 @@
         if ([line.lowercaseString hasPrefix:@"sec-websocket-extensions:"]) {
             if ([line.lowercaseString containsString:@"permessage-deflate"]) {
                 _serverDeflate = YES;
-                // server_max_window_bits=NN 解析
                 NSRegularExpression *re = [NSRegularExpression regularExpressionWithPattern:@"server_max_window_bits=(\\d+)" options:0 error:nil];
                 NSTextCheckingResult *m = [re firstMatchInString:line options:0 range:NSMakeRange(0, line.length)];
                 if (m && m.numberOfRanges > 1) {
@@ -219,9 +152,8 @@
     }
     _handshakeDone = YES;
     [self _log:@"handshake 101 OK deflate=%d", _serverDeflate ? 1 : 0];
-    // 握手剩余字节（若有）当帧处理
     if (_inBuf.length > 0) [self _processFrames];
-    // 握手完成：冲刷待发队列
+    // 冲刷待发队列
     for (NSString *t in _sendQueue) [self sendText:t];
     [_sendQueue removeAllObjects];
     if (self.onOpen) self.onOpen();
@@ -231,15 +163,13 @@
 
 - (void)_processFrames {
     while (!_closed && _inBuf.length > 0) {
-        // 帧头至少 2 字节
         if (_inBuf.length < 2) return;
         const uint8_t *b = (const uint8_t *)_inBuf.bytes;
         uint8_t b0 = b[0], b1 = b[1];
-        _finRsv = b0;
-        _opcode = b1 & 0x0F;
-        _hasMask = (b1 & 0x80) != 0;
+        uint8_t finRsv = b0;
+        uint8_t opcode = b1 & 0x0F;
+        BOOL hasMask = (b1 & 0x80) != 0;
         uint64_t len = b1 & 0x7F;
-        [self _log:@"frame opcode=%u len7=%llu fin=%d", _opcode, len, (_finRsv & 0x80) ? 1 : 0];
         NSUInteger headerLen = 2;
         if (len == 126) {
             if (_inBuf.length < 4) return;
@@ -251,38 +181,39 @@
             for (int i = 0; i < 8; i++) len = (len << 8) | b[2 + i];
             headerLen = 10;
         }
-        NSUInteger maskLen = _hasMask ? 4 : 0;
+        NSUInteger maskLen = hasMask ? 4 : 0;
         NSUInteger need = headerLen + maskLen + (NSUInteger)len;
         if (_inBuf.length < need) return;
         NSUInteger off = headerLen;
-        if (_hasMask) {
-            memcpy(_maskKey, b + off, 4);
+        unsigned char maskKey[4];
+        if (hasMask) {
+            memcpy(maskKey, b + off, 4);
             off += 4;
         }
         NSMutableData *payload = [NSMutableData dataWithLength:(NSUInteger)len];
         if (len > 0) {
             memcpy(payload.mutableBytes, b + off, (NSUInteger)len);
-            if (_hasMask) {
+            if (hasMask) {
                 uint8_t *p = (uint8_t *)payload.mutableBytes;
-                for (NSUInteger i = 0; i < len; i++) p[i] ^= _maskKey[i & 3];
+                for (NSUInteger i = 0; i < len; i++) p[i] ^= maskKey[i & 3];
             }
         }
         [_inBuf replaceBytesInRange:NSMakeRange(0, need) withBytes:NULL length:0];
         // 控制帧
-        if (_opcode == 0x8) { [self _sendControl:0x8 payload:payload]; [self _fail:@"server closed"]; return; }       // close（回执再关）
-        if (_opcode == 0x9) { [self _sendControl:0xA payload:payload]; continue; } // ping→pong
-        if (_opcode == 0xA) continue;                                          // pong
+        if (opcode == 0x8) { [self _sendControl:0x8 payload:payload]; [self _fail:@"server closed"]; return; }
+        if (opcode == 0x9) { [self _sendControl:0xA payload:payload]; continue; }
+        if (opcode == 0xA) continue;
         // 数据帧：text=1 / binary=2 / continuation=0
-        if (_opcode == 0x1 || _opcode == 0x2 || _opcode == 0x0) {
-            BOOL compressed = (_finRsv & 0x40) != 0;  // RSV1
+        if (opcode == 0x1 || opcode == 0x2 || opcode == 0x0) {
+            BOOL compressed = (finRsv & 0x40) != 0;
             if (compressed && _serverDeflate) {
                 NSData *raw = [self _inflate:payload];
                 if (raw) payload = [NSMutableData dataWithData:raw];
                 else { [self _fail:@"inflate failed"]; return; }
             }
-            BOOL fin = (_finRsv & 0x80) != 0;
-            if (_opcode == 0x1 || _opcode == 0x2) {
-                _msgOpcode = _opcode;
+            BOOL fin = (finRsv & 0x80) != 0;
+            if (opcode == 0x1 || opcode == 0x2) {
+                _msgOpcode = opcode;
                 [_payloadBuf setLength:0];
                 [_payloadBuf appendData:payload];
                 if (fin) [self _deliverPayloadBuf];
@@ -309,14 +240,12 @@
     if (data.length == 0) return [NSData data];
     z_stream strm;
     memset(&strm, 0, sizeof(strm));
-    // raw deflate：windowBits = -inflateWindowBits
     if (inflateInit2(&strm, -_inflateWindowBits) != Z_OK) return nil;
     strm.next_in = (Bytef *)data.bytes;
     strm.avail_in = (uInt)data.length;
     NSMutableData *out = [NSMutableData data];
     uint8_t buf[16384];
     int ret;
-    // v7.1.63：修复循环漏洞——输入未耗尽必须继续（旧版 avail_out>0 且 avail_in>0 时提前退出，大帧解压残缺）
     do {
         strm.next_out = buf;
         strm.avail_out = sizeof(buf);
@@ -329,7 +258,6 @@
         if (ret == Z_STREAM_END) break;
     } while (strm.avail_in > 0);
     inflateEnd(&strm);
-    // 剥掉尾部可能的 00 00 ff ff（部分实现输出残留）
     if (out.length >= 4) {
         const uint8_t *tail = (const uint8_t *)out.bytes + out.length - 4;
         if (tail[0] == 0x00 && tail[1] == 0x00 && tail[2] == 0xFF && tail[3] == 0xFF) {
@@ -343,7 +271,7 @@
 
 - (void)sendText:(NSString *)text {
     if (_closed) return;
-    if (!_handshakeDone) { [_sendQueue addObject:text]; return; }  // 握手未完成先排队
+    if (!_handshakeDone) { [_sendQueue addObject:text]; return; }
     NSData *payload = [text dataUsingEncoding:NSUTF8StringEncoding];
     [self _sendFrame:0x1 payload:payload];
 }
@@ -357,11 +285,6 @@
 }
 
 - (void)_sendRawFrame:(uint8_t)opcode payload:(NSData *)payload masked:(BOOL)masked {
-    // v7.1.66：流未 Open 不写（防 TLS 未就绪 write 阻塞主线程）
-    if (_out.streamStatus != NSStreamStatusOpen) {
-        [self _log:@"frame send skip: status=%ld opcode=%u", (long)_out.streamStatus, opcode];
-        return;
-    }
     NSMutableData *frame = [NSMutableData data];
     uint8_t b0 = 0x80 | opcode;  // FIN=1
     [frame appendBytes:&b0 length:1];
@@ -397,23 +320,32 @@
     } else {
         [frame appendData:payload];
     }
-    NSInteger wrote = [_out write:(const uint8_t *)frame.bytes maxLength:frame.length];
-    if (wrote < (NSInteger)frame.length) {
-        [self _log:@"frame write short: opcode=%u wrote=%ld/%lu", opcode, (long)wrote, (unsigned long)frame.length];
-    }
+    [self _sendRawData:frame tag:[NSString stringWithFormat:@"frame op=%u", opcode]];
+}
+
+// NWConnection 异步发送（不阻塞主线程）
+- (void)_sendRawData:(NSData *)data tag:(NSString *)tag {
+    if (_closed || !_conn) { [self _log:@"send skipped (closed/conn nil) %@", tag]; return; }
+    __weak WSClient *wSelf = self;
+    [_conn sendWithContent:data completion:^(NSError *error) {
+        WSClient *s = wSelf;
+        if (!s) return;
+        if (error) {
+            [s _log:@"%@ send error: %@", tag, error.localizedDescription];
+            [s _fail:error.localizedDescription];
+        } else {
+            [s _log:@"%@ sent %luB", tag, (unsigned long)data.length];
+        }
+    }];
 }
 
 - (void)close {
     if (_closed) return;
     _closed = YES;
-    [_in close]; [_out close];
-    [_in removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
-    [_out removeFromRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
-    _in = nil; _out = nil;
+    [_conn cancel];
+    _conn = nil;
 }
 
-// v7.1.60：关键——对象释放前必须从 runloop 摘掉 stream。
-// 之前 wc 在 _speakTTS 返回后被 ARC 释放，stream 悬空在 runloop 上 → EXC_BAD_ACCESS 闪退
 - (void)dealloc {
     if (!_closed) [self close];
 }
@@ -426,7 +358,7 @@
     if (self.onClose) self.onClose(e);
 }
 
-// v7.1.65：直写 tts_debug.log（双通道，不依赖 onLog/VC 链路）——日志中断时仍有证据
+// 日志直写 tts_debug.log（不依赖 onLog/VC 链路，双通道）
 - (void)_log:(NSString *)fmt, ... {
     va_list ap;
     va_start(ap, fmt);

@@ -31,7 +31,7 @@ TrollAgentHUD_CFLAGS += -Isources
 TrollAgentHUD_CFLAGS += -include supports/hudapp-prefix.pch
 TrollAgentHUD_CFLAGS += -Wno-error -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function
 
-TrollAgentHUD_FRAMEWORKS += CoreGraphics CoreServices QuartzCore IOKit UIKit AVFoundation Speech
+TrollAgentHUD_FRAMEWORKS += CoreGraphics CoreServices QuartzCore IOKit UIKit AVFoundation Speech Network
 TrollAgentHUD_LDFLAGS += -lz
 TrollAgentHUD_PRIVATE_FRAMEWORKS += BackBoardServices GraphicsServices SpringBoardServices
 # 私有 framework 符号由 TrollSpeed libraries/*.tbd 提供（Xcode SDK 无私有 tbd）：
