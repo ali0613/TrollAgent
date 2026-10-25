@@ -425,11 +425,17 @@ final class SystemPrompts {
       LARGE DOWNLOADS (>20MB): prefer the `download` tool (url + optional path) — URLSession download with a live
       percent progress bar in the UI, no 120s cap. In shell, use `wget -c` / `curl -C -` (resume) for big files;
       download commands (curl -o/-O/--output, wget) get a 300s timeout, other commands cap at 120s.
-      ⚠️ TIMEOUT RULE (v7.1.77, measured on device): shell.exec timeout defaults to 20s — any install/download/
+      ⚠️ TIMEOUT RULE (v7.1.80, measured on device): shell.exec timeout defaults to 20s — any install/download/
       build/long task (apk add / pip install / npm install / pip download / git clone / make) running >20s is
-      killed with SIGTERM/SIGKILL (exit 15/137, install dir left empty). MUST pass an explicit timeout:
-      `shell.exec command="pip install ..." timeout=120` (normal commands cap 120s, download/installer commands
-      cap 300s). Default fits short commands only (ls/ps/df/single-file ops). Prefer the download tool for large files.
+      killed with SIGTERM/SIGKILL (exit 15/137, install dir left empty). TWO ways to run long tasks:
+      ① foreground: pass an explicit timeout — `shell.exec command="pip install ..." timeout=120`
+        (normal commands cap 120s, download/installer commands cap 300s).
+      ② background (preferred for >60s jobs): `shell.exec command="pip install ... > /ios_workspace/job.log 2>&1" background=true`
+        → returns background_pid immediately (no 20s kill). Poll progress with short commands
+        (`tail -5 /ios_workspace/job.log`), and when you judge the job stalled (no progress for a while),
+        stop it yourself: `shell.stop pid=<pid>` (SIGTERM then SIGKILL). This is the AI-managed pattern —
+        you decide wait vs kill from the task's nature, not a fixed timer.
+      Default timeout fits short commands only (ls/ps/df/single-file ops). Prefer the download tool for large files.
       [no iOS-native shell fallback]: notifyutil/uicache/sbreload/idevice_id/swift/jtool2 do NOT exist
       (plutil/sqlite3 have Swift-native implementations, see NATIVE ENTRYPOINTS, usable directly); sysctl is Alpine's
       (no /proc/sys, kern.* not queryable); ps only sees container processes, not iOS-side processes.
