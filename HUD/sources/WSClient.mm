@@ -70,8 +70,10 @@
 
     // Network.framework C API：secure_tcp = TLS 默认（SNI/证书校验系统处理）
     nw_endpoint_t ep = nw_endpoint_create_host([host UTF8String], [[port stringValue] UTF8String]);
-    nw_parameters_t params = nw_parameters_create_secure_tcp(NW_PARAMETERS_DISABLE_PROTOCOL, NW_PARAMETERS_DEFAULT_MESSAGE);
+    nw_parameters_t params = nw_parameters_create_secure_tcp(NW_PARAMETERS_DISABLE_PROTOCOL, (nw_interface_type_t)0);
     _conn = nw_connection_create(ep, params);
+    // 17.5 SDK：receive/send 无 queue 参数，回调走 connection 队列（此处设为主队列）
+    nw_connection_set_queue(_conn, dispatch_get_main_queue());
     __weak WSClient *wSelf = self;
     nw_connection_set_state_changed_handler(_conn, ^(nw_connection_state_t state, nw_error_t error) {
         WSClient *s = wSelf;
@@ -98,7 +100,7 @@
 - (void)_receiveLoop {
     if (_closed || !_conn) return;
     __weak WSClient *wSelf = self;
-    nw_connection_receive(_conn, 1, 65536, dispatch_get_main_queue(), ^(dispatch_data_t content, nw_content_context_t context, bool is_complete, nw_error_t error) {
+    nw_connection_receive(_conn, 1, 65536, ^(dispatch_data_t content, nw_content_context_t context, bool is_complete, nw_error_t error) {
         WSClient *s = wSelf;
         if (!s || s->_closed) return;
         if (error) { [s _log:@"recv error set"]; [s _fail:@"recv error"]; return; }
@@ -326,7 +328,7 @@
     if (_closed || !_conn) { [self _log:@"send skipped (closed) %@", tag]; return; }
     dispatch_data_t dd = dispatch_data_create(data.bytes, data.length, dispatch_get_main_queue(), DISPATCH_DATA_DESTRUCTOR_DEFAULT);
     __weak WSClient *wSelf = self;
-    nw_connection_send(_conn, dd, NW_CONNECTION_DEFAULT_MESSAGE_CONTEXT, true, dispatch_get_main_queue(), ^(nw_error_t error) {
+    nw_connection_send(_conn, dd, NW_CONNECTION_DEFAULT_MESSAGE_CONTEXT, true, ^(nw_error_t error) {
         WSClient *s = wSelf;
         if (!s) return;
         if (error) {
