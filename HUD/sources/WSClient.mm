@@ -1,10 +1,11 @@
 // WSClient.mm — 最小 WebSocket 客户端（RFC6455 + permessage-deflate RFC7692）
 // v7.1.55：edge-tts v2 实测要求 permessage-deflate（无压缩 iOS URLSessionWebSocketTask 合成阶段被断连 0 音频）
-// v7.1.67：传输层从 NSStream 彻底重写为 NWConnection（Network.framework）。
-//   根因：NSStream 在 TLS 未完全就绪时 [_out write:] 会同步阻塞主线程（CFNetwork 内部等待 TLS 完成），
-//   表现为日志在 write 后戛然而止 + HUD 界面冻结无法拖动（用户 23:16 实测 + 卡死反馈）。
-//   NWConnection 全异步：state==ready（TLS 已就绪）后才发送握手，主线程永不阻塞。
-// 实现：NWConnection TLS → HTTP Upgrade（Sec-WebSocket-Key/Accept + Sec-WebSocket-Extensions）→
+// v7.1.68：传输层重写为 Network.framework C API（nw_connection_*）。
+//   根因：NSStream 在 TLS 未完全就绪时 [_out write:] 同步阻塞主线程（CFNetwork 内部等 TLS 完成），
+//   表现为日志在 write 后戛然而止 + HUD 界面冻结无法拖动。nw_connection 全异步：
+//   state==ready（TLS 已就绪）后才发送握手，主线程永不阻塞。ObjC 类 NWConnection 在 theos SDK 不可用，
+//   用 C API（nw_connection_*，编译器确认可用）。
+// 实现：nw_connection TLS → HTTP Upgrade（Sec-WebSocket-Key + Sec-WebSocket-Extensions）→
 // 帧收发（FIN/RSV/opcode/mask/len）→ RSV1=1 消息 zlib raw inflate → onText/onBinary 回调。
 
 #include <zlib.h>
@@ -15,7 +16,7 @@
 @implementation WSClient {
     NSString *_urlString;
     NSDictionary *_headers;
-    NWConnection *_conn;
+    nw_connection_t _conn;
     NSMutableData *_inBuf;      // 已读但未解析完的字节
     BOOL _handshakeDone;
     BOOL _handshakeSent;        // 握手请求已发送
@@ -67,57 +68,54 @@
     _pendingHandshake = [req copy];
     [self _log:@"connect host=%@ port=%@ req=%luB", host, port, (unsigned long)_pendingHandshake.length];
 
-    // NWConnection（TLS 异步传输层）
-    NWEndpoint *ep = [NWEndpoint hostWithPort:host port:(uint16_t)port.unsignedIntValue];
-    NWParameters *params = [[NWParameters alloc] initWithTLS];
-    [params setAllowMultipath:NO];
-    _conn = [[NWConnection alloc] initWithEndpoint:ep parameters:params];
+    // Network.framework C API：secure_tcp = TLS 默认（SNI/证书校验系统处理）
+    nw_endpoint_t ep = nw_endpoint_create_host([host UTF8String], [[port stringValue] UTF8String]);
+    nw_parameters_t params = nw_parameters_create_secure_tcp(NW_PARAMETERS_DISABLE_PROTOCOL, NW_PARAMETERS_DEFAULT_MESSAGE);
+    _conn = nw_connection_create(ep, params);
     __weak WSClient *wSelf = self;
-    _conn.stateUpdateHandler = ^(NWConnectionState state) {
+    nw_connection_set_state_changed_handler(_conn, ^(nw_connection_state_t state, nw_error_t error) {
         WSClient *s = wSelf;
         if (!s) return;
-        [s _log:@"nw state=%ld", (long)state];
-        switch (state) {
-            case NWConnectionStateReady:
-                [s _log:@"nw ready — TLS done, sending handshake"];
-                [s _sendRawData:[s->_pendingHandshake dataUsingEncoding:NSUTF8StringEncoding] tag:@"handshake"];
-                [s _receiveLoop];
-                break;
-            case NWConnectionStateFailed:
-            case NWConnectionStateCancelled:
-                if (!s->_closed) {
-                    [s _fail:@"nw connection failed/cancelled"];
-                }
-                break;
-            default:
-                break;
+        [s _log:@"nw state=%d", (int)state];
+        if (state == nw_connection_state_ready) {
+            [s _log:@"nw ready — TLS done, sending handshake"];
+            [s _sendRawData:[s->_pendingHandshake dataUsingEncoding:NSUTF8StringEncoding] tag:@"handshake"];
+            [s _receiveLoop];
+        } else if (state == nw_connection_state_failed || state == nw_connection_state_cancelled) {
+            if (!s->_closed) [s _fail:@"nw failed/cancelled"];
         }
-    };
-    [_conn start];
+    });
+    nw_connection_start(_conn);
 
-    // 10s 握手超时保护（主线程不阻塞，正常触发）
+    // 10s 握手超时保护（主线程不阻塞）
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         WSClient *s = wSelf;
         if (s && !s->_handshakeDone && !s->_closed) [s _fail:@"handshake timeout"];
     });
 }
 
-// 接收循环：NWConnection 全异步回调，数据到达即解析
+// 接收循环：nw_connection_receive 全异步，数据到达即解析
 - (void)_receiveLoop {
+    if (_closed || !_conn) return;
     __weak WSClient *wSelf = self;
-    [_conn receiveWithMinimumIncompleteLength:1 maximumLength:65536 completion:^(NSData *data, NWContentContext *ctx, BOOL isComplete, NSError *error) {
+    nw_connection_receive(_conn, 1, 65536, dispatch_get_main_queue(), ^(dispatch_data_t content, nw_content_context_t context, bool is_complete, nw_error_t error) {
         WSClient *s = wSelf;
         if (!s || s->_closed) return;
-        if (error) { [s _log:@"recv error: %@", error.localizedDescription]; [s _fail:error.localizedDescription]; return; }
-        if (data.length > 0) {
-            [s _log:@"recv %lu bytes", (unsigned long)data.length];
-            [s->_inBuf appendData:data];
+        if (error) { [s _log:@"recv error set"]; [s _fail:@"recv error"]; return; }
+        if (content) {
+            NSMutableData *d = [NSMutableData data];
+            dispatch_data_apply(content, ^bool(dispatch_data_t region, size_t offset, const void *bytes, size_t size) {
+                [d appendBytes:bytes length:size];
+                return true;
+            });
+            [s _log:@"recv %lu bytes", (unsigned long)d.length];
+            [s->_inBuf appendData:d];
             if (!s->_handshakeDone) [s _tryFinishHandshake];
             else [s _processFrames];
         }
-        if (isComplete) { [s _fail:@"stream ended"]; return; }
+        if (is_complete) { [s _fail:@"stream ended"]; return; }
         [s _receiveLoop];
-    }];
+    });
 }
 
 #pragma mark - 握手
@@ -323,27 +321,27 @@
     [self _sendRawData:frame tag:[NSString stringWithFormat:@"frame op=%u", opcode]];
 }
 
-// NWConnection 异步发送（不阻塞主线程）
+// nw_connection_send 异步发送（不阻塞主线程）
 - (void)_sendRawData:(NSData *)data tag:(NSString *)tag {
-    if (_closed || !_conn) { [self _log:@"send skipped (closed/conn nil) %@", tag]; return; }
+    if (_closed || !_conn) { [self _log:@"send skipped (closed) %@", tag]; return; }
+    dispatch_data_t dd = dispatch_data_create(data.bytes, data.length, dispatch_get_main_queue(), DISPATCH_DATA_DESTRUCTOR_DEFAULT);
     __weak WSClient *wSelf = self;
-    [_conn sendWithContent:data completion:^(NSError *error) {
+    nw_connection_send(_conn, dd, NW_CONNECTION_DEFAULT_MESSAGE_CONTEXT, true, dispatch_get_main_queue(), ^(nw_error_t error) {
         WSClient *s = wSelf;
         if (!s) return;
         if (error) {
-            [s _log:@"%@ send error: %@", tag, error.localizedDescription];
-            [s _fail:error.localizedDescription];
+            [s _log:@"%@ send error", tag];
+            [s _fail:@"send error"];
         } else {
             [s _log:@"%@ sent %luB", tag, (unsigned long)data.length];
         }
-    }];
+    });
 }
 
 - (void)close {
     if (_closed) return;
     _closed = YES;
-    [_conn cancel];
-    _conn = nil;
+    if (_conn) { nw_connection_cancel(_conn); _conn = NULL; }
 }
 
 - (void)dealloc {
