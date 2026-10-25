@@ -140,6 +140,19 @@ final class ShellExecTool: MCPTool {
             return probe
         }
 
+        // v7.1.45: df 磁盘查询原生执行——Asbestos 解释器里 busybox df 读 /proc/mounts 不稳，
+        // 触发解释器段错误（guest 崩 = App 进程被杀，用户实测 `df -h / | tail -1; ... apk search` 直接闪退）。
+        // 纯 df → 原生 statfs；复合命令含 df → 拦截提示拆分（df 单独跑，其余命令分开跑）。
+        if trimmed.hasPrefix("df") || trimmed.contains(" df ") || trimmed.hasSuffix(" df") {
+            if trimmed.contains(";") || trimmed.contains("&&") || trimmed.contains("|") {
+                return ["command": command, "exit_code": 1,
+                        "stdout": "df now runs natively (container df crashes the app — Asbestos /proc unstable). Run it alone: `df -h /` for disk space. Then run the other part separately.",
+                        "hint": "split compound commands containing df — disk queries via native df, everything else stays in the unified env"]
+            }
+            AuditLog.shared.log("shell.exec (native df)", detail: String(trimmed.prefix(100)))
+            return ShellExecTool.nativeDf(command)
+        }
+
         // v6.6.0: 统一环境——移除 runtime/auto 路由。默认全部命令走 TrollRuntime
         // （Alpine Linux 完整工具链——Asbestos 解释器）；iOS 特有命令（plutil 等 Alpine 无）
         // 内部自动原生兜底（不暴露参数，AI 无感）。
@@ -1364,6 +1377,28 @@ final class ShellExecTool: MCPTool {
     ///   ① App 内置原生 bin/（jtool2）  ② 统一环境 rootfs  ③ 原生命令表（plutil/sqlite3/ta）
     /// 支持批量：一条命令探测多个工具（command -v git; command -v curl; python3 --version）逐个合并返回。
     /// 任一段是真实执行（git status / curl 实际请求）→ 整条不拦截，走原路由。
+    /// v7.1.45：原生 df——iOS 宿主 statfs 取磁盘空间，格式化 df -h 风格（替代容器内 df：Asbestos /proc 不稳会段错误崩 App）
+    private static func nativeDf(_ command: String) -> [String: Any] {
+        let path = "/"
+        let attrs = try? FileManager.default.attributesOfFileSystem(forPath: path)
+        let total = (attrs?[.systemSize] as? NSNumber)?.int64Value ?? 0
+        let free = (attrs?[.systemFreeSize] as? NSNumber)?.int64Value ?? 0
+        let used = max(total - free, 0)
+        let pct = total > 0 ? Int((Double(used) / Double(total)) * 100) : 0
+        func h(_ b: Int64) -> String {
+            let gb = Double(b) / 1_073_741_824
+            if gb >= 1 { return String(format: "%.1fG", gb) }
+            return String(format: "%.0fM", Double(b) / 1_048_576)
+        }
+        let line = String(format: "Filesystem  Size  Used Avail Use%% Mounted on\n/  %@  %@  %@  %d%%  / (iOS host)", h(total), h(used), h(free), pct)
+        return [
+            "command": command,
+            "exit_code": 0,
+            "stdout": line,
+            "hint": "Native df (iOS host filesystem). Container df skipped — Asbestos /proc is unstable and crashes the app."
+        ]
+    }
+
     private static func nativeToolProbe(_ command: String) -> [String: Any]? {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
