@@ -82,6 +82,7 @@
     [self _log:@"in opened"];
     [_out open];
     [self _log:@"out opened, connect returns"];
+    [self _sendHandshakeIfNeeded:_in];   // v7.1.62：兜底尝试（TLS 未就绪 write 返回 -1，HasSpaceAvailable 补发）
     // 预构握手请求（含 permessage-deflate）
     NSString *path = [NSString stringWithFormat:@"%@?%@", u.path, u.query ?: @""];
     unsigned char keyBytes[16];
@@ -101,15 +102,20 @@
     _pendingHandshake = [req copy];
 }
 
-// v7.1.61：写流 open 完成后发送握手请求（之前只存不发 → 服务器永不回 101 → 无音频）
+// v7.1.62：任一 stream open 完成即可尝试发送（iOS 写流 OpenCompleted 不保证触发，
+// 上次等 _out 事件导致握手永远不发）。write 未就绪时等 HasSpaceAvailable 补发。
 - (void)_sendHandshakeIfNeeded:(NSStream *)aStream {
     if (_handshakeSent || !_pendingHandshake) return;
-    if (aStream != _out) return;   // 等写流 TLS 就绪
-    _handshakeSent = YES;
+    (void)aStream;
     NSData *hd = [_pendingHandshake dataUsingEncoding:NSUTF8StringEncoding];
     NSInteger w = [_out write:(const uint8_t *)hd.bytes maxLength:hd.length];
-    [self _log:@"handshake sent %lu bytes (wrote %ld)", (unsigned long)hd.length, (long)w];
-    if (w < (NSInteger)hd.length) [self _fail:@"handshake partial write"];
+    if (w > 0) {
+        _handshakeSent = YES;
+        [self _log:@"handshake sent %lu bytes (wrote %ld)", (unsigned long)hd.length, (long)w];
+        if (w < (NSInteger)hd.length) [self _fail:@"handshake partial write"];
+    } else {
+        [self _log:@"handshake write pending (wrote %ld) — will retry on HasSpaceAvailable", (long)w];
+    }
 }
 
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode {
@@ -117,6 +123,10 @@
     switch (eventCode) {
         case NSStreamEventOpenCompleted:
             [self _log:@"stream open completed"];
+            [self _sendHandshakeIfNeeded:aStream];
+            break;
+        case NSStreamEventHasSpaceAvailable:
+            [self _log:@"out stream has space"];
             [self _sendHandshakeIfNeeded:aStream];
             break;
         case NSStreamEventHasBytesAvailable: {
