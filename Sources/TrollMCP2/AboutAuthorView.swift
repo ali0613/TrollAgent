@@ -2,8 +2,29 @@
 import UIKit
 
 // v2.9.89：关于作者（作者卡片 / 开源致谢 / 安全 / 注意 / 免责 / 赞助 / 反馈）
+// v7.1.46：临时 HUD 语音诊断日志面板（读 /var/mobile/Documents/tts_debug.log，App 有 no-sandbox 权限可读；
+// 不用再让 AI 敲 cat——HUD 长按语音测一次，打开关于页即可看全链路日志）
 struct AboutAuthorView: View {
     @State private var copied = false
+    @State private var diagLog: String = ""
+    @State private var diagLoaded = false
+    @State private var diagError: String? = nil
+
+    private func reloadDiag() {
+        // v7.1.46：日志在 App Group 共享容器（HUD 独立进程同写），不占 Documents
+        var path = "/var/mobile/Documents/tts_debug.log"
+        if let u = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.ai.iosxcode") {
+            path = u.appendingPathComponent("tts_debug.log").path
+        }
+        if let s = try? String(contentsOfFile: path, encoding: .utf8), !s.isEmpty {
+            diagLog = s
+            diagError = nil
+        } else {
+            diagLog = ""
+            diagError = "日志不存在或为空（HUD 长按语音测一次后这里才会有内容）"
+        }
+        diagLoaded = true
+    }
 
     private func bundleImage(_ name: String, _ ext: String) -> UIImage? {
         guard let p = Bundle.main.path(forResource: name, ofType: ext) else { return nil }
@@ -133,6 +154,46 @@ struct AboutAuthorView: View {
                 .frame(maxWidth: .infinity)
             }
 
+            // 临时：HUD 语音诊断日志（v7.1.46——定位长按语音无回复，测一次长按说话后刷新查看）
+            CardSectionHeader(icon: "waveform.badge.magnifyingglass", title: "HUD 语音诊断（临时）", color: .orange)
+            CardBox {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("日志：App Group 共享容器（临时）")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button(action: reloadDiag) {
+                            Label("刷新", systemImage: "arrow.clockwise")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.orange)
+                                .cornerRadius(12)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if !diagLoaded {
+                        Text("打开页面自动读取；若为空说明还没测过 HUD 语音")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    } else if let err = diagError {
+                        Text(err)
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    } else {
+                        ScrollView {
+                            Text(diagLog)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundColor(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 240)
+                    }
+                }
+            }
+
             // Bug 与功能反馈
             CardSectionHeader(icon: "envelope.fill", title: L10n.t("about_feedback"), color: .blue)
             CardBox {
@@ -161,6 +222,7 @@ struct AboutAuthorView: View {
         }
         .navigationTitle(L10n.t("about_title"))
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear(perform: reloadDiag)
     }
 
     // MARK: - 数据

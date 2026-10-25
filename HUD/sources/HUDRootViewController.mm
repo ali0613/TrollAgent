@@ -2816,6 +2816,7 @@ static UIImage *softParticleImage(CGFloat size) {
 // v6.1.5-14p/q：环境决策——按小时选粒子，充电叠加粒子；粒子跟随角色位置（无光晕）
 // v6.1.5-14v：场景→颜色（素材统一柔白光点，cell.color 染色）
 // v6.1.5-14am：白天也出粒子（淡白柔光低密度）——用户"一直没见过粒子"根因是白天无粒子被 _clearParticles 清空
+// v7.1.46：颜色固定亮黄+亮橙（用户要求，不再按时段变色）；仅站立角色飘——趴墙/拖拽/说话(坐姿)清粒子
 - (void)_updateAmbient {
     NSCalendar *cal = [NSCalendar currentCalendar];
     NSInteger hour = [cal component:NSCalendarUnitHour fromDate:[NSDate date]];
@@ -2823,22 +2824,18 @@ static UIImage *softParticleImage(CGFloat size) {
     NSInteger bucket = 0;   // 白天：淡白柔光（低密度，白墙上也能看出光晕）
     if (hour >= 21 || hour < 6) {
         bucket = 2;  // 深夜：冷银白 + 淡蓝，静谧萤光
-        [colors addObject:[UIColor colorWithWhite:0.92 alpha:1.0]];
-        [colors addObject:[UIColor colorWithRed:0.72 green:0.83 blue:1.0 alpha:1.0]];
     } else if (hour >= 17 && hour < 19) {
         bucket = 1;  // 傍晚：暖金余晖
-        [colors addObject:[UIColor colorWithRed:1.0 green:0.85 blue:0.55 alpha:1.0]];
     } else {
-        // v6.1.5-14am：白天（6-17点）淡白柔光粒子——低密度但可见，满足"柔和光粒子"全天可看
-        [colors addObject:[UIColor colorWithWhite:1.0 alpha:1.0]];
-        [colors addObject:[UIColor colorWithRed:0.85 green:0.92 blue:1.0 alpha:1.0]];
+        bucket = 0;  // 白天
     }
+    // v7.1.46：粒子颜色固定亮黄 + 亮橙（用户明确要求，替换原时段变色逻辑）
+    [colors addObject:[UIColor colorWithRed:1.0 green:0.92 blue:0.30 alpha:1.0]];  // 亮黄
+    [colors addObject:[UIColor colorWithRed:1.0 green:0.55 blue:0.08 alpha:1.0]];  // 亮橙
     BOOL charging = ([UIDevice currentDevice].batteryState == UIDeviceBatteryStateCharging ||
                      [UIDevice currentDevice].batteryState == UIDeviceBatteryStateFull);
     if (charging) {
-        bucket = 3;  // 充电：明亮白 + 浅蓝，能量感
-        [colors addObject:[UIColor colorWithRed:0.95 green:0.98 blue:1.0 alpha:1.0]];
-        [colors addObject:[UIColor colorWithRed:0.7 green:0.85 blue:1.0 alpha:1.0]];
+        bucket = 3;  // 充电：能量感（颜色仍黄橙，密度略高）
     }
     // 漂浮时长只在环境时段切换时重置（避免每 60s 打断漂浮动画）
     // v6.1.5-14ac：趴墙/拖拽中不重置漂浮——原无条件 _startFloatWithDuration 会在
@@ -2849,6 +2846,10 @@ static UIImage *softParticleImage(CGFloat size) {
             if (bucket == 2) [self _startFloatWithDuration:2.6f];  // 深夜入睡慢呼吸
             else [self _startFloatWithDuration:1.3f];
         }
+    }
+    // v7.1.46：仅站立角色飘——趴墙/拖拽/说话模式(坐姿)一律清粒子（用户要求"只要站立角色飘就行"）
+    if (_onSideWall || _onBottomWall || _isDragging || _speakingMode) {
+        [colors removeAllObjects];
     }
     // v6.1.5-14ap：粒子开关——读全局文件（设置页"可爱助手→其他→粒子特效"写），
     // 关闭则清空颜色数组 → 走 else _clearParticles；漂浮（入睡呼吸）不受影响
@@ -2866,17 +2867,20 @@ static UIImage *softParticleImage(CGFloat size) {
 }
 
 // v6.1.5-14bh：粒子发射位置改角色脚底（原在头顶上方 center.y - height/2 → 用户要求从脚下往上飘）
+// v7.1.46：发射区=角色全身范围（原脚底一条线/窄矩形→视觉像单点；现从角色身体范围多点向上冒）
 - (void)_refreshAmbientPosition {
     if (_particleLayer) {
         _particleLayer.emitterPosition = CGPointMake(_girlView.center.x,
-                                                     _girlView.center.y + _girlView.frame.size.height / 2);
-        _particleLayer.emitterSize = CGSizeMake(_girlView.frame.size.width * 0.5 + 30, 10);
+                                                     _girlView.center.y);
+        _particleLayer.emitterSize = CGSizeMake(_girlView.frame.size.width * 1.2 + 30,
+                                                _girlView.frame.size.height * 0.9);
     }
 }
 
 // v6.1.5-14p/q：设置粒子（上飘粒）
 // v6.1.5-14v：柔和光点版——柔光渐变圆 + cell.color 染色；光点不旋转、缓慢淡出，更柔和
 // v6.1.5-14aa：持有颜色数组 _particleColors（cell.color 为 assign，保证 UIColor 存活、CGColor 不悬垂）
+// v7.1.46：全向上飘——emissionLongitude=-π/2(向上) + emissionRange=π/6(±30°锥形,不再有向下分量)
 - (void)_setParticles:(NSArray<UIColor *> *)colors {
     if (!_particleLayer) {
         _particleLayer = [CAEmitterLayer layer];
@@ -2896,7 +2900,8 @@ static UIImage *softParticleImage(CGFloat size) {
         cell.velocity = 20;
         cell.velocityRange = 18;
         cell.yAcceleration = -6;          // 轻柔上飘（放缓）
-        cell.emissionRange = M_PI * 2;
+        cell.emissionLongitude = -M_PI_2;  // v7.1.46：发射方向向上（0 度=右，-90°=上）
+        cell.emissionRange = M_PI / 6;     // v7.1.46：±30° 锥形向上，杜绝向下飘（原 2π 全方向）
         cell.scale = 0.066;           // v7.1.10：0.22→0.066（用户要求再小 70%，0.22×0.3）
         cell.scaleRange = 0.024;      // v7.1.10：0.08→0.024 同步收窄（×0.3）
         cell.scaleSpeed = -0.015;         // 越飘越小
@@ -2924,6 +2929,8 @@ static UIImage *softParticleImage(CGFloat size) {
     if (_speakingMode) return;
     _speakingMode = YES;
     [self _hudDiagLog:@"enterSpeakMode: start"];
+    // v7.1.46：说话=坐姿，立即清粒子（站立判定），不必等 60s 定时
+    [self _updateAmbient];
     // 1) 坐姿（用户要求：长按不要压扁，换坐姿）
     if (_sitImage) {
         _girlView.image = _sitImage;
@@ -2942,6 +2949,8 @@ static UIImage *softParticleImage(CGFloat size) {
     [self _hideMicPulse];
     [self _stopListeningAndSend];
     [self _resetToIdleIfNeeded];
+    // v7.1.46：回站立 → 立即恢复粒子（不必等 60s 定时）
+    [self _updateAmbient];
 }
 
 /// 拖动打断：取消说话模式，丢弃录音，不发送（v7.2.5 用户要求拖动无麦克风）
@@ -2951,6 +2960,8 @@ static UIImage *softParticleImage(CGFloat size) {
     [self _hideMicPulse];
     [self _abortListening];
     [self _resetToIdleIfNeeded];
+    // v7.1.46：回站立 → 立即恢复粒子
+    [self _updateAmbient];
 }
 
 /// 显示头顶麦克风（角色顶部上方 30pt，动态放大缩小动画）
@@ -3031,8 +3042,16 @@ static UIImage *softParticleImage(CGFloat size) {
     [_hintSpeaker speakUtterance:u];
 }
 
+/// v7.1.46：诊断日志路径=App Group 共享容器（不占 /var/mobile/Documents，用户要求"别放这"；
+/// 主 App 关于页从同一容器读展示，HUD 独立进程也可写）
+- (NSString *)_diagLogPath {
+    NSURL *u = [[NSFileManager defaultManager] containerURLForSecurityApplicationGroupIdentifier:@"group.com.ai.iosxcode"];
+    if (u) return [[u path] stringByAppendingPathComponent:@"tts_debug.log"];
+    return @"/var/mobile/Documents/tts_debug.log";   // 兜底（无 App Group 时）
+}
+
 /// v7.1.45：HUD 全链路诊断落盘——长按语音从入口到播放每一环写 tts_debug.log
-///（App 内 AI 读 /var/mobile/Documents/tts_debug.log 一次定位无声根因；线程安全：NSFileHandle 追加原子）
+///（主 App 关于页"HUD 语音诊断（临时）"面板直接读；线程安全：NSFileHandle 追加原子）
 - (void)_hudDiagLog:(NSString *)fmt, ... {
     va_list ap; va_start(ap, fmt);
     NSString *msg = [[NSString alloc] initWithFormat:fmt arguments:ap];
@@ -3040,7 +3059,7 @@ static UIImage *softParticleImage(CGFloat size) {
     NSDateFormatter *df = [NSDateFormatter new];
     df.dateFormat = @"HH:mm:ss.SSS";
     NSString *line = [NSString stringWithFormat:@"[%@] %@\n", [df stringFromDate:[NSDate date]], msg];
-    NSString *logPath = @"/var/mobile/Documents/tts_debug.log";
+    NSString *logPath = [self _diagLogPath];
     NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:logPath];
     if (fh) {
         [fh seekToEndOfFile];
@@ -3229,7 +3248,7 @@ static UIImage *softParticleImage(CGFloat size) {
                               diagCopy, status, err ? err.localizedDescription : @"nil",
                               data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : @"nil"];
             NSLog(@"%@", line);
-            NSString *logPath = @"/var/mobile/Documents/tts_debug.log";
+            NSString *logPath = [self _diagLogPath];
             NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:logPath];
             if (fh) {
                 [fh seekToEndOfFile];
