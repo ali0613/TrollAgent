@@ -298,7 +298,11 @@ static NSString *secMsGecV2(double unixTs) {
     double ticks = unixTs + 11644473600.0;
     ticks -= fmod(ticks, 300.0);
     ticks *= 1e7;
-    NSString *str = [NSString stringWithFormat:@"%.0f%@", ticks, @"6A5AA1D4EAFF4E9FB37E23D68491D6F4"];
+    // v7.1.54：与主 App 完全对齐——ticks≈1.34e17 超 double 精确范围(2^53≈9e15)，%.0f 四舍五入
+    // vs 主 App Swift UInt64() 截断可能差 1 → SHA 输入不同 → GEC 校验不符 → 微软拒连
+    // ("Socket is not connected", audioBytes=0 实测)。C (uint64_t) 转换与 Swift UInt64() 同为截断。
+    uint64_t ticksInt = (uint64_t)ticks;
+    NSString *str = [NSString stringWithFormat:@"%llu%@", ticksInt, @"6A5AA1D4EAFF4E9FB37E23D68491D6F4"];
     std::vector<uint8_t> data(str.UTF8String, str.UTF8String + str.length);
     uint8_t digest[32];
     shaDigest(data, digest);
