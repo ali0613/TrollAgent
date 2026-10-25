@@ -53,21 +53,24 @@
 - (void)connect {
     NSURL *u = [NSURL URLWithString:_urlString];
     NSString *host = u.host;
+    if (host.length == 0) { [self _fail:@"bad url host"]; return; }   // v7.1.59：NULL host 会崩 CF
     NSNumber *port = u.port ?: @443;
     CFReadStreamRef r = NULL; CFWriteStreamRef w = NULL;
     CFStreamCreatePairWithSocketToHost(NULL, (__bridge CFStringRef)host, port.intValue, &r, &w);
     if (!r || !w) { [self _fail:@"socket create failed"]; return; }
     _in = (__bridge_transfer NSInputStream *)r;
     _out = (__bridge_transfer NSOutputStream *)w;
+    [self _log:@"connect host=%@ port=%d streams=%@/%@", host, port.intValue, _in ? @"ok" : @"nil", _out ? @"ok" : @"nil"];
     // TLS：SNI + 校验证书链（bing 正规证书）。用字符串字面量（iOS 17.5 SDK 已移除
-    // NSStreamSocketSecurityLevelTLSv1_2 / kCFStreamPropertySSLPeerName 等常量声明）
+    // NSStreamSocketSecurityLevelTLSv1_2 / kCFStreamPropertySSLPeerName 等常量声明）。
+    // 注意：value 直接是 SSLSettings 字典（PeerName/Validates），不能再套一层。
     NSDictionary *tlsSettings = @{
         @"kCFStreamSSLPeerName": host,
         @"kCFStreamSSLValidatesCertificateChain": @YES,
     };
-    NSDictionary *sslProps = @{@"kCFStreamPropertySSLSettings": tlsSettings};
-    CFReadStreamSetProperty((__bridge CFReadStreamRef)_in, (__bridge CFStringRef)@"kCFStreamPropertySSLSettings", (__bridge CFDictionaryRef)sslProps);
-    CFWriteStreamSetProperty((__bridge CFWriteStreamRef)_out, (__bridge CFStringRef)@"kCFStreamPropertySSLSettings", (__bridge CFDictionaryRef)sslProps);
+    CFReadStreamSetProperty((__bridge CFReadStreamRef)_in, (__bridge CFStringRef)@"kCFStreamPropertySSLSettings", (__bridge CFDictionaryRef)tlsSettings);
+    CFWriteStreamSetProperty((__bridge CFWriteStreamRef)_out, (__bridge CFStringRef)@"kCFStreamPropertySSLSettings", (__bridge CFDictionaryRef)tlsSettings);
+    [self _log:@"TLS settings applied"];
     _in.delegate = self; _out.delegate = self;
     [_in scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
     [_out scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
@@ -95,12 +98,14 @@
     if (_closed) return;
     switch (eventCode) {
         case NSStreamEventOpenCompleted:
+            [self _log:@"stream open completed"];
             break;
         case NSStreamEventHasBytesAvailable: {
             if (!_handshakeDone) {
                 // 先读握手响应
                 uint8_t tmp[4096];
                 NSInteger n = [_in read:tmp maxLength:sizeof(tmp)];
+                [self _log:@"handshake read n=%ld", (long)n];
                 if (n > 0) {
                     [_inBuf appendBytes:tmp length:n];
                     [self _tryFinishHandshake];
@@ -108,6 +113,7 @@
             } else {
                 uint8_t tmp[8192];
                 NSInteger n = [_in read:tmp maxLength:sizeof(tmp)];
+                [self _log:@"frame read n=%ld buf=%lu", (long)n, (unsigned long)_inBuf.length];
                 if (n > 0) {
                     [_inBuf appendBytes:tmp length:n];
                     [self _processFrames];
@@ -119,10 +125,12 @@
         }
         case NSStreamEventErrorOccurred: {
             NSError *e = aStream.streamError;
+            [self _log:@"stream error: %@", e ? e.localizedDescription : @"unknown"];
             [self _fail:e ? e.localizedDescription : @"stream error"];
             break;
         }
         case NSStreamEventEndEncountered:
+            [self _log:@"stream ended"];
             [self _fail:@"stream ended"];
             break;
         default:
@@ -162,6 +170,7 @@
         }
     }
     _handshakeDone = YES;
+    [self _log:@"handshake 101 OK deflate=%d", _serverDeflate ? 1 : 0];
     // 握手剩余字节（若有）当帧处理
     if (_inBuf.length > 0) [self _processFrames];
     // 握手完成：冲刷待发队列
@@ -182,6 +191,7 @@
         _opcode = b1 & 0x0F;
         _hasMask = (b1 & 0x80) != 0;
         uint64_t len = b1 & 0x7F;
+        [self _log:@"frame opcode=%u len7=%llu fin=%d", _opcode, len, (_finRsv & 0x80) ? 1 : 0];
         NSUInteger headerLen = 2;
         if (len == 126) {
             if (_inBuf.length < 4) return;
@@ -350,8 +360,18 @@
 - (void)_fail:(NSString *)err {
     if (_closed) return;
     NSString *e = [err copy];
+    [self _log:@"FAIL: %@", e];
     [self close];
     if (self.onClose) self.onClose(e);
+}
+
+- (void)_log:(NSString *)fmt, ... {
+    if (!self.onLog) return;
+    va_list ap;
+    va_start(ap, fmt);
+    NSString *line = [[NSString alloc] initWithFormat:fmt arguments:ap];
+    va_end(ap);
+    self.onLog(line);
 }
 
 @end

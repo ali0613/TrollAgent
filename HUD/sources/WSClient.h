@@ -11,4 +11,5 @@
 @property (nonatomic, copy) void (^onText)(NSString *text);
 @property (nonatomic, copy) void (^onBinary)(NSData *data);
 @property (nonatomic, copy) void (^onClose)(NSString *error);
+@property (nonatomic, copy) void (^onLog)(NSString *line);   // v7.1.59：内部诊断日志（定位 HUD 闪退点）
 @end

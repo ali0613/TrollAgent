@@ -3361,6 +3361,12 @@ static UIImage *softParticleImage(CGFloat size) {
     __weak typeof(self) wself = self;
     __weak WSClient *wcWeak = wc;   // v7.1.55：避免 block 强捕获 wc 造成 retain cycle
     __block int audioFrames = 0;
+    // v7.1.59：WSClient 内部日志接入 HUD 诊断面板（定位闪退点）
+    wc.onLog = ^(NSString *line) {
+        typeof(self) sself = wself;
+        if (!sself) return;
+        [sself _hudDiagLog:@"ws: %@", line];
+    };
     wc.onText = ^(NSString *s) {
         typeof(self) sself = wself;
         if (!sself) return;
