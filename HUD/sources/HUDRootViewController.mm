@@ -2923,6 +2923,7 @@ static UIImage *softParticleImage(CGFloat size) {
 - (void)_enterSpeakMode {
     if (_speakingMode) return;
     _speakingMode = YES;
+    [self _hudDiagLog:@"enterSpeakMode: start"];
     // 1) 坐姿（用户要求：长按不要压扁，换坐姿）
     if (_sitImage) {
         _girlView.image = _sitImage;
@@ -2979,6 +2980,9 @@ static UIImage *softParticleImage(CGFloat size) {
 - (void)_startListening {
     if (_listening) return;
     [self _ensureSpeechPermission:^(BOOL ok) {
+        [self _hudDiagLog:@"permission: ok=%d sttAuth=%ld mic=%@", ok,
+         (long)[SFSpeechRecognizer authorizationStatus],
+         [[AVAudioSession sharedInstance] recordPermission] == AVAudioSessionRecordPermissionGranted ? @"granted" : @"denied"];
         if (!ok) { [self _speakLocalHint:@"请先允许麦克风和语音识别权限"]; return; }
         dispatch_async(dispatch_get_main_queue(), ^{
             [self _beginRecording];
@@ -3018,12 +3022,33 @@ static UIImage *softParticleImage(CGFloat size) {
 /// 权限被拒/链路失败语音提示（本地系统 TTS——不依赖网络；v7.1.44 参数化文案）
 - (void)_speakLocalHint:(NSString *)msg {
     if (!msg || msg.length == 0) msg = @"出错了，请重试";
+    [self _hudDiagLog:@"_speakLocalHint: %@", msg];
     if (!_hintSpeaker) _hintSpeaker = [AVSpeechSynthesizer new];   // 强持有，防 ARC 释放中断
     [_hintSpeaker stopSpeakingAtBoundary:AVSpeechBoundaryImmediate];
     AVSpeechUtterance *u = [AVSpeechUtterance speechUtteranceWithString:msg];
     u.voice = [AVSpeechSynthesisVoice voiceWithLanguage:@"zh-CN"];
     u.rate = 0.5f;
     [_hintSpeaker speakUtterance:u];
+}
+
+/// v7.1.45：HUD 全链路诊断落盘——长按语音从入口到播放每一环写 tts_debug.log
+///（App 内 AI 读 /var/mobile/Documents/tts_debug.log 一次定位无声根因；线程安全：NSFileHandle 追加原子）
+- (void)_hudDiagLog:(NSString *)fmt, ... {
+    va_list ap; va_start(ap, fmt);
+    NSString *msg = [[NSString alloc] initWithFormat:fmt arguments:ap];
+    va_end(ap);
+    NSDateFormatter *df = [NSDateFormatter new];
+    df.dateFormat = @"HH:mm:ss.SSS";
+    NSString *line = [NSString stringWithFormat:@"[%@] %@\n", [df stringFromDate:[NSDate date]], msg];
+    NSString *logPath = @"/var/mobile/Documents/tts_debug.log";
+    NSFileHandle *fh = [NSFileHandle fileHandleForWritingAtPath:logPath];
+    if (fh) {
+        [fh seekToEndOfFile];
+        [fh writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+        [fh closeFile];
+    } else {
+        [line writeToFile:logPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    }
 }
 
 /// 真正开始录音 + 识别
@@ -3034,7 +3059,7 @@ static UIImage *softParticleImage(CGFloat size) {
     [sess setActive:YES error:&err];
 
     _stt = [[SFSpeechRecognizer alloc] initWithLocale:[NSLocale localeWithLocaleIdentifier:@"zh-CN"]];
-    if (!_stt.isAvailable) { [self _stopListeningAndSend]; return; }
+    if (!_stt.isAvailable) { [self _hudDiagLog:@"beginRecording: STT unavailable (isAvailable=NO) -> abort"]; [self _stopListeningAndSend]; return; }
 
     _sttReq = [[SFSpeechAudioBufferRecognitionRequest alloc] init];
     _sttReq.shouldReportPartialResults = YES;
@@ -3088,6 +3113,7 @@ static UIImage *softParticleImage(CGFloat size) {
         text = _sttResult.bestTranscription.formattedString;
     }
     text = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    [self _hudDiagLog:@"stopListeningAndSend: sttResult=%@ text=%@", _sttResult ? @"yes" : @"nil", text.length > 0 ? text : @"(empty)"];
     if (text.length > 0) {
         [self _finishListeningCleanup];
         [self _askAI:text];
@@ -3228,9 +3254,12 @@ static UIImage *softParticleImage(CGFloat size) {
             if (!reply && [choices[0][@"text"] isKindOfClass:[NSString class]]) reply = choices[0][@"text"];
         }
         if (reply.length > 0) {
+            [sself _hudDiagLog:@"askAI OK: replyLen=%lu", (unsigned long)reply.length];
             dispatch_async(dispatch_get_main_queue(), ^{
                 [sself _speakTTS:reply];
             });
+        } else {
+            [sself _hudDiagLog:@"askAI OK but empty reply"];
         }
     }] resume];
 }
@@ -3270,6 +3299,7 @@ static UIImage *softParticleImage(CGFloat size) {
     NSURLSession *session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration ephemeralSessionConfiguration]];
     NSURLSessionWebSocketTask *ws = [session webSocketTaskWithRequest:req];
     [ws resume];
+    [self _hudDiagLog:@"speakTTS: voice=%@ gec=%@ ws=resumed", voice, gec];
 
     NSString *escaped = [self _xmlEscape:clean];
     NSString *ssml = [NSString stringWithFormat:@"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='%@'><prosody pitch='%+dhz' rate='%+d%%' volume='+0%%'>%@</prosody></voice></speak>", fullVoice, pitchHz, ratePct, escaped];
@@ -3280,12 +3310,14 @@ static UIImage *softParticleImage(CGFloat size) {
 
     NSMutableData *audio = [NSMutableData data];
     __weak typeof(self) wself = self;
+    __block int audioFrames = 0;
     [ws sendMessage:[[NSURLSessionWebSocketMessage alloc] initWithString:configPayload] completionHandler:^(NSError *err) {
         if (err) {
             [ws cancel];
             // v7.1.44：WS 连不上 → 本地语音提示（原静默，用户以为没回复）
             dispatch_async(dispatch_get_main_queue(), ^{
                 typeof(self) hs = wself;
+                [hs _hudDiagLog:@"speakTTS FAIL: config send err=%@", err.localizedDescription];
                 [hs _speakLocalHint:@"语音服务连不上，请稍后再试"];
             });
             return;
@@ -3297,6 +3329,7 @@ static UIImage *softParticleImage(CGFloat size) {
                 [ws cancel];
                 dispatch_async(dispatch_get_main_queue(), ^{
                     typeof(self) hs = wself;
+                    [hs _hudDiagLog:@"speakTTS FAIL: ssml send err=%@", err2.localizedDescription];
                     [hs _speakLocalHint:@"语音合成失败，请稍后再试"];
                 });
                 return;
@@ -3305,6 +3338,7 @@ static UIImage *softParticleImage(CGFloat size) {
             loop = ^{
                 [ws receiveMessageWithCompletionHandler:^(NSURLSessionWebSocketMessage *m, NSError *e) {
                     if (e) {
+                        [sself _hudDiagLog:@"speakTTS: ws closed err=%@ audioBytes=%lu frames=%d", e.localizedDescription, (unsigned long)audio.length, audioFrames];
                         if (audio.length > 100) [sself _playAudio:audio];
                         [ws cancel];
                         return;
@@ -3317,18 +3351,21 @@ static UIImage *softParticleImage(CGFloat size) {
                             int hl = (b[0] << 8) | b[1];
                             if (2 + hl <= (int)d.length) {
                                 [audio appendData:[d subdataWithRange:NSMakeRange(2 + hl, d.length - 2 - hl)]];
+                                audioFrames++;
                             }
                         }
                         loop();
                     } else {
                         NSString *s = m.string;
                         if (s && [s containsString:@"turn.end"]) {
+                            [sself _hudDiagLog:@"speakTTS: turn.end audioBytes=%lu frames=%d", (unsigned long)audio.length, audioFrames];
                             if (audio.length > 100) {
                                 [sself _playAudio:audio];
                             } else {
                                 // v7.1.44：turn.end 但无音频 → 提示（原静默无声）
                                 dispatch_async(dispatch_get_main_queue(), ^{
                                     typeof(self) hs = wself;
+                                    [hs _hudDiagLog:@"speakTTS FAIL: turn.end no audio"];
                                     [hs _speakLocalHint:@"回复没有合成出声音"];
                                 });
                             }
@@ -3366,7 +3403,7 @@ static UIImage *softParticleImage(CGFloat size) {
 
 /// 内存播放 mp3（AVAudioPlayer）
 - (void)_playAudio:(NSData *)audio {
-    if (audio.length < 100) return;
+    if (audio.length < 100) { [self _hudDiagLog:@"playAudio: too short %lu", (unsigned long)audio.length]; return; }
     NSError *err = nil;
     AVAudioSession *sess = [AVAudioSession sharedInstance];
     [sess setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionDuckOthers error:&err];
@@ -3374,8 +3411,10 @@ static UIImage *softParticleImage(CGFloat size) {
     AVAudioPlayer *p = [[AVAudioPlayer alloc] initWithData:audio error:&err];
     if (p) {
         _ttsPlayer = p;   // v7.2.5：强持有到播完/下一次，否则 ARC 释放 → 无声
-        [p play];
+        BOOL ok = [p play];
+        [self _hudDiagLog:@"playAudio: bytes=%lu player=%@ play=%@ err=%@", (unsigned long)audio.length, p ? @"ok" : @"nil", ok ? @"started" : @"FAILED", err ? err.localizedDescription : @"nil"];
     } else {
+        [self _hudDiagLog:@"playAudio FAIL: init err=%@", err ? err.localizedDescription : @"nil"];
         // v7.1.44：播放器创建失败 → 提示（原静默）
         [self _speakLocalHint:@"播放失败，请重试"];
     }
