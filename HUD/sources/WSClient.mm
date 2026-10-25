@@ -20,6 +20,7 @@
     NSOutputStream *_out;
     NSMutableData *_inBuf;      // 已读但未解析完的字节
     BOOL _handshakeDone;
+    BOOL _handshakeSent;        // v7.1.61：握手请求已发送（OpenCompleted 发送）
     BOOL _closed;
     // 帧解析状态机
     BOOL _expectExtLen;
@@ -100,11 +101,23 @@
     _pendingHandshake = [req copy];
 }
 
+// v7.1.61：写流 open 完成后发送握手请求（之前只存不发 → 服务器永不回 101 → 无音频）
+- (void)_sendHandshakeIfNeeded:(NSStream *)aStream {
+    if (_handshakeSent || !_pendingHandshake) return;
+    if (aStream != _out) return;   // 等写流 TLS 就绪
+    _handshakeSent = YES;
+    NSData *hd = [_pendingHandshake dataUsingEncoding:NSUTF8StringEncoding];
+    NSInteger w = [_out write:(const uint8_t *)hd.bytes maxLength:hd.length];
+    [self _log:@"handshake sent %lu bytes (wrote %ld)", (unsigned long)hd.length, (long)w];
+    if (w < (NSInteger)hd.length) [self _fail:@"handshake partial write"];
+}
+
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode {
     if (_closed) return;
     switch (eventCode) {
         case NSStreamEventOpenCompleted:
             [self _log:@"stream open completed"];
+            [self _sendHandshakeIfNeeded:aStream];
             break;
         case NSStreamEventHasBytesAvailable: {
             if (!_handshakeDone) {
