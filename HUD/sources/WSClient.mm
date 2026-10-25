@@ -82,7 +82,6 @@
     [self _log:@"in opened"];
     [_out open];
     [self _log:@"out opened, connect returns"];
-    [self _sendHandshakeIfNeeded:_in];   // v7.1.62：兜底尝试（TLS 未就绪 write 返回 -1，HasSpaceAvailable 补发）
     // 预构握手请求（含 permessage-deflate）
     NSString *path = [NSString stringWithFormat:@"%@?%@", u.path, u.query ?: @""];
     unsigned char keyBytes[16];
@@ -100,6 +99,19 @@
     }];
     [req appendString:@"\r\n"];
     _pendingHandshake = [req copy];
+    // v7.1.63：请求构造完立刻兜底尝试（此前在构造前调用=空转，只能依赖流事件）
+    [self _sendHandshakeIfNeeded:_in];
+    // v7.1.63：流事件（OpenCompleted/HasSpaceAvailable）不保证触发 → 定时重试兜底
+    __weak WSClient *wSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        WSClient *s = wSelf;
+        if (s) [s _sendHandshakeIfNeeded:nil];
+    });
+    // v7.1.63：10 秒握手超时保护（事件不来直接报错，不永久卡死）
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        WSClient *s = wSelf;
+        if (s && !s->_handshakeDone && !s->_closed) [s _fail:@"handshake timeout"];
+    });
 }
 
 // v7.1.62：任一 stream open 完成即可尝试发送（iOS 写流 OpenCompleted 不保证触发，
@@ -250,7 +262,7 @@
         }
         [_inBuf replaceBytesInRange:NSMakeRange(0, need) withBytes:NULL length:0];
         // 控制帧
-        if (_opcode == 0x8) { [self _fail:@"server closed"]; return; }       // close
+        if (_opcode == 0x8) { [self _sendControl:0x8 payload:payload]; [self _fail:@"server closed"]; return; }       // close（回执再关）
         if (_opcode == 0x9) { [self _sendControl:0xA payload:payload]; continue; } // ping→pong
         if (_opcode == 0xA) continue;                                          // pong
         // 数据帧：text=1 / binary=2 / continuation=0
@@ -297,6 +309,7 @@
     NSMutableData *out = [NSMutableData data];
     uint8_t buf[16384];
     int ret;
+    // v7.1.63：修复循环漏洞——输入未耗尽必须继续（旧版 avail_out>0 且 avail_in>0 时提前退出，大帧解压残缺）
     do {
         strm.next_out = buf;
         strm.avail_out = sizeof(buf);
@@ -306,10 +319,8 @@
             return nil;
         }
         [out appendBytes:buf length:sizeof(buf) - strm.avail_out];
-        // websockets 尾部 00 00 ff ff：inflate Z_SYNC_FLUSH 会把空块消费完，ret=Z_STREAM_END 或 avail_in=0
-        if (strm.avail_in == 0 && ret != Z_BUF_ERROR) break;
         if (ret == Z_STREAM_END) break;
-    } while (strm.avail_out == 0);
+    } while (strm.avail_in > 0);
     inflateEnd(&strm);
     // 剥掉尾部可能的 00 00 ff ff（部分实现输出残留）
     if (out.length >= 4) {
@@ -374,7 +385,10 @@
     } else {
         [frame appendData:payload];
     }
-    [_out write:(const uint8_t *)frame.bytes maxLength:frame.length];
+    NSInteger wrote = [_out write:(const uint8_t *)frame.bytes maxLength:frame.length];
+    if (wrote < (NSInteger)frame.length) {
+        [self _log:@"frame write short: opcode=%u wrote=%ld/%lu", opcode, (long)wrote, (unsigned long)frame.length];
+    }
 }
 
 - (void)close {
