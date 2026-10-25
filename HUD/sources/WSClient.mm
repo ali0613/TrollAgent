@@ -49,18 +49,22 @@
     if (host.length == 0) { [self _fail:@"bad url host"]; return; }
     NSNumber *port = u.port ?: @443;
 
-    // 预构握手请求（含 permessage-deflate）
+    // 预构握手请求
+    // v7.1.73：去掉 Sec-WebSocket-Extensions 硬编码——主 App(URLSession) 实测成功的请求不带扩展头，
+    // HUD 带 "permessage-deflate; client_max_window_bits" 收到 HTTP/1.1 400 Bad Request（7.1.71 实测）。
+    // 服务器若仍发压缩帧(RSV1=1)，_inflate 保留可解；不发则原始帧直接播放，两头兼容。
     NSString *path = [NSString stringWithFormat:@"%@?%@", u.path, u.query ?: @""];
     unsigned char keyBytes[16];
     for (int i = 0; i < 16; i++) keyBytes[i] = (unsigned char)arc4random_uniform(256);
     NSString *b64Key = [[NSData dataWithBytes:keyBytes length:16] base64EncodedStringWithOptions:0];
     NSMutableString *req = [NSMutableString string];
     [req appendFormat:@"GET %@ HTTP/1.1\r\n", path];
-    [req appendFormat:@"Host: %@:%d\r\n", host, port.intValue];
+    // v7.1.73：Host 省略标准端口 443（URLSession 成功版不带端口，避免服务器解析差异）
+    if (port.intValue == 443) [req appendFormat:@"Host: %@\r\n", host];
+    else [req appendFormat:@"Host: %@:%d\r\n", host, port.intValue];
     [req appendFormat:@"Connection: Upgrade\r\nUpgrade: websocket\r\n"];
     [req appendFormat:@"Sec-WebSocket-Key: %@\r\n", b64Key];
     [req appendFormat:@"Sec-WebSocket-Version: 13\r\n"];
-    [req appendFormat:@"Sec-WebSocket-Extensions: permessage-deflate; client_max_window_bits\r\n"];
     [_headers enumerateKeysAndObjectsUsingBlock:^(id k, id v, BOOL *stop) {
         [req appendFormat:@"%@: %@\r\n", k, v];
     }];
