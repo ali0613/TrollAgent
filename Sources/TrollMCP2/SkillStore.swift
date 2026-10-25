@@ -35,7 +35,10 @@ final class SkillStore {
 
     /// 内置技能版本：升级内置技能时递增，触发对已存在 skills.json 的合并补全
     /// v4 变更：mergeBuiltins 由"补全缺失"改为"补全+覆盖同名内置技能"，同步 v3.7.7 bind 新架构措辞
-    private static let builtinsVersion = 6
+    /// v7 变更：v7.1.77 边界参考技能名 L10n.t→固定英文 "Shell & Env Boundaries"——bump 触发合并：
+    ///   补新名技能 + 用 prevNames 清理旧名 "Shell & Env 边界参考"（否则设备残留旧名，
+    ///   AI 按提示词新名 skills.read 找不到技能）
+    private static let builtinsVersion = 7
 
     private var enabledKey = "trollmcp2.skills_enabled"
 
