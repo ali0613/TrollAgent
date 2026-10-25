@@ -59,14 +59,15 @@
     if (!r || !w) { [self _fail:@"socket create failed"]; return; }
     _in = (__bridge_transfer NSInputStream *)r;
     _out = (__bridge_transfer NSOutputStream *)w;
-    // TLS：SNI + 校验证书链（bing 正规证书）
-    [_in setProperty:NSStreamSocketSecurityLevelTLSv1_2 forKey:NSStreamSocketSecurityLevelKey];
-    [_out setProperty:NSStreamSocketSecurityLevelTLSv1_2 forKey:NSStreamSocketSecurityLevelKey];
-    [_in setProperty:host forKey:(__bridge NSString *)kCFStreamPropertySSLPeerName];
-    [_out setProperty:host forKey:(__bridge NSString *)kCFStreamPropertySSLPeerName];
-    NSDictionary *ssl = @{(__bridge NSString *)kCFStreamSSLValidatesCertificateChain: @YES};
-    CFReadStreamSetProperty((__bridge CFReadStreamRef)_in, kCFStreamPropertySSLSettings, (__bridge CFDictionaryRef)ssl);
-    CFWriteStreamSetProperty((__bridge CFWriteStreamRef)_out, kCFStreamPropertySSLSettings, (__bridge CFDictionaryRef)ssl);
+    // TLS：SNI + 校验证书链（bing 正规证书）。用字符串字面量（iOS 17.5 SDK 已移除
+    // NSStreamSocketSecurityLevelTLSv1_2 / kCFStreamPropertySSLPeerName 等常量声明）
+    NSDictionary *tlsSettings = @{
+        @"kCFStreamSSLPeerName": host,
+        @"kCFStreamSSLValidatesCertificateChain": @YES,
+    };
+    NSDictionary *sslProps = @{@"kCFStreamPropertySSLSettings": tlsSettings};
+    CFReadStreamSetProperty((__bridge CFReadStreamRef)_in, (__bridge CFStringRef)@"kCFStreamPropertySSLSettings", (__bridge CFDictionaryRef)sslProps);
+    CFWriteStreamSetProperty((__bridge CFWriteStreamRef)_out, (__bridge CFStringRef)@"kCFStreamPropertySSLSettings", (__bridge CFDictionaryRef)sslProps);
     _in.delegate = self; _out.delegate = self;
     [_in scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
     [_out scheduleInRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
@@ -175,7 +176,7 @@
     while (!_closed && _inBuf.length > 0) {
         // 帧头至少 2 字节
         if (_inBuf.length < 2) return;
-        const uint8_t *b = _inBuf.bytes;
+        const uint8_t *b = (const uint8_t *)_inBuf.bytes;
         uint8_t b0 = b[0], b1 = b[1];
         _finRsv = b0;
         _opcode = b1 & 0x0F;
@@ -204,7 +205,7 @@
         if (len > 0) {
             memcpy(payload.mutableBytes, b + off, (NSUInteger)len);
             if (_hasMask) {
-                uint8_t *p = payload.mutableBytes;
+                uint8_t *p = (uint8_t *)payload.mutableBytes;
                 for (NSUInteger i = 0; i < len; i++) p[i] ^= _maskKey[i & 3];
             }
         }
@@ -273,7 +274,7 @@
     inflateEnd(&strm);
     // 剥掉尾部可能的 00 00 ff ff（部分实现输出残留）
     if (out.length >= 4) {
-        const uint8_t *tail = out.bytes + out.length - 4;
+        const uint8_t *tail = (const uint8_t *)out.bytes + out.length - 4;
         if (tail[0] == 0x00 && tail[1] == 0x00 && tail[2] == 0xFF && tail[3] == 0xFF) {
             [out setLength:out.length - 4];
         }
@@ -327,14 +328,14 @@
         for (int i = 0; i < 4; i++) key[i] = (unsigned char)arc4random_uniform(256);
         [frame appendBytes:key length:4];
         NSMutableData *maskedPayload = [NSMutableData dataWithLength:len];
-        const uint8_t *src = payload.bytes;
-        uint8_t *dst = maskedPayload.mutableBytes;
+        const uint8_t *src = (const uint8_t *)payload.bytes;
+        uint8_t *dst = (uint8_t *)maskedPayload.mutableBytes;
         for (NSUInteger i = 0; i < len; i++) dst[i] = src[i] ^ key[i & 3];
         [frame appendData:maskedPayload];
     } else {
         [frame appendData:payload];
     }
-    [_out write:frame.bytes maxLength:frame.length];
+    [_out write:(const uint8_t *)frame.bytes maxLength:frame.length];
 }
 
 - (void)close {
