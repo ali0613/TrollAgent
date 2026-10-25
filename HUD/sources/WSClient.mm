@@ -101,24 +101,19 @@
     _pendingHandshake = [req copy];
     // v7.1.63：请求构造完立刻兜底尝试（此前在构造前调用=空转，只能依赖流事件）
     [self _sendHandshakeIfNeeded:_in];
-    // v7.1.63：流事件（OpenCompleted/HasSpaceAvailable）不保证触发 → 定时重试兜底
-    __weak WSClient *wSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        WSClient *s = wSelf;
-        if (s) [s _sendHandshakeIfNeeded:nil];
-    });
     // v7.1.63：10 秒握手超时保护（事件不来直接报错，不永久卡死）
+    __weak WSClient *wSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         WSClient *s = wSelf;
         if (s && !s->_handshakeDone && !s->_closed) [s _fail:@"handshake timeout"];
     });
 }
 
-// v7.1.62：任一 stream open 完成即可尝试发送（iOS 写流 OpenCompleted 不保证触发，
-// 上次等 _out 事件导致握手永远不发）。write 未就绪时等 HasSpaceAvailable 补发。
+// v7.1.64：无条件入口日志 + write 未就绪时 200ms 自循环重试（彻底不依赖流事件）
 - (void)_sendHandshakeIfNeeded:(NSStream *)aStream {
-    if (_handshakeSent || !_pendingHandshake) return;
-    (void)aStream;
+    [self _log:@"sendHandshake entry hs=%d pending=%d out=%@", _handshakeSent ? 1 : 0, _pendingHandshake ? 1 : 0, _out ? @"ok" : @"nil"];
+    if (!_pendingHandshake) { [self _log:@"sendHandshake: pending=nil, skip"]; return; }
+    if (_handshakeSent) { [self _log:@"sendHandshake: already sent, skip"]; return; }
     NSData *hd = [_pendingHandshake dataUsingEncoding:NSUTF8StringEncoding];
     NSInteger w = [_out write:(const uint8_t *)hd.bytes maxLength:hd.length];
     if (w > 0) {
