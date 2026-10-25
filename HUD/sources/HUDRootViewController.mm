@@ -3238,16 +3238,15 @@ static UIImage *softParticleImage(CGFloat size) {
 /// Edge TTS 直连微软（Sec-MS-GEC 无偏移，对齐 edge-tts 原版）+ 内存播放；音色随角色固定
 - (void)_speakTTS:(NSString *)text {
     NSString *role = g_hud_char ? [NSString stringWithUTF8String:g_hud_char] : @"girl";
-    NSString *voice; int pitchHz; int ratePct; NSString *tail;
-    if ([role isEqualToString:@"rabit"])   { voice = @"zh-CN-XiaoyiNeural";  pitchHz = 5;  ratePct = 8;  tail = @"呜~"; }
-    else if ([role isEqualToString:@"cat"]) { voice = @"zh-CN-XiaoxiaoNeural"; pitchHz = -8; ratePct = 0; tail = @"喵~"; }
-    else                                   { voice = @"zh-CN-XiaoyiNeural";  pitchHz = 15; ratePct = 10; tail = @""; }
+    NSString *voice; int pitchHz; int ratePct;
+    if ([role isEqualToString:@"rabit"])   { voice = @"zh-CN-XiaoyiNeural";  pitchHz = 5;  ratePct = 8; }
+    else if ([role isEqualToString:@"cat"]) { voice = @"zh-CN-XiaoxiaoNeural"; pitchHz = -8; ratePct = 0; }
+    else                                   { voice = @"zh-CN-XiaoyiNeural";  pitchHz = 15; ratePct = 10; }
     // v7.2.6：微软 2.x 只认长 voice 名（短名 turn.start 后静默无音频）
     NSString *fullVoice = [voice isEqualToString:@"zh-CN-XiaoxiaoNeural"]
         ? @"Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)"
         : @"Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoyiNeural)";
     NSString *clean = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    if (tail.length > 0) clean = [clean stringByAppendingString:tail];
     if (clean.length == 0) return;
 
     // v7.2.6：v2 Sec-MS-GEC（cs64-sha256，5 分钟取整）→ URL query + 版本号（edge-tts 2.x 实证）

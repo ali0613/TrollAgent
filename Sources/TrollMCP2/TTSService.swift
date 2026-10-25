@@ -38,14 +38,6 @@ enum VoicePreset: String, CaseIterable {
         case .bunny: return "+8%"
         }
     }
-    /// 句尾口癖（整段只在末尾加一次，避免每句都加很吵）
-    var tailCatchphrase: String {
-        switch self {
-        case .loli: return ""
-        case .cat: return "喵~"
-        case .bunny: return "呜~"
-        }
-    }
     var displayName: String {
         switch self {
         case .loli: return "萝莉音"
@@ -107,17 +99,10 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     // MARK: - 对外
 
-    /// v7.2.1：整段句尾加一次口癖（喵~/呜~）——自动朗读的句子流最后一句自然带上
-    private func withCatchphrase(_ t: String) -> String {
-        let p = voicePreset.tailCatchphrase
-        guard !p.isEmpty else { return t }
-        return t.trimmingCharacters(in: .whitespacesAndNewlines) + p
-    }
-
     /// 自动朗读（受全局喇叭开关控制）：流式分句送进来，排队流水线播放
     func speak(_ text: String) {
         guard speakerEnabled else { return }
-        enqueueSentences(cleanForSpeech(withCatchphrase(text)))
+        enqueueSentences(cleanForSpeech(text))
     }
 
     /// 手动朗读（v7.1.43：与顶部全局开关解耦——气泡喇叭是独立的手动朗读入口，
@@ -125,7 +110,7 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     /// 违背"顶部管自动、气泡管手动"的设计本意）——打断当前自动朗读，只播这段；整段一次合成连续播完
     func speakForced(id: String?, _ text: String) {
         stopInternal()
-        let t = cleanForSpeech(withCatchphrase(text)).trimmingCharacters(in: .whitespacesAndNewlines)
+        let t = cleanForSpeech(text).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
         speakingId = id
         isSynthBusy = true
