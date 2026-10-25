@@ -3358,9 +3358,9 @@ static UIImage *softParticleImage(CGFloat size) {
         @"Pragma": @"no-cache",
         @"Cache-Control": @"no-cache",
         @"Origin": @"chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
-        @"Sec-WebSocket-Version": @"13",
+        // v7.1.76：Sec-WebSocket-Version 由 WSClient 硬编码发送，此处去掉避免重复头
         @"User-Agent": @"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",
-        @"Accept-Encoding": @"gzip, deflate, br",
+        @"Accept-Encoding": @"gzip, deflate, br, zstd",
         @"Accept-Language": @"en-US,en;q=0.9",
         @"Cookie": [NSString stringWithFormat:@"muid=%@;", muid],
     };
