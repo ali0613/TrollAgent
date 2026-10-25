@@ -6,6 +6,7 @@
 // 发送不压缩（permessage-deflate 逐方向独立，服务器不强求客户端压缩）。
 
 #include <zlib.h>
+#include <string.h>
 #import "WSClient.h"
 
 @interface WSClient () <NSStreamDelegate>

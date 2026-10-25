@@ -3359,6 +3359,7 @@ static UIImage *softParticleImage(CGFloat size) {
 
     NSMutableData *audio = [NSMutableData data];
     __weak typeof(self) wself = self;
+    __weak WSClient *wcWeak = wc;   // v7.1.55：避免 block 强捕获 wc 造成 retain cycle
     __block int audioFrames = 0;
     wc.onText = ^(NSString *s) {
         typeof(self) sself = wself;
@@ -3375,7 +3376,7 @@ static UIImage *softParticleImage(CGFloat size) {
                     [hs _speakLocalHint:@"回复没有合成出声音"];
                 });
             }
-            [wc close];
+            [wcWeak close];
         }
     };
     wc.onBinary = ^(NSData *d) {
