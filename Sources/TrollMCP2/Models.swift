@@ -214,7 +214,12 @@ final class ModelStore: ObservableObject {
         let payload = SharedConfigPayload(configs: configs, last_used_config_id: lastUsedConfigId)
         guard let data = try? JSONEncoder().encode(payload) else { return }
         DispatchQueue.global(qos: .utility).async {
-            try? data.write(to: url, options: .atomic)
+            do {
+                try data.write(to: url, options: .atomic)
+            } catch {
+                // v7.1.51：atomic（临时文件+rename）在 /var/mobile/Documents 可能被拒 → 直接写兜底
+                try? data.write(to: url)
+            }
         }
     }
 

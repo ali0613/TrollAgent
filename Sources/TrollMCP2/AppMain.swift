@@ -81,6 +81,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         Workspace.ensure()
         Workspace.ensureBundledTweaks()  // v2.9.62：把内置 dylib（MemoryTweak 等）复制到工作区，AI 可直接 artifact.find 定位
         ConfigMigration.migrateIfNeeded()  // v2.9.126：配置 schema 迁移（防模块脱节：升级后旧配置结构自动搬运）
+        // v7.1.51：强制初始化 ModelStore——static let 是懒加载，用户只开关于页不碰聊天/模型页时
+        // load() 永不执行 → 共享配置文件不写 → HUD 读 sharedFile=NO 401 无回复（17:21 实测根因）
+        _ = ModelStore.shared
         ToolRegistry.shared.registerBuiltinTools()
         // v2.9.145：启动探测移到后台——DeviceProbe.run() 含 spawnRoot/文件遍历，
         // 主线程同步跑会卡死启动被看门狗杀（表现为"装完打开就闪退"）
