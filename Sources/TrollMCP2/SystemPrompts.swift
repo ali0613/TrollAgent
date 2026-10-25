@@ -425,6 +425,11 @@ final class SystemPrompts {
       LARGE DOWNLOADS (>20MB): prefer the `download` tool (url + optional path) — URLSession download with a live
       percent progress bar in the UI, no 120s cap. In shell, use `wget -c` / `curl -C -` (resume) for big files;
       download commands (curl -o/-O/--output, wget) get a 300s timeout, other commands cap at 120s.
+      ⚠️ TIMEOUT RULE (v7.1.76, 用户实测 20s 默认值掐死长任务): shell.exec timeout 默认 20s——任何
+      安装/下载/编译/长任务（apk add / pip install / npm install / pip download / git clone / make）若超过
+      20 秒会被 SIGTERM/SIGKILL 杀掉（exit 15/137，安装目录为空）。必须显式传 timeout 参数：
+      `shell.exec command="pip install ..." timeout=120`（普通命令上限 120s，下载命令上限 300s）。
+      默认值仅适合短命令（ls/ps/df/单文件操作）。大文件下载优先 download 工具。
       [no iOS-native shell fallback]: notifyutil/uicache/sbreload/idevice_id/swift/jtool2 do NOT exist
       (plutil/sqlite3 have Swift-native implementations, see NATIVE ENTRYPOINTS, usable directly); sysctl is Alpine's
       (no /proc/sys, kern.* not queryable); ps only sees container processes, not iOS-side processes.

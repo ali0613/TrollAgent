@@ -378,11 +378,17 @@ final class ShellExecTool: MCPTool {
 
     /// v4.5.x：下载命令检测——curl 带 -o/-O/--output 输出到文件，或 wget 拉 URL。
     /// 命中则 shell.exec 超时上限放宽到 300s（大文件下载不被 120s SIGKILL 掐断）。
+    /// v7.1.76：加安装/包管理类（pip/npm/apk/git clone/make）——这些命令天然 >20s（用户实测
+    /// 默认 20s 掐死 npm install/venv/pip download），统一放宽到 300s，AI 不传 timeout 也不撞墙。
     static func isDownloadCommand(_ cmd: String) -> Bool {
         let c = cmd.lowercased()
         let isCurlOut = c.contains("curl") && (c.contains(" -o ") || c.contains(" -O ") || c.contains(" --output ") || c.contains("--output="))
         let isWgetUrl = c.contains("wget") && (c.contains("http://") || c.contains("https://"))
-        return isCurlOut || isWgetUrl
+        let isInstaller = c.contains("pip install") || c.contains("pip download") || c.contains("pip3 install")
+            || c.contains("npm install") || c.contains("npm i ") || c.contains("npm ci")
+            || c.contains("apk add") || c.contains("apk update") || c.contains("git clone")
+            || c.contains(" make") || c.contains("make ") || c.contains("venv")
+        return isCurlOut || isWgetUrl || isInstaller
     }
 
     static func containsShellSyntax(_ command: String) -> Bool {
