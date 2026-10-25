@@ -1503,7 +1503,16 @@ timeGreetings = HUDIsZh() ? @[@"好晚呀... 我困了", @"要睡觉觉啦，晚
     NSString *msg = messages[arc4random_uniform((uint32_t)messages.count)];
     
     // v6.0.28：读取气泡样式设置（0=经典圆角 1=椭圆 2=方形硬边 3=爆炸吐槽）
-    int bubbleStyle = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"trollmcp2.bubble_style"];
+    // v7.1.74：优先读全局文件（主 App 写 /var/mobile/Documents/bubble_style.txt）——
+    // 独立进程读不到主 App 的 UserDefaults，之前永远默认 0，"切换样式不生效"。
+    int bubbleStyle = 0;
+    NSString *bsPath = @"/var/mobile/Documents/bubble_style.txt";
+    NSString *bsVal = [NSString stringWithContentsOfFile:bsPath encoding:NSUTF8StringEncoding error:nil];
+    if (bsVal.length > 0) {
+        bubbleStyle = bsVal.intValue;
+    } else {
+        bubbleStyle = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"trollmcp2.bubble_style"];
+    }
     
     // 换样式之后旧气泡扔掉，下次重新创建
     if (_bubbleView) {

@@ -54,8 +54,15 @@ final class GirlCompanion: ObservableObject {
         didSet { UserDefaults.standard.set(floatSize, forKey: "trollmcp2.girl_float_size") }
     }
     // v6.0.28：气泡样式（0=经典圆角 1=椭圆 2=方形硬边 3=爆炸形）
+    // v7.1.74：didSet 额外写全局文件 /var/mobile/Documents/bubble_style.txt——
+    // HUD 是独立进程读不到本进程 UserDefaults（同 fanMenuStyle 坑），之前只写 standard
+    // 导致 HUD 永远读默认 0，"切换样式不生效"。HUD 侧改读全局文件优先。
     @Published var bubbleStyle: Int {
-        didSet { UserDefaults.standard.set(bubbleStyle, forKey: "trollmcp2.bubble_style") }
+        didSet {
+            UserDefaults.standard.set(bubbleStyle, forKey: "trollmcp2.bubble_style")
+            try? "\(bubbleStyle)".write(toFile: "/var/mobile/Documents/bubble_style.txt",
+                                        atomically: true, encoding: .utf8)
+        }
     }
     private init() {
         enabled = UserDefaults.standard.bool(forKey: "trollmcp2.girl_companion_enabled")

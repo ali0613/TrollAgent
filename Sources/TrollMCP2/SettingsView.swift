@@ -90,6 +90,9 @@ struct SettingsView: View {
             // v2.9.242：进设置页彻底隐藏悬浮浏览器（不只是收成胶囊），杜绝任何遮挡
             FloatingBrowser.shared.hide()
             triggerProbe()   // v2.9.18：进入设置页自动探测一次，更新环境状态色
+            // v7.1.74：push 返回（角色选择页等）强制重渲染——SwiftUI NavigationLink 快照会恢复
+            // 旧 Toggle 状态，导致"开关明明开着、返回却显示关"（用户实测闪烁）
+            hudRefresh.toggle()
         }
         .onAppear {
             if AppUIState.shared.settingsJumpToModels {
@@ -205,6 +208,9 @@ struct SettingsView: View {
                 if on { _ = HUDManager.shared.start() }
                 else { _ = HUDManager.shared.stop() }
                 hudRefresh.toggle()
+                // v7.1.74：start/stop 异步（launchctl load / posix_spawn 需要时间），
+                // 延迟再刷一次，副标题 isRunning 与真实进程状态对齐（避免显示"未运行"闪烁）
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { hudRefresh.toggle() }
             }
         ))
         groups.append(SettingsGroup(header: L10n.t("sec_control"), items: controlItems))
