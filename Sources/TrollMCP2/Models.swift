@@ -1070,6 +1070,12 @@ final class ConversationStore: ObservableObject {
                     }
                 }
             }
+        }, onCompacted: { summary in
+            // v7.1.41：LLM Compaction 持久化——摘要写回会话历史（对齐 Claude Code /compact 的破坏性替换），
+            // 下次请求不再重复压缩同一堆旧消息，而是增量合并
+            DispatchQueue.main.async {
+                self.applyCompaction(summary: summary, droppedCount: prepared.droppedCount)
+            }
         }) { result in
             DispatchQueue.main.async {
                 self.statusText = nil
@@ -1621,11 +1627,17 @@ final class ConversationStore: ObservableObject {
         return parts.joined(separator: " | ")
     }
 
-    /// v4.3.71：返回 (messages, compactSource) —— compactSource 是被裁掉的旧消息原文，
+    /// v4.3.71：返回 (messages, compactSource, droppedCount) —— compactSource 是被裁掉的旧消息原文，
     /// 供 OpenAIClient 在发送主请求前交给模型生成结构化摘要 (LLM Compaction)。
-    private func messagesForAPI(budget: Int) -> (messages: [ChatMessage], compactSource: [ChatMessage]) {
+    /// v7.1.41：旧摘要（[Long-conversation summary 前缀）单独拎出——不参与裁剪、永远保留在结果最前；
+    /// 压缩时旧摘要作为 compactSource 的第一条输入（增量演进：合并更新而非重复压缩）。
+    private func messagesForAPI(budget: Int) -> (messages: [ChatMessage], compactSource: [ChatMessage], droppedCount: Int) {
         var all = currentMessages.filter { !$0.isError }
-        guard !all.isEmpty else { return ([], []) }
+        guard !all.isEmpty else { return ([], [], 0) }
+        var priorSummary: ChatMessage?
+        if let i = all.firstIndex(where: { $0.role == "system" && $0.content.hasPrefix("[Long-conversation summary") }) {
+            priorSummary = all.remove(at: i)
+        }
         // v2.9.138：工具结果修剪 (Claude Code Precision Forgetting Layer 1）——
         // 非最近 3 条 tool 消息、内容 > 300 字符的旧工具结果替换为紧凑占位符。
         // 零 LLM 成本回收上下文：AI 需要细节时可重新调用该工具。
@@ -1647,7 +1659,11 @@ final class ConversationStore: ObservableObject {
         let theBudget = max(Int(Double(budget) * 0.7), 2000)
         // 估算总 token；低于预算直接返回 (短会话，无需压缩）
         let total = all.reduce(0) { $0 + Self.estimateTokens($1) }
-        if total <= theBudget { return (all, []) }
+        if total <= theBudget {
+            var short = all
+            if let s = priorSummary { short.insert(s, at: 0) }   // 旧摘要永远保留
+            return (short, [], 0)
+        }
         // 长会话：从旧到新裁剪，但始终保留最后 N 条核心消息
         let keepMin = 6
         var kept: [ChatMessage] = []
@@ -1669,7 +1685,12 @@ final class ConversationStore: ObservableObject {
         // 从被裁消息里提取用户提问/工具名作为"旧会话记忆"，AI 仍能感知上下文主题）
         let dropped = all.count - result.count
         // v4.3.71：被裁旧消息原文交给 LLM Compaction 生成结构化摘要（替换下方启发式摘要）
-        let compactSource = dropped > 0 ? Array(all.prefix(all.count - result.count)) : []
+        // v7.1.41：旧摘要作为 compactSource 的第一条——增量演进（合并更新），而非重复压缩同一堆旧消息
+        var compactSource: [ChatMessage] = []
+        if dropped > 0 {
+            compactSource = Array(all.prefix(dropped))
+            if let s = priorSummary { compactSource.insert(s, at: 0) }
+        }
         if dropped > 0 {
             let droppedMsgs = compactSource
             var topics: [String] = []
@@ -1678,6 +1699,7 @@ final class ConversationStore: ObservableObject {
             for m in droppedMsgs {
                 idx += 1
                 if m.role == "tool" { continue }
+                if m.role == "system" { continue }   // 旧摘要不参与话题提取
                 if let calls = m.toolCalls, !calls.isEmpty {
                     for c in calls {
                         if !c.name.isEmpty {
@@ -1702,10 +1724,77 @@ final class ConversationStore: ObservableObject {
                 summaryParts.append("Tools involved: " + toolNames.sorted().prefix(10).joined(separator: ", "))
             }
             summaryParts.append("For old details, just ask — AI will re-run the relevant tools to get them.")
-            let hint = ChatMessage(role: "system", content: "[System] " + summaryParts.joined(separator: ". "))
-            result.insert(hint, at: 0)
+            // v7.1.41：已有旧摘要时不再插启发式占位（send 会直接增量更新旧摘要）
+            if priorSummary == nil {
+                let hint = ChatMessage(role: "system", content: "[System] " + summaryParts.joined(separator: ". "))
+                result.insert(hint, at: 0)
+            }
         }
-        return (result, compactSource)
+        // v7.1.41：旧摘要永远保留在结果最前（增量演进的基底）
+        if let s = priorSummary { result.insert(s, at: 0) }
+        return (result, compactSource, dropped)
+    }
+
+    // MARK: - v7.1.41 LLM Compaction 持久化（对齐 Claude Code /compact：摘要替换进会话历史，增量演进）
+
+    /// 压缩确认后应用——删除被裁消息、替换/插入摘要 system 消息（破坏性替换，写回并持久化）
+    func applyCompaction(summary: String, droppedCount: Int) {
+        guard droppedCount > 0, let idx = activeConvIndex ?? selectedIndex else { return }
+        var conv = conversations[idx]
+        // 删除头部 droppedCount 条非 error 消息（isError 消息保留不删——与 messagesForAPI 的过滤口径一致）
+        var remaining = droppedCount
+        var i = 0
+        while i < conv.messages.count && remaining > 0 {
+            if !conv.messages[i].isError {
+                conv.messages.remove(at: i)
+                remaining -= 1
+            } else {
+                i += 1
+            }
+        }
+        let newSummary = "[Long-conversation summary, model-generated]\n" + summary
+        if let si = conv.messages.firstIndex(where: { $0.role == "system" && $0.content.hasPrefix("[Long-conversation summary") }) {
+            conv.messages[si] = ChatMessage(role: "system", content: newSummary)   // 增量：更新旧摘要
+        } else {
+            conv.messages.insert(ChatMessage(role: "system", content: newSummary), at: 0)
+        }
+        conv.updatedAt = Date()
+        conversations[idx] = conv
+        sortAndSave()
+    }
+
+    /// v7.1.41：手动压缩当前会话（对齐 Claude Code /compact）——只生成摘要并持久化，不发主请求
+    func compactNow(completion: @escaping (Bool, String) -> Void) {
+        guard let config = ConversationStore.currentModelConfig() else {
+            completion(false, "未找到模型配置")
+            return
+        }
+        let prepared = messagesForAPI(budget: config.contextTokens)
+        guard !prepared.compactSource.isEmpty else {
+            completion(false, "会话不长，无需压缩")
+            return
+        }
+        let client = OpenAIClient(config)
+        client.summarize(prepared.compactSource) { [weak self] summary in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let s = summary, !s.isEmpty {
+                    self.applyCompaction(summary: s, droppedCount: prepared.droppedCount)
+                    completion(true, "已压缩 \(prepared.droppedCount) 条历史消息")
+                } else {
+                    completion(false, "摘要生成失败（网络或模型问题），未压缩")
+                }
+            }
+        }
+    }
+
+    /// 当前使用的模型配置（最近使用优先，兜底第一个）
+    private static func currentModelConfig() -> ModelConfig? {
+        let store = ModelStore.shared
+        if let id = store.lastUsedConfigId, let c = store.configs.first(where: { $0.id.uuidString == id }) {
+            return c
+        }
+        return store.configs.first
     }
 
     /// 粗估 token：中文/日文等约 1 字≈1.5 token；ASCII 约 4 字符≈1 token；图片按固定值计

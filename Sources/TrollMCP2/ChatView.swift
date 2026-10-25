@@ -127,6 +127,8 @@ struct ChatView: View {
                                 }
                                 // v7.1.33：TTS 诊断日志（最近 40 条合成/播放记录，复现无声后直接看卡点）
                                 Button("TTS 诊断日志") { showTTSLogs = true }
+                                // v7.1.41：手动压缩当前会话（对齐 Claude Code /compact）——AI 摘要替换旧历史，持久化
+                                Button("压缩当前会话") { compactNow() }
                                 Button("取消", role: .cancel) {}
                             }
                             // 勾选/选择按钮
@@ -1063,6 +1065,15 @@ struct ChatView: View {
     private func copyMessage(_ m: ChatMessage) {
         UIPasteboard.general.string = m.content
         showToast(L10n.t("i18n_1197"))
+    }
+
+    /// v7.1.41：手动压缩当前会话（对齐 Claude Code /compact）——AI 摘要替换旧历史并持久化，不发主请求
+    private func compactNow() {
+        store.compactNow { ok, msg in
+            DispatchQueue.main.async {
+                self.showToast(msg)
+            }
+        }
     }
 
     private func shareMessage(_ m: ChatMessage) {

@@ -119,7 +119,7 @@ final class OpenAIClient {
         guard !compactSource.isEmpty else { completion(nil); return }
         let base = config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + "/chat/completions") else { completion(nil); return }
-        let summarySystem = "You are a conversation compression engine. Below is an old conversation between an AI assistant and the user (user questions, assistant replies, tool calls and results). Compress it into a structured Markdown summary so the assistant can seamlessly continue in later turns. MUST include:\n1. Task overview: user's core request, success criteria, constraints;\n2. Current state: what's done, changed/generated files or artifacts (with paths);\n3. Key findings: technical constraints, important decisions, resolved errors, failed approaches;\n4. Next steps: todos, blockers, priorities;\n5. Context to keep: user preferences, domain details, commitments.\nOutput only the summary body — no pleasantries, no restating the original conversation."
+        let summarySystem = "You are a conversation compression engine. Below is an old conversation between an AI assistant and the user (user questions, assistant replies, tool calls and results). Compress it into a structured Markdown summary so the assistant can seamlessly continue in later turns. The input may BEGIN with a previously generated summary of this same conversation — if so, MERGE it with the new messages below into ONE updated summary (keep earlier context that is still relevant, integrate the new state; do not duplicate or drop it). MUST include:\n1. Task overview: user's core request, success criteria, constraints;\n2. Current state: what's done, changed/generated files or artifacts (with paths);\n3. Key findings: technical constraints, important decisions, resolved errors, failed approaches;\n4. Next steps: todos, blockers, priorities;\n5. Context to keep: user preferences, domain details, commitments.\nOutput only the summary body — no pleasantries, no restating the original conversation."
         let conversation = compactSource.map { m -> String in
             let roleLabel: String
             switch m.role {
@@ -157,7 +157,7 @@ final class OpenAIClient {
         }.resume()
     }
 
-    func send(messages: [ChatMessage], compactSource: [ChatMessage] = [], tools: [[String: Any]]? = nil, onStatus: ((String) -> Void)? = nil, onDelta: ((String) -> Void)? = nil, onThinking: ((String) -> Void)? = nil, completion: @escaping (Result<ChatResult, Error>) -> Void) {
+    func send(messages: [ChatMessage], compactSource: [ChatMessage] = [], tools: [[String: Any]]? = nil, onStatus: ((String) -> Void)? = nil, onDelta: ((String) -> Void)? = nil, onThinking: ((String) -> Void)? = nil, onCompacted: ((String) -> Void)? = nil, completion: @escaping (Result<ChatResult, Error>) -> Void) {
         // v4.3.71：LLM Compaction 前置——先摘要被裁旧消息，替换启发式占位后再发主请求
         if !compactSource.isEmpty {
             summarize(compactSource) { [weak self] summary in
@@ -171,9 +171,19 @@ final class OpenAIClient {
                     return
                 }
                 var msgs = messages
-                if let s = summary, !s.isEmpty,
-                   let idx = msgs.firstIndex(where: { $0.role == "system" && $0.content.hasPrefix("[System] earliest") }) {
-                    msgs[idx] = ChatMessage(role: "system", content: "[Long-conversation summary, model-generated]\n" + s)
+                if let s = summary, !s.isEmpty {
+                    // v7.1.41：优先更新已有摘要（增量演进——同会话多次压缩只保留一份、内容持续合并），
+                    // 无则替换启发式占位，再否则插入最前
+                    let newSummary = "[Long-conversation summary, model-generated]\n" + s
+                    if let idx = msgs.firstIndex(where: { $0.role == "system" && $0.content.hasPrefix("[Long-conversation summary") }) {
+                        msgs[idx] = ChatMessage(role: "system", content: newSummary)
+                    } else if let idx = msgs.firstIndex(where: { $0.role == "system" && $0.content.hasPrefix("[System] earliest") }) {
+                        msgs[idx] = ChatMessage(role: "system", content: newSummary)
+                    } else {
+                        msgs.insert(ChatMessage(role: "system", content: newSummary), at: 0)
+                    }
+                    // v7.1.41：回调上层把压缩持久化进会话历史（对齐 Claude Code /compact 的破坏性替换）
+                    onCompacted?(s)
                 }
                 self.sendInner(messages: msgs, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: completion)
             }
