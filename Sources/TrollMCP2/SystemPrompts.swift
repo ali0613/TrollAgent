@@ -436,8 +436,9 @@ final class SystemPrompts {
         stop it yourself: `shell.stop pid=<pid>` (SIGTERM then SIGKILL). This is the AI-managed pattern —
         you decide wait vs kill from the task's nature, not a fixed timer.
       Default timeout fits short commands only (ls/ps/df/single-file ops). Prefer the download tool for large files.
-      [no iOS-native shell fallback]: notifyutil/uicache/sbreload/idevice_id/swift/jtool2 do NOT exist
-      (plutil/sqlite3 have Swift-native implementations, see NATIVE ENTRYPOINTS, usable directly); sysctl is Alpine's
+      [no iOS-native shell fallback in unified env]: notifyutil/uicache/sbreload/idevice_id/swift do NOT exist
+      (plutil/sqlite3 have Swift-native implementations, see NATIVE ENTRYPOINTS, usable directly); jtool2/class-dump
+      are NOT preinstalled — install via tool.install (triggers CI native build, v7.1.83 note); sysctl is Alpine's
       (no /proc/sys, kern.* not queryable); ps only sees container processes, not iOS-side processes.
       Mach-O analysis: Alpine binutils (objdump/nm/strings/readelf/size) or llvm-objdump.
       All commands/pipes/paths work in the unified env, it is unified, check the command itself before concluding.
