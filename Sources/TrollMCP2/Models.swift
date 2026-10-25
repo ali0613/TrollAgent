@@ -189,14 +189,16 @@ final class ModelStore: ObservableObject {
     // 两侧 entitlements 都含 application-groups，suite 通道可用；读优先 suite，回退 standard（兼容老版本）。
     // v7.1.47 修正：实测两侧都是 no-sandbox 进程——UserDefaults(suiteName:) 的 suite 文件
     // 落在各自 data 容器的 Library/Preferences/group.com.ai.iosxcode.plist（物理隔离，互不可见），
-    // HUD 读 suite 一直是 cfgData=NO。可靠通道改为 App Group 容器【文件】：
-    // containerURLForSecurityApplicationGroupIdentifier 是文件系统真实共享路径（no-sandbox 也可访问），
-    // 主 App 写 trollmcp2_model_configs.json（configs + last_used_config_id），HUD 优先读该文件。
+    // HUD 读 suite 一直是 cfgData=NO。改 App Group 容器【文件】通道。
+    // v7.1.49 再修正：containerURLForSecurityApplicationGroupIdentifier 在 no-sandbox + no-container
+    // 进程返回 nil/不可写（实测 sharedFile=NO，主 App 写入静默失败）——App Group 容器通道不可用。
+    // 最终通道：绝对路径共享文件 /var/mobile/Documents/trollmcp2_model_configs.json
+    // （主 App 有 absolute-path read-write "/" + no-sandbox 可写；HUD no-sandbox 可读，实证可写 tts_debug.log）。
     private var suitePrefs: UserDefaults? { UserDefaults(suiteName: "group.com.ai.iosxcode") }
 
+    /// v7.1.49：绝对路径共享配置文件（App Group 容器不可用时的可靠通道）
     private var sharedConfigFileURL: URL? {
-        guard let u = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.ai.iosxcode") else { return nil }
-        return u.appendingPathComponent("trollmcp2_model_configs.json")
+        URL(fileURLWithPath: "/var/mobile/Documents/trollmcp2_model_configs.json")
     }
 
     private struct SharedConfigPayload: Codable {

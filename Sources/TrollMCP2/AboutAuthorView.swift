@@ -11,11 +11,8 @@ struct AboutAuthorView: View {
     @State private var diagError: String? = nil
 
     private func reloadDiag() {
-        // v7.1.46：日志在 App Group 共享容器（HUD 独立进程同写），不占 Documents
-        var path = "/var/mobile/Documents/tts_debug.log"
-        if let u = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.ai.iosxcode") {
-            path = u.appendingPathComponent("tts_debug.log").path
-        }
+        // v7.1.49：日志在 /var/mobile/Documents/tts_debug.log（App Group 容器在 no-sandbox 进程不可用）
+        let path = "/var/mobile/Documents/tts_debug.log"
         if let s = try? String(contentsOfFile: path, encoding: .utf8), !s.isEmpty {
             diagLog = s
             diagError = nil
@@ -159,7 +156,7 @@ struct AboutAuthorView: View {
             CardBox {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("日志：App Group 共享容器（临时）")
+                        Text("日志：/var/mobile/Documents（临时）")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                         Spacer()
