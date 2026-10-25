@@ -414,7 +414,7 @@ final class SystemPrompts {
 
     === SHELL & ENVIRONMENT (authoritative) ===
     - MEASURED EDGE CASES (jtool2 empty output / nscan usage / installer / provision / auto-bind): on tool errors or
-      environment boundary limits, first `skills.read "Shell & Env 边界参考"` for measured conclusions; if skills are
+      environment boundary limits, first `skills.read "Shell & Env Boundaries"` for measured conclusions; if skills are
       unavailable, fall back to the error hints.
     - OUTPUT & TRUNCATION: shell.exec defaults to limit=16000; when output shows the "truncated" notice, read the
       full <path> before analyzing, never conclude from truncated fragments; for reverse-engineering/analysis prefer full=true or limit=50000.
@@ -425,11 +425,11 @@ final class SystemPrompts {
       LARGE DOWNLOADS (>20MB): prefer the `download` tool (url + optional path) — URLSession download with a live
       percent progress bar in the UI, no 120s cap. In shell, use `wget -c` / `curl -C -` (resume) for big files;
       download commands (curl -o/-O/--output, wget) get a 300s timeout, other commands cap at 120s.
-      ⚠️ TIMEOUT RULE (v7.1.76, 用户实测 20s 默认值掐死长任务): shell.exec timeout 默认 20s——任何
-      安装/下载/编译/长任务（apk add / pip install / npm install / pip download / git clone / make）若超过
-      20 秒会被 SIGTERM/SIGKILL 杀掉（exit 15/137，安装目录为空）。必须显式传 timeout 参数：
-      `shell.exec command="pip install ..." timeout=120`（普通命令上限 120s，下载命令上限 300s）。
-      默认值仅适合短命令（ls/ps/df/单文件操作）。大文件下载优先 download 工具。
+      ⚠️ TIMEOUT RULE (v7.1.77, measured on device): shell.exec timeout defaults to 20s — any install/download/
+      build/long task (apk add / pip install / npm install / pip download / git clone / make) running >20s is
+      killed with SIGTERM/SIGKILL (exit 15/137, install dir left empty). MUST pass an explicit timeout:
+      `shell.exec command="pip install ..." timeout=120` (normal commands cap 120s, download/installer commands
+      cap 300s). Default fits short commands only (ls/ps/df/single-file ops). Prefer the download tool for large files.
       [no iOS-native shell fallback]: notifyutil/uicache/sbreload/idevice_id/swift/jtool2 do NOT exist
       (plutil/sqlite3 have Swift-native implementations, see NATIVE ENTRYPOINTS, usable directly); sysctl is Alpine's
       (no /proc/sys, kern.* not queryable); ps only sees container processes, not iOS-side processes.
