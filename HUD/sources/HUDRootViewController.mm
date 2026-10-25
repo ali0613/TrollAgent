@@ -2930,6 +2930,8 @@ static UIImage *softParticleImage(CGFloat size) {
 - (void)_enterSpeakMode {
     if (_speakingMode) return;
     _speakingMode = YES;
+    // v7.1.52：每次长按说话先清空日志——关于页刷新只看到本次完整链路（用户要求"新日志新开始"）
+    [[NSFileManager defaultManager] removeItemAtPath:[self _diagLogPath] error:nil];
     [self _hudDiagLog:@"enterSpeakMode: start"];
     // v7.1.46：说话=坐姿，立即清粒子（站立判定），不必等 60s 定时
     [self _updateAmbient];
