@@ -70,7 +70,7 @@
 
     // Network.framework C API：secure_tcp = TLS 默认（SNI/证书校验系统处理）
     nw_endpoint_t ep = nw_endpoint_create_host([host UTF8String], [[port stringValue] UTF8String]);
-    nw_parameters_t params = nw_parameters_create_secure_tcp(NW_PARAMETERS_DISABLE_PROTOCOL, (nw_interface_type_t)0);
+    nw_parameters_t params = nw_parameters_create_secure_tcp(NW_PARAMETERS_DISABLE_PROTOCOL, NULL);
     _conn = nw_connection_create(ep, params);
     // 17.5 SDK：receive/send 无 queue 参数，回调走 connection 队列（此处设为主队列）
     nw_connection_set_queue(_conn, dispatch_get_main_queue());
