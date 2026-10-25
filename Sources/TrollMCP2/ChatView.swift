@@ -1720,19 +1720,19 @@ struct MessageBubble: View {
                                 .strokeBorder(isSelected ? (isUser ? Color.white : Color.blue) : Color.clear, lineWidth: 2)
                         )
                     // v4.4.18：朗读喇叭按钮（assistant 消息）——点一下朗读这条全文；长按仍保留选字复制
-                    // v7.1.40：正在播这条时再点 = 停止（关闭声音）；全局开关关闭时点击不发声（斜杠灰显）
+                    // v7.1.40：正在播这条时再点 = 停止（关闭声音）
+                    // v7.1.43：与顶部全局开关解耦——顶部管自动朗读，气泡管手动点读（点读/再点停），互不影响
                     if !isUser && !message.isTool {
                         HStack(spacing: 6) {
                             let isSpeakingThis = TTSService.shared.speakingId == message.id.uuidString
-                            let soundOff = !TTSService.shared.speakerEnabled
                             Button(action: {
                                 if isSpeakingThis {
                                     TTSService.shared.stop()
-                                } else if !soundOff {
+                                } else {
                                     TTSService.shared.speakForced(id: message.id.uuidString, message.content)
                                 }
                             }) {
-                                Image(systemName: soundOff ? "speaker.slash.fill" : (isSpeakingThis ? "speaker.wave.2.fill" : "speaker.wave.2"))
+                                Image(systemName: isSpeakingThis ? "speaker.wave.2.fill" : "speaker.wave.2")
                                     .font(.system(size: 18, weight: .medium))
                                     .foregroundColor(isSpeakingThis ? .tmCyan : .secondary)
                                     .padding(.vertical, 6)

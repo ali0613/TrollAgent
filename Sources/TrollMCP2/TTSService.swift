@@ -120,10 +120,10 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         enqueueSentences(cleanForSpeech(withCatchphrase(text)))
     }
 
-    /// 手动朗读（受全局喇叭开关控制——v7.1.40：全局关闭=全部静音，气泡喇叭也不再出声；
-    /// 打断当前自动朗读，只播这段）——整段已完整，一次合成后连续播完（实测100字3s/500字约6s，比逐句更快）
+    /// 手动朗读（v7.1.43：与顶部全局开关解耦——气泡喇叭是独立的手动朗读入口，
+    /// 顶部关闭只静音自动朗读，不影响手动点读；7.1.40 的 guard 造成"顶部关→气泡也开不了"，
+    /// 违背"顶部管自动、气泡管手动"的设计本意）——打断当前自动朗读，只播这段；整段一次合成连续播完
     func speakForced(id: String?, _ text: String) {
-        guard speakerEnabled else { return }
         stopInternal()
         let t = cleanForSpeech(withCatchphrase(text)).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }

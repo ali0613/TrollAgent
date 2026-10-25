@@ -206,10 +206,16 @@ final class ModelStore: ObservableObject {
     func load() {
         let suite = suitePrefs
         let std = UserDefaults.standard
+        let suiteData = suite?.data(forKey: key)
         // suite 主数据（HUD 同源）优先；缺失时回退 standard（老版本主 App 写入）
-        let data = suite?.data(forKey: key) ?? std.data(forKey: key)
+        let data = suiteData ?? std.data(forKey: key)
         if let d = data, let decoded = try? JSONDecoder().decode([ModelConfig].self, from: d) {
             configs = decoded
+            // v7.1.43：老用户升级场景——数据此前只在 standard 域（主 App 进程级），App Group 域是空的，
+            // HUD 独立进程读 suite 读不到（要等下次改配置 save 才双写）→ HUD 长按语音无回复。
+            // 启动时一次性把 standard 数据补写进 suite（幂等；后续 save() 继续双写）。
+            if suiteData == nil { suite?.set(d, forKey: key) }
+            migrateLegacyPrefs(suite: suite, std: std)
             return
         }
         // v2.9.107：主数据损坏时从备份restored (最多试 4 份）——suite 优先，standard 兜底
@@ -217,8 +223,17 @@ final class ModelStore: ObservableObject {
             let bak = suite?.data(forKey: "\(key).bak.\(i)") ?? std.data(forKey: "\(key).bak.\(i)")
             if let bak, let decoded = try? JSONDecoder().decode([ModelConfig].self, from: bak) {
                 configs = decoded
+                if suiteData == nil { suite?.set(bak, forKey: key) }
+                migrateLegacyPrefs(suite: suite, std: std)
                 break
             }
+        }
+    }
+
+    /// v7.1.43：老配置迁移——standard 域有而 suite 域无的 lastUsedConfigId 一次性补写（HUD 读 suite 侧）
+    private func migrateLegacyPrefs(suite: UserDefaults?, std: UserDefaults) {
+        if suite?.string(forKey: lastUsedKey) == nil, let oldId = std.string(forKey: lastUsedKey) {
+            suite?.set(oldId, forKey: lastUsedKey)
         }
     }
 
