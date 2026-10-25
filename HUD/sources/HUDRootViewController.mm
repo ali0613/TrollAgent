@@ -506,6 +506,8 @@ static NSString *jsDateString() {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor clearColor];
+    // v7.1.52：HUD 启动落盘一行——区分"HUD 没运行/没更新到新二进制" vs "长按没触发"（日志空时一刷新即知）
+    [self _hudDiagLog:@"HUD launched (viewDidLoad)"];
 
     _girlView = [[UIImageView alloc] initWithFrame:CGRectZero];
     _girlView.image = _idleFrames.firstObject;

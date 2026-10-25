@@ -13,6 +13,8 @@ struct AboutAuthorView: View {
     private func reloadDiag() {
         // v7.1.49：日志在 /var/mobile/Documents/tts_debug.log（App Group 容器在 no-sandbox 进程不可用）
         // v7.1.50：后台线程读 + 只取末尾 24KB——主线程同步读大文件/渲染大文本会卡死 UI（7.1.49 实测假死黑屏）
+        // v7.1.52 修正：seekToEnd 后指针停在文件尾，小文件(<24KB)不 seek 回 0 → readDataToEndOfFile 读 0 字节
+        // → 日志永远显示"为空"（日志其实一直在写）。修：len<=max 时 seek(0) 再读全文件。
         DispatchQueue.global(qos: .userInitiated).async {
             let path = "/var/mobile/Documents/tts_debug.log"
             var text = ""
@@ -20,9 +22,13 @@ struct AboutAuthorView: View {
                 let max = 24 * 1024
                 if let end = try? h.seekToEnd() {
                     let len = Int(end)
-                    if len > max, let _ = try? h.seek(toOffset: UInt64(len - max)) {
-                        // 已定位到末尾 max 字节起点
+                    if len > max {
+                        try? h.seek(toOffset: UInt64(len - max))   // 大文件：只读末尾 24KB
+                    } else {
+                        try? h.seek(toOffset: 0)                    // 小文件：回到开头读全量
                     }
+                } else {
+                    try? h.seek(toOffset: 0)
                 }
                 text = String(data: h.readDataToEndOfFile(), encoding: .utf8) ?? ""
                 try? h.close()
