@@ -7,6 +7,7 @@
 
 #include <zlib.h>
 #include <string.h>
+#import <CFNetwork/CFNetwork.h>   // kCFStreamPropertySSLPeerName / kCFStreamSSLValidatesCertificateChain / CFStreamCreatePairWithSocketToHost
 #import "WSClient.h"
 
 @interface WSClient () <NSStreamDelegate>
