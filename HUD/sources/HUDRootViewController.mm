@@ -18,6 +18,7 @@
 #import <Speech/Speech.h>              // v7.2.5：语音识别
 #import <CommonCrypto/CommonCrypto.h>  // v7.2.5：Edge TTS Sec-MS-GEC SHA256
 #import <vector>              // v7.2.6：v2 Sec-MS-GEC DRM（edge-tts 2.x）
+#import "WSClient.h"          // v7.1.55：permessage-deflate WebSocket 客户端（edge-tts v2 服务器要求压缩）
 
 // v6.0.7：SpringBoardServices 是私有 framework（Xcode SDK 无头文件），直接 extern "C" 声明原型（.mm 是 C++，
 // 不加 extern "C" 会按 C++ 链接找不到 tbd 里的 C 符号），符号由 HUD/libraries/SpringBoardServices.framework/SpringBoardServices.tbd 链接提供
@@ -298,11 +299,10 @@ static NSString *secMsGecV2(double unixTs) {
     double ticks = unixTs + 11644473600.0;
     ticks -= fmod(ticks, 300.0);
     ticks *= 1e7;
-    // v7.1.54：与主 App 完全对齐——ticks≈1.34e17 超 double 精确范围(2^53≈9e15)，%.0f 四舍五入
-    // vs 主 App Swift UInt64() 截断可能差 1 → SHA 输入不同 → GEC 校验不符 → 微软拒连
-    // ("Socket is not connected", audioBytes=0 实测)。C (uint64_t) 转换与 Swift UInt64() 同为截断。
-    uint64_t ticksInt = (uint64_t)ticks;
-    NSString *str = [NSString stringWithFormat:@"%llu%@", ticksInt, @"6A5AA1D4EAFF4E9FB37E23D68491D6F4"];
+    // v7.1.55：edge-tts 官方库实证——用 %.0f（四舍五入），与 generate_sec_ms_gec_v2 的
+    // f"{ticks:.0f}" 完全一致（沙盒用官方库回放 19:15:09 时刻 gec 与 HUD 日志逐字符相等）。
+    // 7.1.54 曾误改截断(uint64_t)，回放验证与官方不符——已回退。
+    NSString *str = [NSString stringWithFormat:@"%.0f%@", ticks, @"6A5AA1D4EAFF4E9FB37E23D68491D6F4"];
     std::vector<uint8_t> data(str.UTF8String, str.UTF8String + str.length);
     uint8_t digest[32];
     shaDigest(data, digest);
@@ -3335,10 +3335,20 @@ static UIImage *softParticleImage(CGFloat size) {
     for (int i = 0; i < 32; i++) [muid appendFormat:@"%02X", arc4random_uniform(256)];
     [req setValue:[NSString stringWithFormat:@"muid=%@;", muid] forHTTPHeaderField:@"Cookie"];
 
-    NSURLSession *session = [NSURLSession sessionWithConfiguration:[NSURLSessionConfiguration ephemeralSessionConfiguration]];
-    NSURLSessionWebSocketTask *ws = [session webSocketTaskWithRequest:req];
-    [ws resume];
-    [self _hudDiagLog:@"speakTTS: voice=%@ gec=%@ ws=resumed", voice, gec];
+    // v7.1.55：换 WSClient（permessage-deflate）——URLSessionWebSocketTask 不支持压缩扩展，
+    // edge-tts v2 服务器合成阶段断连（Socket is not connected audioBytes=0 实测复现）
+    NSDictionary *wsHeaders = @{
+        @"Pragma": @"no-cache",
+        @"Cache-Control": @"no-cache",
+        @"Origin": @"chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
+        @"Sec-WebSocket-Version": @"13",
+        @"User-Agent": @"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0",
+        @"Accept-Encoding": @"gzip, deflate, br",
+        @"Accept-Language": @"en-US,en;q=0.9",
+        @"Cookie": [NSString stringWithFormat:@"muid=%@;", muid],
+    };
+    WSClient *wc = [[WSClient alloc] initWithURLString:urlStr headers:wsHeaders];
+    [self _hudDiagLog:@"speakTTS: voice=%@ gec=%@ ws=resumed(deflate)", voice, gec];
 
     NSString *escaped = [self _xmlEscape:clean];
     NSString *ssml = [NSString stringWithFormat:@"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='%@'><prosody pitch='%+dhz' rate='%+d%%' volume='+0%%'>%@</prosody></voice></speak>", fullVoice, pitchHz, ratePct, escaped];
@@ -3350,74 +3360,45 @@ static UIImage *softParticleImage(CGFloat size) {
     NSMutableData *audio = [NSMutableData data];
     __weak typeof(self) wself = self;
     __block int audioFrames = 0;
-    [ws sendMessage:[[NSURLSessionWebSocketMessage alloc] initWithString:configPayload] completionHandler:^(NSError *err) {
-        if (err) {
-            [ws cancel];
-            // v7.1.44：WS 连不上 → 本地语音提示（原静默，用户以为没回复）
-            dispatch_async(dispatch_get_main_queue(), ^{
-                typeof(self) hs = wself;
-                [hs _hudDiagLog:@"speakTTS FAIL: config send err=%@", err.localizedDescription];
-                [hs _speakLocalHint:@"语音服务连不上，请稍后再试"];
-            });
-            return;
-        }
+    wc.onText = ^(NSString *s) {
         typeof(self) sself = wself;
         if (!sself) return;
-        [ws sendMessage:[[NSURLSessionWebSocketMessage alloc] initWithString:ssmlPayload] completionHandler:^(NSError *err2) {
-            if (err2) {
-                [ws cancel];
+        if ([s containsString:@"turn.end"]) {
+            [sself _hudDiagLog:@"speakTTS: turn.end audioBytes=%lu frames=%d", (unsigned long)audio.length, audioFrames];
+            if (audio.length > 100) {
+                [sself _playAudio:audio];
+            } else {
+                // v7.1.44：turn.end 但无音频 → 提示（原静默无声）
                 dispatch_async(dispatch_get_main_queue(), ^{
                     typeof(self) hs = wself;
-                    [hs _hudDiagLog:@"speakTTS FAIL: ssml send err=%@", err2.localizedDescription];
-                    [hs _speakLocalHint:@"语音合成失败，请稍后再试"];
+                    [hs _hudDiagLog:@"speakTTS FAIL: turn.end no audio"];
+                    [hs _speakLocalHint:@"回复没有合成出声音"];
                 });
-                return;
             }
-            __block void (^loop)(void) = nil;
-            loop = ^{
-                [ws receiveMessageWithCompletionHandler:^(NSURLSessionWebSocketMessage *m, NSError *e) {
-                    if (e) {
-                        [sself _hudDiagLog:@"speakTTS: ws closed err=%@ audioBytes=%lu frames=%d", e.localizedDescription, (unsigned long)audio.length, audioFrames];
-                        if (audio.length > 100) [sself _playAudio:audio];
-                        [ws cancel];
-                        return;
-                    }
-                    if (m.type == NSURLSessionWebSocketMessageTypeData) {
-                        // 音频 BINARY 帧：前 2 字节 header 长度 + header + 音频（edge-tts 同样剥离）
-                        NSData *d = m.data;
-                        if (d.length >= 2) {
-                            const uint8_t *b = (const uint8_t *)d.bytes;
-                            int hl = (b[0] << 8) | b[1];
-                            if (2 + hl <= (int)d.length) {
-                                [audio appendData:[d subdataWithRange:NSMakeRange(2 + hl, d.length - 2 - hl)]];
-                                audioFrames++;
-                            }
-                        }
-                        loop();
-                    } else {
-                        NSString *s = m.string;
-                        if (s && [s containsString:@"turn.end"]) {
-                            [sself _hudDiagLog:@"speakTTS: turn.end audioBytes=%lu frames=%d", (unsigned long)audio.length, audioFrames];
-                            if (audio.length > 100) {
-                                [sself _playAudio:audio];
-                            } else {
-                                // v7.1.44：turn.end 但无音频 → 提示（原静默无声）
-                                dispatch_async(dispatch_get_main_queue(), ^{
-                                    typeof(self) hs = wself;
-                                    [hs _hudDiagLog:@"speakTTS FAIL: turn.end no audio"];
-                                    [hs _speakLocalHint:@"回复没有合成出声音"];
-                                });
-                            }
-                            [ws cancel];
-                        } else {
-                            loop();
-                        }
-                    }
-                }];
-            };
-            loop();
-        }];
-    }];
+            [wc close];
+        }
+    };
+    wc.onBinary = ^(NSData *d) {
+        // 音频 BINARY 帧：前 2 字节 header 长度 + header + 音频（edge-tts 同样剥离）
+        if (d.length >= 2) {
+            const uint8_t *b = (const uint8_t *)d.bytes;
+            int hl = (b[0] << 8) | b[1];
+            if (2 + hl <= (int)d.length) {
+                [audio appendData:[d subdataWithRange:NSMakeRange(2 + hl, d.length - 2 - hl)]];
+                audioFrames++;
+            }
+        }
+    };
+    wc.onClose = ^(NSString *err) {
+        typeof(self) sself = wself;
+        if (!sself) return;
+        [sself _hudDiagLog:@"speakTTS: ws closed err=%@ audioBytes=%lu frames=%d", err, (unsigned long)audio.length, audioFrames];
+        if (audio.length > 100) [sself _playAudio:audio];
+    };
+    [wc connect];
+    // 握手完成后发送 config/ssml（WSClient 内部排队，onOpen 即 flush）
+    [wc sendText:configPayload];
+    [wc sendText:ssmlPayload];
 }
 
 /// SHA256 hex（Sec-MS-GEC）

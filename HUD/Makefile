@@ -22,7 +22,8 @@ TrollAgentHUD_FILES = \
     sources/HUDRootViewController.mm \
     sources/UITouch-KIFAdditions.m \
     sources/IOHIDEvent+KIF.m \
-    sources/HUDMain.mm
+    sources/HUDMain.mm \
+    sources/WSClient.mm
 
 TrollAgentHUD_CFLAGS += -fobjc-arc
 TrollAgentHUD_CFLAGS += -Iheaders
@@ -31,6 +32,7 @@ TrollAgentHUD_CFLAGS += -include supports/hudapp-prefix.pch
 TrollAgentHUD_CFLAGS += -Wno-error -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function
 
 TrollAgentHUD_FRAMEWORKS += CoreGraphics CoreServices QuartzCore IOKit UIKit AVFoundation Speech
+TrollAgentHUD_LDFLAGS += -lz
 TrollAgentHUD_PRIVATE_FRAMEWORKS += BackBoardServices GraphicsServices SpringBoardServices
 # 私有 framework 符号由 TrollSpeed libraries/*.tbd 提供（Xcode SDK 无私有 tbd）：
 # -F 指向 HUD/libraries/<fw>.framework/<fw>，配合 PRIVATE_FRAMEWORKS 生成的 -framework 链上

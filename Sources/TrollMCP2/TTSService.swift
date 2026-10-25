@@ -433,11 +433,13 @@ final class TTSService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     }
 
     /// 生成 v2 Sec-MS-GEC token（格式 "cs64-sha256"，5 分钟取整，无偏移）
+    /// v7.1.55：%.0f（四舍五入）与 edge-tts 官方 generate_sec_ms_gec_v2 的 f"{ticks:.0f}" 完全一致
+    /// （沙盒官方库回放 19:15:09 gec 与 HUD 日志逐字符相等实证）。原 UInt64() 截断与官方不符——已修正。
     private func secMsGecV2(_ unixTs: Double = Date().timeIntervalSince1970) -> String {
         var ticks = unixTs + Self.winEpochSec
         ticks -= ticks.truncatingRemainder(dividingBy: 300)
         ticks *= 1e7
-        let strToHash = "\(UInt64(ticks))\(Self.trustedClientToken)"
+        let strToHash = String(format: "%.0f", ticks) + Self.trustedClientToken
         let (cs64, sha256) = Self.tokenHash(Data(strToHash.utf8))
         return "\(cs64)-\(sha256)"
     }
