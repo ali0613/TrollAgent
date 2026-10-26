@@ -30,8 +30,9 @@ final class DeviceDatabase {
 
 struct FakeDeviceView: View {
     @Environment(\.colorScheme) private var colorScheme
-    @State private var apps: [AppCatalog.AppEntry] = AppCatalog.list()
     @State private var selectedAppId: String = ""
+    @State private var selectedAppName: String = ""   // v7.1.92：完整选择器选中显示
+    @State private var showAppPicker = false          // v7.1.92：弹完整选择器
     @State private var selectedModel: String = ""
     @State private var resultText = ""
     @State private var resultOK = false
@@ -52,20 +53,32 @@ struct FakeDeviceView: View {
                 .ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // 目标 App
+                    // 目标 App（v7.1.92：原简陋 Picker 下拉 → 完整选择器 AppPickerView——
+                    // 用户要求换成搜索·分类·版本·索引的选择应用界面）
                     VStack(alignment: .leading, spacing: 8) {
                         Text(L10n.t("ui_15"))
                             .font(.headline)
-                        Picker(L10n.t("i18n_1144"), selection: $selectedAppId) {
-                            Text(L10n.t("ui_134")).tag("")
-                            ForEach(apps, id: \.bundleId) { app in
-                                Text("\(app.name) (\(app.bundleId))").tag(app.bundleId)
+                        Button {
+                            showAppPicker = true
+                        } label: {
+                            HStack {
+                                Text(selectedAppName.isEmpty ? L10n.t("ui_134") : selectedAppName)
+                                    .foregroundColor(selectedAppName.isEmpty ? .secondary : .primary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote)
+                                    .foregroundColor(.secondary)
                             }
+                            .padding(10)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(colorScheme == .dark ? Color.white.opacity(0.10) : Color.white.opacity(0.9)))
                         }
-                        .pickerStyle(.menu)
-                        .frame(maxWidth: .infinity)
-                        .padding(10)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(colorScheme == .dark ? Color.white.opacity(0.10) : Color.white.opacity(0.9)))
+                        .buttonStyle(.plain)
+                    }
+                    .sheet(isPresented: $showAppPicker) {
+                        AppPickerView { app in
+                            selectedAppId = app.bundleId
+                            selectedAppName = "\(app.name) (\(app.bundleId))"
+                        }
                     }
 
                     // 机型
