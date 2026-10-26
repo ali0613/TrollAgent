@@ -753,17 +753,9 @@ struct ModelEditorView: View {
         isTesting = true
         testStatus = L10n.t("i18n_426")
         testColor = .secondary
-        ModelAPIClient.shared.testConnection(config: cfg) { result in
-            isTesting = false
-            switch result {
-            case .success(let msg):
-                testStatus = msg
-                testColor = .green
-            case .failure(let error):
-                testStatus = error.localizedDescription
-                testColor = .red
-            }
-        }
+        // v7.1.95：保存后只做轻量'测试连接'（GET /models 测连通+延迟）——不再 POST
+        // chat/completions 完整调用（耗 token 且慢——用户要求'保存只需要测试连接'）
+        speedTestCore(config: cfg)
     }
 
     private func fetchUpstreamModels() {
@@ -798,7 +790,12 @@ struct ModelEditorView: View {
         isTesting = true
         testStatus = L10n.t("i18n_430")
         testColor = .secondary
-        let base = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        speedTestCore(config: makeConfig())
+    }
+
+    /// v7.1.95：轻量测试连接（GET {base}/models 测连通+延迟）——saveAndTest 与 speedTestOnly 共用
+    private func speedTestCore(config: ModelConfig) {
+        let base = config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: base + "/models") else {
             isTesting = false
             testStatus = L10n.t("i18n_1103")
@@ -807,8 +804,8 @@ struct ModelEditorView: View {
         }
         var req = URLRequest(url: url, timeoutInterval: 8)
         setHTTPMethod("GET", on: &req)
-        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if authMethod == "API Key" {
+        let key = config.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if config.authMethod == "API Key" {
             req.setValue(key, forHTTPHeaderField: "x-api-key")
         } else if !key.isEmpty {
             req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")

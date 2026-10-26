@@ -1282,6 +1282,11 @@ struct QuickTabButton: View {
 struct ChatModelPickerSheet: View {
     @ObservedObject private var modelStore = ModelStore.shared
     let onSelect: (ModelConfig) -> Void
+    // v7.1.95：首页切换模型弹窗直接获取上游模型并切换（用户要求）
+    @State private var fetchedModels: [String] = []
+    @State private var showingUpstreamModelPicker = false
+    @State private var isFetchingModels = false
+    @State private var fetchError = ""
 
     var body: some View {
         CompatNav {
@@ -1306,6 +1311,59 @@ struct ChatModelPickerSheet: View {
                                 }
                             }
                         }
+                    }
+                }
+                // v7.1.95：直接获取当前默认配置的上游模型列表并切换（用户要求：
+                // '获取上游模型可以在首页顶部切换模型里点击就能获取上游模型进行切换'）
+                if let cfg = modelStore.defaultConfig {
+                    Section {
+                        Button(action: {
+                            isFetchingModels = true
+                            fetchError = ""
+                            ModelAPIClient.shared.fetchModelList(config: cfg) { result in
+                                isFetchingModels = false
+                                switch result {
+                                case .success(let models):
+                                    fetchedModels = models
+                                    if models.isEmpty {
+                                        fetchError = L10n.t("i18n_428")
+                                    } else {
+                                        showingUpstreamModelPicker = true
+                                    }
+                                case .failure(let error):
+                                    fetchError = error
+                                }
+                            }
+                        }) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "arrow.down.circle")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(.blue)
+                                Text(L10n.t("ui_128"))
+                                    .foregroundColor(.blue)
+                                Spacer()
+                                if isFetchingModels { ProgressView() }
+                            }
+                            .font(.footnote)
+                        }
+                        .disabled(isFetchingModels)
+                        if !fetchError.isEmpty {
+                            Text(fetchError)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                    }
+                    .sheet(isPresented: $showingUpstreamModelPicker) {
+                        ModelPickerSheet(models: fetchedModels, selected: Binding(
+                            get: { modelStore.defaultConfig?.model ?? "" },
+                            set: { newModel in
+                                if var c = modelStore.defaultConfig {
+                                    c.model = newModel
+                                    modelStore.update(c)   // 保持默认 + 同步共享文件（HUD 语音同用）
+                                    onSelect(c)            // 外层关 sheet + toast 提示已切换
+                                }
+                            }
+                        ))
                     }
                 }
                 Section {
