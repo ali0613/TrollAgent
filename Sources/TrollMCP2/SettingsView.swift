@@ -97,7 +97,12 @@ struct SettingsView: View {
         .onAppear {
             if AppUIState.shared.settingsJumpToModels {
                 AppUIState.shared.settingsJumpToModels = false
-                jumpToModels = true
+                // v7.1.94：同 v4.4.21 修复——iOS16 navigationDestination(isPresented:)
+                // 在设置页首帧出现时目标未注册，立即设 true 会被 SwiftUI 吞掉不跳
+                // （用户实测"在设置中管理模型"点了没跳到模型 API 页）
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    jumpToModels = true
+                }
             }
             // v4.4.16：底部"指令"胶囊 → 跳到系统指令页
             // v4.4.21：延迟一帧触发——iOS16 navigationDestination(isPresented:) 在设置页首帧出现时目标未注册,
