@@ -969,11 +969,16 @@ struct UsageStatsView: View {
             List {
                 let agg = aggregate()
                 Section(header: Text(L10n.t("ui_60"))) {
+                    // v7.1.109-minis：6 卡分列（对齐 OpenMinis TokenUsageSheet 的 Input/Output 分列）
                     HStack {
                         statCell(title: L10n.t("i18n_433"), value: "\(agg.total)", color: .blue)
                         statCell(title: L10n.t("i18n_434"), value: agg.total > 0 ? "\(Int(Double(agg.ok) / Double(agg.total) * 100))%" : "-", color: .green)
                         statCell(title: L10n.t("i18n_435"), value: agg.total > 0 ? "\(agg.elapsed / agg.total)ms" : "-", color: .orange)
+                    }
+                    HStack {
                         statCell(title: L10n.t("i18n_1107"), value: "\(fmtK(agg.inputTokens))", color: .purple)
+                        statCell(title: L10n.t("i18n_1246"), value: "\(fmtK(agg.outputTokens))", color: .purple)
+                        statCell(title: L10n.t("i18n_1247"), value: "\(fmtK(agg.totalTokens))", color: .indigo)
                     }
                 }
 
@@ -984,9 +989,30 @@ struct UsageStatsView: View {
                                 HStack {
                                     Text(row.name).font(.subheadline.weight(.medium))
                                     Spacer()
-                                    Text(L10n.t("ui_156", row.total, row.ok))
+                                    // v7.1.109-minis：模型行 token 聚合（对齐 OpenMinis ModelStats.totalTokens）
+                                    Text("\(fmtK(row.totalTokens)) tok · \(L10n.t("ui_156", row.total, row.ok))")
                                         .font(.caption)
                                         .foregroundColor(.secondary)
+                                }
+                                // v7.1.109-minis：token 输入/输出比例条（Input 蓝 / Output 紫——同列可视）
+                                if row.totalTokens > 0 {
+                                    HStack(spacing: 3) {
+                                        GeometryReader { geo in
+                                            HStack(spacing: 0) {
+                                                let inRatio = row.totalTokens > 0 ? CGFloat(row.inputTokens) / CGFloat(row.totalTokens) : 0
+                                                Rectangle()
+                                                    .fill(Color.purple.opacity(0.75))
+                                                    .frame(width: max(4, geo.size.width * min(inRatio, 1)))
+                                                Rectangle()
+                                                    .fill(Color.indigo.opacity(0.5))
+                                            }
+                                        }
+                                        .frame(height: 6)
+                                        .clipShape(Capsule())
+                                        Text("\(fmtK(row.inputTokens)) → \(fmtK(row.outputTokens))")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
                                 ProgressView(value: row.total > 0 ? Double(row.ok) / Double(row.total) : 0)
                                     .accentColor(.green)
@@ -1089,25 +1115,41 @@ struct UsageStatsView: View {
         var ok: Int = 0
         var elapsed: Int = 0
         var inputTokens: Int = 0
+        var outputTokens: Int = 0
+        var totalTokens: Int = 0
     }
 
-    private func aggregate() -> (total: Int, ok: Int, elapsed: Int, inputTokens: Int, byProvider: [ProviderAgg]) {
-        var total = 0, ok = 0, elapsed = 0, inputTokens = 0
+    /// v7.1.109-minis：token 分列聚合（对齐 OpenMinis TokenUsageSheet / ModelStats）——
+    /// 真实 usage(prompt/completion/total) 优先，无则回退估算输入(estInputTokens)；
+    /// total 无真实值按 input+output 推算。
+    private func aggregate() -> (total: Int, ok: Int, elapsed: Int, inputTokens: Int, outputTokens: Int, totalTokens: Int, byProvider: [ProviderAgg]) {
+        var total = 0, ok = 0, elapsed = 0, inputTokens = 0, outputTokens = 0, totalTokens = 0
         var map: [String: ProviderAgg] = [:]
         for r in records {
             total += 1
             let o = r["ok"] as? Bool ?? false
             if o { ok += 1 }
             elapsed += r["elapsedMs"] as? Int ?? 0
-            inputTokens += r["estInputTokens"] as? Int ?? 0
+            let pt = r["promptTokens"] as? Int ?? 0
+            let ct = r["completionTokens"] as? Int ?? 0
+            let tt = r["totalTokens"] as? Int ?? 0
+            let ei = r["estInputTokens"] as? Int ?? 0
+            let inT = pt > 0 ? pt : ei
+            let outT = ct
+            let totT = tt > 0 ? tt : (inT + outT)
+            inputTokens += inT
+            outputTokens += outT
+            totalTokens += totT
             let name = r["name"] as? String ?? "-"
             var a = map[name] ?? ProviderAgg(name: name)
             a.total += 1
             if o { a.ok += 1 }
             a.elapsed += r["elapsedMs"] as? Int ?? 0
-            a.inputTokens += r["estInputTokens"] as? Int ?? 0
+            a.inputTokens += inT
+            a.outputTokens += outT
+            a.totalTokens += totT
             map[name] = a
         }
-        return (total, ok, elapsed, inputTokens, Array(map.values))
+        return (total, ok, elapsed, inputTokens, outputTokens, totalTokens, Array(map.values))
     }
 }
