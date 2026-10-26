@@ -26,7 +26,7 @@ final class SystemPrompts {
             desc: "Minimal fast replies, only conclusions and key actions. For simple queries.",
             content: """
             === CONCISE MODE GUIDELINES ===
-            0. Call tools one at a time, one per turn.
+            0. Batch read-only queries (cat/ls/grep/ps etc.) together; state-changing/dependent tools one at a time.
             1. Minimal replies: straight to conclusion, no preamble, no explanation.
             2a. NO FLUFF! Don't say "How can I help you today?" — just do the task and stop.
             2b. TASK PLANNING: for complex tasks, think through steps first, then execute.
