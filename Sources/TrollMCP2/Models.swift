@@ -1935,7 +1935,18 @@ final class ConversationStore: ObservableObject {
                 "curl", "ping", "mount", "id", "whoami", "sysctl", "defaults", "plutil", "strings",
                 "file", "stat", "readlink", "kill"   // kill 只对进程(副作用极小，AI 常与 ps 连查)
             ]
-            return readOnlyCmds.contains(base)
+            if readOnlyCmds.contains(base) { return true }
+            // v7.1.102：解释器命令（python3/node/perl/ruby/php/bash -c...）——
+            // 合批后依次执行（非并行，副作用有序、依赖可见、错误可恢复），
+            // 用脚本内容黑名单兜底：含写/危险 API 特征 → 一次一条，纯只读脚本 → 可合批。
+            let interpreters: Set<String> = [
+                "python3", "python", "node", "perl", "ruby", "php", "bash", "sh", "zsh", "lua",
+                "awk", "sed", "jq"
+            ]
+            if interpreters.contains(base) {
+                return !Self.scriptHasWriteRisk(cmd)
+            }
+            return false
         }
         // browser：只读子命令（text/snapshot/status/form_fields/wait/scroll）→ 可合批
         if name == "browser" {
@@ -1944,6 +1955,20 @@ final class ConversationStore: ObservableObject {
             return readOnlyOps.contains(op)
         }
         return false
+    }
+
+    /// v7.1.102：解释器命令脚本内容黑名单——含写/危险特征视为副作用（一次一条），
+    /// 纯只读脚本才可合批。保守原则：宁可多几轮往返，不放过写操作。
+    static func scriptHasWriteRisk(_ cmd: String) -> Bool {
+        let c = cmd.lowercased()
+        let dangerous: [String] = [
+            "open(", "write", "remove", "unlink", "os.system", "subprocess", "exec(", "eval(",
+            "makedirs", "chmod", "shutil", "truncate", "replace(", "save", "dump", "append",
+            "rm ", "rm -", "mv ", "cp ", "mkdir", "touch ", "tee ", ">>", "> ", "| tee",
+            "curl -o", "wget -o", "install", "apt", "apk add", "pip install", "npm i ", "npm install",
+            "delete", "drop ", "truncate table", "insert into", "update ", "alter "
+        ]
+        return dangerous.contains { c.contains($0) }
     }
 
     // v2.9.171：工具结果序列化去掉 prettyPrinted → 紧凑 JSON (无缩进空格）。
