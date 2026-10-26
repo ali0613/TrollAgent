@@ -67,10 +67,10 @@
 
 ## 六、远程/日志通道（已探明的边界）
 
-- 手机 TrollAgent 内置 HTTP 服务 `:8790`（局域网 `192.168.31.108:8790`，Bearer 1335612901）：**只有 `/health` 和 `/api/tools`（GET 列表 42 个工具），无外部执行端点**（POST 全 no_route）。工具只能在 App 内嵌 AI 里执行。
+- 手机 TrollAgent 内置 HTTP 服务 `:8790`（局域网地址与 Bearer token **不入库**，取当前会话记忆/环境变量）：**只有 `/health` 和 `/api/tools`（GET 工具列表），无外部执行端点**（POST 全 no_route）。工具只能在 App 内嵌 AI 里执行。
 - App 容器 shell.exec（Alpine）挂载只有 Workspace/Containers/System，读不到 `/var/mobile/Documents/`；`system.exec_root` 返回空（哑通道）；`/ios_workspace` 挂载状态异常（写文件能 cat 但 ls 计数 0）。
 - 日志文件：`/var/mobile/Documents/tts_debug.log`（存在，~192KB，全链路插桩）。读取唯一可靠路径 = **App 内嵌 AI 用 file 工具读末尾原文**，或 **7.1.35 的 UI 诊断日志面板**（推荐，用户零操作）。
-- N1 网关：公网 `121.31.138.193:10222`（SSH root/1335612901）；公网 18790→手机 8790 的转发被 N1 IP 池劫持（502），**局域网直连 192.168.31.108:8790 是通的**（手机在线时）。手机 22/22022 关闭。
+- N1 网关：公网 SSH 跳板（公网 IP/端口动态，凭据**不入库**，取会话记忆）；公网 18790→手机 8790 的转发曾被 N1 IP 池劫持（502），**局域网直连手机 8790 是通的**（手机在线时）。手机 22/22022 关闭。
 
 ## 七、下一步行动清单（给下一个 AI）
 

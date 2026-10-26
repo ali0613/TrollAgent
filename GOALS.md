@@ -58,7 +58,7 @@ Unified environment (AI sees one entry point = TrollRuntime)
 
 - Repo: zrrt/TrollAgent (main); GitHub token lives in session memory / env vars (never write it into this file — Push Protection blocks it)
 - Release: latest = TrollAgent.tipa (overwritten on every build)
-- Device remote test: N1 SSH jump host → iPhone terminal 192.168.31.108:8790 (/health needs no auth; check build). The jump host's public IP is dynamic — ask the user for the current one; credentials are kept in session memory, not in the repo.
+- Device remote test: N1 SSH jump host → iPhone terminal :8790 (/health needs no auth; check build). The jump host's public IP is dynamic — ask the user for the current one; credentials are kept in session memory, not in the repo.
 - a-Shell conclusion: main app source is not public; a-Shell-commands are WASM commands (not native iOS ARM binaries), usable only as a tool-list reference
 
 ---
