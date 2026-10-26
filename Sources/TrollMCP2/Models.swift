@@ -1246,7 +1246,11 @@ final class ConversationStore: ObservableObject {
                     // 都裁成第一个：assistant 消息与执行只带这一个，执行完回模型让它看到
                     // 结果再决定下一步（一个接一个）。依赖调用必须等前一个结果才能决定下一步，
                     // 合批执行会让模型猜结果(违规)；提示词不可靠，代码兜底强制一次一个。
-                    let calls = Array(calls.prefix(1))
+                    // v7.1.99：按工具分类放开——只读/查询类（system_overview/tools_audit/verify、
+                    // shell_exec 只读命令、browser 只读子命令）可一次多条依次执行（省 N-1 轮往返，
+                    // 用户实测效率慢）；副作用/写类（inject/app/control/artifact 等）保持一次一条
+                    // 回模型等结果（依赖安全）。判断见 Self.isParallelSafeTool。
+                    let calls = Self.isParallelSafeTool(calls) ? Array(calls.prefix(4)) : Array(calls.prefix(1))
                     // v3.1.72：思考(reasoning)与可见输出(content)分开存放——
                     // 旧逻辑把流式可见文本+思考合并成 thinkText 塞进 assistant.content，
                     // 又把同一 thinkText 塞进 tool 消息 thinking，导致 UI 上"回复内容"和
@@ -1903,6 +1907,43 @@ final class ConversationStore: ObservableObject {
         guard let data = json.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
         return obj
+    }
+
+    // MARK: - v7.1.99 工具合批分类（只读可合批 / 副作用一次一条）
+
+    /// 一批 toolCalls 是否全部可合批（依次执行，不回模型重生成）
+    static func isParallelSafeTool(_ calls: [ToolCall]) -> Bool {
+        calls.allSatisfy { isParallelSafeTool($0) }
+    }
+
+    /// 单个工具是否可合批：只读/查询类（无副作用、互相独立）→ true；
+    /// 副作用/写类/未知（inject、app、control、artifact、shell 写命令等）→ false（保持一次一条）
+    static func isParallelSafeTool(_ call: ToolCall) -> Bool {
+        let name = call.name
+        // 纯只读/验证大工具
+        let readOnlyTools: Set<String> = ["system_overview", "tools_audit", "verify"]
+        if readOnlyTools.contains(name) { return true }
+        // shell_exec：按命令首词判断只读命令（cat/ls/find/grep/ps/...）→ 可合批
+        if name == "shell_exec" {
+            let cmd = (parseArgs(call.arguments)["command"] as? String ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let first = cmd.components(separatedBy: .whitespacesAndNewlines).first(where: { !$0.isEmpty }) ?? ""
+            let base = first.hasPrefix("-") ? "" : first
+            let readOnlyCmds: Set<String> = [
+                "cat", "ls", "find", "grep", "ps", "df", "free", "uname", "echo", "pwd", "which",
+                "uptime", "netstat", "ifconfig", "head", "tail", "wc", "du", "date", "env", "printenv",
+                "curl", "ping", "mount", "id", "whoami", "sysctl", "defaults", "plutil", "strings",
+                "file", "stat", "readlink", "kill"   // kill 只对进程(副作用极小，AI 常与 ps 连查)
+            ]
+            return readOnlyCmds.contains(base)
+        }
+        // browser：只读子命令（text/snapshot/status/form_fields/wait/scroll）→ 可合批
+        if name == "browser" {
+            let op = parseArgs(call.arguments)["op"] as? String ?? ""
+            let readOnlyOps: Set<String> = ["text", "snapshot", "status", "form_fields", "wait", "scroll"]
+            return readOnlyOps.contains(op)
+        }
+        return false
     }
 
     // v2.9.171：工具结果序列化去掉 prettyPrinted → 紧凑 JSON (无缩进空格）。
