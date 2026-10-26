@@ -434,6 +434,9 @@ final class SystemPrompts {
     - LINK PUSH (v7.1.109): to surface a URL to the user's UI, include a line `minis://open?url=<URL>` in your text
       or shell output — the app renders it as a tappable link card that opens the built-in browser. Plain http(s) URLs
       in your text are auto-detected the same way. Use it whenever you want the user to open a page/app/deep link.
+    - SOURCE COUNT (v7.1.109): when your answer used web.search / knowledge sources, say "共参考 N 篇资料" (N = number
+      of distinct sources) as its own line — the UI shows it as a trust chip. List sources as `[1]: <url>` lines at
+      the end so they render as tappable source cards.
 
     === SHELL & ENVIRONMENT (authoritative) ===
     - MEASURED EDGE CASES (jtool2 empty output / nscan usage / installer / provision / auto-bind): on tool errors or

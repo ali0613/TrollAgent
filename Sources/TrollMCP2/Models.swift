@@ -713,6 +713,8 @@ struct ChatMessage: Codable, Identifiable, Hashable {
     var imageDataURLs: [String]? = nil
     /// v2.9.20：思考记录 (reasoning）。Responses API 返回的 reasoning 摘要，气泡内可展开。
     var thinking: String? = nil
+    /// v7.1.109-peers：思考耗时（秒）——从首个思考 delta 到首个正文 delta，DeepSeek 式"已深度思考（用时 X 秒）"
+    var thinkingSeconds: Double? = nil
     /// v2.9.127：执行轨迹 (对齐豆包工作任务/Codex turn 流）——AI 本次回复的
     /// 思考→工具调用→工具结果 全过程，随消息持久化，可展开回看。
     var trail: [TrailStep]? = nil
@@ -785,6 +787,8 @@ final class ConversationStore: ObservableObject {
     // v3.0.3：保存当前请求的思考内容 (onThinking 流式累加），
     // toolCalls 时传到 tool 消息，前端在 toolBubble 顶部显示
     private var thinkBuffer: String = ""
+    /// v7.1.109-peers：思考计时起点（首个 onThinking delta 时间），首个正文 delta 时结算 thinkingSeconds
+    private var thinkingStartAt: Date? = nil
 
     // v2.9.87：网络恢复自动重试 ("切后台回来网络中断"补偿）——
     // 网络类错误且当前确认为断网时，等 AppLifecycleMonitor 广播 networkRestored 后自动重发一次。
@@ -946,8 +950,10 @@ final class ConversationStore: ObservableObject {
     }
 
     func send(_ text: String, using config: ModelConfig, imageDataURLs: [String]? = nil,
-              reasoningLevel: Int = 0, smartSearch: Bool = true, personaPrompt: String? = nil) {
+              reasoningLevel: Int = 0, smartSearch: Bool = true, personaPrompt: String? = nil,
+              outputMode: Int = 0) {
         // v7.2.3：personaPrompt 非空 = 语音角色对话模式——系统提示词替换为角色人设，且不带任何工具调用
+        // v7.1.109-peers：outputMode 输出模式（豆包式胶囊条）0=标准 1=快速 2=专家 3=深度思考
         // v2.9.97：记住最近使用的模型，顶栏/下次启动立即恢复
         ModelStore.shared.markUsed(config.id.uuidString)
         // v2.9.82：请求开始——首次要通知权限 + 开启后台任务延长
@@ -1137,6 +1143,14 @@ final class ConversationStore: ObservableObject {
         }
         // 动态状态块：最新信息放最后，不影响稳定前缀缓存
         history.insert(ChatMessage(role: "system", content: Self.dynamicStatePrompt()), at: 0)
+        // v7.1.109-peers：输出模式注入（豆包式胶囊条）——0=标准(不注入) 1=快速 2=专家 3=深度思考
+        if outputMode == 1 {
+            history.insert(ChatMessage(role: "system", content: "[Output mode: FAST] Answer concisely — short direct replies, minimal preamble, no narration of steps unless asked."), at: 0)
+        } else if outputMode == 2 {
+            history.insert(ChatMessage(role: "system", content: "[Output mode: EXPERT] Give a thorough technical answer: precise terminology, exact commands/paths, edge cases, and a recommendation. Be complete but structured (use tables/code blocks where they help)."), at: 0)
+        } else if outputMode == 3 {
+            history.insert(ChatMessage(role: "system", content: "[Output mode: DEEP THINK] Reason carefully before acting: explore the problem space, check assumptions and edge cases, then give a well-reasoned conclusion with tradeoffs."), at: 0)
+        }
         // Tool-param prevalidation correction injection: missing required params blocked last round, append likewise.
         if let pcorr = self.pendingParamCorrection, !pcorr.isEmpty {
             history.append(ChatMessage(role: "user", content: pcorr))
@@ -1171,7 +1185,12 @@ final class ConversationStore: ObservableObject {
                     self.conversations[idx].messages[mi].content += delta
                 } else {
                     // 第一次 delta：创建流式消息
-                    let msg = ChatMessage(role: "assistant", content: delta)
+                    var msg = ChatMessage(role: "assistant", content: delta)
+                    // v7.1.109-peers：思考计时结算——首个正文 delta 到达，思考结束
+                    if let st = self.thinkingStartAt {
+                        msg.thinkingSeconds = Date().timeIntervalSince(st)
+                        self.thinkingStartAt = nil
+                    }
                     self.streamingMessageId = msg.id
                     self.liveProducedID = msg.id
                     self.appendToCurrent(msg)
@@ -1182,6 +1201,8 @@ final class ConversationStore: ObservableObject {
             // 不再写 liveTrail——否则实时轨迹卡也渲染思考，导致同一思考出现两次 (用户实测截图)。
             // 实时轨迹卡(liveTrail)只显示"工具执行步骤"：工具名/命令/结果，绝不显示思考文字。
             DispatchQueue.main.async {
+                // v7.1.109-peers：思考计时——首个思考 delta 记起点
+                if self.thinkingStartAt == nil { self.thinkingStartAt = Date() }
                 self.thinkBuffer += delta
                 // v3.5.4：思考实时写入流式消息的 thinking(黄色气泡)，随模型思考逐段填充、不打字机。
                 // 若无流式消息(思考先于正文到达)，先建一条空 assistant 消息，把思考挂上去。
@@ -1229,6 +1250,7 @@ final class ConversationStore: ObservableObject {
                     self.requestRound = 0
                     self.runningTool = nil
                     self.thinkBuffer = "" // 重置缓冲区
+                    self.thinkingStartAt = nil // v7.1.109-peers：思考计时重置
                     // v2.9.138：自动会话记忆——一轮完整回复后落库 (供下会话 BM25 检索）
                     if let idx = self.activeConvIndex {
                         let msgs = self.conversations[idx].messages
@@ -1398,6 +1420,7 @@ final class ConversationStore: ObservableObject {
                         self.liveProducedID = am.id
                     }
                     self.thinkBuffer = "" // 重置缓冲区
+                    self.thinkingStartAt = nil // v7.1.109-peers：思考计时重置
                     self.streamingMessageId = nil
                     // v2.9.127：轨迹——AI 决定调用一批工具
                     self.trailStep(.done(.tool, "AI chose to call \(calls.count) tools",
@@ -1413,6 +1436,7 @@ final class ConversationStore: ObservableObject {
                     self.requestRound = 0
                     self.runningTool = nil
                     self.thinkBuffer = "" // 重置缓冲区
+                    self.thinkingStartAt = nil // v7.1.109-peers：思考计时重置
                     self.liveProducedID = nil
                     // v2.9.13：用户主动取消 (-999）不追加错误气泡
                     let nsErr = error as NSError

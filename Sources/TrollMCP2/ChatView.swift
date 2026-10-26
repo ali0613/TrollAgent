@@ -15,6 +15,8 @@ struct ChatView: View {
     @AppStorage("chat_smart_search") private var smartSearch = true
     // v3.1.25：思考模型总开关——关闭时完全不思考，直接回复（reasoning_effort=none）
     @AppStorage("chat_think_enabled") private var thinkEnabled = true
+    // v7.1.109-peers：输出模式（豆包式胶囊条）0=标准 1=快速 2=专家 3=深度思考
+    @AppStorage("chat_output_mode") private var outputMode = 0
     @State private var keyboardHeight: CGFloat = 0   // v2.9.234：键盘高度(消息列表跟随上移)
     @State private var attachmentSheet: AttachmentSheet?
     // v3.1.67：文件选择改用 UIKit UIDocumentPickerViewController（asCopy: true）从顶层 VC present——
@@ -654,6 +656,23 @@ struct ChatView: View {
             AttachmentPreviewStrip(attachments: pendingAttachments) { att in
                 withAnimation { pendingAttachments.removeAll { $0.id == att.id } }
             }
+            // v7.1.109-peers：输出模式胶囊条（豆包式）+ 上下文环形指示器（Cursor 式）——
+            // 模式：标准/快速/专家/深度思考（注入提示词段）；环形：最近请求 token 占上下文比例
+            HStack(spacing: 8) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        outputModePill(0, L10n.t("i18n_1250"))
+                        outputModePill(1, L10n.t("i18n_1251"))
+                        outputModePill(2, L10n.t("i18n_1252"))
+                        outputModePill(3, L10n.t("i18n_1253"))
+                    }
+                }
+                contextRing
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+            .padding(.bottom, 6)
+
             // v3.4.5：功能行（推理/思考/搜索/系统指令/技能/工作区）——胶囊与输入框、与上方都留
             // 等距 16pt 间隙（上下对称，间距比之前加大）
             chatModeBar
@@ -757,6 +776,49 @@ struct ChatView: View {
         // v4.3.40：档位扩为 低/中/高/最高/极限——最高档=xhigh, 极限档=max (破甲站 gpt-6.1-sol 实测支持 low/medium/high/xhigh/max)
         let labels = [L10n.t("i18n_1041"), L10n.t("i18n_1042"), L10n.t("i18n_1043"), L10n.t("i18n_1044"), L10n.t("i18n_1045")]
         return reasoning >= 0 && reasoning < labels.count ? labels[reasoning] : L10n.t("i18n_1043")
+    }
+
+    // v7.1.109-peers：输出模式胶囊（豆包式）——选中蓝底白字
+    private func outputModePill(_ mode: Int, _ label: String) -> some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) { outputMode = mode }
+        } label: {
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(outputMode == mode ? .white : .primary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(outputMode == mode ? Color.blue : Color(.systemGray5))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // v7.1.109-peers：上下文环形指示器（Cursor 式）——最近请求真实/估算 token 占 200k 上下文比例
+    private var contextRing: some View {
+        let rec = UsageRecorder.shared.records.last
+        let total = rec?["totalTokens"] as? Int ?? 0
+        let est = rec?["estInputTokens"] as? Int ?? 0
+        let tok = total > 0 ? total : est
+        let ratio: CGFloat = tok > 0 ? min(1.0, CGFloat(tok) / 200000) : 0
+        ZStack {
+            Circle()
+                .stroke(Color(.systemGray4), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: ratio)
+                .stroke(Color.blue, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Text(tokText(tok))
+                .font(.system(size: 7, weight: .semibold))
+                .foregroundColor(.secondary)
+        }
+        .frame(width: 24, height: 24)
+        .accessibilityLabel(L10n.t("i18n_1254"))
+    }
+
+    private func tokText(_ t: Int) -> String {
+        if t >= 1000 { return String(format: "%.0fk", Double(t) / 1000) }
+        return "\(t)"
     }
 
     /// v3.3.4：+ 展开的快捷附件行（应用 / 相册 / 文件 / 浏览器），对齐微信式附件栏
@@ -887,7 +949,7 @@ struct ChatView: View {
         pendingAttachments = []
         let finalImgs = attImgs.isEmpty ? imagesToSend : attImgs
         // v3.4.1：思考总开关接入主发送路径（此前漏传，思考·开/关在输入框无效）
-        store.send(text, using: cfg, imageDataURLs: finalImgs, reasoningLevel: thinkEnabled ? reasoning : 3, smartSearch: smartSearch)
+        store.send(text, using: cfg, imageDataURLs: finalImgs, reasoningLevel: thinkEnabled ? reasoning : 3, smartSearch: smartSearch, outputMode: outputMode)
         AuditLog.shared.log("chat", detail: L10n.t("i18n_1056"))
     }
 
@@ -1638,32 +1700,63 @@ struct MessageBubble: View {
 
     private func coloredBody(_ text: String) -> AttributedString {
         var out = AttributedString()
-        let pattern = "`([^`]+)`"
+        // v7.1.109-peers：引用角标 [N] 蓝色上标（Perplexity/Kimi 式）——优先于反引号着色
+        // 顺序：反引号 > [N] 角标 > 加粗（在 styledBody 内做 [N]）
+        let pattern = "`([^`]+)`|(\\[(\\d+)\\])"
         var pos = text.startIndex
         while let range = text.range(of: pattern, options: .regularExpression, range: pos..<text.endIndex) {
-            if pos < range.lowerBound { out += styledBold(text[pos..<range.lowerBound]) }
-            let inner = text[text.index(after: range.lowerBound)..<text.index(before: range.upperBound)]
-            var c = AttributedString(inner)
-            c.foregroundColor = .orange
-            c.font = .system(.body, design: .monospaced)
-            out += c
+            let seg = text[range]
+            if pos < range.lowerBound { out += styledBody(text[pos..<range.lowerBound]) }
+            if seg.hasPrefix("`") {
+                let inner = text[text.index(after: range.lowerBound)..<text.index(before: range.upperBound)]
+                var c = AttributedString(inner)
+                c.foregroundColor = .orange
+                c.font = .system(.body, design: .monospaced)
+                out += c
+            } else if seg.hasPrefix("[") {
+                // [N] → 蓝色上标
+                var c = AttributedString(seg)
+                c.foregroundColor = .blue
+                c.font = .system(size: 12, weight: .semibold)
+                c.baselineOffset = 6
+                out += c
+            }
             pos = range.upperBound
         }
-        if pos < text.endIndex { out += styledBold(text[pos..<text.endIndex]) }
+        if pos < text.endIndex { out += styledBody(text[pos..<text.endIndex]) }
         return out
     }
 
     // v4.4.12：代码段外的 markdown 加粗(**xx**)→粗体；未闭合的 ** 容错为普通文本
-    private func styledBold(_ s: Substring) -> AttributedString {
+    // v7.1.109-peers：同名 styledBody（替换 styledBold），内部处理 **加粗** + [N] 角标（跨段）
+    private func styledBody(_ s: Substring) -> AttributedString {
         var out = AttributedString()
         let boldPat = "\\*\\*([^*]+)\\*\\*"
         var pos = s.startIndex
         while let r = s.range(of: boldPat, options: .regularExpression, range: pos..<s.endIndex) {
-            if pos < r.lowerBound { out += AttributedString(s[pos..<r.lowerBound]) }
+            if pos < r.lowerBound { out += styledMarks(s[pos..<r.lowerBound]) }
             let inner = s[s.index(after: r.lowerBound)..<s.index(before: r.upperBound)]
             var b = AttributedString(inner)
             b.font = .system(size: 17, weight: .semibold) // v4.4.14: .system(_:weight:) 需 iOS16+, 改 system(size:weight:) 兼容更低部署目标
             out += b
+            pos = r.upperBound
+        }
+        if pos < s.endIndex { out += styledMarks(s[pos..<s.endIndex]) }
+        return out
+    }
+
+    // v7.1.109-peers：普通段内 [N] 角标 → 蓝色上标
+    private func styledMarks(_ s: Substring) -> AttributedString {
+        var out = AttributedString()
+        let markPat = "\\[(\\d+)\\]"
+        var pos = s.startIndex
+        while let r = s.range(of: markPat, options: .regularExpression, range: pos..<s.endIndex) {
+            if pos < r.lowerBound { out += AttributedString(s[pos..<r.lowerBound]) }
+            var c = AttributedString(s[r])
+            c.foregroundColor = .blue
+            c.font = .system(size: 12, weight: .semibold)
+            c.baselineOffset = 6
+            out += c
             pos = r.upperBound
         }
         if pos < s.endIndex { out += AttributedString(s[pos..<s.endIndex]) }
@@ -1720,7 +1813,8 @@ struct MessageBubble: View {
             // v2.9.20：思考记录（reasoning）可展开显示
             // v3.5.31：加 thinkEnabled —— 思考关时即使 API 返回 thinking 也一律不显示
             if !isUser, thinkEnabled, let th = message.thinking, !th.isEmpty {
-                thinkingView(th)
+                // v7.1.109-peers：思考耗时秒数传入（DeepSeek 式"已深度思考（用时 X 秒）"）
+                thinkingView(th, seconds: message.thinkingSeconds)
             }
             // v3.0.2: 去掉旧的 TrailCard，改用 toolBubble 显示工具调用
             // v3.0.2e：如果 content 是空的，就不显示气泡（避免空白气泡）
@@ -1803,17 +1897,30 @@ struct MessageBubble: View {
     }
 
     /// v2.9.20：思考记录（reasoning）折叠视图
-    private func thinkingView(_ text: String) -> some View {
+    private func thinkingView(_ text: String, seconds: Double?) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Button(action: { withAnimation { toggleThinking() } }) {
                 HStack(spacing: 6) {
                     Image(systemName: thinkingExpanded ? "chevron.down.circle" : "chevron.right.circle")
                         .font(.system(size: 14))
                     // v3.5.4：思考中→"思考中…"；思考完→"已深度思考 N 字"(业界一致)
-                    Text(isStreaming ? L10n.t("i18n_1071") : L10n.t("i18n_1072", text.count))
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.orange)
+                    // v7.1.109-peers：加耗时秒数（DeepSeek/元宝式"已深度思考（用时 X 秒）"）
+                    if isStreaming {
+                        Text(L10n.t("i18n_1071"))
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.orange)
+                    } else if let s = seconds, s > 0 {
+                        Text(L10n.t("i18n_1072", text.count) + L10n.t("i18n_1248", Int(s.rounded())))
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.orange)
+                    } else {
+                        Text(L10n.t("i18n_1072", text.count))
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.orange)
+                    }
                     Spacer()
                     if thinkingExpanded {
                         Button(action: { UIPasteboard.general.string = text }) {
@@ -2148,12 +2255,18 @@ struct FileCardRow: View {
                         .foregroundColor(.tmCyan)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(fileName)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    HStack(spacing: 5) {
+                        Text(fileName)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        // v7.1.109-peers：文件解析状态卡（元宝式）——已解析绿勾徽标
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.green)
+                    }
                     Text(sizeText)
                         .font(.caption2)
                         .foregroundColor(.secondary)
@@ -2217,6 +2330,17 @@ struct LiveTrailCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // v7.1.109-peers：Manus 式任务计数——N/M（完成/总步骤），三态一眼可见
+            let done = steps.filter { $0.status == .success }.count
+            HStack(spacing: 6) {
+                Image(systemName: "list.bullet")
+                    .font(.system(size: 11))
+                    .foregroundColor(.blue)
+                Text(L10n.t("i18n_1249", done, steps.count))
+                    .font(.caption.weight(.medium))
+                    .foregroundColor(.blue)
+                Spacer()
+            }
             ForEach(steps) { step in
                 TrailRow(step: step)
             }

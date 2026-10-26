@@ -9,8 +9,9 @@ enum MarkdownBlocks {
 
     enum Block: Equatable {
         case text(String)
-        case codeBlock(String)
+        case codeBlock(code: String, language: String?)
         case table(header: [String], rows: [[String]])
+        case tasks(items: [(done: Bool, text: String)])
     }
 
     static func parse(_ text: String) -> [Block] {
@@ -27,9 +28,11 @@ enum MarkdownBlocks {
         while i < lines.count {
             let line = lines[i]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            // fenced 代码块：``` 开头（语言标记忽略）
+            // fenced 代码块：``` 开头，语言标记提取（```swift → swift）
             if trimmed.hasPrefix("```") {
                 flushText()
+                let langMarker = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                let language = langMarker.isEmpty ? nil : langMarker
                 var code: [String] = []
                 i += 1
                 while i < lines.count {
@@ -38,8 +41,28 @@ enum MarkdownBlocks {
                     code.append(l)
                     i += 1
                 }
-                blocks.append(.codeBlock(code.joined(separator: "\n")))
+                blocks.append(.codeBlock(code: code.joined(separator: "\n"), language: language))
                 continue
+            }
+            // v7.1.109-peers：任务清单三态（Cursor To-dos / Manus 计数式）——
+            // 连续 "- [ ]" / "- [x]" 行识别为任务块
+            if trimmed.hasPrefix("- [") || trimmed.hasPrefix("* [") {
+                flushText()
+                var items: [(done: Bool, text: String)] = []
+                while i < lines.count {
+                    let dl = lines[i].trimmingCharacters(in: .whitespaces)
+                    if dl.hasPrefix("- [") || dl.hasPrefix("* [") {
+                        let rest = String(dl.dropFirst(3))
+                        let done = rest.hasPrefix("x]") || rest.hasPrefix("X]")
+                        let body = rest.dropFirst(2).trimmingCharacters(in: .whitespaces)
+                        items.append((done, body))
+                        i += 1
+                    } else { break }
+                }
+                if !items.isEmpty {
+                    blocks.append(.tasks(items: items))
+                    continue
+                }
             }
             // 表格：当前行 | 开头结尾 && 下一行是分隔行（|---|---|）→ 表头 + 数据行
             if trimmed.hasPrefix("|") && trimmed.hasSuffix("|"),
@@ -167,6 +190,8 @@ struct MarkdownBlocksView: View {
 
     var body: some View {
         let blocks = MarkdownBlocks.parse(text)
+        // v7.1.109-peers：引用来源列表（Perplexity/Kimi 式）——正文里的 [N] 角标 + 文末 [N]: URL 来源行
+        let citations = CitationExtractor.extract(text)
         VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, b in
                 switch b {
@@ -181,25 +206,149 @@ struct MarkdownBlocksView: View {
                             ForEach(links, id: \.self) { LinkCardView(url: $0) }
                         }
                     }
-                case .codeBlock(let code):
-                    // 命令行文本展示：黑底等宽白字（与工具结果同一视觉语言）
-                    Text(code)
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundColor(.white)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.black)
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(Color(.separator), lineWidth: 0.5)
-                        )
-                        .textSelection(.enabled)
+                case .codeBlock(let code, let language):
+                    MarkdownCodeBlockView(code: code, language: language)
                 case .table(let header, let rows):
                     MarkdownTableView(header: header, rows: rows)
+                case .tasks(let items):
+                    // v7.1.109-peers：任务清单三态——空心圈待办 / 绿勾完成（Cursor To-dos / Manus 三态）
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Image(systemName: item.done ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(item.done ? .green : .secondary)
+                                Text(item.text)
+                                    .font(.callout)
+                                    .foregroundColor(item.done ? .secondary : .primary)
+                                    .strikethrough(item.done, color: .secondary)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                    }
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemBackground))
+                    .cornerRadius(8)
                 }
             }
+            // 引用来源行：文末 [1]: URL 列表 → 来源卡（可点开）
+            if !citations.sources.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "books.vertical")
+                            .font(.system(size: 11))
+                            .foregroundColor(.blue)
+                        Text("Sources · \(citations.sources.count)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.blue)
+                    }
+                    ForEach(citations.sources, id: \.index) { src in
+                        LinkCardView(url: src.url)
+                    }
+                }
+                .padding(.top, 2)
+            }
         }
+    }
+}
+
+/// v7.1.109-peers：引用角标 + 来源提取（Perplexity/Kimi 三层渐进的第一、三层）
+/// 第一层：正文句末 [1][2] 角标（渲染为蓝色上标）
+/// 第三层：文末 [1]: https://... 来源列表 → Sources 计数 + 来源卡
+enum CitationExtractor {
+
+    struct Source: Equatable {
+        let index: Int
+        let url: URL
+    }
+
+    struct Result {
+        /// 正文里的角标数（[N] 出现次数，去重）
+        var markerCount: Int = 0
+        /// 文末来源列表（[N]: URL 行解析出的有序来源）
+        var sources: [Source] = []
+    }
+
+    static func extract(_ text: String) -> Result {
+        var r = Result()
+        // 角标：形如 [1] 或 [1][2]，紧跟句尾
+        let markerPattern = #"\[\d+\]"#
+        if let regex = try? NSRegularExpression(pattern: markerPattern) {
+            let range = NSRange(text.startIndex..., in: text)
+            var seen = Set<Int>()
+            regex.enumerateMatches(in: text, range: range) { match, _, _ in
+                guard let m = match, let rng = Range(m.range, in: text) else { return }
+                let n = Int(String(text[rng]).dropFirst().dropLast()) ?? 0
+                if n > 0 { seen.insert(n) }
+            }
+            r.markerCount = seen.count
+        }
+        // 来源行：[N]: URL（文末或行内）
+        let srcPattern = #"(?:^|\n)\s*\[(\d+)\]:\s*(https?://[^\s"'\(\)\]\}，。；：,;]+)"#
+        if let regex = try? NSRegularExpression(pattern: srcPattern) {
+            let range = NSRange(text.startIndex..., in: text)
+            regex.enumerateMatches(in: text, range: range) { match, _, _ in
+                guard let m = match,
+                      let iR = Range(m.range(at: 1), in: text),
+                      let uR = Range(m.range(at: 2), in: text) else { return }
+                let idx = Int(String(text[iR])) ?? 0
+                var u = String(text[uR])
+                while let last = u.last, "。，；：,.;:)）]】".contains(last) { u.removeLast() }
+                if let url = URL(string: u), idx > 0, !r.sources.contains(where: { $0.index == idx }) {
+                    r.sources.append(Source(index: idx, url: url))
+                }
+            }
+            r.sources.sort { $0.index < $1.index }
+        }
+        return r
+    }
+}
+
+/// v7.1.109-peers：代码块操作条（Gemini/Kimi 式）——左上语言标签 + 右上复制按钮
+struct MarkdownCodeBlockView: View {
+    let code: String
+    let language: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if language != nil || !code.isEmpty {
+                HStack(spacing: 8) {
+                    if let lang = language {
+                        Text(lang)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.18))
+                            .cornerRadius(4)
+                    }
+                    Spacer()
+                    Button {
+                        UIPasteboard.general.string = code
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Color.black)
+            }
+            Text(code)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundColor(.white)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.black)
+                .textSelection(.enabled)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color(.separator), lineWidth: 0.5)
+        )
     }
 }
 
