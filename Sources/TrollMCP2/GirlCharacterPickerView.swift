@@ -399,6 +399,7 @@ struct GirlCharacterPickerView: View {
                                 ForEach(menuRows) { row in
                                     HStack(spacing: 12) {
                                         // v6.1.5-14ae：行美化——真实图标圆角 + 名称 + url 次要灰色
+                                        // v7.1.91：图标 scaledToFill 撑满 34pt 圆角容器（原 26pt 留白没填满——用户实测）
                                         ZStack {
                                             RoundedRectangle(cornerRadius: 8)
                                                 .fill(Color(.tertiarySystemFill))
@@ -406,8 +407,9 @@ struct GirlCharacterPickerView: View {
                                             if let bid = row.app["bundleId"], let icon = Self.appIcon(forBundleId: bid) {
                                                 Image(uiImage: icon)
                                                     .resizable()
-                                                    .scaledToFit()
-                                                    .frame(width: 26, height: 26)
+                                                    .scaledToFill()
+                                                    .frame(width: 34, height: 34)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
                                             } else {
                                                 Image(systemName: "app.fill")
                                                     .font(.system(size: 16))
