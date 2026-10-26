@@ -1331,7 +1331,11 @@ final class ConversationStore: ObservableObject {
                     // shell_exec 只读命令、browser 只读子命令）可一次多条依次执行（省 N-1 轮往返，
                     // 用户实测效率慢）；副作用/写类（inject/app/control/artifact 等）保持一次一条
                     // 回模型等结果（依赖安全）。判断见 Self.isParallelSafeTool。
-                    let calls = Self.isParallelSafeTool(calls) ? Array(calls.prefix(4)) : Array(calls.prefix(1))
+                    // v7.1.108-minis：废除批截断（prefix 1/4 会静默丢弃模型已生成的调用——
+                    // 只读批>4 丢剩余造成漏检、混合批只做第一个造成 N 轮往返重发）。
+                    // 对齐 OpenMinis：全批执行，并发上限用分波(≤4 一波自动续，等价 in-flight
+                    // 排队)，混合批 writer(副作用)依次 + reader(只读)并发(读后写天然满足)。
+                    // 分流见 processToolCalls 内 index==0 处。
                     // v3.1.72：思考(reasoning)与可见输出(content)分开存放——
                     // 旧逻辑把流式可见文本+思考合并成 thinkText 塞进 assistant.content，
                     // 又把同一 thinkText 塞进 tool 消息 thinking，导致 UI 上"回复内容"和
@@ -1550,10 +1554,18 @@ final class ConversationStore: ObservableObject {
         // v7.1.106：真并行分流——只读/独立工具批（count>1）走 DispatchGroup 并发执行，
         // 全部完成后按 tool_use 原序回填 tool 消息（API 要求 assistant toolCalls 与结果顺序配对）。
         // 串行路径（count==1 / 副作用批）完全不变。并行安全判定见 isParallelSafeTool。
-        if index == 0, calls.count > 1, Self.isParallelSafeTool(calls) {
-            self.processToolCallsParallel(calls, toolMessages: toolMessages, newlyDisclosed: newlyDisclosed,
-                                          config: config, tools: tools, disclosed: disclosed, depth: depth,
-                                          reasoningLevel: reasoningLevel, thinkText: thinkText, personaPrompt: personaPrompt)
+        // v7.1.108-minis：废除截断后全量批进这里——全安全批 → 分波并发（≤4 一波自动续）；
+        // 混合/全副作用批 → processToolCallsOrdered（writer 依次 → reader 并发，读后写天然满足）。
+        if index == 0, calls.count > 1 {
+            if Self.isParallelSafeTool(calls) {
+                self.processToolCallsParallel(calls, toolMessages: toolMessages, newlyDisclosed: newlyDisclosed,
+                                              config: config, tools: tools, disclosed: disclosed, depth: depth,
+                                              reasoningLevel: reasoningLevel, thinkText: thinkText, personaPrompt: personaPrompt)
+            } else {
+                self.processToolCallsOrdered(calls, toolMessages: toolMessages, newlyDisclosed: newlyDisclosed,
+                                             config: config, tools: tools, disclosed: disclosed, depth: depth,
+                                             reasoningLevel: reasoningLevel, thinkText: thinkText, personaPrompt: personaPrompt)
+            }
             return
         }
         let call = calls[index]
@@ -1679,47 +1691,200 @@ final class ConversationStore: ObservableObject {
             self.pendingToolMsgIDs[call.id] = runMsg.id
         }
         self.trailStep(.running(.tool, "parallel batch", detail: calls.map { $0.name }.joined(separator: "、")))
-        // 2) DispatchGroup 并发执行（真并行；结果按 (index, result, duration) 收集，执行完按原序回填）
-        let group = DispatchGroup()
+        // 2) 分波并发执行（v7.1.108-minis：全执行不截断，≤4 个一波自动续，等价 OpenMinis
+        // in-flight 排队；结果按 (index, result, duration) 收集，最终按原序回填）
+        let allIndices = calls.indices.filter { preErrors[$0] == nil }
+        let step = 4
+        var collected: [(index: Int, result: Result<[String: Any], Error>, duration: Double)] = []
+        let resultsLock = NSLock()
+
+        func runWave(_ indices: [Int]) {
+            guard !indices.isEmpty else {
+                // 3) 全部完成 → 主线程按原序合并 tool 消息（与 assistant toolCalls 顺序一致），一次性回模型
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    self.runningTool = nil
+                    var next = toolMessages
+                    for (i, call) in calls.enumerated() {
+                        if let pre = preErrors[i] {
+                            // 缺参：错误消息直接进序列（toolCallId 匹配，序列始终完整合法），并更新对应 running 卡
+                            next.append(pre)
+                            self.resolvePendingTool(callId: call.id, content: pre.content, toolDuration: 0, isError: true, narration: nil)
+                            self.trailStep(.done(.note, "Missing tool params",
+                                                 detail: "\(call.name) missing required params", ok: false))
+                            continue
+                        }
+                        let entry = collected.first { $0.index == i }
+                        let r = entry?.result ?? .failure(MCPError.failed("parallel tool result missing for \(call.name)"))
+                        next = self.applyParallelResult(r, call: call, toolMessages: next,
+                                                        toolDuration: entry?.duration ?? 0, thinkText: thinkText)
+                    }
+                    let merged = Array(Set(disclosed + newlyDisclosed))
+                    self.runLoop(config: config, tools: tools, disclosed: merged, depth: depth + 1,
+                                 reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
+                }
+                return
+            }
+            let wave = Array(indices.prefix(step))
+            let rest = Array(indices.dropFirst(step))
+            let group = DispatchGroup()
+            for i in wave {
+                let call = calls[i]
+                group.enter()
+                DispatchQueue.global().async {
+                    let start = CFAbsoluteTimeGetCurrent()
+                    let r: Result<[String: Any], Error>
+                    do { r = .success(try ToolRegistry.shared.dispatch(name: call.name, params: Self.parseArgs(call.arguments))) }
+                    catch { r = .failure(error) }
+                    let duration = CFAbsoluteTimeGetCurrent() - start
+                    resultsLock.lock()
+                    collected.append((i, r, duration))
+                    resultsLock.unlock()
+                    group.leave()
+                }
+            }
+            group.notify(queue: .main) {
+                runWave(rest)
+            }
+        }
+        runWave(allIndices)
+    }
+
+    /// v7.1.108-minis：混合批排序执行（对齐 OpenMinis BatchToolOrder 语义 + 本地保守策略）。
+    /// 全执行不截断：副作用(writer)按原序依次执行 → 只读(reader)分波并发(≤4 一波)，
+    /// 最终按原序回填 tool 消息（与 assistant toolCalls 配对）。副作用绝不同时并发；
+    /// reader 等所有前序 writer 完成后再启动（阶段隔离，读后写天然满足，比逐项排序更保守安全）。
+    private func processToolCallsOrdered(_ calls: [ToolCall],
+                                         toolMessages: [ChatMessage],
+                                         newlyDisclosed: [String],
+                                         config: ModelConfig,
+                                         tools: [[String: Any]]?,
+                                         disclosed: [String],
+                                         depth: Int,
+                                         reasoningLevel: Int,
+                                         thinkText: String,
+                                         personaPrompt: String?) {
+        // 0) schema 预校验（同 parallel）：缺必填参的 call 不执行，生成错误 tool 消息占位（顺序保留）
+        var preErrors: [Int: ChatMessage] = [:]
+        for (i, call) in calls.enumerated() {
+            if let schema = ToolRegistry.shared.openAISchema(for: call.name),
+               let fn = schema["function"] as? [String: Any],
+               let ps = fn["parameters"] as? [String: Any],
+               let required = ps["required"] as? [String] {
+                let params = Self.parseArgs(call.arguments)
+                let missing = required.filter { params[$0] == nil }
+                if !missing.isEmpty && self.paramCorrectionCount < 2 {
+                    self.paramCorrectionCount += 1
+                    let body: [String: Any] = [
+                        "ok": false,
+                        "message": "Missing required params for \(call.name): \(missing.joined(separator: ", ")). Fill them in and call again."
+                    ]
+                    var failMsg = ChatMessage(role: "tool", content: Self.jsonString(body), isError: true,
+                                              toolCallId: call.id, toolName: call.name)
+                    failMsg.toolArgs = Self.summarizeArgs(call.arguments)
+                    preErrors[i] = failMsg
+                }
+            }
+        }
+        // 1) 每工具上屏一张 running 卡（主线程；结果回来后在原地更新成完成/出错卡）
+        self.runningTool = calls.first?.name
+        let nar = thinkText.trimmingCharacters(in: .whitespacesAndNewlines)
+        for call in calls {
+            var runMsg = ChatMessage(role: "tool", content: "", toolCallId: call.id, toolName: call.name)
+            runMsg.toolArgs = Self.summarizeArgs(call.arguments)
+            runMsg.toolNarration = nar.isEmpty ? nil : thinkText
+            runMsg.isRunning = true
+            self.appendToCurrent(runMsg)
+            self.pendingToolMsgIDs[call.id] = runMsg.id
+        }
+        self.trailStep(.running(.tool, "ordered batch (writers → readers)", detail: calls.map { $0.name }.joined(separator: "、")))
+        // 2) 分类：writer=副作用/未知（依次）；reader=只读（并发）
+        let writers = calls.indices.filter { preErrors[$0] == nil && !Self.isParallelSafeTool(calls[$0]) }
+        let readers = calls.indices.filter { preErrors[$0] == nil && Self.isParallelSafeTool(calls[$0]) }
+        // 执行结果统一收集（index → (result, duration)），全部完成后按原序回填——
+        // 阶段隔离执行（writer 先 reader 后）绝不能直接按执行顺序 append：
+        // 原序中 writer 可能在 reader 之后（如 [grep, rm]），执行序≠原序会破坏
+        // assistant toolCalls 配对（API 400）。
         var results: [(index: Int, result: Result<[String: Any], Error>, duration: Double)] = []
         let resultsLock = NSLock()
-        for (i, call) in calls.enumerated() where preErrors[i] == nil {
-            group.enter()
-            DispatchQueue.global().async {
-                let start = CFAbsoluteTimeGetCurrent()
+        // 4) 阶段 B：reader 分波并发（≤4 一波自动续），完成后统一原序回填 + 一次性回模型
+        // （声明在 runWriters 之前——Swift 局部函数不支持前向引用）
+        func runReaders(_ idxList: [Int]) {
+            guard !idxList.isEmpty else {
+                // 全部完成 → 主线程按原序合并 tool 消息（与 assistant toolCalls 顺序一致），一次性回模型
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    self.runningTool = nil
+                    var next = toolMessages
+                    for (i, call) in calls.enumerated() {
+                        if let pre = preErrors[i] {
+                            // 缺参：错误消息直接进序列（toolCallId 匹配，序列始终完整合法），并更新对应 running 卡
+                            next.append(pre)
+                            self.resolvePendingTool(callId: call.id, content: pre.content, toolDuration: 0, isError: true, narration: nil)
+                            self.trailStep(.done(.note, "Missing tool params",
+                                                 detail: "\(call.name) missing required params", ok: false))
+                            continue
+                        }
+                        let entry = results.first { $0.index == i }
+                        let r = entry?.result ?? .failure(MCPError.failed("ordered tool result missing for \(call.name)"))
+                        next = self.applyParallelResult(r, call: call, toolMessages: next,
+                                                        toolDuration: entry?.duration ?? 0, thinkText: thinkText)
+                    }
+                    let merged = Array(Set(disclosed + newlyDisclosed))
+                    self.runLoop(config: config, tools: tools, disclosed: merged, depth: depth + 1,
+                                 reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
+                }
+                return
+            }
+            let step = 4
+            let wave = Array(idxList.prefix(step))
+            let rest = Array(idxList.dropFirst(step))
+            let group = DispatchGroup()
+            for i in wave {
+                let call = calls[i]
+                group.enter()
+                DispatchQueue.global().async {
+                    let start = CFAbsoluteTimeGetCurrent()
+                    let r: Result<[String: Any], Error>
+                    do { r = .success(try ToolRegistry.shared.dispatch(name: call.name, params: Self.parseArgs(call.arguments))) }
+                    catch { r = .failure(error) }
+                    let duration = CFAbsoluteTimeGetCurrent() - start
+                    resultsLock.lock()
+                    results.append((i, r, duration))
+                    resultsLock.unlock()
+                    group.leave()
+                }
+            }
+            group.notify(queue: .main) {
+                runReaders(rest)
+            }
+        }
+        // 3) 阶段 A：writer 按原序依次执行（后台 dispatch，收集结果后继续下一个）
+        func runWriters(_ idxList: [Int], at pos: Int) {
+            guard pos < idxList.count else {
+                runReaders(readers)
+                return
+            }
+            let i = idxList[pos]
+            let call = calls[i]
+            let params = Self.parseArgs(call.arguments)
+            self.trailStep(.running(.tool, call.name, detail: Self.jsonString(params)))
+            let start = CFAbsoluteTimeGetCurrent()
+            DispatchQueue.global().async { [weak self] in
+                guard let self = self else { return }
                 let r: Result<[String: Any], Error>
-                do { r = .success(try ToolRegistry.shared.dispatch(name: call.name, params: Self.parseArgs(call.arguments))) }
+                do { r = .success(try ToolRegistry.shared.dispatch(name: call.name, params: params)) }
                 catch { r = .failure(error) }
                 let duration = CFAbsoluteTimeGetCurrent() - start
                 resultsLock.lock()
                 results.append((i, r, duration))
                 resultsLock.unlock()
-                group.leave()
-            }
-        }
-        // 3) 全部完成 → 主线程按原序合并 tool 消息（与 assistant toolCalls 顺序一致），一次性回模型
-        group.notify(queue: .main) { [weak self] in
-            guard let self = self else { return }
-            self.runningTool = nil
-            var next = toolMessages
-            for (i, call) in calls.enumerated() {
-                if let pre = preErrors[i] {
-                    // 缺参：错误消息直接进序列（toolCallId 匹配，序列始终完整合法），并更新对应 running 卡
-                    next.append(pre)
-                    self.resolvePendingTool(callId: call.id, content: pre.content, toolDuration: 0, isError: true, narration: nil)
-                    self.trailStep(.done(.note, "Missing tool params",
-                                         detail: "\(call.name) missing required params", ok: false))
-                    continue
+                DispatchQueue.main.async {
+                    runWriters(idxList, at: pos + 1)
                 }
-                let entry = results.first { $0.index == i }
-                let r = entry?.result ?? .failure(MCPError.failed("parallel tool result missing for \(call.name)"))
-                next = self.applyParallelResult(r, call: call, toolMessages: next,
-                                                toolDuration: entry?.duration ?? 0, thinkText: thinkText)
             }
-            let merged = Array(Set(disclosed + newlyDisclosed))
-            self.runLoop(config: config, tools: tools, disclosed: merged, depth: depth + 1,
-                         reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
         }
+        runWriters(writers, at: 0)
     }
 
     /// v7.1.106：并行批的单条工具结果处理（三分支与 handleDispatchResult 一致，但非递归——
