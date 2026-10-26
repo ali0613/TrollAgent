@@ -6,6 +6,7 @@ import UIKit
 // 不用再让 AI 敲 cat——HUD 长按语音测一次，打开关于页即可看全链路日志）
 struct AboutAuthorView: View {
     @State private var copied = false
+    @State private var diagCopied = false
     @State private var diagLog: String = ""
     @State private var diagLoaded = false
     @State private var diagError: String? = nil
@@ -190,6 +191,21 @@ struct AboutAuthorView: View {
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
                                 .background(Color.orange)
+                                .cornerRadius(12)
+                        }
+                        .buttonStyle(.plain)
+                        // v7.1.88：复制日志（用户反馈日志长不能复制——调试不便）
+                        Button(action: {
+                            UIPasteboard.general.string = diagLog
+                            diagCopied = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { diagCopied = false }
+                        }) {
+                            Label(diagCopied ? "已复制" : "复制", systemImage: diagCopied ? "checkmark" : "doc.on.doc")
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(diagCopied ? Color.green : Color.blue)
                                 .cornerRadius(12)
                         }
                         .buttonStyle(.plain)

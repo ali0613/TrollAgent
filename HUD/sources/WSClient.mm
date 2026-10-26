@@ -176,7 +176,10 @@
         const uint8_t *b = (const uint8_t *)_inBuf.bytes;
         uint8_t b0 = b[0], b1 = b[1];
         uint8_t finRsv = b0;
-        uint8_t opcode = b1 & 0x0F;
+        // v7.1.88：opcode 在字节0 低4位（FIN/RSV3/OPCODE4）——旧代码取 b1&0x0F 是长度字节，
+        // 导致所有接收帧 opcode 全错（binary 帧 0x82 被解析成 0xE=14 → 丢弃，text 帧 0x81 成 0xE
+        // → turn.start/end 收不到）→ audioBytes=0 frames=0 的根因。
+        uint8_t opcode = b0 & 0x0F;
         BOOL hasMask = (b1 & 0x80) != 0;
         uint64_t len = b1 & 0x7F;
         // v7.1.87：帧级诊断日志（定位音频帧解析/剥离失败）
