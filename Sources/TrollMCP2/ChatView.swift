@@ -1622,6 +1622,9 @@ struct MessageBubble: View {
     // 容错流式打字机未闭合反引号(不配对则视为普通文本)。仅 assistant 生效, user 保持纯文本。
     // v4.4.12：正文 markdown 加粗(**xx**)→粗体(semibold)。代码段优先(橙色)，代码段外再匹配粗体。
     /// v4.4.21：消息文本视图——流式/打字机/用户消息用轻量 Text（避免 UITextView 高频刷新闪跳）；assistant 完成消息用 SelectableText(UITextView) 长按选字/划词/复制
+    /// v7.1.109-minis：assistant 完成消息改 Markdown 块渲染（表格/代码块/文本，对齐 OpenMinis
+    /// SelectableMarkdownView）——表格 LazyVGrid 栅格、代码块黑底等宽命令行样式、文本沿用正则着色。
+    /// 选择能力用 .textSelection(.enabled) 保留（v4.4.13 已验证 Text 拖选可用）。
     @ViewBuilder
     private func messageTextView(_ shown: String) -> some View {
         if isStreaming || forceType || isUser {
@@ -1629,8 +1632,7 @@ struct MessageBubble: View {
                 .font(.body)
                 .textSelection(.enabled)
         } else {
-            // v4.5.0：完成消息用原生 NSAttributedString 富文本（加粗/橙色/暗黑模式都正确渲染），避免 SwiftUI AttributedString 桥接丢失样式
-            SelectableText(attributed: attributedBody(shown), textColor: .label)
+            MarkdownBlocksView(text: shown, coloredBody: { self.coloredBody($0) })
         }
     }
 
