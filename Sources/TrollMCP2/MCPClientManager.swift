@@ -182,7 +182,139 @@ final class MCPClientManager: ObservableObject {
             return try self.callTool(server: server, tool: tool, args: args)
         })
         ToolRegistry.shared.setEnabled(name: "user.mcp_call", enabled: true)
-        print("[TA] ✅ MCP entry tools registered: user.mcp_list / user.mcp_call")
+
+        // 入口 3（v7.1.86）：探测能力——AI 发现本机/局域网 MCP 服务器，提示用户批准
+        let probeDef = ToolDefinition(
+            name: "user.mcp_probe",
+            summary: "Scan localhost (or given host) for discoverable MCP servers (REA etc) via initialize handshake on common ports. Use this to discover new AI capabilities, then ask the user for approval before adding via user.mcp_add.",
+            parameters: ["host": "host to scan (optional, default 127.0.0.1; use LAN IP for a computer running REA)"],
+            returns: ["content": "list of discovered MCP servers (name + url)"],
+            verified: true, category: "mcp",
+            uiSummary: "探测本机/局域网可用的 MCP 能力",
+            minIOSMajor: nil, maxIOSMajor: nil,
+            requiresJailbreak: false, requiresTrollStore: false
+        )
+        ToolRegistry.shared.register(ExternalMCPTool(definition: probeDef) { [weak self] params in
+            guard let self else { return [:] }
+            return self.probeServers(host: params["host"] as? String)
+        })
+        ToolRegistry.shared.setEnabled(name: "user.mcp_probe", enabled: true)
+
+        // 入口 4（v7.1.86）：添加探测到的服务器——只能在用户明确同意后调用，且只能加 probe 结果里的
+        let addDef = ToolDefinition(
+            name: "user.mcp_add",
+            summary: "Add an MCP server that was discovered by user.mcp_probe. ONLY call after the user explicitly approves adding it. Rejects URLs not in the latest probe results (prevents adding unknown servers).",
+            parameters: ["url": "server url from user.mcp_probe results (required)"],
+            returns: ["content": "add/enable result with tool count"],
+            verified: true, category: "mcp",
+            uiSummary: "添加已探测并获用户同意的 MCP 能力",
+            minIOSMajor: nil, maxIOSMajor: nil,
+            requiresJailbreak: false, requiresTrollStore: false
+        )
+        ToolRegistry.shared.register(ExternalMCPTool(definition: addDef) { [weak self] params in
+            guard let self else { return [:] }
+            guard let url = params["url"] as? String, !url.isEmpty else {
+                throw MCPError.invalidParams("url required")
+            }
+            return self.addServerFromProbe(url: url)
+        })
+        ToolRegistry.shared.setEnabled(name: "user.mcp_add", enabled: true)
+        print("[TA] ✅ MCP tools registered: user.mcp_list / user.mcp_call / user.mcp_probe / user.mcp_add")
+    }
+
+    // MARK: - v7.1.86：能力探测 + 一键批准（AI 发现 → 用户对话批准 → 添加）
+
+    /// 候选 MCP 端口（常见本地服务默认端口）
+    private static let probePorts = [3000, 4000, 5000, 5173, 7000, 8000, 8080, 8765, 8931, 9000]
+    /// 最近一次探测发现（user.mcp_add 只能添加这里面的，防 AI 乱加未知地址）
+    private var lastProbe: [[String: String]] = []
+
+    /// 对单个候选 URL 做 initialize 握手（2s 快速超时），成功返回 serverInfo.name
+    private func probeHandshake(url: String) -> String? {
+        guard let u = URL(string: url) else { return nil }
+        var req = URLRequest(url: u)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 2
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+        req.setValue("2025-06-18", forHTTPHeaderField: "MCP-Protocol-Version")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "jsonrpc": "2.0", "method": "initialize", "id": 1,
+            "params": ["protocolVersion": "2025-06-18",
+                       "capabilities": ["tools": [:] as [String: Any]],
+                       "clientInfo": ["name": "TrollAgent", "version": "7.1.86"]]
+        ])
+        let sem = DispatchSemaphore(value: 0)
+        var serverName: String?
+        URLSession.shared.dataTask(with: req) { data, resp, err in
+            defer { sem.signal() }
+            guard err == nil, let data,
+                  let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let result = json["result"] as? [String: Any],
+                  let info = result["serverInfo"] as? [String: Any],
+                  let name = info["name"] as? String else { return }
+            serverName = name
+        }.resume()
+        _ = sem.wait(timeout: .now() + 3)
+        return serverName
+    }
+
+    /// user.mcp_probe：并发扫描候选端口，返回发现的 MCP 服务器（AI 据此提示用户批准）
+    func probeServers(host: String?) -> [String: Any] {
+        let h = (host ?? "127.0.0.1").trimmingCharacters(in: .whitespacesAndNewlines)
+        var found: [[String: String]] = []
+        let lock = NSLock()
+        let group = DispatchGroup()
+        for port in Self.probePorts {
+            let url = "http://\(h):\(port)"
+            group.enter()
+            DispatchQueue.global().async {
+                defer { group.leave() }
+                if let name = self.probeHandshake(url: url) {
+                    lock.lock(); found.append(["name": name, "url": url]); lock.unlock()
+                }
+            }
+        }
+        _ = group.wait(timeout: .now() + 10)
+        found.sort { ($0["url"] ?? "") < ($1["url"] ?? "") }
+        lastProbe = found
+        if found.isEmpty {
+            return ["content": "未发现 MCP 服务器。可传 host 参数扫描局域网（如 host=192.168.1.100，电脑上跑 REA 时用）。"]
+        }
+        var lines = ["发现 \(found.count) 个 MCP 服务器："]
+        for f in found {
+            lines.append("- \(f["name"] ?? "unknown") @ \(f["url"] ?? "")")
+        }
+        lines.append("")
+        lines.append("如需启用：先询问用户是否添加，用户明确同意后再调 user.mcp_add 传对应 url。")
+        return ["content": lines.joined(separator: "\n")]
+    }
+
+    /// user.mcp_add：添加探测发现的服务器（防 AI 乱加未知地址——只能加 lastProbe 里的）
+    func addServerFromProbe(url: String) -> [String: Any] {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let match = lastProbe.first(where: { $0["url"] == trimmed }) else {
+            return ["content": "拒绝：\(trimmed) 不在最近探测结果中。先调 user.mcp_probe 探测，或手动在 设置→MCP Servers 添加。"]
+        }
+        let name = match["name"] ?? "mcp"
+        // 已存在同名 → 直接启用（幂等）
+        if let idx = servers.firstIndex(where: { $0.name == name }) {
+            servers[idx].enabled = true
+            save()
+            var c = servers[idx]
+            _ = refreshServer(&c)
+            servers[idx] = c
+            return ["content": "已启用现有服务器 \(name)（\(c.toolCount) 工具）。"]
+        }
+        var cfg = MCPServerConfig(name: name, url: trimmed)
+        let ok = refreshServer(&cfg)
+        if ok {
+            servers.append(cfg)
+            save()
+            return ["content": "已添加并启用 \(name)（\(cfg.toolCount) 工具）。现在可用 user.mcp_list 查看、user.mcp_call 调用。"]
+        }
+        return ["content": "添加失败：\(lastError ?? "未知错误")"]
     }
 
     /// user.mcp_list handler：从缓存返回工具清单（格式化文本，AI 易读）
