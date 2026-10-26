@@ -3371,11 +3371,14 @@ static UIImage *softParticleImage(CGFloat size) {
     [self _hudDiagLog:@"speakTTS: voice=%@ gec=%@ ws=resumed(deflate)", voice, gec];
 
     NSString *escaped = [self _xmlEscape:clean];
-    NSString *ssml = [NSString stringWithFormat:@"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='%@'><prosody pitch='%+dhz' rate='%+d%%' volume='+0%%'>%@</prosody></voice></speak>", fullVoice, pitchHz, ratePct, escaped];
+    // v7.1.85：pitch 单位大写 Hz（主 App 成功版 +15Hz；HUD 小写 +15hz 微软 SSML 解析可能拒合成）
+    NSString *ssml = [NSString stringWithFormat:@"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='%@'><prosody pitch='%+dHz' rate='%+d%%' volume='+0%%'>%@</prosody></voice></speak>", fullVoice, pitchHz, ratePct, escaped];
     // v7.2.6：先 speech.config（设 outputFormat），再 SSML 直发（Path:ssml，X-Timestamp 带 Z）
     NSString *jsDate = hud_v2::jsDateString();
     NSString *configPayload = [NSString stringWithFormat:@"X-Timestamp:%@\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{\"context\":{\"synthesis\":{\"audio\":{\"metadataoptions\":{\"sentenceBoundaryEnabled\":\"true\",\"wordBoundaryEnabled\":\"false\"},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}\r\n", jsDate];
-    NSString *ssmlPayload = [NSString stringWithFormat:@"X-RequestId:%@\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:%@Z\r\nPath:ssml\r\n\r\n%@", [[[NSUUID UUID] UUIDString] lowercaseString], jsDate, ssml];
+    // v7.1.85：X-RequestId 去横线→32 位 hex（主 App 成功版 UUID 去横线；带横线 36 字符服务端可能不认）
+    NSString *reqId = [[[[NSUUID UUID] UUIDString] lowercaseString] stringByReplacingOccurrencesOfString:@"-" withString:@""];
+    NSString *ssmlPayload = [NSString stringWithFormat:@"X-RequestId:%@\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:%@Z\r\nPath:ssml\r\n\r\n%@", reqId, jsDate, ssml];
 
     NSMutableData *audio = [NSMutableData data];
     __weak typeof(self) wself = self;
