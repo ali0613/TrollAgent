@@ -2,50 +2,10 @@
 import UIKit
 
 // v2.9.89：关于作者（作者卡片 / 开源致谢 / 安全 / 注意 / 免责 / 赞助 / 反馈）
-// v7.1.46：临时 HUD 语音诊断日志面板（读 /var/mobile/Documents/tts_debug.log，App 有 no-sandbox 权限可读；
-// 不用再让 AI 敲 cat——HUD 长按语音测一次，打开关于页即可看全链路日志）
+// v7.1.93：HUD 语音诊断已移除——不再 onAppear 实时读日志（用户要求：去掉影响性能的实时读取；
+// 日志仍由 HUD 写 /var/mobile/Documents/tts_debug.log 作调试保险，需要时再读）
 struct AboutAuthorView: View {
     @State private var copied = false
-    @State private var diagCopied = false
-    @State private var diagLog: String = ""
-    @State private var diagLoaded = false
-    @State private var diagError: String? = nil
-
-    private func reloadDiag() {
-        // v7.1.49：日志在 /var/mobile/Documents/tts_debug.log（App Group 容器在 no-sandbox 进程不可用）
-        // v7.1.50：后台线程读 + 只取末尾 24KB——主线程同步读大文件/渲染大文本会卡死 UI（7.1.49 实测假死黑屏）
-        // v7.1.52 修正：seekToEnd 后指针停在文件尾，小文件(<24KB)不 seek 回 0 → readDataToEndOfFile 读 0 字节
-        // → 日志永远显示"为空"（日志其实一直在写）。修：len<=max 时 seek(0) 再读全文件。
-        DispatchQueue.global(qos: .userInitiated).async {
-            let path = "/var/mobile/Documents/tts_debug.log"
-            var text = ""
-            if let h = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) {
-                let max = 24 * 1024
-                if let end = try? h.seekToEnd() {
-                    let len = Int(end)
-                    if len > max {
-                        try? h.seek(toOffset: UInt64(len - max))   // 大文件：只读末尾 24KB
-                    } else {
-                        try? h.seek(toOffset: 0)                    // 小文件：回到开头读全量
-                    }
-                } else {
-                    try? h.seek(toOffset: 0)
-                }
-                text = String(data: h.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                try? h.close()
-            }
-            DispatchQueue.main.async {
-                if !text.isEmpty {
-                    diagLog = text
-                    diagError = nil
-                } else {
-                    diagLog = ""
-                    diagError = "日志不存在或为空（HUD 长按语音测一次后这里才会有内容）"
-                }
-                diagLoaded = true
-            }
-        }
-    }
 
     private func bundleImage(_ name: String, _ ext: String) -> UIImage? {
         guard let p = Bundle.main.path(forResource: name, ofType: ext) else { return nil }
@@ -206,7 +166,6 @@ struct AboutAuthorView: View {
         }
         .navigationTitle(L10n.t("about_title"))
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear(perform: reloadDiag)
     }
 
     // MARK: - 数据
