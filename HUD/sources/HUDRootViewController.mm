@@ -2967,6 +2967,9 @@ static UIImage *softParticleImage(CGFloat size) {
     _speakingMode = NO;
     [self _hideMicPulse];
     [self _stopListeningAndSend];
+    // v7.1.89：说话模式打断趴墙/攀爬状态——否则 _resetToIdleIfNeeded 因
+    // _onSideWall/_onBottomWall/_isClimbing 守卫 return → 坐姿残留卡在说话动作（用户实测）
+    _onSideWall = NO; _onBottomWall = NO; _isClimbing = NO;
     [self _resetToIdleIfNeeded];
     // v7.1.46：回站立 → 立即恢复粒子（不必等 60s 定时）
     [self _updateAmbient];
@@ -2978,6 +2981,8 @@ static UIImage *softParticleImage(CGFloat size) {
     _speakingMode = NO;
     [self _hideMicPulse];
     [self _abortListening];
+    // v7.1.89：同 _exitSpeakMode——清趴墙/攀爬守卫强制回待机
+    _onSideWall = NO; _onBottomWall = NO; _isClimbing = NO;
     [self _resetToIdleIfNeeded];
     // v7.1.46：回站立 → 立即恢复粒子
     [self _updateAmbient];
@@ -3296,7 +3301,12 @@ static UIImage *softParticleImage(CGFloat size) {
             }
             // v7.1.44：不再静默——本地语音提示一句（用户至少知道失败了，日志细节可让 AI 读）
             dispatch_async(dispatch_get_main_queue(), ^{
-                [sself _speakLocalHint:@"刚才那句话没收到回复，请再试一次"];
+                // v7.1.89：401 + 无 API Key → 明确提示配置（用户要求：缺 key 应该回复语音提示）
+                if (status == 401 && apiKey.length == 0) {
+                    [sself _speakLocalHint:@"请先在主 App 配置 API Key"];
+                } else {
+                    [sself _speakLocalHint:@"刚才那句话没收到回复，请再试一次"];
+                }
             });
             return;
         }
@@ -3471,12 +3481,26 @@ static UIImage *softParticleImage(CGFloat size) {
     AVAudioPlayer *p = [[AVAudioPlayer alloc] initWithData:audio error:&err];
     if (p) {
         _ttsPlayer = p;   // v7.2.5：强持有到播完/下一次，否则 ARC 释放 → 无声
+        p.delegate = self;   // v7.1.89：播完回调确保回待机（双保险）
         BOOL ok = [p play];
         [self _hudDiagLog:@"playAudio: bytes=%lu player=%@ play=%@ err=%@", (unsigned long)audio.length, p ? @"ok" : @"nil", ok ? @"started" : @"FAILED", err ? err.localizedDescription : @"nil"];
     } else {
         [self _hudDiagLog:@"playAudio FAIL: init err=%@", err ? err.localizedDescription : @"nil"];
         // v7.1.44：播放器创建失败 → 提示（原静默）
         [self _speakLocalHint:@"播放失败，请重试"];
+    }
+}
+
+/// v7.1.89：TTS 播完确保回待机（双保险——防说话期间被其他状态切走导致卡在说话动作）
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
+    [self _hudDiagLog:@"playAudio finished flag=%d", flag];
+    _ttsPlayer = nil;
+    if (!_speakingMode && !_isDragging && !_falling) {
+        if (_idleFrames.firstObject && _girlView.image != _idleFrames.firstObject) {
+            _girlView.image = _idleFrames.firstObject;
+            [self _setFrameForImage:_idleFrames.firstObject];
+            [self _startBreathing];
+        }
     }
 }
 

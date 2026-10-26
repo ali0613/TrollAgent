@@ -8,8 +8,9 @@
 //
 
 #import <UIKit/UIKit.h>
+#import <AVFoundation/AVFoundation.h>
 
-@interface HUDRootViewController : UIViewController
+@interface HUDRootViewController : UIViewController <AVAudioPlayerDelegate>
 
 /// 是否穿透触摸（悬浮窗内容之外区域是否透传给下层）
 + (BOOL)passthroughMode;

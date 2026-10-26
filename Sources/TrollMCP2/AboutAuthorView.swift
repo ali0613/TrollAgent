@@ -175,60 +175,8 @@ struct AboutAuthorView: View {
                 .frame(maxWidth: .infinity)
             }
 
-            // 临时：HUD 语音诊断日志（v7.1.46——定位长按语音无回复，测一次长按说话后刷新查看）
-            CardSectionHeader(icon: "waveform.badge.magnifyingglass", title: "HUD 语音诊断（临时）", color: .orange)
-            CardBox {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("日志：/var/mobile/Documents（临时）")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Button(action: reloadDiag) {
-                            Label("刷新", systemImage: "arrow.clockwise")
-                                .font(.caption.weight(.semibold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.orange)
-                                .cornerRadius(12)
-                        }
-                        .buttonStyle(.plain)
-                        // v7.1.88：复制日志（用户反馈日志长不能复制——调试不便）
-                        Button(action: {
-                            UIPasteboard.general.string = diagLog
-                            diagCopied = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { diagCopied = false }
-                        }) {
-                            Label(diagCopied ? "已复制" : "复制", systemImage: diagCopied ? "checkmark" : "doc.on.doc")
-                                .font(.caption.weight(.semibold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(diagCopied ? Color.green : Color.blue)
-                                .cornerRadius(12)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    if !diagLoaded {
-                        Text("打开页面自动读取；若为空说明还没测过 HUD 语音")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    } else if let err = diagError {
-                        Text(err)
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
-                    } else {
-                        ScrollView {
-                            Text(diagLog)
-                                .font(.system(.caption2, design: .monospaced))
-                                .foregroundColor(.primary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(maxHeight: 240)
-                    }
-                }
-            }
+            // v7.1.89：HUD 语音诊断面板已移除（语音已可用，用户要求去掉；日志仍落盘
+            // /var/mobile/Documents/tts_debug.log 供需要时读取）
 
             // Bug 与功能反馈
             CardSectionHeader(icon: "envelope.fill", title: L10n.t("about_feedback"), color: .blue)
