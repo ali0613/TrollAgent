@@ -424,6 +424,13 @@ final class UpdateManager: ObservableObject {
     /// TrollStore 2 的 trollstore://install/?url= 支持 file:// 本地包，TrollStore 自己完成
     /// 杀进程→安装→注册→失败回滚，全程它的 UI，不会闪退/半覆盖。
     func installIPA(at url: URL) {
+        // v7.1.96：强制主线程——downloadTask 完成回调在后台线程，后台线程
+        // canOpenURL/open 静默失败 → 更新完不跳 TrollStore（用户实测：
+        // '检查更新没跳转到巨魔安装，只有分享菜单的储存按钮有效'）
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { self.installIPA(at: url) }
+            return
+        }
         // 1) URL scheme 优先：本地包 file:// 交给 TrollStore 安装
         //    (LSApplicationQueriesSchemes 已声明 trollstore + apple-magnifier → canOpenURL 才有效）
         let scheme = "trollstore://install/?url="
