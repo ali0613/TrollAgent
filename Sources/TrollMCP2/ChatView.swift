@@ -1367,11 +1367,10 @@ struct ChatModelPickerSheet: View {
                     }
                 }
                 Section {
-                    Button(action: {
-                        // v2.9.84：打开设置并直接跳到「模型 API」页
-                        AppUIState.shared.settingsJumpToModels = true
-                        AppUIState.shared.settingsPresented = true
-                    }) {
+                    // v7.1.97：弹窗内直接 push 模型 API 页（原"开设置再跳"链路：
+                    // 半屏 sheet 挂着 → 根 fullScreenCover 排队延迟呈现 + 0.25s 跳转延迟
+                    // ——用户实测'点了半天才跳过去'。push 零切换零延迟，返回回弹窗）
+                    NavigationLink(destination: ModelsView()) {
                         Label(L10n.t("i18n_1070"), systemImage: "gearshape.fill")
                             .font(.footnote)
                     }
