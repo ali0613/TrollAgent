@@ -592,7 +592,10 @@ struct ChatView: View {
                 if !loading {
                     WorkflowManager.shared.finishRun(success: true)
                 }
+                // v7.1.109-peers：请求完成 → 刷新上下文环形指示器（records 读文件，仅此刻读一次）
+                if !loading { refreshRingTok() }
             }
+            .onAppear { refreshRingTok() }
             // v2.9.235：键盘高度变化→自动滚到底（高度本身由外层 VStack 监听，空会话也能避让键盘）
             .onChange(of: keyboardHeight) { _ in
                 if keyboardHeight > 0 {
@@ -795,11 +798,16 @@ struct ChatView: View {
     }
 
     // v7.1.109-peers：上下文环形指示器（Cursor 式）——最近请求真实/估算 token 占 200k 上下文比例
-    private var contextRing: some View {
+    // 数据缓存于 @State（audit：records 每次读全文件，不能在 body 渲染里高频读）
+    @State private var ringTok = 0
+    private func refreshRingTok() {
         let rec = UsageRecorder.shared.records.last
         let total = rec?["totalTokens"] as? Int ?? 0
         let est = rec?["estInputTokens"] as? Int ?? 0
-        let tok = total > 0 ? total : est
+        ringTok = total > 0 ? total : est
+    }
+    private var contextRing: some View {
+        let tok = ringTok
         let ratio: CGFloat = tok > 0 ? min(1.0, CGFloat(tok) / 200000) : 0
         ZStack {
             Circle()

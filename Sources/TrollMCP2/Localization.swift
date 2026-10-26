@@ -966,6 +966,7 @@ enum L10n {
             tbl["i18n_1252"] = ["zh": "专家", "en": "Expert"]
             tbl["i18n_1253"] = ["zh": "深度思考", "en": "Deep"]
             tbl["i18n_1254"] = ["zh": "最近请求 token 占用", "en": "Recent request token usage"]
+            tbl["i18n_1255"] = ["zh": "复制", "en": "Copy"]
             tbl["i18n_973"] = ["zh": "用户", "en": "User"]
             tbl["i18n_979"] = ["zh": "系统", "en": "System"]
             tbl["i18n_672"] = ["zh": "缓存 · 钥匙串 · 广告符 · 数据容器 · AI 清理", "en": "Caches · keychain · IDFA · containers · AI cleanup"]

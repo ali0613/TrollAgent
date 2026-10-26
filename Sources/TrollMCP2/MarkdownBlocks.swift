@@ -198,10 +198,13 @@ struct MarkdownBlocksView: View {
                 case .text(let t):
                     // v7.1.109-minis：文本块下方附加链接卡（URL / minis:// 标记 → 一键开内置浏览器）
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(coloredBody(t))
+                        // v7.1.109-peers：正文剥离来源行（[1]: URL），避免原文里露出一长串 URL；
+                        // 来源 URL 也不重复渲染链接卡（Sources 卡统一呈现）
+                        let cleanBody = CitationExtractor.stripSourceLines(t)
+                        Text(coloredBody(cleanBody))
                             .font(.body)
                             .textSelection(.enabled)
-                        let links = LinkExtractor.extractLinks(from: t)
+                        let links = LinkExtractor.extractLinks(from: cleanBody)
                         if !links.isEmpty {
                             ForEach(links, id: \.self) { LinkCardView(url: $0) }
                         }
@@ -303,6 +306,14 @@ enum CitationExtractor {
         }
         return r
     }
+
+    /// v7.1.109-peers：从正文剥离来源行（[1]: URL），避免原文露出一长串 URL
+    static func stripSourceLines(_ text: String) -> String {
+        let pattern = #"(?:^|\n)\s*\[\d+\]:\s*https?://[^\s"'\(\)\]\}，。；：,;]+"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let range = NSRange(text.startIndex..., in: text)
+        return regex.stringByReplacingMatches(in: text, range: range, withTemplate: "")
+    }
 }
 
 /// v7.1.109-peers：代码块操作条（Gemini/Kimi 式）——左上语言标签 + 右上复制按钮
@@ -327,7 +338,7 @@ struct MarkdownCodeBlockView: View {
                     Button {
                         UIPasteboard.general.string = code
                     } label: {
-                        Label("Copy", systemImage: "doc.on.doc")
+                        Label(L10n.t("i18n_1255"), systemImage: "doc.on.doc")
                             .font(.system(size: 10))
                             .foregroundColor(.white.opacity(0.8))
                     }

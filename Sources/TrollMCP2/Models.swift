@@ -1144,12 +1144,15 @@ final class ConversationStore: ObservableObject {
         // 动态状态块：最新信息放最后，不影响稳定前缀缓存
         history.insert(ChatMessage(role: "system", content: Self.dynamicStatePrompt()), at: 0)
         // v7.1.109-peers：输出模式注入（豆包式胶囊条）——0=标准(不注入) 1=快速 2=专家 3=深度思考
-        if outputMode == 1 {
-            history.insert(ChatMessage(role: "system", content: "[Output mode: FAST] Answer concisely — short direct replies, minimal preamble, no narration of steps unless asked."), at: 0)
-        } else if outputMode == 2 {
-            history.insert(ChatMessage(role: "system", content: "[Output mode: EXPERT] Give a thorough technical answer: precise terminology, exact commands/paths, edge cases, and a recommendation. Be complete but structured (use tables/code blocks where they help)."), at: 0)
-        } else if outputMode == 3 {
-            history.insert(ChatMessage(role: "system", content: "[Output mode: DEEP THINK] Reason carefully before acting: explore the problem space, check assumptions and edge cases, then give a well-reasoned conclusion with tradeoffs."), at: 0)
+        // audit：persona 语音角色模式不注入（角色人设即全部指令，避免风格段干扰人设）
+        if (personaPrompt ?? "").isEmpty {
+            if outputMode == 1 {
+                history.insert(ChatMessage(role: "system", content: "[Output mode: FAST] Answer concisely — short direct replies, minimal preamble, no narration of steps unless asked."), at: 0)
+            } else if outputMode == 2 {
+                history.insert(ChatMessage(role: "system", content: "[Output mode: EXPERT] Give a thorough technical answer: precise terminology, exact commands/paths, edge cases, and a recommendation. Be complete but structured (use tables/code blocks where they help)."), at: 0)
+            } else if outputMode == 3 {
+                history.insert(ChatMessage(role: "system", content: "[Output mode: DEEP THINK] Reason carefully before acting: explore the problem space, check assumptions and edge cases, then give a well-reasoned conclusion with tradeoffs."), at: 0)
+            }
         }
         // Tool-param prevalidation correction injection: missing required params blocked last round, append likewise.
         if let pcorr = self.pendingParamCorrection, !pcorr.isEmpty {
