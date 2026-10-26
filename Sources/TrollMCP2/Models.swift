@@ -18,6 +18,10 @@ struct ModelConfig: Codable, Identifiable, Hashable {
     var isDefault: Bool = false
     var temperature: Double = 0.2   // v6.1.5-14bj：执行任务型AI标准(参考Claude Agent SDK默认0/代码工具类0.1-0.3)，原0.7偏高输出飘
     var maxTokens: Int = 16384      // v6.1.5-14bj：Agent场景需大输出(BytePlus官方推荐≥128000, 手机端取16384平衡; 原2048会截断长任务)
+    /// v7.1.107：备用模型组（fallback 链）——主模型请求失败（网络/超时/鉴权/熔断/5xx，
+    /// 且未产出任何内容）时，OpenAIClient 自动按序切换到备用模型重发同一请求
+    /// （对齐 OpenMinis ModelGroupRouter fallback 思想，自实现不搬码）。空数组=不启用。
+    var fallbackIDs: [UUID] = []
     /// v2.9.11：输入上下文预算 (token 估算）。发送前按预算自动裁剪最旧消息，
     /// 避免长会话请求体无限增长导致"一直请求中"。
     var contextTokens: Int = 16000
@@ -50,7 +54,8 @@ struct ModelConfig: Codable, Identifiable, Hashable {
     init(id: UUID = UUID(), name: String, provider: String, apiProtocol: String = "OpenAI Chat Completions",
          baseURL: String, apiKey: String, model: String, authMethod: String = "Bearer",
          isDefault: Bool = false, temperature: Double = 0.2, maxTokens: Int = 16384, compatLevel: Int = 0,
-         contextTokens: Int = 16000, group: String = "default", paramAliases: [String: String] = [:]) {
+         contextTokens: Int = 16000, group: String = "default", paramAliases: [String: String] = [:],
+         fallbackIDs: [UUID] = []) {
         self.id = id
         self.name = name
         self.provider = provider
@@ -66,6 +71,7 @@ struct ModelConfig: Codable, Identifiable, Hashable {
         self.contextTokens = contextTokens
         self.group = group
         self.paramAliases = paramAliases
+        self.fallbackIDs = fallbackIDs
     }
 
     init(from decoder: Decoder) throws {
@@ -88,6 +94,7 @@ struct ModelConfig: Codable, Identifiable, Hashable {
         compatLevel = (try? c.decode(Int.self, forKey: .compatLevel)) ?? 0
         group = (try? c.decode(String.self, forKey: .group)) ?? "default"
         paramAliases = (try? c.decode([String: String].self, forKey: .paramAliases)) ?? [:]
+        fallbackIDs = (try? c.decode([UUID].self, forKey: .fallbackIDs)) ?? []   // v7.1.107：旧配置缺失时默认无备用
     }
 }
 
@@ -236,6 +243,25 @@ final class ModelStore: ObservableObject {
 
     func markUsed(_ id: String) {
         lastUsedConfigId = id
+    }
+
+    /// v7.1.107：模型组 fallback 链——主模型 + fallbackIDs 按序展开。
+    /// credential gate（对齐 OpenMinis）：过滤掉 apiKey 为空（未配凭据）的项，避免
+    /// 空凭据配置抢跑导致 401 空转；去重防循环；链长上限 8 防极端配置。
+    func fallbackChain(from config: ModelConfig) -> [ModelConfig] {
+        var ids = [config.id]
+        ids.append(contentsOf: config.fallbackIDs)
+        var seen: Set<UUID> = []
+        var chain: [ModelConfig] = []
+        for id in ids {
+            guard seen.count < 8 else { break }
+            guard !seen.contains(id) else { continue }
+            seen.insert(id)
+            guard let c = configs.first(where: { $0.id == id }) else { continue }
+            if c.apiKey.trimmingCharacters(in: .whitespaces).isEmpty { continue }
+            chain.append(c)
+        }
+        return chain
     }
 
     func load() {

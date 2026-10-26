@@ -187,11 +187,96 @@ final class OpenAIClient {
                     // v7.1.41：回调上层把压缩持久化进会话历史（对齐 Claude Code /compact 的破坏性替换）
                     onCompacted?(s)
                 }
-                self.sendInner(messages: msgs, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: completion)
+                self.sendWithFallback(messages: msgs, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: completion)
             }
             return
         }
-        sendInner(messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: completion)
+        sendWithFallback(messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: completion)
+    }
+
+    /// v7.1.107：模型组 fallback 入口——主模型失败（网络/超时/鉴权/熔断/HTTP 4xx5xx，
+    /// 且未产出任何内容）时自动按序切换到备用模型重发同一请求（对齐 OpenMinis
+    /// ModelGroupRouter fallback 思想，自实现）。链长度为 1（未配置备用）时完全等价旧行为。
+    private func sendWithFallback(messages: [ChatMessage], tools: [[String: Any]]? = nil,
+                                  onStatus: ((String) -> Void)? = nil, onDelta: ((String) -> Void)? = nil,
+                                  onThinking: ((String) -> Void)? = nil,
+                                  completion: @escaping (Result<ChatResult, Error>) -> Void) {
+        let chain = ModelStore.shared.fallbackChain(from: config)
+        guard chain.count > 1 else {
+            sendInner(messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: completion)
+            return
+        }
+        attemptSend(chain: chain, index: 0, messages: messages, tools: tools,
+                    onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: completion)
+    }
+
+    /// v7.1.107：fallback 链单层执行——当前模型失败且可切换时递归到下一层。
+    /// 安全闸：已产出内容（流式吐字）或用户取消的失败不切换（避免重复输出/打断用户）；
+    /// 工具调用在失败时尚未执行，重发无副作用风险。
+    private func attemptSend(chain: [ModelConfig], index: Int,
+                             messages: [ChatMessage], tools: [[String: Any]]? = nil,
+                             onStatus: ((String) -> Void)? = nil, onDelta: ((String) -> Void)? = nil,
+                             onThinking: ((String) -> Void)? = nil,
+                             completion: @escaping (Result<ChatResult, Error>) -> Void) {
+        guard index < chain.count else {
+            completion(.failure(NSError(domain: "OpenAIClient", code: -503,
+                userInfo: [NSLocalizedDescriptionKey: "Model fallback chain exhausted — all backup models failed too. Check model configs."])))
+            return
+        }
+        let cfg = chain[index]
+        let client = index == 0 ? self : OpenAIClient(cfg)
+        var producedOutput = false
+        let wrappedDelta: ((String) -> Void)?
+        if let onDelta = onDelta {
+            wrappedDelta = { text in
+                producedOutput = true
+                onDelta(text)
+            }
+        } else {
+            wrappedDelta = nil
+        }
+        client.sendInner(messages: messages, tools: tools, onStatus: onStatus, onDelta: wrappedDelta, onThinking: onThinking) { [weak self] result in
+            switch result {
+            case .success(let r):
+                completion(.success(r))
+            case .failure(let err):
+                let nsErr = err as NSError
+                let canFallback = !producedOutput
+                    && nsErr.code != -999
+                    && Self.isFallbackableError(nsErr)
+                    && index + 1 < chain.count
+                if canFallback {
+                    let next = chain[index + 1]
+                    NetworkLog.shared.log("\(cfg.name) failed (code \(nsErr.code), \(String(describing: nsErr.localizedDescription.prefix(80)))) → fallback to \(next.name)")
+                    onStatus?("⚠️ \(cfg.name) failed, switching to backup model \(next.name)…")
+                    self?.attemptSend(chain: chain, index: index + 1, messages: messages, tools: tools,
+                                      onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: completion)
+                } else {
+                    completion(.failure(err))
+                }
+            }
+        }
+    }
+
+    /// v7.1.107：该失败是否值得切换模型——取消/本地配置错/参数错(400/422)/流式本地错不切；
+    /// 网络、超时、熔断、鉴权(401/403)、限流(429)、模型不存在(404)、服务端错(5xx)切换。
+    private static func isFallbackableError(_ err: NSError) -> Bool {
+        if err.domain == NSURLErrorDomain {
+            return [NSURLErrorTimedOut, NSURLErrorNetworkConnectionLost,
+                    NSURLErrorCannotConnectToHost, NSURLErrorNotConnectedToInternet,
+                    NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed].contains(err.code)
+        }
+        guard err.domain == "OpenAIClient" else { return false }
+        switch err.code {
+        case -999, 0, 1, 2, -3040, -3041:
+            return false   // 取消 / 本地配置错 / 协议解析错 / 流式本地错
+        case -503, -1001:
+            return true    // 熔断 / 超时
+        default:
+            let http = err.code
+            if http == 400 || http == 422 { return false }   // 请求体/参数错，换模型无用
+            return http >= 400   // 401/403/404/429/5xx → 换模型试
+        }
     }
 
     /// v4.3.71：send 主流程（熔断/降级链/流式），与 compaction 前置分支分离。

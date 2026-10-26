@@ -457,6 +457,8 @@ struct ModelEditorView: View {
     @State private var group: String
     /// v3.5.13：参数名别名映射编辑（"标准键:供应商键"逗号分隔，如 max_tokens:max_completion_tokens）
     @State private var paramAliasesText: String
+    /// v7.1.107：备用模型组（失败自动切换）——主模型请求失败时按序切换，见 OpenAIClient fallback
+    @State private var fallbackIDs: [UUID]
 
     @State private var showKey = false
     @State private var showingQuickPicker = false
@@ -487,6 +489,7 @@ struct ModelEditorView: View {
         _contextTokens = State(initialValue: config?.contextTokens ?? 16000)
         _group = State(initialValue: config?.group ?? L10n.t("ui_144"))
         _paramAliasesText = State(initialValue: ModelEditorView.aliasesString(config?.paramAliases))
+        _fallbackIDs = State(initialValue: config?.fallbackIDs ?? [])
     }
 
     var body: some View {
@@ -505,6 +508,37 @@ struct ModelEditorView: View {
                     tokenRow
                     // v6.1.5-14bk：参数别名/分组 UI 移除（用户看不懂也不需要填）——
                     // 别名兼容由 OpenAIClient compatLevel 0-4 自动降级覆盖，分组默认"默认"即可
+                }
+
+                // v7.1.107：备用模型组——主模型请求失败（网络/超时/鉴权/熔断/5xx 且未产出内容）
+                // 自动按序切换重发。对齐 OpenMinis 组路由 fallback 思想。
+                Section(header: sectionHeader("备用模型（失败自动切换）")) {
+                    let others = ModelStore.shared.configs.filter { $0.id != (config?.id ?? UUID()) }
+                    if others.isEmpty {
+                        Text("先保存其他模型配置，再回来勾选备用模型")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    ForEach(others) { m in
+                        Toggle(isOn: Binding(
+                            get: { fallbackIDs.contains(m.id) },
+                            set: { on in
+                                if on {
+                                    if !fallbackIDs.contains(m.id) { fallbackIDs.append(m.id) }
+                                } else {
+                                    fallbackIDs.removeAll { $0 == m.id }
+                                }
+                            }
+                        )) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(m.name)
+                                    .font(.subheadline)
+                                Text(m.model)
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
                 }
 
                 // v6.1.5-14bi：参数(Temperature/Max Tokens/上下文预算)不再让用户填——
@@ -716,7 +750,8 @@ struct ModelEditorView: View {
             maxTokens: maxTokens,
             contextTokens: contextTokens,
             group: group,
-            paramAliases: ModelEditorView.parseAliases(paramAliasesText)
+            paramAliases: ModelEditorView.parseAliases(paramAliasesText),
+            fallbackIDs: fallbackIDs
         )
     }
 
