@@ -809,7 +809,7 @@ struct ChatView: View {
     private var contextRing: some View {
         let tok = ringTok
         let ratio: CGFloat = tok > 0 ? min(1.0, CGFloat(tok) / 200000) : 0
-        ZStack {
+        return ZStack {
             Circle()
                 .stroke(Color(.systemGray4), lineWidth: 2)
             Circle()

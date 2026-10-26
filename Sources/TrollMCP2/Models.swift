@@ -789,6 +789,8 @@ final class ConversationStore: ObservableObject {
     private var thinkBuffer: String = ""
     /// v7.1.109-peers：思考计时起点（首个 onThinking delta 时间），首个正文 delta 时结算 thinkingSeconds
     private var thinkingStartAt: Date? = nil
+    /// v7.1.109-peers：当前输出模式（0=标准 1=快速 2=专家 3=深度思考）——send 设置，runLoop 注入读取
+    var currentOutputMode: Int = 0
 
     // v2.9.87：网络恢复自动重试 ("切后台回来网络中断"补偿）——
     // 网络类错误且当前确认为断网时，等 AppLifecycleMonitor 广播 networkRestored 后自动重发一次。
@@ -954,6 +956,7 @@ final class ConversationStore: ObservableObject {
               outputMode: Int = 0) {
         // v7.2.3：personaPrompt 非空 = 语音角色对话模式——系统提示词替换为角色人设，且不带任何工具调用
         // v7.1.109-peers：outputMode 输出模式（豆包式胶囊条）0=标准 1=快速 2=专家 3=深度思考
+        self.currentOutputMode = outputMode
         // v2.9.97：记住最近使用的模型，顶栏/下次启动立即恢复
         ModelStore.shared.markUsed(config.id.uuidString)
         // v2.9.82：请求开始——首次要通知权限 + 开启后台任务延长
@@ -1146,11 +1149,11 @@ final class ConversationStore: ObservableObject {
         // v7.1.109-peers：输出模式注入（豆包式胶囊条）——0=标准(不注入) 1=快速 2=专家 3=深度思考
         // audit：persona 语音角色模式不注入（角色人设即全部指令，避免风格段干扰人设）
         if (personaPrompt ?? "").isEmpty {
-            if outputMode == 1 {
+            if self.currentOutputMode == 1 {
                 history.insert(ChatMessage(role: "system", content: "[Output mode: FAST] Answer concisely — short direct replies, minimal preamble, no narration of steps unless asked."), at: 0)
-            } else if outputMode == 2 {
+            } else if self.currentOutputMode == 2 {
                 history.insert(ChatMessage(role: "system", content: "[Output mode: EXPERT] Give a thorough technical answer: precise terminology, exact commands/paths, edge cases, and a recommendation. Be complete but structured (use tables/code blocks where they help)."), at: 0)
-            } else if outputMode == 3 {
+            } else if self.currentOutputMode == 3 {
                 history.insert(ChatMessage(role: "system", content: "[Output mode: DEEP THINK] Reason carefully before acting: explore the problem space, check assumptions and edge cases, then give a well-reasoned conclusion with tradeoffs."), at: 0)
             }
         }

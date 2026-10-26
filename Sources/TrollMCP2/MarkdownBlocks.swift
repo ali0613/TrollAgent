@@ -11,7 +11,13 @@ enum MarkdownBlocks {
         case text(String)
         case codeBlock(code: String, language: String?)
         case table(header: [String], rows: [[String]])
-        case tasks(items: [(done: Bool, text: String)])
+        case tasks(items: [TaskItem])
+    }
+
+    /// v7.1.109-peers：任务清单项（tuple 数组不自动合成 Equatable，需 struct）
+    struct TaskItem: Equatable {
+        var done: Bool
+        var text: String
     }
 
     static func parse(_ text: String) -> [Block] {
@@ -48,14 +54,14 @@ enum MarkdownBlocks {
             // 连续 "- [ ]" / "- [x]" 行识别为任务块
             if trimmed.hasPrefix("- [") || trimmed.hasPrefix("* [") {
                 flushText()
-                var items: [(done: Bool, text: String)] = []
+                var items: [TaskItem] = []
                 while i < lines.count {
                     let dl = lines[i].trimmingCharacters(in: .whitespaces)
                     if dl.hasPrefix("- [") || dl.hasPrefix("* [") {
                         let rest = String(dl.dropFirst(3))
                         let done = rest.hasPrefix("x]") || rest.hasPrefix("X]")
                         let body = rest.dropFirst(2).trimmingCharacters(in: .whitespaces)
-                        items.append((done, body))
+                        items.append(TaskItem(done: done, text: body))
                         i += 1
                     } else { break }
                 }
