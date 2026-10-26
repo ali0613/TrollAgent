@@ -63,12 +63,12 @@
 
 | You say | The AI does |
 |---|---|
-| "分析这个 App 怎么工作的" | `app diagnose` → injection-residue / encryption / signature checks → explicit report |
-| "这个插件安全吗" | `inject ipa_inspect` / `dylib_inspect` → arch / signature / entitlements / dependencies analysis |
-| "抓一下这个 App 的流量" | `network.capture` start → injected NetworkTweak → TLSHook-decrypted request list |
-| "这个 App 数据里有什么" | `db list` / `db query` → native sqlite3 read of the app data container |
-| "帮我把微信伪装成别的机型" | `device fake` → in-memory FakeDevice.dylib spoofing (zero residue) |
-| "卸载前备份一下" | `app duplicate` → silent duplicate via trollstorehelper |
+| "Analyze how this app works" | `app diagnose` → injection-residue / encryption / signature checks → explicit report |
+| "Is this plugin safe?" | `inject ipa_inspect` / `dylib_inspect` → arch / signature / entitlements / dependencies analysis |
+| "Capture this app's traffic" | `network.capture` start → injected NetworkTweak → TLSHook-decrypted request list |
+| "What's in this app's data?" | `db list` / `db query` → native sqlite3 read of the app data container |
+| "Spoof this app's device model" | `device fake` → in-memory FakeDevice.dylib spoofing (zero residue) |
+| "Back it up before uninstalling" | `app duplicate` → silent duplicate via trollstorehelper |
 
 > Model & API key: configured in Settings → Model. Multiple upstream providers supported. The HUD voice loop shares the same configuration via App Group.
 
