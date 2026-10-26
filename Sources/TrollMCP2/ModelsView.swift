@@ -1013,6 +1013,17 @@ struct UsageStatsView: View {
         let name = r["name"] as? String ?? "-"
         let model = r["model"] as? String ?? "-"
         let error = r["error"] as? String ?? ""
+        // v7.1.98：token 显示——优先真实 usage total_tokens，无则回退估算输入
+        let realTok = r["totalTokens"] as? Int ?? 0
+        let estTok = r["estInputTokens"] as? Int ?? 0
+        let tokText: String
+        if realTok > 0 {
+            tokText = "≈\(fmtK(realTok)) tok"
+        } else if estTok > 0 {
+            tokText = "≈\(fmtK(estTok)) tok(估)"
+        } else {
+            tokText = ""
+        }
         let d = Date(timeIntervalSince1970: ts)
         let f = DateFormatter()
         f.dateFormat = "MM-dd HH:mm:ss"
@@ -1023,6 +1034,9 @@ struct UsageStatsView: View {
                     .font(.system(size: 13))
                 Text(name).font(.subheadline).lineLimit(1)
                 Spacer()
+                if !tokText.isEmpty {
+                    Text(tokText).font(.caption2).foregroundColor(.purple)
+                }
                 Text("\(el)ms").font(.caption).foregroundColor(.secondary)
                 Text(f.string(from: d)).font(.caption2).foregroundColor(.secondary)
             }

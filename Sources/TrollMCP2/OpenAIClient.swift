@@ -72,6 +72,8 @@ final class OpenAIClient {
     /// v4.3.36：思考自动升档标志——低/中档请求成功但响应无任何思考痕迹时，自动以 high 重试一次。
     /// 破甲站等中转 gpt-5.5 实测 low/medium 不触发思考 (reasoning_tokens=0)，只有 high 出思考。
     private var didAutoEscalateReasoning = false
+    /// v7.1.98：本轮响应真实 usage（用量统计最近请求显示 token）——attempt 解析处捕获，end() 读取
+    private var lastUsage: [String: Any]?
     private var currentCompatLevel: Int;  // v6.0.30: 内存里的兼容级别，避免反复试探死循环
     /// v2.9.87：多级降级总预算——全链串行最坏 7 分钟+，用户感知"一直请求中"。
     /// v2.9.96：试探级 (L0-L4）超时已压到 25s，预算放宽到 220s 给 L5 流式留足时间。
@@ -211,6 +213,7 @@ final class OpenAIClient {
             return
         }
         UsageRecorder.shared.begin(messages: messages)
+        lastUsage = nil   // v7.1.98：本轮 usage 清零，attempt 捕获真实 usage
         // v2.9.0：级别 5 = Responses API + 工具调用 (Codex 走的端点，GPT-5.6 家族
         // 在 chat/completions 上无法用 function tools，但 /v1/responses 可以）
         // v2.9.299：VLM 错误图片剥离标志——遇到"模型不是视觉模型"时只剥离一次
@@ -252,7 +255,7 @@ final class OpenAIClient {
                 NetworkLog.shared.log("\(self.config.name) request done (\(el)ms)")
                 onStatus?(L10n.t("status_response_done", secs))
                 ModelStore.shared.breaker(for: self.config.id).recordSuccess(usedHalfOpenPermit: self.usedHalfOpenPermit)
-                UsageRecorder.shared.end(config: self.config, ok: true, elapsedMs: el)
+                UsageRecorder.shared.end(config: self.config, ok: true, elapsedMs: el, usage: self.lastUsage)
             case .failure(let e):
                 NetworkLog.shared.log("\(self.config.name) request failed (\(el)ms): \(e.localizedDescription)")
                 ModelStore.shared.breaker(for: self.config.id).recordFailure(usedHalfOpenPermit: self.usedHalfOpenPermit)
@@ -429,6 +432,8 @@ final class OpenAIClient {
                 let msgDict = firstChoice["message"] as? [String: Any]
                 let hasReasoningText = (msgDict?["reasoning_content"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
                 let ctd = (json["usage"] as? [String: Any])?["completion_tokens_details"] as? [String: Any]
+                // v7.1.98：捕获真实 usage（prompt/completion/total tokens）→ 用量统计最近请求显示
+                if let u = json["usage"] as? [String: Any] { self.lastUsage = u }
                 let reasoningTokens = ctd?["reasoning_tokens"] as? Int ?? 0
                 let lowMid = (self.currentReasoningLevel == 0 || self.currentReasoningLevel == 1)
                 if !hasReasoningText, reasoningTokens <= 0, lowMid, !self.didAutoEscalateReasoning {
@@ -1675,9 +1680,9 @@ final class UsageRecorder {
         lastInputEst = est
     }
 
-    func end(config: ModelConfig, ok: Bool, elapsedMs: Int, error: String = "") {
+    func end(config: ModelConfig, ok: Bool, elapsedMs: Int, error: String = "", usage: [String: Any]? = nil) {
         lock.lock(); defer { lock.unlock() }
-        let rec: [String: Any] = [
+        var rec: [String: Any] = [
             "ts": Date().timeIntervalSince1970,
             "name": config.name,
             "provider": config.provider,
@@ -1688,6 +1693,13 @@ final class UsageRecorder {
             "error": error,
             "estInputTokens": lastInputEst
         ]
+        // v7.1.98：真实 usage（API 返回的 prompt/completion/total tokens）——有则记录，
+        // 用量统计最近请求优先显示真实 token，无则回退估算输入
+        if let u = usage {
+            rec["promptTokens"] = u["prompt_tokens"] ?? 0
+            rec["completionTokens"] = u["completion_tokens"] ?? 0
+            rec["totalTokens"] = u["total_tokens"] ?? 0
+        }
         guard let d = try? JSONSerialization.data(withJSONObject: rec) else { return }
         if let fh = try? FileHandle(forWritingTo: fileURL) {
             fh.seekToEndOfFile()
