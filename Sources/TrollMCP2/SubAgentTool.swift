@@ -21,6 +21,9 @@ final class SubAgentTask: Identifiable {
     /// v7.1.107-P0: 完成但无交付内容（模型总结为空/被截断）——对齐 OpenMinis
     /// "finished callback whose body is empty carries no deliverable" 语义
     private(set) var noDeliverable: Bool = false
+    /// v7.1.108-fix: 状态锁——runner 后台线程写状态（markDone/Failed/Stopped/addRound），
+    /// 工具线程读（toDict/status）。无锁多线程读写是数据竞争（UB），全部可变状态读写统一走 stateLock。
+    private let stateLock = NSLock()
 
     enum Status: String { case running, done, failed, stopped }
 
@@ -39,6 +42,7 @@ final class SubAgentTask: Identifiable {
     }
 
     func markDone(result: String) {
+        stateLock.lock(); defer { stateLock.unlock() }
         status = .done
         // 防结果撑爆主线：截断到 4000 字符（子代理最终总结应简短，超长说明模型把工具输出写进了总结）
         self.result = result.count > 4000 ? String(result.prefix(4000)) + "\n... [result truncated]" : result
@@ -48,23 +52,33 @@ final class SubAgentTask: Identifiable {
     }
 
     func markFailed(_ err: String) {
+        stateLock.lock(); defer { stateLock.unlock() }
         status = .failed
         error = err
         elapsed = Date().timeIntervalSince(createdAt)
     }
 
     func markStopped() {
+        stateLock.lock(); defer { stateLock.unlock() }
         status = .stopped
         elapsed = Date().timeIntervalSince(createdAt)
     }
 
     func addRound(tools: [String]) {
+        stateLock.lock(); defer { stateLock.unlock() }
         rounds += 1
         toolTrace.append(contentsOf: tools)
     }
 
+    /// v7.1.108-fix: 线程安全的状态读取（runner 后台线程/stop 工具线程共用）
+    func isRunning() -> Bool {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return status == .running
+    }
+
     /// 工具返回值 JSON（subagent.status / 完成回传用）
     func toDict() -> [String: Any] {
+        stateLock.lock(); defer { stateLock.unlock() }
         var d: [String: Any] = [
             "task_id": id,
             "status": status.rawValue,
@@ -74,26 +88,22 @@ final class SubAgentTask: Identifiable {
         ]
         // v7.1.108: 进度可视化——模型/用户在工具流里直接看到"还剩几轮/还剩几秒/最近在干嘛"
         // （对齐 OpenMinis SubAgentRunDigest 的信息密度，但走工具流呈现，零 UI 改动）
+        // v7.1.108-fix: 修复逻辑矛盾——running 时 elapsed 字段从未更新（只在 markDone/Failed/Stopped
+        // 赋值），旧代码显示 elapsed_secs=0 / "0s elapsed" / time_left=满值。running 一律实时计算。
+        let liveElapsed = Date().timeIntervalSince(createdAt)
         if status == .running {
             d["rounds_left"] = max(0, maxRounds - rounds)
-            d["time_left_secs"] = max(0, Int(timeoutSecs - elapsed))
-            if let last = toolTrace.suffix(3).map({ "\($0)" }).joined(separator: ", ").nilIfEmpty {
-                d["recent_tools"] = last
-            }
-            d["progress_hint"] = "working... \(rounds)/\(maxRounds) rounds, \(Int(elapsed))s elapsed"
+            d["time_left_secs"] = max(0, Int(timeoutSecs - liveElapsed))
+            let recent = toolTrace.suffix(3).joined(separator: ", ")
+            if !recent.isEmpty { d["recent_tools"] = recent }
+            d["elapsed_secs"] = Int(liveElapsed)
+            d["progress_hint"] = "working... \(rounds)/\(maxRounds) rounds, \(Int(liveElapsed))s elapsed"
         }
         if !result.isEmpty { d["result"] = result }
         if !error.isEmpty { d["error"] = error }
         // v7.1.107-P0: 无交付标记——父模型拿到 done 但 result 空时，知道该去查看轨迹而非重跑
         if status == .done && noDeliverable { d["no_deliverable"] = true }
         return d
-    }
-}
-
-extension Optional where Wrapped == String {
-    var nilIfEmpty: String? {
-        guard let self, !self.isEmpty else { return nil }
-        return self
     }
 }
 
@@ -109,13 +119,15 @@ final class SubAgentManager {
     private var pendingSteers: [String: [String]] = [:]
     private let lock = NSLock()
 
-    /// 启动子代理。成功返回 task_id；已有任务在跑则返回失败（模型应轮询/停止旧任务）。
+    /// 启动子代理。成功返回 task_id；已有任务在跑则 throw（模型应轮询/停止旧任务）。
+    /// v7.1.108-fix: Result<String,String> 改为 throws——Swift 要求 Result.Failure: Error，
+    /// String 不满足协议，这是子代理系列构建失败的根因。
     func start(instruction: String, allowedTools: [String]?,
-               maxRounds: Int, timeout: TimeInterval) -> Result<String, String> {
+               maxRounds: Int, timeout: TimeInterval) throws -> String {
         lock.lock()
         if let active = activeTaskID {
             lock.unlock()
-            return .failure("已有子代理 \(active) 在运行。先 subagent.status 等待它完成，或 subagent.stop 停止后再委派新任务。")
+            throw MCPError.failed("已有子代理 \(active) 在运行。先 subagent.status 等待它完成，或 subagent.stop 停止后再委派新任务。")
         }
         let id = String(UUID().uuidString.prefix(8))
         let clampedRounds = max(2, min(maxRounds, 30))
@@ -134,7 +146,7 @@ final class SubAgentManager {
             if self.activeTaskID == id { self.activeTaskID = nil }
             self.lock.unlock()
         }
-        return .success(id)
+        return id
     }
 
     func status(id: String) -> SubAgentTask? {
@@ -146,7 +158,7 @@ final class SubAgentManager {
     func stop(id: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard let t = tasks[id], t.status == .running else { return false }
+        guard let t = tasks[id], t.isRunning() else { return false }
         t.markStopped()
         return true
     }
@@ -156,7 +168,7 @@ final class SubAgentManager {
     func steer(id: String, instruction: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard let t = tasks[id], t.status == .running else { return false }
+        guard let t = tasks[id], t.isRunning() else { return false }
         pendingSteers[id, default: []].append(instruction)
         return true
     }
@@ -244,8 +256,8 @@ final class SubAgentRunner {
     }
 
     private func loop() {
-        // 停止检查
-        if task.status == .stopped { return }
+        // 停止检查（线程安全读取——stop 可能由工具线程随时触发）
+        if !task.isRunning() { return }
         // 超时
         if Date() > deadline {
             task.markFailed("timeout after \(Int(deadline.timeIntervalSince(task.createdAt)))s")
@@ -435,14 +447,10 @@ final class SubAgentRunTool: MCPTool {
             if let s = params["timeout_secs"] as? String, let d = Double(s) { return d }
             return 180
         }()
-        switch SubAgentManager.shared.start(instruction: instruction, allowedTools: wl,
-                                            maxRounds: rounds, timeout: timeout) {
-        case .success(let id):
-            return ["ok": true, "task_id": id,
-                    "message": "subagent \(id) started. Poll with subagent.status task_id=\(id); stop with subagent.stop task_id=\(id)."]
-        case .failure(let err):
-            throw MCPError.failed(err)
-        }
+        let id = try SubAgentManager.shared.start(instruction: instruction, allowedTools: wl,
+                                                  maxRounds: rounds, timeout: timeout)
+        return ["ok": true, "task_id": id,
+                "message": "subagent \(id) started. Poll with subagent.status task_id=\(id); steer with subagent.steer task_id=\(id); stop with subagent.stop task_id=\(id)."]
     }
 }
 
