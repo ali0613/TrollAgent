@@ -32,7 +32,8 @@ final class SubAgentTask: Identifiable {
 
     func markDone(result: String) {
         status = .done
-        self.result = result
+        // 防结果撑爆主线：截断到 4000 字符（子代理最终总结应简短，超长说明模型把工具输出写进了总结）
+        self.result = result.count > 4000 ? String(result.prefix(4000)) + "\n... [result truncated]" : result
         elapsed = Date().timeIntervalSince(createdAt)
     }
 
@@ -151,7 +152,8 @@ final class SubAgentRunner {
            actually done; if a step needs waiting, chain short polling calls (timeout≈5) and decide from each result.
         3. If a tool fails, diagnose from the error and try a different approach (up to 3 attempts), then move on.
         4. Do not ask the user questions — decide autonomously. Do not chat about the task; just do it.
-        5. When finished, your final text must be a concise structured summary of what was done and the key result.
+        5. You are a LEAF worker — never delegate further (no subagent.run/status/stop). Do everything yourself.
+        6. When finished, your final text must be a concise structured summary of what was done and the key result.
         """
         if let wl = allowedTools, !wl.isEmpty {
             p += "\nTOOL WHITELIST (use ONLY these): \(wl.joined(separator: ", "))"
@@ -216,8 +218,8 @@ final class SubAgentRunner {
                 switch cr {
                 case .text(let text, _):
                     self.task.markDone(result: text)
-                case .toolCalls(let calls, _, _):
-                    self.execute(calls: calls)
+                case .toolCalls(let calls, _, let content):
+                    self.execute(calls: calls, narration: content)
                 }
             case .failure(let err):
                 let nsErr = err as NSError
@@ -231,9 +233,13 @@ final class SubAgentRunner {
     }
 
     /// 逐条执行工具（子代理内串行——简单安全，不做并行），结果回填后继续循环
-    private func execute(calls: [ToolCall]) {
+    private func execute(calls: [ToolCall], narration: String? = nil) {
         var msgs = messages
         var executed: [String] = []
+        // 关键：API 要求 tool 结果必须跟在"带 tool_calls 的 assistant 消息"之后——
+        // 先追加 assistant 消息挂上 toolCalls（content 用模型解说或空串，与主循环一致），
+        // 否则 "tool" role message must follow a message with tool_calls → 400。
+        msgs.append(ChatMessage(role: "assistant", content: narration ?? "", toolCalls: calls))
         for call in calls {
             // 同工具同参数重复 3 次熔断（防死循环，对齐 ToolLoopDetector 思想）
             if call.name == lastTool {
@@ -316,14 +322,27 @@ final class SubAgentRunTool: MCPTool {
         verified: true, category: "system")
 
     func invoke(_ params: [String: Any]) throws -> [String: Any] {
-        guard let instruction = params["instruction"] as? String, !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard let raw = params["instruction"] as? String,
+              !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MCPError.invalidParams("instruction required")
         }
+        // 指令截断（对齐 OpenMinis 子会话指令 4000 字上限的防护精神）
+        let instruction = raw.count > 8000 ? String(raw.prefix(8000)) + "\n... [instruction truncated]" : raw
         let wl = (params["tools"] as? String)?
             .split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
-        let rounds = (params["max_rounds"] as? Int) ?? 12
-        let timeout = (params["timeout_secs"] as? Double) ?? 180
+        // 宽松解析：模型可能传字符串数字（"12"）——Int/Double 都兼容
+        let rounds: Int = {
+            if let i = params["max_rounds"] as? Int { return i }
+            if let s = params["max_rounds"] as? String, let i = Int(s) { return i }
+            return 12
+        }()
+        let timeout: TimeInterval = {
+            if let d = params["timeout_secs"] as? Double { return d }
+            if let i = params["timeout_secs"] as? Int { return Double(i) }
+            if let s = params["timeout_secs"] as? String, let d = Double(s) { return d }
+            return 180
+        }()
         switch SubAgentManager.shared.start(instruction: instruction, allowedTools: wl,
                                             maxRounds: rounds, timeout: timeout) {
         case .success(let id):
