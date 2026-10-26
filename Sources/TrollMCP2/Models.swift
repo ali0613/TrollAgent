@@ -1479,24 +1479,24 @@ final class ConversationStore: ObservableObject {
             if !missing.isEmpty && self.paramCorrectionCount < 2 {
                 self.paramCorrectionCount += 1
                 self.pendingParamCorrection = "The tool \(call.name) you want to call is missing required params: \(missing.joined(separator: ", ")). Fill them in and call again; don't keep retrying the same missing-param call in the same way."
-                self.trailStep(.done(.note, "Missing tool params blocked", detail: "\(call.name) missing: \(missing.joined(separator: ", "))", ok: false))
-                // v3.5.6 审计修正：纠正重跑前，必须先清掉刚挂上但未执行的 toolCalls——
-                // 否则会话里留下"assistant 带 toolCalls 却无 tool 结果"的非法历史序列，
-                // OpenAI/Anthropic 会拒绝（tool_call 必须紧跟 tool message），纠正重跑会失败。
-                if let ci = self.activeConvIndex {
-                    let msgs = self.conversations[ci].messages
-                    if let mi = msgs.lastIndex(where: { ($0.toolCalls ?? []).contains(where: { $0.id == call.id }) }) {
-                        if self.conversations[ci].messages[mi].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            // 只挂了思考没正文 → 整条移除，避免"孤立思考块"观感
-                            self.conversations[ci].messages.remove(at: mi)
-                        } else {
-                            // 已写了正文解说 → 保留正文，仅剥离未执行的 toolCalls
-                            self.conversations[ci].messages[mi].toolCalls = nil
-                        }
-                    }
-                }
-                // 不执行工具，回模型补齐参数（depth+1 防死循环；paramCorrectionCount 上限 2）
-                self.runLoop(config: config, tools: tools, disclosed: disclosed, depth: depth + 1, reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
+                self.trailStep(.done(.note, "Missing tool params", detail: "\(call.name) missing: \(missing.joined(separator: ", "))", ok: false))
+                // v7.1.101：缺参不再剥离回模型——v7.1.99 多条合批后，剥离会留下
+                // "assistant 带 N 条 toolCalls 却只有部分 tool 结果"的非法序列（API 拒）。
+                // 改为：缺参作为错误 tool 消息 append（toolCallId 匹配），继续执行下一条，
+                // 全部执行完再回模型——模型看到错误消息自己补齐，序列始终完整合法。
+                var next = toolMessages
+                let body: [String: Any] = [
+                    "ok": false,
+                    "message": "Missing required params for \(call.name): \(missing.joined(separator: ", ")). Fill them in and call again."
+                ]
+                var failMsg = ChatMessage(role: "tool", content: Self.jsonString(body), isError: true,
+                                          toolCallId: call.id, toolName: call.name)
+                failMsg.toolArgs = Self.summarizeArgs(call.arguments)
+                next.append(failMsg)
+                self.appendToCurrent(failMsg)   // 对话可见（缺参步骤卡）
+                self.processToolCalls(calls, index: index + 1, toolMessages: next, newlyDisclosed: newlyDisclosed,
+                                      config: config, tools: tools, disclosed: disclosed, depth: depth,
+                                      reasoningLevel: reasoningLevel, thinkText: thinkText, personaPrompt: personaPrompt)
                 return
             }
             self.paramCorrectionCount = 0
