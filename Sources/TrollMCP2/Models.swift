@@ -1911,6 +1911,22 @@ final class ConversationStore: ObservableObject {
 
     // MARK: - v7.1.99 工具合批分类（只读可合批 / 副作用一次一条）
 
+    /// v7.1.103：shell 只读命令白名单（首词）
+    private static let readOnlyShellCmds: Set<String> = [
+        "cat", "ls", "find", "grep", "ps", "df", "free", "uname", "echo", "pwd", "which",
+        "uptime", "netstat", "ifconfig", "head", "tail", "wc", "du", "date", "env", "printenv",
+        "curl", "ping", "mount", "id", "whoami", "sysctl", "defaults", "plutil", "strings",
+        "file", "stat", "readlink"
+        // v7.1.103：kill 移出白名单——真实副作用(杀进程)，合批语义不成立，应一次一条
+    ]
+
+    /// v7.1.103：curl 写文件排除（-o/-O/--output/--download → 副作用，不可合批）
+    private static func curlWritesFile(_ cmd: String) -> Bool {
+        let c = cmd.lowercased()
+        return c.contains("-o ") || c.contains("-o\t") || c.contains("--output")
+            || c.contains("-o\"") || c.contains(" -o") || c.contains("-O ") || c.contains("--download")
+    }
+
     /// 一批 toolCalls 是否全部可合批（依次执行，不回模型重生成）
     static func isParallelSafeTool(_ calls: [ToolCall]) -> Bool {
         calls.allSatisfy { isParallelSafeTool($0) }
@@ -1929,24 +1945,14 @@ final class ConversationStore: ObservableObject {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let first = cmd.components(separatedBy: .whitespacesAndNewlines).first(where: { !$0.isEmpty }) ?? ""
             let base = first.hasPrefix("-") ? "" : first
-            let readOnlyCmds: Set<String> = [
-                "cat", "ls", "find", "grep", "ps", "df", "free", "uname", "echo", "pwd", "which",
-                "uptime", "netstat", "ifconfig", "head", "tail", "wc", "du", "date", "env", "printenv",
-                "curl", "ping", "mount", "id", "whoami", "sysctl", "defaults", "plutil", "strings",
-                "file", "stat", "readlink", "kill"   // kill 只对进程(副作用极小，AI 常与 ps 连查)
-            ]
-            if readOnlyCmds.contains(base) { return true }
-            // v7.1.102：解释器命令（python3/node/perl/ruby/php/bash -c...）——
-            // 合批后依次执行（非并行，副作用有序、依赖可见、错误可恢复），
-            // 用脚本内容黑名单兜底：含写/危险 API 特征 → 一次一条，纯只读脚本 → 可合批。
-            let interpreters: Set<String> = [
-                "python3", "python", "node", "perl", "ruby", "php", "bash", "sh", "zsh", "lua",
-                "awk", "sed", "jq"
-            ]
-            if interpreters.contains(base) {
-                return !Self.scriptHasWriteRisk(cmd)
+            // v7.1.103：env VAR=1 cmd 包装 → 递归判断真实命令（裸 env 列环境变量才只读）
+            if base == "env" {
+                let after = cmd.components(separatedBy: .whitespacesAndNewlines).dropFirst()
+                let realFirst = after.first(where: { !$0.isEmpty && !$0.contains("=") }) ?? ""
+                if realFirst.isEmpty { return true }   // 裸 env
+                return isShellCmdReadOnly(realFirst, cmd: cmd)
             }
-            return false
+            return isShellCmdReadOnly(base, cmd: cmd)
         }
         // browser：只读子命令（text/snapshot/status/form_fields/wait/scroll）→ 可合批
         if name == "browser" {
@@ -1957,16 +1963,38 @@ final class ConversationStore: ObservableObject {
         return false
     }
 
+    /// v7.1.103：shell 首词 + 写特征统一判定（env 包装/curl 写文件共用）
+    private static func isShellCmdReadOnly(_ base: String, cmd: String) -> Bool {
+        if readOnlyShellCmds.contains(base) {
+            // curl 写文件（-o/-O/--output）→ 副作用，不可合批
+            if base == "curl" && curlWritesFile(cmd) { return false }
+            return true
+        }
+        // v7.1.102：解释器命令（python3/node/perl/ruby/php/bash -c...）——
+        // 合批后依次执行（非并行，副作用有序、依赖可见、错误可恢复），
+        // 用脚本内容黑名单兜底：含写/危险 API 特征 → 一次一条，纯只读脚本 → 可合批。
+        // v7.1.103：sed/awk 移出——sed -i 就地写/awk 重定向无法静态区分，保守一次一条
+        let interpreters: Set<String> = [
+            "python3", "python", "node", "perl", "ruby", "php", "bash", "sh", "zsh", "lua", "jq"
+        ]
+        if interpreters.contains(base) {
+            return !scriptHasWriteRisk(cmd)
+        }
+        return false
+    }
+
     /// v7.1.102：解释器命令脚本内容黑名单——含写/危险特征视为副作用（一次一条），
     /// 纯只读脚本才可合批。保守原则：宁可多几轮往返，不放过写操作。
     static func scriptHasWriteRisk(_ cmd: String) -> Bool {
         let c = cmd.lowercased()
         let dangerous: [String] = [
-            "open(", "write", "remove", "unlink", "os.system", "subprocess", "exec(", "eval(",
-            "makedirs", "chmod", "shutil", "truncate", "replace(", "save", "dump", "append",
-            "rm ", "rm -", "mv ", "cp ", "mkdir", "touch ", "tee ", ">>", "> ", "| tee",
-            "curl -o", "wget -o", "install", "apt", "apk add", "pip install", "npm i ", "npm install",
-            "delete", "drop ", "truncate table", "insert into", "update ", "alter "
+            "open(", "open ", "write", "write_text", "writefile", "remove", "unlink", "rmdir",
+            "os.system", "system(", "popen", "subprocess", "exec(", "eval(", "spawn",
+            "makedirs", "chmod", "chown", "shutil", "truncate", "replace(", "save", "dump",
+            "append", "rm ", "rm -", "mv ", "cp ", "mkdir", "touch ", "touch(", "tee ",
+            ">>", "> ", "| tee", "curl -o", "wget -o", "install", "apt", "apk add",
+            "pip install", "npm i ", "npm install", "delete", "drop ", "insert into",
+            "update ", "alter "
         ]
         return dangerous.contains { c.contains($0) }
     }
