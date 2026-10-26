@@ -8,6 +8,9 @@ import Foundation
 final class SubAgentTask: Identifiable {
     let id: String
     let instruction: String
+    /// v7.1.108: 预算信息存入任务（status 返回可算剩余轮次/剩余时间）
+    let maxRounds: Int
+    let timeoutSecs: TimeInterval
     private(set) var status: Status
     private(set) var createdAt: Date
     private(set) var rounds: Int
@@ -21,9 +24,11 @@ final class SubAgentTask: Identifiable {
 
     enum Status: String { case running, done, failed, stopped }
 
-    init(id: String, instruction: String) {
+    init(id: String, instruction: String, maxRounds: Int, timeoutSecs: TimeInterval) {
         self.id = id
         self.instruction = instruction
+        self.maxRounds = maxRounds
+        self.timeoutSecs = timeoutSecs
         self.status = .running
         self.createdAt = Date()
         self.rounds = 0
@@ -67,11 +72,28 @@ final class SubAgentTask: Identifiable {
             "elapsed_secs": Int(elapsed),
             "tool_trace": toolTrace,
         ]
+        // v7.1.108: 进度可视化——模型/用户在工具流里直接看到"还剩几轮/还剩几秒/最近在干嘛"
+        // （对齐 OpenMinis SubAgentRunDigest 的信息密度，但走工具流呈现，零 UI 改动）
+        if status == .running {
+            d["rounds_left"] = max(0, maxRounds - rounds)
+            d["time_left_secs"] = max(0, Int(timeoutSecs - elapsed))
+            if let last = toolTrace.suffix(3).map({ "\($0)" }).joined(separator: ", ").nilIfEmpty {
+                d["recent_tools"] = last
+            }
+            d["progress_hint"] = "working... \(rounds)/\(maxRounds) rounds, \(Int(elapsed))s elapsed"
+        }
         if !result.isEmpty { d["result"] = result }
         if !error.isEmpty { d["error"] = error }
         // v7.1.107-P0: 无交付标记——父模型拿到 done 但 result 空时，知道该去查看轨迹而非重跑
         if status == .done && noDeliverable { d["no_deliverable"] = true }
         return d
+    }
+}
+
+extension Optional where Wrapped == String {
+    var nilIfEmpty: String? {
+        guard let self, !self.isEmpty else { return nil }
+        return self
     }
 }
 
@@ -96,13 +118,16 @@ final class SubAgentManager {
             return .failure("已有子代理 \(active) 在运行。先 subagent.status 等待它完成，或 subagent.stop 停止后再委派新任务。")
         }
         let id = String(UUID().uuidString.prefix(8))
-        let task = SubAgentTask(id: id, instruction: instruction)
+        let clampedRounds = max(2, min(maxRounds, 30))
+        let clampedTimeout = max(30, min(timeout, 600))
+        let task = SubAgentTask(id: id, instruction: instruction,
+                                maxRounds: clampedRounds, timeoutSecs: clampedTimeout)
         tasks[id] = task
         activeTaskID = id
         lock.unlock()
 
         let runner = SubAgentRunner(task: task, allowedTools: allowedTools,
-                                    maxRounds: maxRounds, timeout: timeout)
+                                    maxRounds: clampedRounds, timeout: clampedTimeout)
         DispatchQueue.global(qos: .userInitiated).async {
             runner.run()
             self.lock.lock()
