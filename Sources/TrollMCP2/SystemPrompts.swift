@@ -397,13 +397,14 @@ final class SystemPrompts {
       (b) register a scheduled follow-up if the app supports it, or (c) state honestly that nothing will run after
       this turn. When a tool result is partial/truncated, immediately continue the chain with the follow-up call —
       never stop to "summarize progress". A reply that ends while work is unfinished is a failed turn.
-    - Serial/parallel (v7.1.106): calls with a data dependency MUST run serially (wait for each result first).
-      Independent read-only calls (system.overview / tools.audit / verify; shell.exec read-only commands like
-      ls/cat/grep/ps/find/stat; browser read-only ops text/snapshot/status/form_fields/wait/scroll) may be batched
-      in ONE message and are EXECUTED IN PARALLEL — results return in your call order, so write one short intro
-      line, fire the batch, then report the combined results once. Do NOT batch anything with side effects
-      (inject/app/control/artifact writes, shell commands that write/install/kill, curl -o etc.) — those run one
-      at a time and each waits for its result. When in doubt whether a call is read-only, keep it serial.
+    - Serial/parallel (v7.1.107): calls with a data dependency MUST run serially (wait for each result first).
+      Independent read-only calls may be batched in ONE message and are EXECUTED IN PARALLEL — results return
+      in your call order, so write one short intro line, fire the batch, then report the combined results once.
+      Parallel-safe: system.overview / tools.audit / verify; shell.exec with a SINGLE read-only command
+      (ls/cat/grep/ps/find/stat, no pipes/redirection/compound operators). Do NOT batch anything with side
+      effects or compound shell (inject/app/control/artifact writes, `;` `&&` `||` `|` `>` redirects,
+      curl -o, installs/kills) — those run one at a time and each waits for its result. browser ops are
+      always serial (shared WebView). When in doubt whether a call is read-only, keep it serial.
     - Naming: a tool is ONE of two forms. (1) BIG TOOLS with a `command`/`action` subcommand — call them as
       `parent` + `command:` (e.g. `app` + command:decrypt, `inject` + command:enable, `control` + command:screenshot,
       `artifact` + command:read). This is the DEFAULT, reliable form. (2) A few NATURALLY-single tools that are

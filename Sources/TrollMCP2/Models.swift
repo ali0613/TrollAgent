@@ -25,6 +25,14 @@ struct ModelConfig: Codable, Identifiable, Hashable {
     /// v2.9.11：输入上下文预算 (token 估算）。发送前按预算自动裁剪最旧消息，
     /// 避免长会话请求体无限增长导致"一直请求中"。
     var contextTokens: Int = 16000
+    /// v7.1.107：模型能力表匹配后的实际压缩预算——命中已知模型用真实 context window
+    /// （大窗口多留历史、小窗口不撑爆）；未知模型用用户配置值兜底（安全默认）。
+    var effectiveContextTokens: Int {
+        if let known = ModelCapability.contextWindow(for: model) {
+            return known
+        }
+        return contextTokens
+    }
     /// v2.8.4：中转站兼容级别 (由 OpenAIClient 自适应降级时写入并持久化）
     /// 0=完整载荷 1=互换token参数名 2=去掉tool_choice 3=去掉tools纯对话 4=最小载荷
     var compatLevel: Int = 0
@@ -99,6 +107,51 @@ struct ModelConfig: Codable, Identifiable, Hashable {
 }
 
 // MARK: - 模型协议与鉴权方式
+
+/// v7.1.107：模型能力表——主流模型真实 context window（token），用于压缩预算自动匹配。
+/// 数值按各厂商公开文档核对（2026-10）；未收录模型返回 nil → 走 ModelConfig.contextTokens 兜底。
+/// 对齐 OpenMinis models.dev 能力表的思路（本地静态版，不依赖网络注册表）。
+enum ModelCapability {
+    static func contextWindow(for model: String) -> Int? {
+        let m = model.lowercased()
+        // Anthropic Claude：3.5/3.7/4 系均为 200k 窗口
+        if m.contains("claude") {
+            return 200_000
+        }
+        // OpenAI GPT-5：400k；GPT-4.1：1M；GPT-4o / o1 / o3 / o4：200k；GPT-4：128k
+        if m.contains("gpt-5") { return 400_000 }
+        if m.contains("gpt-4.1") { return 1_000_000 }
+        if m.contains("gpt-4o") || m.contains("o1") || m.contains("o3") || m.contains("o4") { return 200_000 }
+        if m.contains("gpt-4") { return 128_000 }
+        // DeepSeek：V3 / R1 128k，chat 类 64k
+        if m.contains("deepseek") {
+            if m.contains("v3") || m.contains("r1") || m.contains("v4") { return 128_000 }
+            return 64_000
+        }
+        // 智谱 GLM：128k
+        if m.contains("glm") { return 128_000 }
+        // Kimi / Moonshot：128k（部分型号 256k）
+        if m.contains("kimi") || m.contains("moonshot") {
+            if m.contains("k2") || m.contains("256") { return 256_000 }
+            return 128_000
+        }
+        // 通义 Qwen：131072（128k）
+        if m.contains("qwen") { return 131_072 }
+        // MiniMax：131072
+        if m.contains("minimax") { return 131_072 }
+        // 豆包 / 火山 Ark：按型号名匹配 256k/128k，默认 32k
+        if m.contains("doubao") || m.contains("ark") || m.contains("volc") {
+            if m.contains("256k") || m.contains("pro-256") { return 256_000 }
+            if m.contains("128k") || m.contains("pro-128") { return 128_000 }
+            return 32_000
+        }
+        // Gemini：1M（Pro/Flash 系）
+        if m.contains("gemini") { return 1_000_000 }
+        // Llama 等开源系：128k
+        if m.contains("llama") { return 128_000 }
+        return nil
+    }
+}
 
 extension ModelConfig {
     static let apiProtocols = [
@@ -1068,7 +1121,7 @@ final class ConversationStore: ObservableObject {
         let client = OpenAIClient(config)
         client.currentReasoningLevel = reasoningLevel
         currentClient = client
-        let prepared = messagesForAPI(budget: config.contextTokens)
+        let prepared = messagesForAPI(budget: config.effectiveContextTokens)
         var history = prepared.messages
         // v2.9.138：模块化 system prompt 组装 (稳定前缀工程）——
         // 稳定块 (系统指令→开发者指令）在前、动态状态块 (设备/App/工作区/会话）在后，
@@ -2044,7 +2097,7 @@ final class ConversationStore: ObservableObject {
             completion(false, "未找到模型配置")
             return
         }
-        let prepared = messagesForAPI(budget: config.contextTokens)
+        let prepared = messagesForAPI(budget: config.effectiveContextTokens)
         guard !prepared.compactSource.isEmpty else {
             completion(false, "会话不长，无需压缩")
             return
@@ -2145,13 +2198,19 @@ final class ConversationStore: ObservableObject {
     /// 副作用/写类/未知（inject、app、control、artifact、shell 写命令等）→ false（保持一次一条）
     static func isParallelSafeTool(_ call: ToolCall) -> Bool {
         let name = call.name
-        // 纯只读/验证大工具
+        // 纯只读/验证大工具（内部只读 ToolRegistry/Bundle，无共享可变状态）
         let readOnlyTools: Set<String> = ["system_overview", "tools_audit", "verify"]
         if readOnlyTools.contains(name) { return true }
-        // shell_exec：按命令首词判断只读命令（cat/ls/find/grep/ps/...）→ 可合批
+        // shell_exec：仅【单命令】纯只读命令可并行（ls/cat/grep/ps/find/stat...）。
+        // v7.1.107：复合命令（; && || | > >> < 等）无法静态确认只读——例如
+        // `ls && rm x`、`cat a | tee out` 首词只读但实际有副作用，并行会互相踩，保守不并行。
         if name == "shell_exec" {
             let cmd = (parseArgs(call.arguments)["command"] as? String ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            if cmd.contains(";") || cmd.contains("&&") || cmd.contains("||")
+                || cmd.contains("|") || cmd.contains(">") || cmd.contains("<") {
+                return false
+            }
             let first = cmd.components(separatedBy: .whitespacesAndNewlines).first(where: { !$0.isEmpty }) ?? ""
             let base = first.hasPrefix("-") ? "" : first
             // v7.1.103：env VAR=1 cmd 包装 → 递归判断真实命令（裸 env 列环境变量才只读）
@@ -2163,12 +2222,8 @@ final class ConversationStore: ObservableObject {
             }
             return isShellCmdReadOnly(base, cmd: cmd)
         }
-        // browser：只读子命令（text/snapshot/status/form_fields/wait/scroll）→ 可合批
-        if name == "browser" {
-            let op = parseArgs(call.arguments)["op"] as? String ?? ""
-            let readOnlyOps: Set<String> = ["text", "snapshot", "status", "form_fields", "wait", "scroll"]
-            return readOnlyOps.contains(op)
-        }
+        // v7.1.107：browser 只读子命令（text/snapshot/status...）共享同一 WebView——
+        // 并发 evaluateJavaScript 有导航/状态竞态，保守不并行（一次一条，防闪退优先）
         return false
     }
 
