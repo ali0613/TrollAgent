@@ -696,7 +696,9 @@ final class ConversationStore: ObservableObject {
     /// v3.5.10：正在上屏的"工具启动即显示 running 步骤卡"的消息 id——
     /// 工具启动先 append 一张 isRunning=true 的占位卡（真实工具名+命令，机制保证每步可见，
     /// 不依赖模型解说），结果回来后在 handleDispatchResult 原地更新成完成/出错卡。
-    var pendingToolMsgID: UUID?
+    /// v7.1.106：单槽改多槽（toolCallId → 消息 id）——真并行批会同时有多张 running 卡，
+    /// 串行路径同样用此字典（每批一个 toolCallId 唯一），resolvePendingTool 按 callId 定位。
+    var pendingToolMsgIDs: [String: UUID] = [:]
     /// v2.9.127：执行轨迹 (实时）——当前请求的 思考→工具调用→工具结果 步骤流，
     /// 请求结束时随最后一条 assistant 消息持久化 (message.trail）。
     @Published var liveTrail: [TrailStep] = []
@@ -1466,6 +1468,15 @@ final class ConversationStore: ObservableObject {
             self.runLoop(config: config, tools: tools, disclosed: merged, depth: depth + 1, reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
             return
         }
+        // v7.1.106：真并行分流——只读/独立工具批（count>1）走 DispatchGroup 并发执行，
+        // 全部完成后按 tool_use 原序回填 tool 消息（API 要求 assistant toolCalls 与结果顺序配对）。
+        // 串行路径（count==1 / 副作用批）完全不变。并行安全判定见 isParallelSafeTool。
+        if index == 0, calls.count > 1, Self.isParallelSafeTool(calls) {
+            self.processToolCallsParallel(calls, toolMessages: toolMessages, newlyDisclosed: newlyDisclosed,
+                                          config: config, tools: tools, disclosed: disclosed, depth: depth,
+                                          reasoningLevel: reasoningLevel, thinkText: thinkText, personaPrompt: personaPrompt)
+            return
+        }
         let call = calls[index]
         let params = Self.parseArgs(call.arguments)
         // v3.5.6：工具参数 schema 预校验（机制级，治"缺参盲试"老毛病）——
@@ -1513,7 +1524,7 @@ final class ConversationStore: ObservableObject {
             runMsg.toolNarration = nar.isEmpty ? nil : thinkText
             runMsg.isRunning = true
             self.appendToCurrent(runMsg)
-            self.pendingToolMsgID = runMsg.id
+            self.pendingToolMsgIDs[call.id] = runMsg.id
         }
         // v3.3.4：记录工具执行耗时（UI 气泡显示，对齐 OpenMinis 步骤耗时样式）
         let toolStart = CFAbsoluteTimeGetCurrent()
@@ -1537,6 +1548,177 @@ final class ConversationStore: ObservableObject {
                                               thinkText: thinkText, toolDuration: toolDuration, personaPrompt: personaPrompt)
                 }
             }
+        }
+    }
+
+    /// v7.1.106：真并行执行只读工具批（DispatchGroup）。
+    /// 语义对齐串行路径但并发：schema 预校验（缺参生成错误消息、位置保留）→ 全部工具并发执行 →
+    /// 主线程按原序回填 tool 消息 → 一次性回模型。UI：每工具一张 running 卡（多槽 pendingToolMsgIDs），
+    /// 完成后原地更新。线程安全：dispatch 内部可变字典已由 ToolRegistry.stateLock 串行化，
+    /// 本函数只收集结果（resultsLock 保护），UI 操作全部在主线程。
+    private func processToolCallsParallel(_ calls: [ToolCall],
+                                          toolMessages: [ChatMessage],
+                                          newlyDisclosed: [String],
+                                          config: ModelConfig,
+                                          tools: [[String: Any]]?,
+                                          disclosed: [String],
+                                          depth: Int,
+                                          reasoningLevel: Int,
+                                          thinkText: String,
+                                          personaPrompt: String?) {
+        // 0) schema 预校验：缺必填参的 call 不执行，生成错误 tool 消息占位（顺序保留，v7.1.101 语义）
+        var preErrors: [Int: ChatMessage] = [:]
+        for (i, call) in calls.enumerated() {
+            if let schema = ToolRegistry.shared.openAISchema(for: call.name),
+               let fn = schema["function"] as? [String: Any],
+               let ps = fn["parameters"] as? [String: Any],
+               let required = ps["required"] as? [String] {
+                let params = Self.parseArgs(call.arguments)
+                let missing = required.filter { params[$0] == nil }
+                if !missing.isEmpty && self.paramCorrectionCount < 2 {
+                    self.paramCorrectionCount += 1
+                    let body: [String: Any] = [
+                        "ok": false,
+                        "message": "Missing required params for \(call.name): \(missing.joined(separator: ", ")). Fill them in and call again."
+                    ]
+                    var failMsg = ChatMessage(role: "tool", content: Self.jsonString(body), isError: true,
+                                              toolCallId: call.id, toolName: call.name)
+                    failMsg.toolArgs = Self.summarizeArgs(call.arguments)
+                    preErrors[i] = failMsg
+                }
+            }
+        }
+        // 1) 每工具上屏一张 running 卡（主线程；结果回来后在原地更新成完成/出错卡）
+        self.runningTool = calls.first?.name
+        let nar = thinkText.trimmingCharacters(in: .whitespacesAndNewlines)
+        for call in calls {
+            var runMsg = ChatMessage(role: "tool", content: "", toolCallId: call.id, toolName: call.name)
+            runMsg.toolArgs = Self.summarizeArgs(call.arguments)
+            runMsg.toolNarration = nar.isEmpty ? nil : thinkText
+            runMsg.isRunning = true
+            self.appendToCurrent(runMsg)
+            self.pendingToolMsgIDs[call.id] = runMsg.id
+        }
+        self.trailStep(.running(.tool, "parallel batch", detail: calls.map { $0.name }.joined(separator: "、")))
+        // 2) DispatchGroup 并发执行（真并行；结果按 (index, result, duration) 收集，执行完按原序回填）
+        let group = DispatchGroup()
+        var results: [(index: Int, result: Result<[String: Any], Error>, duration: Double)] = []
+        let resultsLock = NSLock()
+        for (i, call) in calls.enumerated() where preErrors[i] == nil {
+            group.enter()
+            DispatchQueue.global().async {
+                let start = CFAbsoluteTimeGetCurrent()
+                let r: Result<[String: Any], Error>
+                do { r = .success(try ToolRegistry.shared.dispatch(name: call.name, params: Self.parseArgs(call.arguments))) }
+                catch { r = .failure(error) }
+                let duration = CFAbsoluteTimeGetCurrent() - start
+                resultsLock.lock()
+                results.append((i, r, duration))
+                resultsLock.unlock()
+                group.leave()
+            }
+        }
+        // 3) 全部完成 → 主线程按原序合并 tool 消息（与 assistant toolCalls 顺序一致），一次性回模型
+        group.notify(queue: .main) { [weak self] in
+            guard let self = self else { return }
+            self.runningTool = nil
+            var next = toolMessages
+            for (i, call) in calls.enumerated() {
+                if let pre = preErrors[i] {
+                    // 缺参：错误消息直接进序列（toolCallId 匹配，序列始终完整合法），并更新对应 running 卡
+                    next.append(pre)
+                    self.resolvePendingTool(callId: call.id, content: pre.content, toolDuration: 0, isError: true, narration: nil)
+                    self.trailStep(.done(.note, "Missing tool params",
+                                         detail: "\(call.name) missing required params", ok: false))
+                    continue
+                }
+                let entry = results.first { $0.index == i }
+                let r = entry?.result ?? .failure(MCPError.failed("parallel tool result missing for \(call.name)"))
+                next = self.applyParallelResult(r, call: call, toolMessages: next,
+                                                toolDuration: entry?.duration ?? 0, thinkText: thinkText)
+            }
+            let merged = Array(Set(disclosed + newlyDisclosed))
+            self.runLoop(config: config, tools: tools, disclosed: merged, depth: depth + 1,
+                         reasoningLevel: reasoningLevel, personaPrompt: personaPrompt)
+        }
+    }
+
+    /// v7.1.106：并行批的单条工具结果处理（三分支与 handleDispatchResult 一致，但非递归——
+    /// 只返回更新后的 toolMessages，由 processToolCallsParallel 主线程循环按原序调用）。
+    @discardableResult
+    private func applyParallelResult(_ result: Result<[String: Any], Error>,
+                                     call: ToolCall,
+                                     toolMessages: [ChatMessage],
+                                     toolDuration: Double,
+                                     thinkText: String) -> [ChatMessage] {
+        switch result {
+        case .success(let r):
+            let rawContent = Self.jsonString(r)
+            let content: String
+            if rawContent.count > 8000 {
+                content = rawContent.prefix(8000) + "\n... [tool result truncated, total \(rawContent.count) chars. For full data, call the tool with params like limit/filter/query to narrow the range.]"
+            } else {
+                content = rawContent
+            }
+            var next = toolMessages
+            var toolMsg = ChatMessage(role: "tool", content: content, toolCallId: call.id, toolName: call.name)
+            toolMsg.toolArgs = Self.summarizeArgs(call.arguments)
+            toolMsg.toolDuration = toolDuration
+            toolMsg.toolNarration = thinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : thinkText
+            next.append(toolMsg)
+            self.resolvePendingTool(callId: call.id, content: content, toolDuration: toolDuration, isError: false, narration: toolMsg.toolNarration)
+            self.trailStep(.done(.result, call.name, detail: Self.trailSummary(rawContent), ok: true))
+            return next
+        case .failure(let err as MCPError):
+            var next = toolMessages
+            let failureBody: [String: Any]
+            if case MCPError.classified(let m, let code, let reason, let nextStep) = err {
+                failureBody = ["ok": false, "message": m,
+                               "error": ["code": code, "reason": reason, "next_step": nextStep]]
+            } else {
+                failureBody = ["ok": false, "message": err.description]
+            }
+            let content = Self.jsonString(failureBody)
+            var failMsg = ChatMessage(role: "tool", content: content, isError: true, toolCallId: call.id, toolName: call.name)
+            failMsg.toolDuration = toolDuration
+            next.append(failMsg)
+            self.resolvePendingTool(callId: call.id, content: content, toolDuration: toolDuration, isError: true, narration: nil)
+            self.trailStep(.done(.result, call.name, detail: Self.trailSummary(content), ok: false))
+            return next
+        case .failure(let err):
+            var next = toolMessages
+            let errStr = err.localizedDescription.lowercased()
+            var reason = "Tool execution failed"
+            var nextStep = "Check the error message above. Try a different approach or tool."
+            if errStr.contains("not found") || errStr.contains("no such file") {
+                reason = "File or path does not exist"
+                nextStep = "Check path with shell.exec. If app container, verify bundle_id."
+            } else if errStr.contains("refused") || errStr.contains("connection") || errStr.contains("unreachable") {
+                reason = "Target app or service not reachable"
+                nextStep = "Start the target app first, or check if injection is active (injection.status)."
+            } else if errStr.contains("permission") || errStr.contains("denied") {
+                reason = "Permission denied"
+                nextStep = "Check tool permissions in settings, or use a different approach."
+            } else if errStr.contains("required") || errStr.contains("invalid") {
+                reason = "Missing or wrong parameter"
+                nextStep = "Check tool parameters. Required params are marked (REQUIRED) in the tool description."
+            } else if errStr.contains("timeout") {
+                reason = "Operation timed out"
+                nextStep = "Try again with longer timeout, or check if the app is responsive."
+            }
+            let errBody: [String: Any] = [
+                "ok": false,
+                "tool": call.name,
+                "error": err.localizedDescription,
+                "reason": reason,
+                "next_step": nextStep
+            ]
+            var errMsg = ChatMessage(role: "tool", content: Self.jsonString(errBody),
+                                    isError: true, toolCallId: call.id, toolName: call.name)
+            next.append(errMsg)
+            self.resolvePendingTool(callId: call.id, content: Self.jsonString(errBody), toolDuration: toolDuration, isError: true, narration: nil)
+            self.trailStep(.done(.result, call.name, detail: "❌ \(err.localizedDescription.prefix(200))", ok: false))
+            return next
         }
     }
 
@@ -1572,7 +1754,7 @@ final class ConversationStore: ObservableObject {
             // 旧逻辑把同一文本又塞进 tool 消息导致"回复内容和思考内容一模一样" (用户实测反馈）
             next.append(toolMsg)
             // v3.5.10：原地更新"启动即上屏"的 running 步骤卡 → 完成卡（同一张，不再新增第二条）
-            self.resolvePendingTool(content: content, toolDuration: toolDuration, isError: false, narration: toolMsg.toolNarration)
+            self.resolvePendingTool(callId: call.id, content: content, toolDuration: toolDuration, isError: false, narration: toolMsg.toolNarration)
             // v2.9.127：轨迹——工具执行OK (结果摘要 200 字符，完整结果在 tool 消息里）
             self.trailStep(.done(.result, call.name,
                                  detail: Self.trailSummary(rawContent),
@@ -1599,7 +1781,7 @@ final class ConversationStore: ObservableObject {
             failMsg.toolDuration = toolDuration
             next.append(failMsg)
             // v3.5.10：原地更新 running 步骤卡 → 出错卡
-            self.resolvePendingTool(content: content, toolDuration: toolDuration, isError: true, narration: nil)
+            self.resolvePendingTool(callId: call.id, content: content, toolDuration: toolDuration, isError: true, narration: nil)
             // v2.9.127：轨迹——工具执行failed (四分类错误摘要）
             self.trailStep(.done(.result, call.name,
                                  detail: Self.trailSummary(Self.jsonString(failureBody)),
@@ -1641,7 +1823,7 @@ final class ConversationStore: ObservableObject {
             // v3.1.72：不再写 errMsg.thinking (思考只在 assistant 消息显示一次，避免重复）
             next.append(errMsg)
             // v3.5.10：原地更新 running 步骤卡 → 出错卡
-            self.resolvePendingTool(content: Self.jsonString(errBody), toolDuration: toolDuration, isError: true, narration: nil)
+            self.resolvePendingTool(callId: call.id, content: Self.jsonString(errBody), toolDuration: toolDuration, isError: true, narration: nil)
             self.trailStep(.done(.result, call.name,
                                  detail: "❌ \(err.localizedDescription.prefix(200))",
                                  ok: false))
@@ -1652,10 +1834,11 @@ final class ConversationStore: ObservableObject {
     }
 
     /// v3.5.10：工具结果回来后，原地更新"启动即上屏"的 running 步骤卡（同一张卡变完成/出错）。
-    private func resolvePendingTool(content: String, toolDuration: Double, isError: Bool, narration: String?) {
-        guard let mid = self.pendingToolMsgID, let ci = self.activeConvIndex,
+    /// v7.1.106：按 toolCallId 定位多槽（真并行批每工具一张卡），完成后移除该槽。
+    private func resolvePendingTool(callId: String, content: String, toolDuration: Double, isError: Bool, narration: String?) {
+        guard let mid = self.pendingToolMsgIDs[callId], let ci = self.activeConvIndex,
               let mi = self.conversations[ci].messages.firstIndex(where: { $0.id == mid }) else {
-            self.pendingToolMsgID = nil
+            self.pendingToolMsgIDs.removeValue(forKey: callId)
             return
         }
         self.conversations[ci].messages[mi].content = content
@@ -1665,7 +1848,7 @@ final class ConversationStore: ObservableObject {
         if let n = narration, !n.isEmpty {
             self.conversations[ci].messages[mi].toolNarration = n
         }
-        self.pendingToolMsgID = nil
+        self.pendingToolMsgIDs.removeValue(forKey: callId)
     }
 
     /// v2.9.138：动态会话状态块——设备/App/工作区/当前会话，injected system 最前

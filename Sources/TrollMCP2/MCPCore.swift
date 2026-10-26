@@ -220,6 +220,11 @@ public final class ToolRegistry: ObservableObject {
     public var toolCount: Int { tools.count }
     private var apiNameToOriginal: [String: String] = [:]
     private let lock = NSLock()
+    /// v7.1.106：并发执行状态锁——recentCalls/resultCache/cacheHitCounts 三个可变字典
+    /// 在真并行工具执行（isParallelSafeTool 批次 DispatchGroup 并发调用 dispatch）下会被
+    /// 多线程同时读写，必须串行化。锁粒度小（只锁字典操作，不锁 t.invoke 工具本体），
+    /// 保证工具真正并行执行、记账线程安全。
+    private let stateLock = NSLock()
     private let disabledKey = "trollmcp2.disabled_tools"
     /// v2.9.22：会话内已授权工具 (AI 调用即自动放行，无需用户手动开 Toggle）。新会话时清空。
     private var sessionApproved: Set<String> = []
@@ -271,16 +276,23 @@ public final class ToolRegistry: ObservableObject {
     private func recordCall(name: String, params: [String: Any]) -> Int {
         let key = callKey(name: name, params: params)
         let now = Date()
+        // v7.1.106：加锁——并发工具执行时 recentCalls 被多线程写，字典无锁会数据竞争
+        stateLock.lock()
         // 清理过期记录
         recentCalls[key] = (recentCalls[key] ?? []).filter { now.timeIntervalSince($0) < loopWindow }
         recentCalls[key]?.append(now)
         if recentCalls[key] == nil { recentCalls[key] = [now] }
-        return recentCalls[key]?.count ?? 1
+        let count = recentCalls[key]?.count ?? 1
+        stateLock.unlock()
+        return count
     }
 
     /// v3.0.90：查缓存——5 分钟内同样的调用直接返回缓存结果
     private func getCachedResult(name: String, params: [String: Any]) -> [String: Any]? {
         let key = callKey(name: name, params: params)
+        // v7.1.106：加锁——并发下 resultCache 读写互斥
+        stateLock.lock()
+        defer { stateLock.unlock() }
         guard let cached = resultCache[key] else { return nil }
         // 过期了
         let window = cacheWindow(for: name)
@@ -294,6 +306,8 @@ public final class ToolRegistry: ObservableObject {
     /// v3.0.90：存缓存
     private func cacheResult(name: String, params: [String: Any], result: [String: Any]) {
         let key = callKey(name: name, params: params)
+        // v7.1.106：加锁——并发下 resultCache 写互斥
+        stateLock.lock()
         resultCache[key] = (result, Date())
         // 清理过期缓存
         let now = Date()
@@ -303,6 +317,33 @@ public final class ToolRegistry: ObservableObject {
                 resultCache.removeValue(forKey: k)
             }
         }
+        stateLock.unlock()
+    }
+
+    /// v7.1.106：并发下 cacheHitCounts/resultCache 的原子小操作（各自持锁，不嵌套调用）
+    private func bumpHitCount(_ key: String) -> Int {
+        stateLock.lock()
+        let hits = (cacheHitCounts[key] ?? 0) + 1
+        cacheHitCounts[key] = hits
+        stateLock.unlock()
+        return hits
+    }
+    private func readHitCount(_ key: String) -> Int {
+        stateLock.lock()
+        let hits = cacheHitCounts[key] ?? 0
+        stateLock.unlock()
+        return hits
+    }
+    private func resetHitAndCache(_ key: String) {
+        stateLock.lock()
+        resultCache.removeValue(forKey: key)
+        cacheHitCounts[key] = 0
+        stateLock.unlock()
+    }
+    private func resetHit(_ key: String) {
+        stateLock.lock()
+        cacheHitCounts[key] = 0
+        stateLock.unlock()
     }
 
     public func register(_ tool: MCPTool) {
@@ -791,14 +832,11 @@ public final class ToolRegistry: ObservableObject {
                 if !bypassCache {
                     cached = getCachedResult(name: originalName, params: params)
                     if cached != nil {
-                        let hits = (cacheHitCounts[cacheKey] ?? 0) + 1
+                        let hits = bumpHitCount(cacheKey)
                         if hits >= 2 {
                             // 连续第 2 次命中 → 强制重取：删缓存、清计数、真实执行
-                            resultCache.removeValue(forKey: cacheKey)
-                            cacheHitCounts[cacheKey] = 0
+                            resetHitAndCache(cacheKey)
                             cached = nil
-                        } else {
-                            cacheHitCounts[cacheKey] = hits
                         }
                     }
                 }
@@ -808,10 +846,10 @@ public final class ToolRegistry: ObservableObject {
                     cachedData.removeValue(forKey: "message")
                     cachedData["_call_count"] = callCount
                     cachedData["_cached"] = true
-                    cachedData["_cache_hits"] = cacheHitCounts[cacheKey] ?? 1
+                    cachedData["_cache_hits"] = readHitCount(cacheKey)
                     return ["ok": true, "data": cachedData]
                 }
-                cacheHitCounts[cacheKey] = 0   // 真实执行前清零命中计数
+                resetHit(cacheKey)   // 真实执行前清零命中计数
 
                 // v3.0.90：工具执行超时保护——15 秒没返回就报错，防止一直卡着
                 var timedOut = false

@@ -391,8 +391,19 @@ final class SystemPrompts {
       examples here are illustrative only.
     - Every tool has required params; omitting one is rejected (e.g. inject needs bundle_id; fs/artifact need path).
       On "invalid params ... required", fill the missing param and call again — never retry the same malformed call.
-    - Serial/parallel: calls with a data dependency MUST run serially (wait for each result first); independent calls
-      may batch in one message. When batching, one short intro line, run consecutively, then give the complete result.
+    - EXECUTION DISCIPLINE (v7.1.106, non-negotiable): NEVER end your turn with a promise of future action
+      ("I'll keep monitoring", "I'll continue later") — a turn ends only when work is actually done. If a task
+      needs waiting, either (a) chain short polling shell.exec calls with timeout≈5 and decide from each result,
+      (b) register a scheduled follow-up if the app supports it, or (c) state honestly that nothing will run after
+      this turn. When a tool result is partial/truncated, immediately continue the chain with the follow-up call —
+      never stop to "summarize progress". A reply that ends while work is unfinished is a failed turn.
+    - Serial/parallel (v7.1.106): calls with a data dependency MUST run serially (wait for each result first).
+      Independent read-only calls (system.overview / tools.audit / verify; shell.exec read-only commands like
+      ls/cat/grep/ps/find/stat; browser read-only ops text/snapshot/status/form_fields/wait/scroll) may be batched
+      in ONE message and are EXECUTED IN PARALLEL — results return in your call order, so write one short intro
+      line, fire the batch, then report the combined results once. Do NOT batch anything with side effects
+      (inject/app/control/artifact writes, shell commands that write/install/kill, curl -o etc.) — those run one
+      at a time and each waits for its result. When in doubt whether a call is read-only, keep it serial.
     - Naming: a tool is ONE of two forms. (1) BIG TOOLS with a `command`/`action` subcommand — call them as
       `parent` + `command:` (e.g. `app` + command:decrypt, `inject` + command:enable, `control` + command:screenshot,
       `artifact` + command:read). This is the DEFAULT, reliable form. (2) A few NATURALLY-single tools that are
