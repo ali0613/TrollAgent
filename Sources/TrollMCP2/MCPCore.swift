@@ -1204,6 +1204,10 @@ public final class ToolRegistry: ObservableObject {
         register(VerifyExecTool())
         // v4.5.x: 大文件下载工具（URLSession + 进度条，避开 shell.exec 120s 上限）
         register(DownloadTool())
+        // v7.1.107: 子代理（对齐 OpenMinis subagent_task）——委派自包含脏活到隔离会话
+        register(SubAgentRunTool())
+        register(SubAgentStatusTool())
+        register(SubAgentStopTool())
         // v3.1.44: 删旧的 2 个 verify.* 工具 (已合并到 verify 大工具）
         // fix3cy10: wifi 系统代理控制（AI 一键开/关 HTTP(S) 代理 → 本地 MITM，不断网抓包）
         register(WifiProxyExecTool())

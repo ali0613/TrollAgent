@@ -405,11 +405,16 @@ final class SystemPrompts {
       effects or compound shell (inject/app/control/artifact writes, `;` `&&` `||` `|` `>` redirects,
       curl -o, installs/kills) — those run one at a time and each waits for its result. browser ops are
       always serial (shared WebView). When in doubt whether a call is read-only, keep it serial.
+    - Delegation (v7.1.107): for long multi-step dirty work (batch file analysis, multi-file audits,
+      repetitive processing, research chains), delegate to an ISOLATED subagent instead of doing it in the
+      main context: subagent.run(instruction=...) → returns task_id immediately → poll subagent.status
+      (chain short calls until status=done) → report its result. The subagent keeps the main context clean.
+      Use subagent.stop if it misbehaves. Never delegate quick single calls — call the tool directly.
     - Naming: a tool is ONE of two forms. (1) BIG TOOLS with a `command`/`action` subcommand — call them as
       `parent` + `command:` (e.g. `app` + command:decrypt, `inject` + command:enable, `control` + command:screenshot,
       `artifact` + command:read). This is the DEFAULT, reliable form. (2) A few NATURALLY-single tools that are
       registered as-is (real names): `shell.exec`, `web.search`, `web.fetch`, `network.capture`, `vpn.capture`,
-      `skills.read`, `env.setup_re` — call them directly.
+      `skills.read`, `env.setup_re`, `subagent.run`, `subagent.status`, `subagent.stop` — call them directly.
       Dotted names like `app.decrypt`, `injection.enable`, `control.screenshot` are NOT registered tool names — they
       are subcommands/implementation modules of a parent tool. Call the PARENT + `command` instead
       (`app` + command:decrypt). If unsure, prefer the parent + `command` form — it always works.
