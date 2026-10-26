@@ -84,6 +84,81 @@ enum MarkdownBlocks {
     }
 }
 
+/// v7.1.109-minis：提取正文/工具结果里的可打开链接——
+/// 1) minis://open?url=<目标>（AI 主动推送标记，对齐 Minis OSC minis-open 语义：
+///    shell 输出/正文带此标记 → UI 渲染链接卡一键打开）
+/// 2) 裸 http/https URL（点击开内置浏览器，对齐 Minis LinkPreviewView 能力）
+enum LinkExtractor {
+
+    /// 返回去重后的可打开链接
+    static func extractLinks(from text: String) -> [URL] {
+        var urls: [URL] = []
+        var seen = Set<String>()
+        // 1) minis://open?url= 标记（支持 URL 编码或裸 URL）
+        var searchRange = text.startIndex..<text.endIndex
+        while let r = text.range(of: "minis://open?url=", range: searchRange) {
+            let rest = text[r.upperBound...]
+            let end = rest.firstIndex { $0 == " " || $0 == "\n" || $0 == "\t" || $0 == ")" || $0 == "]" || $0 == "，" || $0 == "。" } ?? rest.endIndex
+            var u = String(rest[..<end])
+            if u.contains("%") { u = u.removingPercentEncoding ?? u }
+            if let url = URL(string: u), !seen.contains(u) {
+                urls.append(url)
+                seen.insert(u)
+            }
+            searchRange = end..<text.endIndex
+        }
+        // 2) 裸 http/https URL
+        let pattern = #"https?://[^\s"'\(\)\]\}，。；：,;]+"#
+        if let regex = try? NSRegularExpression(pattern: pattern) {
+            let range = NSRange(text.startIndex..., in: text)
+            regex.enumerateMatches(in: text, range: range) { match, _, _ in
+                guard let match = match, let r = Range(match.range, in: text) else { return }
+                var u = String(text[r])
+                while let last = u.last, "。，；：,.;:)）]】".contains(last) { u.removeLast() }
+                if seen.contains(u) { return }
+                guard let url = URL(string: u) else { return }
+                urls.append(url)
+                seen.insert(u)
+            }
+        }
+        return urls
+    }
+}
+
+/// 链接卡：点击开内置浏览器（对齐 Minis LinkPreviewView 的"点击 → 应用内打开"）
+struct LinkCardView: View {
+    let url: URL
+
+    var body: some View {
+        Button {
+            BrowserManager.shared.open(url.absoluteString)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "link")
+                    .font(.system(size: 12))
+                    .foregroundColor(.blue)
+                Text(url.host ?? url.absoluteString)
+                    .font(.caption.weight(.medium))
+                    .foregroundColor(.blue)
+                    .lineLimit(1)
+                Text(url.absoluteString)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Color.blue.opacity(0.08))
+            .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// 完成消息的块组合渲染视图
 struct MarkdownBlocksView: View {
     let text: String
@@ -96,9 +171,16 @@ struct MarkdownBlocksView: View {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, b in
                 switch b {
                 case .text(let t):
-                    Text(coloredBody(t))
-                        .font(.body)
-                        .textSelection(.enabled)
+                    // v7.1.109-minis：文本块下方附加链接卡（URL / minis:// 标记 → 一键开内置浏览器）
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(coloredBody(t))
+                            .font(.body)
+                            .textSelection(.enabled)
+                        let links = LinkExtractor.extractLinks(from: t)
+                        if !links.isEmpty {
+                            ForEach(links, id: \.self) { LinkCardView(url: $0) }
+                        }
+                    }
                 case .codeBlock(let code):
                     // 命令行文本展示：黑底等宽白字（与工具结果同一视觉语言）
                     Text(code)

@@ -2055,6 +2055,14 @@ struct MessageBubble: View {
                         }
                     }
                 }
+                // v7.1.109-minis：工具结果里的链接 → 链接卡（URL / minis://open?url= 标记）
+                // 对齐 Minis：shell stdout 带 OSC minis-open 标记时 UI 渲染打开入口
+                let links = LinkExtractor.extractLinks(from: message.content)
+                if !links.isEmpty {
+                    VStack(spacing: 6) {
+                        ForEach(links, id: \.self) { LinkCardView(url: $0) }
+                    }
+                }
             }
         }
     }
@@ -2090,7 +2098,45 @@ struct FileCardRow: View {
         return "\(size) B"
     }
 
+    @ViewBuilder
     var body: some View {
+        // v7.1.109-minis：图片文件直显缩略图（对齐 Minis ZoomableImageView——工具结果/正文里的
+        // 图片路径不再只显示图标行，直接渲染图；点击 QuickLook 放大）
+        if isImage, let img = UIImage(contentsOfFile: url.path) {
+            Button(action: { showPreview = true }) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 200)
+                        .cornerRadius(8)
+                    HStack(spacing: 6) {
+                        Image(systemName: "photo")
+                            .font(.system(size: 11))
+                            .foregroundColor(.tmCyan)
+                        Text(fileName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Text(sizeText)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(10)
+                .background(Color(.systemGray5))
+                .cornerRadius(10)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .contextMenu {
+                SharePresenter.menuShare(url: url)
+            }
+            .sheet(isPresented: $showPreview) {
+                QLFilePreview(urls: [url])
+            }
+        } else {
         Button(action: { showPreview = true }) {
             HStack(spacing: 10) {
                 ZStack {
@@ -2137,6 +2183,7 @@ struct FileCardRow: View {
         }
         .sheet(isPresented: $showPreview) {
             QLFilePreview(urls: [url])
+        }
         }
     }
 }

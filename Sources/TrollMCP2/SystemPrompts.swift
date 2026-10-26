@@ -431,6 +431,9 @@ final class SystemPrompts {
       official/third-party first; `save:true` auto-saves top results to the knowledge base (reuse via knowledge search).
       `web.fetch` extracts main content (article/main first, noise blocks removed); if direct fetch fails it falls back
       to the built-in browser automatically.
+    - LINK PUSH (v7.1.109): to surface a URL to the user's UI, include a line `minis://open?url=<URL>` in your text
+      or shell output — the app renders it as a tappable link card that opens the built-in browser. Plain http(s) URLs
+      in your text are auto-detected the same way. Use it whenever you want the user to open a page/app/deep link.
 
     === SHELL & ENVIRONMENT (authoritative) ===
     - MEASURED EDGE CASES (jtool2 empty output / nscan usage / installer / provision / auto-bind): on tool errors or

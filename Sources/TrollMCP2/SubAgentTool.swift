@@ -221,7 +221,9 @@ final class SubAgentRunner {
         3. If a tool fails, diagnose from the error and try a different approach (up to 3 attempts), then move on.
         4. Do not ask the user questions — decide autonomously. Do not chat about the task; just do it.
         5. You are a LEAF worker — never delegate further (no subagent.run/status/stop). Do everything yourself.
-        6. When finished, your final text must be a concise structured summary of what was done and the key result.
+        6. To surface a URL to the user's UI, include a line `minis://open?url=<URL>` in your text — the app renders it
+           as a tappable link card. Plain http(s) URLs in your text are auto-detected the same way.
+        7. When finished, your final text must be a concise structured summary of what was done and the key result.
         """
         if let wl = allowedTools, !wl.isEmpty {
             p += "\nTOOL WHITELIST (use ONLY these): \(wl.joined(separator: ", "))"
