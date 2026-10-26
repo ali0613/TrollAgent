@@ -491,6 +491,9 @@ static NSString *jsDateString() {
         if (mood.count) _moodFrames = mood;
         // v7.2.5：坐姿帧（长按说话显示——用户要求长按不要压扁，换坐姿）
         UIImage *sit = [UIImage imageNamed:[NSString stringWithFormat:@"%@_sit", prefix]];
+        // v7.1.90：兔娘坐姿素材命名 rabit_chin_sit（黑兔女郎托腮蹲坐）——兜底加载，
+        // 否则 rabit 长按说话无坐姿（用户实测兔娘不是坐姿）
+        if (!sit) sit = [UIImage imageNamed:[NSString stringWithFormat:@"%@_chin_sit", prefix]];
         if (sit) _sitImage = _trimTransparentPadding(sit);
         if (!idle) {
             // 兜底：纯色圆（资源缺失时仍可见）
