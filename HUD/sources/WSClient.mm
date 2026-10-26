@@ -179,6 +179,8 @@
         uint8_t opcode = b1 & 0x0F;
         BOOL hasMask = (b1 & 0x80) != 0;
         uint64_t len = b1 & 0x7F;
+        // v7.1.87：帧级诊断日志（定位音频帧解析/剥离失败）
+        [self _log:@"frame recv op=%d len=%llu head=%02x%02x%02x%02x rsv=%02x", opcode, len, b0, b1, (_inBuf.length > 2 ? b[2] : 0), (_inBuf.length > 3 ? b[3] : 0), (finRsv & 0x40)];
         NSUInteger headerLen = 2;
         if (len == 126) {
             if (_inBuf.length < 4) return;

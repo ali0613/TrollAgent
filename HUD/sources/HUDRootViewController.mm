@@ -3413,6 +3413,14 @@ static UIImage *softParticleImage(CGFloat size) {
         // 音频 BINARY 帧：前 2 字节 header 长度 + header + 音频（edge-tts 同样剥离）
         if (d.length >= 2) {
             const uint8_t *b = (const uint8_t *)d.bytes;
+            // v7.1.87：裸 MP3 帧兼容——edge-tts 未压缩(deflate=0)时音频帧可能是裸 MP3
+            //（开头 0xFFFx 同步头），无 2 字节 header；此时直接整体追加，剥离会误把
+            // 0xFFFB 当 header 长度(65531)导致丢弃 → audioBytes=0 frames=0。
+            if (b[0] == 0xFF && (b[1] & 0xE0) == 0xE0) {
+                [audio appendData:d];
+                audioFrames++;
+                return;
+            }
             int hl = (b[0] << 8) | b[1];
             if (2 + hl <= (int)d.length) {
                 [audio appendData:[d subdataWithRange:NSMakeRange(2 + hl, d.length - 2 - hl)]];
