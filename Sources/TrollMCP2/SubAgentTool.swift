@@ -15,6 +15,9 @@ final class SubAgentTask: Identifiable {
     private(set) var result: String
     private(set) var error: String
     private(set) var elapsed: Double
+    /// v7.1.107-P0: 完成但无交付内容（模型总结为空/被截断）——对齐 OpenMinis
+    /// "finished callback whose body is empty carries no deliverable" 语义
+    private(set) var noDeliverable: Bool = false
 
     enum Status: String { case running, done, failed, stopped }
 
@@ -34,6 +37,8 @@ final class SubAgentTask: Identifiable {
         status = .done
         // 防结果撑爆主线：截断到 4000 字符（子代理最终总结应简短，超长说明模型把工具输出写进了总结）
         self.result = result.count > 4000 ? String(result.prefix(4000)) + "\n... [result truncated]" : result
+        // v7.1.107-P0: 空总结 = 无交付——父模型拿到后知道要去子代理轨迹里挖结果
+        noDeliverable = result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         elapsed = Date().timeIntervalSince(createdAt)
     }
 
@@ -64,6 +69,8 @@ final class SubAgentTask: Identifiable {
         ]
         if !result.isEmpty { d["result"] = result }
         if !error.isEmpty { d["error"] = error }
+        // v7.1.107-P0: 无交付标记——父模型拿到 done 但 result 空时，知道该去查看轨迹而非重跑
+        if status == .done && noDeliverable { d["no_deliverable"] = true }
         return d
     }
 }
@@ -75,6 +82,9 @@ final class SubAgentManager {
 
     private var tasks: [String: SubAgentTask] = [:]
     private var activeTaskID: String?
+    /// v7.1.107-P0: steer 方向修正队列——父模型可运行中给子代理注入新指令，
+    /// 在循环边界以"用户消息"送达（对齐 OpenMinis pendingSteerMessages 语义）
+    private var pendingSteers: [String: [String]] = [:]
     private let lock = NSLock()
 
     /// 启动子代理。成功返回 task_id；已有任务在跑则返回失败（模型应轮询/停止旧任务）。
@@ -115,6 +125,23 @@ final class SubAgentManager {
         t.markStopped()
         return true
     }
+
+    /// v7.1.107-P0: 给运行中的子代理注入方向修正（steer）。仅 running 可注入；
+    /// 消息排队在循环边界消费。返回是否成功入队。
+    func steer(id: String, instruction: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let t = tasks[id], t.status == .running else { return false }
+        pendingSteers[id, default: []].append(instruction)
+        return true
+    }
+
+    /// v7.1.107-P0: 消费子代理的待送达 steer（循环边界调用）。线程安全。
+    func drainSteers(id: String) -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return pendingSteers.removeValue(forKey: id) ?? []
+    }
 }
 
 // MARK: - 子代理执行循环（隔离会话 + 工具循环，独立于主 runLoop，不碰主线状态）
@@ -128,6 +155,10 @@ final class SubAgentRunner {
     private var client: OpenAIClient?
     private var lastTool = ""
     private var sameToolRepeat = 0
+    /// v7.1.107-P0: 轮次预警已注入（剩 2-3 轮时，工具仍可用）
+    private var turnWarningInjected = false
+    /// v7.1.107-P0: wrap-up 已注入（最后一轮收回工具，强制写交付总结）
+    private var wrapUpInjected = false
 
     /// 子代理默认工具集——通用干活三件套 + 只读信息工具（全量 schema 太大，注入精简集）
     private let defaultTools: Set<String> = [
@@ -190,14 +221,49 @@ final class SubAgentRunner {
     private func loop() {
         // 停止检查
         if task.status == .stopped { return }
-        // 超时 / 轮次上限
+        // 超时
         if Date() > deadline {
             task.markFailed("timeout after \(Int(deadline.timeIntervalSince(task.createdAt)))s")
             return
         }
+        // v7.1.107-P0: 轮次生命周期（对齐 OpenMinis 预算警告 + wrap-up）：
+        // 剩 1 轮 → 收回工具，注入"写交付"（tools=nil 模型只能文本总结，不会再有 toolCalls）
+        // 剩 2-3 轮 → 注入"还剩 N 轮"预警（工具仍可用，可行动而非墓碑）
+        let roundsLeft = maxRounds - task.rounds
+        if !wrapUpInjected {
+            if roundsLeft <= 1 {
+                wrapUpInjected = true
+                messages.append(ChatMessage(role: "user", content: """
+                ⏰ TURN BUDGET EXPIRED — you have NO tool rounds left. You must now produce your FINAL summary \
+                as plain text (this turn has no tools). Write the deliverable: what you did, the key results, \
+                and any files/paths involved. If you have not finished, state exactly what remains and what you \
+                found so far — the delegating agent will read this text only.
+                """))
+            } else if roundsLeft <= 3, !turnWarningInjected {
+                turnWarningInjected = true
+                messages.append(ChatMessage(role: "user", content: """
+                ⚠️ TURN BUDGET WARNING: you have \(roundsLeft - 1) tool rounds left (this one included you may still use tools).
+                Finish what you are doing and plan for a concise final summary next — do not start long new work.
+                """))
+            }
+        }
+        // v7.1.107-P0: 轮次硬上限（wrap-up 轮发完总结即 done；若仍进入下一轮则失败）
         if task.rounds >= maxRounds {
-            task.markFailed("reached max rounds (\(maxRounds))")
+            if wrapUpInjected {
+                // wrap-up 轮应已产出文本；能走到这说明模型回了 toolCalls（工具已收回，理论不可达）
+                task.markFailed("reached max rounds (\(maxRounds)) without a final summary")
+            } else {
+                task.markFailed("reached max rounds (\(maxRounds))")
+            }
             return
+        }
+        // v7.1.107-P0: 消费 steer 方向修正（循环边界，作为子会话真实用户消息送达）
+        let steers = SubAgentManager.shared.drainSteers(id: task.id)
+        if !steers.isEmpty {
+            let note = steers
+                .map { "[Course correction from the delegating agent] \($0)" }
+                .joined(separator: "\n")
+            messages.append(ChatMessage(role: "user", content: note))
         }
         // 取当前模型配置（与主会话一致）
         let store = ModelStore.shared
@@ -210,7 +276,8 @@ final class SubAgentRunner {
         }
         let client = OpenAIClient(config)
         self.client = client
-        let tools = subAgentTools()
+        // v7.1.107-P0: wrap-up 轮不传工具 schema → 模型只能文本总结
+        let tools = wrapUpInjected ? nil : subAgentTools()
         client.send(messages: messages, tools: tools) { [weak self] result in
             guard let self = self else { return }
             switch result {
@@ -391,6 +458,33 @@ final class SubAgentStopTool: MCPTool {
         }
         if SubAgentManager.shared.stop(id: id) {
             return ["ok": true, "task_id": id, "status": "stopped"]
+        }
+        return ["ok": false, "message": "task \(id) not running (already finished/stopped or unknown id)"]
+    }
+}
+
+/// v7.1.107-P0: subagent.steer——父模型运行中给子代理注入方向修正
+/// （对齐 OpenMinis pendingSteerMessages：循环边界以子会话真实用户消息送达）
+final class SubAgentSteerTool: MCPTool {
+    let definition = ToolDefinition(
+        name: "subagent.steer",
+        summary: "Send a mid-run course correction to a RUNNING subagent (appended to its transcript as a user message; it takes effect at the next loop boundary). Use for: the subagent went in the wrong direction, you learned new info, or you want to change its output format mid-task. Does NOT stop it. Returns ok=false if the task is not running.",
+        parameters: [
+            "task_id": "The subagent task id returned by subagent.run (required)",
+            "instruction": "The new direction/instruction to inject (required). Be specific: what to change, what to keep, output format.",
+        ],
+        verified: true, category: "system")
+
+    func invoke(_ params: [String: Any]) throws -> [String: Any] {
+        guard let id = params["task_id"] as? String, !id.isEmpty else {
+            throw MCPError.invalidParams("task_id required")
+        }
+        guard let instruction = params["instruction"] as? String,
+              !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw MCPError.invalidParams("instruction required")
+        }
+        if SubAgentManager.shared.steer(id: id, instruction: instruction) {
+            return ["ok": true, "task_id": id, "message": "steer queued for \(id) (takes effect at next loop boundary)"]
         }
         return ["ok": false, "message": "task \(id) not running (already finished/stopped or unknown id)"]
     }
