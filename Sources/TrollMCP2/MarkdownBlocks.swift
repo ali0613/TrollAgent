@@ -17,6 +17,7 @@ enum MarkdownBlocks {
         case list(items: [ListItem])
         case image(alt: String, url: String)
         case math(String)
+        case heading(level: Int, text: String)
     }
 
     /// v7.1.109-peers：任务清单项（tuple 数组不自动合成 Equatable，需 struct）
@@ -155,6 +156,18 @@ enum MarkdownBlocks {
                 } else if !closed {
                     textBuf.append(startLine)
                     textBuf.append(contentsOf: latexLines)
+                    continue
+                }
+            }
+            // v7.2.3-fix4：标题——# ～ ###### 开头行 → heading 块（大字号加粗）。
+            // 连续 # 无空格也接受（模型常写 "##标题"）；### 及以上缩进逐级减小。
+            if trimmed.hasPrefix("#") {
+                let hashCount = trimmed.prefix(while: { $0 == "#" }).count
+                let rest = trimmed.dropFirst(hashCount).trimmingCharacters(in: .whitespaces)
+                if hashCount <= 6 && !rest.isEmpty {
+                    flushText()
+                    blocks.append(.heading(level: hashCount, text: rest))
+                    i += 1
                     continue
                 }
             }
@@ -481,6 +494,13 @@ struct MarkdownBlocksView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(.secondarySystemBackground).opacity(0.6))
                     .cornerRadius(8)
+                case .heading(let level, let title):
+                    // v7.2.3-fix4：标题——字号随级别递减（H1=21 → H6=15），粗体、行内样式保留
+                    Text(coloredBody(title))
+                        .font(.system(size: CGFloat(max(22 - level, 16)), weight: .bold))
+                        .padding(.top, level <= 2 ? 10 : 6)
+                        .padding(.bottom, 2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 case .hr:
                     Divider()
                         .overlay(Color(.separator))

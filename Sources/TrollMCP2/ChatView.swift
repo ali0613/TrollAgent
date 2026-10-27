@@ -1927,9 +1927,10 @@ struct MessageBubble: View {
     }
 
     // v7.2.1：段内富文本——~~删除线~~ / ==高亮== / *斜体* / $行内公式$ / [N] 角标（跨段）
+    // v7.2.3-fix4：段内富文本 + [text](url) 链接 / 裸 URL（蓝色可点）
     private func styledMarks(_ s: Substring) -> AttributedString {
         var out = AttributedString()
-        let richPat = #"~~([^~]+)~~|==([^=]+)==|\*([^*]+)\*|\$([^$\n]+)\$|\[(\d+)\]"#
+        let richPat = #"~~([^~]+)~~|==([^=]+)==|\*([^*]+)\*|\$([^$\n]+)\$|\[(\d+)\]|\[([^\]\n]+)\]\((https?://[^)\s]+)\)|(https?://[^\s)\]），。；：,;]+)"#
         var pos = s.startIndex
         while let r = s.range(of: richPat, options: .regularExpression, range: pos..<s.endIndex) {
             if pos < r.lowerBound { out += AttributedString(s[pos..<r.lowerBound]) }
@@ -1961,6 +1962,30 @@ struct MessageBubble: View {
                 } else {
                     out += AttributedString(seg)
                 }
+            } else if seg.hasPrefix("[") {
+                // v7.2.3-fix4：[text](url) Markdown 链接 vs [N] 角标——含 "](" 即链接
+                if seg.contains("]("),
+                   let te = seg.range(of: "](")?.lowerBound,
+                   let us = seg.range(of: "](")?.upperBound,
+                   te > seg.startIndex, us < seg.endIndex {
+                    let linkText = String(seg[seg.index(after: seg.startIndex)..<te])
+                    let linkURL = String(seg[us..<seg.index(before: seg.endIndex)])
+                    var c = AttributedString(linkText)
+                    c.foregroundColor = .blue
+                    c.underlineStyle = .single
+                    c.link = URL(string: linkURL)
+                    out += c
+                } else {
+                    out += AttributedString(seg)
+                }
+            } else if seg.hasPrefix("http") {
+                // v7.2.3-fix4：裸 URL 自动链接化（尾随标点已由正则排除；
+                // 用 seg 而非 inner——URL 无包裹字符，inner 会剥首尾各一字符）
+                var c = AttributedString(seg)
+                c.foregroundColor = .blue
+                c.underlineStyle = .single
+                c.link = URL(string: seg)
+                out += c
             } else {
                 // [N] → 蓝色上标（可点击：minis://source?n=N 由 openURL 拦截弹出来源卡）
                 var c = AttributedString(seg)
