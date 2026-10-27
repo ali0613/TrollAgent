@@ -78,9 +78,11 @@ enum MarkdownBlocks {
                 let header = cells(of: line)
                 i += 2
                 var rows: [[String]] = []
+                // v7.1.109-peers：不完整行（流式/打字中途无结尾 |）也进表格容器——
+                // 内容在单元格内流式填充（大厂式表格内打字），不再跳回纯文本
                 while i < lines.count {
                     let dl = lines[i].trimmingCharacters(in: .whitespaces)
-                    if dl.hasPrefix("|") && dl.hasSuffix("|") {
+                    if dl.hasPrefix("|") {
                         rows.append(cells(of: lines[i]))
                         i += 1
                     } else { break }

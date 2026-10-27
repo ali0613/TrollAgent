@@ -1577,12 +1577,14 @@ struct MessageBubble: View {
                 let idx = self.message.content.index(self.message.content.startIndex, offsetBy: self.revealedCount)
                 let ch = self.message.content[idx]
                 let isPause = ch == "\n" || "，。；：！？、,.。;:!?… ".contains(ch)
+                // v7.1.109-peers：大厂式打字速度——基础 3 字符/tick(150字/秒)不拖沓，
+                // 积压大幅提速追平网络/整段到达，标点/换行 1 字符停顿更有呼吸感
                 let step: Int
-                if backlog > 60 { step = 8 }        // 积压很多 → 大幅提速追平
-                else if backlog > 30 { step = 4 }   // 积压多 → 提速
-                else if backlog > 12 { step = 2 }   // 稍积压 → 中速
-                else if isPause { step = 1 }        // 标点/换行 → 慢速停顿(真人感)
-                else { step = 1 }                    // 常规 ~50 字/秒(0.02s/字)
+                if backlog > 200 { step = 12 }       // 大量积压 → 追平
+                else if backlog > 100 { step = 8 }   // 积压多 → 提速
+                else if backlog > 40 { step = 5 }    // 稍积压 → 中快
+                else if isPause { step = 1 }         // 标点/换行 → 停顿
+                else { step = 3 }                    // 常规 ~150 字/秒
                 self.revealedCount = min(total, self.revealedCount + step)
             }
         }
@@ -1675,19 +1677,26 @@ struct MessageBubble: View {
         // 文字选择。全量复制/分享走多选工具栏(selectionMode: copySelected/shareMessage)。
         // v3.4.5：打字机效果——内容增长即逐字显示，直到完整
         // v7.1.109-peers：forceType 已完成消息视图重建时直接全文（不重打）；
-        // 流式消息若之前打完过但内容又增长（续写），清除标记重新打
+        // 流式消息实时跟随网络（onChange(content) 同步 revealedCount），不启动限速 timer
         .onAppear {
             if isStreaming { Self.clearDoneTyping(message.id) }
-            if (isStreaming || forceType), revealedCount < message.content.count { startTypeTimer() }
+            if !isStreaming, forceType, revealedCount < message.content.count { startTypeTimer() }
         }
         .onDisappear { stopTypeTimer() }
         .onChange(of: isStreaming) { streaming in
-            if streaming, revealedCount < message.content.count { startTypeTimer() }
+            if streaming {
+                // v7.1.109-peers：流式开始——实时跟随网络，不启动限速 timer
+                revealedCount = message.content.count
+            }
             // v7.1.109-peers：流式结束且已显示完整 → 标记已打完（防切后台回来重打）
-            else if !streaming, revealedCount >= message.content.count { Self.markDoneTyping(message.id) }
+            else if revealedCount >= message.content.count { Self.markDoneTyping(message.id) }
         }
         .onChange(of: message.content) { _ in
-            if revealedCount < message.content.count { startTypeTimer() }
+            // v7.1.109-peers：流式中实时同步（网络到哪渲染哪，大厂式流式）；forceType 落后时启动打字机
+            if isStreaming {
+                revealedCount = message.content.count
+                Self.clearDoneTyping(message.id)
+            } else if revealedCount < message.content.count { startTypeTimer() }
         }
     }
 
@@ -1849,9 +1858,17 @@ struct MessageBubble: View {
                 // 导致"打字机一下有一下没有"(用户实测反馈)。修复后非流式完成的消息也逐字打出来。
                 // v7.1.109-peers：已打完标记(doneTyping)的消息——即使 forceType 仍 true、revealedCount
                 // 视图重建归 0，也直接渲染全文（切后台回来不重打、表格/黑底立即可见）
+                // v7.1.109-peers：流式跟随网络实时渲染（大厂式：delta 到哪渲染哪，代码块/表格/
+                // 链接结构到达即出现，不再字符限速）；forceType(整段到达)保留逐字打字机+结构即时化
                 let typedDone = !isStreaming && Self.doneTyping(for: message.id)
-                let shown = (isStreaming || forceType) && !typedDone
-                    ? String(message.content.prefix(revealedCount)) : message.content
+                let shown: String
+                if isStreaming {
+                    shown = message.content
+                } else if forceType && !typedDone {
+                    shown = String(message.content.prefix(revealedCount))
+                } else {
+                    shown = message.content
+                }
                 // v4.4.11：assistant 行内代码橙色高亮, user 纯文本
                 VStack(alignment: .leading, spacing: 3) {
                     // v4.4.21：完成消息用 SelectableText(UITextView) 长按划词/复制；流式打字机+用户消息用 Text(轻量)
