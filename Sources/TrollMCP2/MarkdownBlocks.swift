@@ -31,6 +31,7 @@ enum MarkdownBlocks {
         var ordered: Bool
         var marker: String   // "•"（无序）或 "1."（有序原文编号）
         var text: String
+        var level: Int = 0   // v7.2.3-fix5：嵌套级别（行首 2 空格 = 1 级，tab = 1 级）
     }
 
     static func parse(_ text: String) -> [Block] {
@@ -195,13 +196,16 @@ enum MarkdownBlocks {
                 continue
             }
             // v7.2.1：有序/无序列表——连续 - / * / + / 1. 行首
+            // v7.2.3-fix5：支持嵌套——按行首缩进算级别（2 空格 = 1 级，tab = 1 级，clamp 0-4）
             if isListMarker(trimmed) {
                 flushText()
                 var items: [ListItem] = []
                 while i < lines.count {
-                    let dl = lines[i].trimmingCharacters(in: .whitespaces)
+                    let raw = lines[i]
+                    let indent = Self.leadingIndent(of: raw)
+                    let dl = raw.trimmingCharacters(in: .whitespaces)
                     guard let m = listMarker(of: dl) else { break }
-                    items.append(m)
+                    items.append(ListItem(ordered: m.ordered, marker: m.marker, text: m.text, level: min(indent / 2, 4)))
                     i += 1
                 }
                 if !items.isEmpty {
@@ -231,6 +235,17 @@ enum MarkdownBlocks {
     }
 
     /// v7.2.1：无序（- / * / +）或有序（数字.）列表行首
+    /// v7.2.3-fix5：行首缩进计数（2 空格 = 1 级，tab = 2 空格计）
+    private static func leadingIndent(of line: String) -> Int {
+        var n = 0
+        for ch in line {
+            if ch == " " { n += 1 }
+            else if ch == "\t" { n += 2 }
+            else { break }
+        }
+        return n
+    }
+
     private static func isListMarker(_ trimmed: String) -> Bool {
         if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("+ ") { return true }
         // 有序：数字 + "." + 空格
@@ -507,6 +522,7 @@ struct MarkdownBlocksView: View {
                         .padding(.vertical, 4)
                 case .list(let items):
                     // v7.2.1：有序/无序列表——marker 列 + 正文（首行基线对齐）
+                    // v7.2.3-fix5：嵌套缩进——按 item.level 每级 16pt 左移
                     VStack(alignment: .leading, spacing: 3) {
                         ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -517,6 +533,7 @@ struct MarkdownBlocksView: View {
                                     .font(.body)
                                     .textSelection(.enabled)
                             }
+                            .padding(.leading, CGFloat(item.level) * 16)
                         }
                     }
                 case .image(let alt, let url):
