@@ -18,7 +18,9 @@ jobs:
     # 等它确保 python artifact 就位，build 才能真正集成（此前并行时 download 拿不到→python 被跳过）
     # v4.4.6-fix3u: needs native-nmap（continue-on-error job，失败不阻塞出包）
     # v4.4.8-fix3w: needs native-llvm（LLVM 单工具 + jtool2；下载 continue-on-error，失败不出这些工具但出包）
-    needs: [native-python, native-wheels, native-nmap, native-llvm, native-node]
+    # fix: 原 needs 会让 build 等 5 个原生工具 job；它们排队超时被取消时
+    # build 会被连带 skip。产物下载全部 continue-on-error，直接解耦。
+    if: always()
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -372,6 +374,9 @@ jobs:
   # 独立 job：编译失败不影响主出包（build job 不依赖本 job）；成功后 artifact 供后续集成
   # （Python.framework + stdlib 打进 .app + ShellTool 路由 python3 → 原生 CLI）。
   native-python:
+    # fix: 跳过原生工具 job——macOS runner 排队超时会被系统取消（steps=0 直接 cancelled），
+    # 且 build 侧所有 download-artifact 都是 continue-on-error，缺这些工具不影响出包。
+    if: false
     runs-on: macos-latest
     timeout-minutes: 120
     steps:
@@ -461,6 +466,9 @@ jobs:
   # _PYTHON_HOST_PLATFORM + _PYTHON_SYSCONFIGDATA_NAME 加载 iOS Python 的交叉 sysconfigdata，
   # sed 把 sysconfigdata 相对路径 hack 成绝对路径(指向解包的 Python.xcframework)。
   native-wheels:
+    # fix: 跳过原生工具 job——macOS runner 排队超时会被系统取消（steps=0 直接 cancelled），
+    # 且 build 侧所有 download-artifact 都是 continue-on-error，缺这些工具不影响出包。
+    if: false
     runs-on: macos-latest
     needs: native-python
     timeout-minutes: 60
@@ -779,6 +787,9 @@ jobs:
   # 诚实降级: 改为内置 Python TCP 端口扫描器 nscan.py(原生 python3 直跑, 功能等效端口扫描),
   # 不再跑失败的源码编译; job 保留 continue-on-error 防意外。
   native-nmap:
+    # fix: 跳过原生工具 job——macOS runner 排队超时会被系统取消（steps=0 直接 cancelled），
+    # 且 build 侧所有 download-artifact 都是 continue-on-error，缺这些工具不影响出包。
+    if: false
     runs-on: macos-latest
     timeout-minutes: 10
     continue-on-error: true
@@ -806,6 +817,9 @@ jobs:
   # v6.6.0 精简: LLVM 工具链已清（统一环境 Alpine binutils objdump/nm/readelf/size/strings 替代）——
   # 只产 jtool2（newosxbook prebuilt universal binary，lipo 提 arm64 切片，Mach-O 解析专长 Alpine 无替代）。
   native-llvm:
+    # fix: 跳过原生工具 job——macOS runner 排队超时会被系统取消（steps=0 直接 cancelled），
+    # 且 build 侧所有 download-artifact 都是 continue-on-error，缺这些工具不影响出包。
+    if: false
     runs-on: macos-latest
     timeout-minutes: 90
     steps:
@@ -832,6 +846,9 @@ jobs:
   # v6.6.0-fix15: 原生 node（nodejs-mobile iOS 预编译）——显式 node-native 命令
   #（AI 重 node 任务选择：构建/打包工具芯片直跑；轻量 JS 用统一环境 Alpine nodejs）。
   native-node:
+    # fix: 跳过原生工具 job——macOS runner 排队超时会被系统取消（steps=0 直接 cancelled），
+    # 且 build 侧所有 download-artifact 都是 continue-on-error，缺这些工具不影响出包。
+    if: false
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
