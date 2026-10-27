@@ -647,7 +647,9 @@ struct ChatView: View {
                 QuickTabButton(icon: "folder", label: L10n.t("i18n_1040")) {
                     AppUIState.shared.quickFilesPresented = true
                 }.frame(height: 36)
-                // v7.1.109-peers：上下文环形指示器（Cursor 式 token 占用）——行尾，不占胶囊位
+                // v7.1.109-peers：上下文指示（Minis 式文字 + Cursor 式圆环）——行尾，不占胶囊位
+                contextText
+                    .padding(.leading, 4)
                 contextRing
                     .padding(.leading, 2)
             }
@@ -766,7 +768,8 @@ struct ChatView: View {
         return reasoning >= 0 && reasoning < labels.count ? labels[reasoning] : L10n.t("i18n_1043")
     }
 
-    // v7.1.109-peers：上下文环形指示器（Cursor 式）——最近请求真实/估算 token 占 200k 上下文比例
+    // v7.1.109-peers：上下文环形指示器（Cursor 式）+ 文字指示（Minis 式"5%·53.7k/1000k"）——
+    // 最近请求真实/估算 token 占当前模型实际上下文窗口比例
     // 数据缓存于 @State（audit：records 每次读全文件，不能在 body 渲染里高频读）
     @State private var ringTok = 0
     private func refreshRingTok() {
@@ -775,9 +778,30 @@ struct ChatView: View {
         let est = rec?["estInputTokens"] as? Int ?? 0
         ringTok = total > 0 ? total : est
     }
+    // v7.1.109-peers：当前模型实际上下文窗口（ModelCapability 静态表，未收录兜底 200k）
+    private var currentContextWindow: Int {
+        let name = modelStore.defaultConfig?.model ?? ""
+        return ModelCapability.contextWindow(for: name) ?? 200_000
+    }
+    private func fmtTok(_ t: Int) -> String {
+        if t >= 1_000_000 { return String(format: "%.1fM", Double(t) / 1_000_000) }
+        if t >= 1000 { return String(format: "%.1fk", Double(t) / 1000) }
+        return "\(t)"
+    }
+    // v7.1.109-peers：Minis 式上下文文字——"5%·53.7k/1000k"（百分比·当前/总量）
+    private var contextText: some View {
+        let tok = ringTok
+        let window = currentContextWindow
+        let pct = window > 0 ? min(100, Int(Double(tok) / Double(window) * 100)) : 0
+        return Text("\(pct)%·\(fmtTok(tok))/\(fmtTok(window))")
+            .font(.system(size: 11, weight: .medium))
+            .foregroundColor(.secondary)
+            .accessibilityLabel(L10n.t("i18n_1254"))
+    }
     private var contextRing: some View {
         let tok = ringTok
-        let ratio: CGFloat = tok > 0 ? min(1.0, CGFloat(tok) / 200000) : 0
+        let window = currentContextWindow
+        let ratio: CGFloat = tok > 0 ? min(1.0, CGFloat(tok) / CGFloat(window)) : 0
         return ZStack {
             Circle()
                 .stroke(Color(.systemGray4), lineWidth: 2)
