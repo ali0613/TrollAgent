@@ -304,6 +304,14 @@ jobs:
           export XCODE_APPEX=1
           bash scripts/build-ipa.sh
 
+      # v7.2.3-fix9：回归测试编译验证——纯逻辑单测（Markdown 解析/引用提取/
+      # 并行安全判定）进编译基线；编译绿即防"修复引入新状态"。运行需 iOS
+      # destination（模拟器下载慢），先以编译验证锁住，运行留待后续接 xcodebuild。
+      - name: Build tests (compile gate)
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          swift build --build-tests -c debug 2>&1 | tail -20
+
       # v4.4.8-fix3x: 进包断言——实测发现 job 绿但工具缺失（缓存劫持/吞错），
       # 这里逐项列出实际进包情况，build 日志可查、可审计。
       - name: Verify bundled tools in tipa

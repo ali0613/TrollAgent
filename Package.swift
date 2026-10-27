@@ -121,5 +121,12 @@ let package = Package(
                 ])
             ]
         ),
+        // v7.2.3-fix9：回归测试基线（病灶⑥）——纯逻辑单测：Markdown 解析/
+        // 引用提取/并行安全判定。CI 以 `swift build --build-tests` 编译验证
+        // （运行需 iOS destination，编译绿即进入回归基线）。
+        .testTarget(
+            name: "TrollAgentTests",
+            dependencies: ["TrollAgent"]
+        ),
     ]
 )
