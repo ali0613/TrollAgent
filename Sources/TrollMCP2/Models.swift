@@ -2505,6 +2505,13 @@ final class ConversationStore: ObservableObject {
             if base == "curl" && curlWritesFile(cmd) { return false }
             return true
         }
+        // v7.2.3-audit3：sed 无就地写（-i/--in-place）→ 纯只读可合批
+        // `sed -n '1,400p' file` / `sed -e 's/x/y/'` 无重定向都只读；-i 就地写拦截。
+        // 复合符(;&&|||><)已在前置检查拦截，此处只需防 -i。
+        if base == "sed" {
+            if cmd.contains("-i") || cmd.contains("--in-place") { return false }
+            return true
+        }
         // v7.1.102：解释器命令（python3/node/perl/ruby/php/bash -c...）——
         // 合批后依次执行（非并行，副作用有序、依赖可见、错误可恢复），
         // 用脚本内容黑名单兜底：含写/危险 API 特征 → 一次一条，纯只读脚本 → 可合批。

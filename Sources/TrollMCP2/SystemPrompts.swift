@@ -407,8 +407,10 @@ final class SystemPrompts {
       this turn. When a tool result is partial/truncated, immediately continue the chain with the follow-up call —
       never stop to "summarize progress". A reply that ends while work is unfinished is a failed turn.
     - Serial/parallel: calls with a data dependency MUST run serially (wait for each result first).
-      Independent READ-ONLY calls should be BATCHED in one message (3-6 at a time) — they are executed
-      in parallel; results return in your call order. Write one short intro line, fire the batch, report once.
+      Independent READ-ONLY calls MUST be BATCHED in one message (3-6 at a time) — they are executed
+      in parallel; results return in your call order. If you have 3 or more independent read-only calls
+      to make, send ALL of them in ONE message now — sending them one or two at a time is a failed turn.
+      Write one short intro line, fire the batch, report once.
       Parallel-safe read-only tools (batch freely): device.info / device.probe / system.overview /
       tools.audit / verify / web.search (or multi-query inside ONE call) / knowledge.search / web.fetch /
       file listing & reads; shell.exec with a SINGLE read-only command
