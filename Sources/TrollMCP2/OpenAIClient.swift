@@ -1797,6 +1797,32 @@ final class UsageRecorder {
         lastInputEst = est
     }
 
+    /// v7.1.109-peers：缓存读取 token 兼容解析（中转站/API 各形态）
+    static func extractCachedRead(_ u: [String: Any]) -> Int {
+        if let v = u["cache_read_input_tokens"] as? Int { return v }            // Anthropic/部分中转
+        if let v = u["cached_tokens"] as? Int { return v }                      // OpenAI/中转
+        if let v = u["prompt_cache_hit_tokens"] as? Int { return v }            // DeepSeek 老格式
+        if let v = u["cache_read_tokens"] as? Int { return v }
+        if let d = u["prompt_tokens_details"] as? [String: Any] {
+            if let v = d["cached_tokens"] as? Int { return v }                  // OpenAI/DeepSeek 新格式
+            if let v = d["cached_tokens"] as? Double { return Int(v) }
+            if let v = d["cache_read_tokens"] as? Int { return v }
+        }
+        if let v = u["cache_read_input_tokens"] as? Double { return Int(v) }
+        return 0
+    }
+    /// v7.1.109-peers：缓存未命中 token（标准命中率分母用）；无该字段返回 nil
+    static func extractCacheMiss(_ u: [String: Any]) -> Int? {
+        if let v = u["cache_miss_input_tokens"] as? Int { return v }
+        if let v = u["prompt_cache_miss_tokens"] as? Int { return v }           // DeepSeek 老格式
+        if let v = u["uncached_tokens"] as? Int { return v }
+        if let d = u["prompt_tokens_details"] as? [String: Any] {
+            if let v = d["uncached_tokens"] as? Int { return v }
+            if let v = d["cache_miss_tokens"] as? Int { return v }
+        }
+        return nil
+    }
+
     func end(config: ModelConfig, ok: Bool, elapsedMs: Int, error: String = "", usage: [String: Any]? = nil) {
         lock.lock(); defer { lock.unlock() }
         var rec: [String: Any] = [
@@ -1816,6 +1842,16 @@ final class UsageRecorder {
             rec["promptTokens"] = u["prompt_tokens"] ?? 0
             rec["completionTokens"] = u["completion_tokens"] ?? 0
             rec["totalTokens"] = u["total_tokens"] ?? 0
+            // v7.1.109-peers：缓存字段直读中转站/API usage（对齐 OpenMinis TokenUsageSheet）——
+            // 兼容各形态：Anthropic cache_read_input_tokens / OpenAI cached_tokens /
+            // DeepSeek prompt_cache_hit_tokens / prompt_tokens_details.cached_tokens
+            let cacheRead = Self.extractCachedRead(u)
+            rec["cacheReadTokens"] = cacheRead
+            if let miss = Self.extractCacheMiss(u) {
+                rec["cacheMissTokens"] = miss
+            } else if let pt = u["prompt_tokens"] as? Int {
+                rec["cacheMissTokens"] = max(0, pt - cacheRead)   // 只给 cache 时，miss = 输入 - cache
+            }
             // v7.1.109-peers：OpenMinis calibration ratio——真实/估算比值即时更新（lock 内，线程安全）
             if let p = rec["promptTokens"] as? Int, p > 0, lastInputEst > 0 {
                 lastRealRatio = min(2.5, max(0.5, Double(p) / Double(lastInputEst)))

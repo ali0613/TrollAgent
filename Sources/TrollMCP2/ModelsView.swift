@@ -975,10 +975,13 @@ struct UsageStatsView: View {
                         statCell(title: L10n.t("i18n_434"), value: agg.total > 0 ? "\(Int(Double(agg.ok) / Double(agg.total) * 100))%" : "-", color: .green)
                         statCell(title: L10n.t("i18n_435"), value: agg.total > 0 ? "\(agg.elapsed / agg.total)ms" : "-", color: .orange)
                     }
+                    // v7.1.109-peers：缓存四件套（对齐 OpenMinis TokenUsageSheet）——
+                    // 总输入(含缓存)/输出/缓存读取/命中率，直读中转站 usage
                     HStack {
-                        statCell(title: L10n.t("i18n_1107"), value: "\(fmtK(agg.inputTokens))", color: .purple)
-                        statCell(title: L10n.t("i18n_1246"), value: "\(fmtK(agg.outputTokens))", color: .purple)
-                        statCell(title: L10n.t("i18n_1247"), value: "\(fmtK(agg.totalTokens))", color: .indigo)
+                        statCell(title: "总输入(含缓存)", value: "\(fmtK(agg.inputTokens + agg.cacheRead))", color: .blue)
+                        statCell(title: "输出 Token", value: "\(fmtK(agg.outputTokens))", color: .purple)
+                        statCell(title: "缓存读取", value: "\(fmtK(agg.cacheRead))", color: .green)
+                        statCell(title: "缓存命中率", value: cacheRateText(agg.cacheRead, agg.byProvider), color: .indigo)
                     }
                 }
 
@@ -989,10 +992,26 @@ struct UsageStatsView: View {
                                 HStack {
                                     Text(row.name).font(.subheadline.weight(.medium))
                                     Spacer()
-                                    // v7.1.109-minis：模型行 token 聚合（对齐 OpenMinis ModelStats.totalTokens）
-                                    Text("\(fmtK(row.totalTokens)) tok · \(L10n.t("ui_156", row.total, row.ok))")
-                                        .font(.caption)
+                                    // v7.1.109-peers：总输入(含缓存) / 输出（对齐 Minis 行右侧）
+                                    Text("\(fmtK(row.inputTokens + row.cacheReadTokens)) / \(fmtK(row.outputTokens))")
+                                        .font(.caption.weight(.medium))
                                         .foregroundColor(.secondary)
+                                }
+                                // v7.1.109-peers：缓存明细行（输入(新)/输出/缓存读取/命中率）
+                                HStack(spacing: 8) {
+                                    Text("输入 \(fmtK(row.inputTokens))").font(.caption2).foregroundColor(.secondary)
+                                    Text("输出 \(fmtK(row.outputTokens))").font(.caption2).foregroundColor(.secondary)
+                                    Text("缓存 \(fmtK(row.cacheReadTokens))").font(.caption2).foregroundColor(.secondary)
+                                    Text("命中率 \(Int(row.cacheHitRate * 100))%").font(.caption2).foregroundColor(.secondary)
+                                    Spacer()
+                                }
+                                // v7.1.109-peers：日均/会话均值/会话/活跃天数（对齐 Minis 明细）
+                                HStack(spacing: 8) {
+                                    Text("日均 \(fmtK(row.dailyTokens))").font(.caption2).foregroundColor(.secondary)
+                                    Text("会话均值 \(fmtK(row.perSessionTokens))").font(.caption2).foregroundColor(.secondary)
+                                    Text("会话 \(row.sessionCount)").font(.caption2).foregroundColor(.secondary)
+                                    Text("活跃 \(row.activeDays.count) 天").font(.caption2).foregroundColor(.secondary)
+                                    Spacer()
                                 }
                                 // v7.1.109-minis：token 输入/输出比例条（Input 蓝 / Output 紫——同列可视）
                                 if row.totalTokens > 0 {
@@ -1056,7 +1075,17 @@ struct UsageStatsView: View {
     }
 
     private func fmtK(_ n: Int) -> String {
-        n >= 1000 ? String(format: "%.1fk", Double(n) / 1000.0) : "\(n)"
+        if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
+        return n >= 1000 ? String(format: "%.1fk", Double(n) / 1000.0) : "\(n)"
+    }
+
+    /// v7.1.109-peers：总缓存命中率——cache/(cache+miss) 标准口径；无 miss 时按 cache/总输入
+    private func cacheRateText(_ cacheRead: Int, _ byProvider: [ProviderAgg]) -> String {
+        let miss = byProvider.reduce(0) { $0 + $1.cacheMissTokens }
+        if cacheRead + miss > 0 {
+            return "\(Int(Double(cacheRead) / Double(cacheRead + miss) * 100))%"
+        }
+        return "-"
     }
 
     private func statCell(title: String, value: String, color: Color) -> some View {
@@ -1117,13 +1146,35 @@ struct UsageStatsView: View {
         var inputTokens: Int = 0
         var outputTokens: Int = 0
         var totalTokens: Int = 0
+        // v7.1.109-peers：缓存统计（直读中转站 usage）——缓存读取/未命中/命中率/会话/活跃天数
+        var cacheReadTokens: Int = 0
+        var cacheMissTokens: Int = 0
+        var sessionCount: Int = 0
+        var activeDays: Set<String> = []
+        var lastTs: Double = 0
+        /// 缓存命中率（标准口径 cache / (cache+miss)；无 miss 数据时按 cache / 总输入）
+        var cacheHitRate: Double {
+            let denom = cacheReadTokens + cacheMissTokens
+            if denom > 0 { return Double(cacheReadTokens) / Double(denom) }
+            let totalIn = inputTokens + cacheReadTokens
+            return totalIn > 0 ? Double(cacheReadTokens) / Double(totalIn) : 0
+        }
+        var dailyTokens: Int {
+            let totalInOut = inputTokens + outputTokens
+            return activeDays.isEmpty ? totalInOut : totalInOut / max(1, activeDays.count)
+        }
+        var perSessionTokens: Int {
+            let totalInOut = inputTokens + outputTokens
+            return sessionCount > 0 ? totalInOut / sessionCount : totalInOut
+        }
     }
 
     /// v7.1.109-minis：token 分列聚合（对齐 OpenMinis TokenUsageSheet / ModelStats）——
     /// 真实 usage(prompt/completion/total) 优先，无则回退估算输入(estInputTokens)；
     /// total 无真实值按 input+output 推算。
-    private func aggregate() -> (total: Int, ok: Int, elapsed: Int, inputTokens: Int, outputTokens: Int, totalTokens: Int, byProvider: [ProviderAgg]) {
-        var total = 0, ok = 0, elapsed = 0, inputTokens = 0, outputTokens = 0, totalTokens = 0
+    /// v7.1.109-peers：缓存四件套直读中转站 usage；会话按时间间隔>30min 分桶，活跃天数按日期去重。
+    private func aggregate() -> (total: Int, ok: Int, elapsed: Int, inputTokens: Int, outputTokens: Int, totalTokens: Int, cacheRead: Int, byProvider: [ProviderAgg]) {
+        var total = 0, ok = 0, elapsed = 0, inputTokens = 0, outputTokens = 0, totalTokens = 0, cacheRead = 0
         var map: [String: ProviderAgg] = [:]
         for r in records {
             total += 1
@@ -1137,10 +1188,14 @@ struct UsageStatsView: View {
             let inT = pt > 0 ? pt : ei
             let outT = ct
             let totT = tt > 0 ? tt : (inT + outT)
+            let cr = r["cacheReadTokens"] as? Int ?? 0
+            let cm = r["cacheMissTokens"] as? Int ?? 0
             inputTokens += inT
             outputTokens += outT
             totalTokens += totT
+            cacheRead += cr
             let name = r["name"] as? String ?? "-"
+            let ts = r["ts"] as? Double ?? 0
             var a = map[name] ?? ProviderAgg(name: name)
             a.total += 1
             if o { a.ok += 1 }
@@ -1148,8 +1203,22 @@ struct UsageStatsView: View {
             a.inputTokens += inT
             a.outputTokens += outT
             a.totalTokens += totT
+            a.cacheReadTokens += cr
+            a.cacheMissTokens += cm
+            if ts > 0 {
+                // 会话分桶：与上一条间隔 > 30 分钟 → 新会话
+                if a.lastTs > 0, ts - a.lastTs > 1800 { a.sessionCount += 1 }
+                a.lastTs = max(a.lastTs, ts)
+                let day = String(Int(ts / 86400))
+                a.activeDays.insert(day)
+            }
             map[name] = a
         }
-        return (total, ok, elapsed, inputTokens, outputTokens, totalTokens, Array(map.values))
+        for (k, v) in map {
+            var v = v
+            if v.total > 0 { v.sessionCount += 1 }   // 首条也算一个会话
+            map[k] = v
+        }
+        return (total, ok, elapsed, inputTokens, outputTokens, totalTokens, cacheRead, Array(map.values))
     }
 }
