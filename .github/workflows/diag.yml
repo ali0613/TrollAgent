@@ -1,0 +1,20 @@
+name: diag
+
+on:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "ubuntu ok" && uname -a
+
+  mac14:
+    runs-on: macos-14
+    steps:
+      - run: sw_vers && xcodebuild -version
+
+  mac15:
+    runs-on: macos-15
+    steps:
+      - run: sw_vers && xcodebuild -version

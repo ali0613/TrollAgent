@@ -8,8 +8,7 @@ permissions:
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+  # fix: 暂停 push 自动触发——runner 排队诊断期间避免每次 push 都占用一次 15 分钟排队
 
 jobs:
   # v4.4.5: 原生工具链（lua arm64 iOS 交叉编译，产物缓存秒级）。
