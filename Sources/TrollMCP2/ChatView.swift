@@ -2228,21 +2228,35 @@ struct MessageBubble: View {
                         .font(.system(size: 14))
                     // v3.5.4：思考中→"思考中…"；思考完→"已深度思考 N 字"(业界一致)
                     // v7.1.109-peers：加耗时秒数（DeepSeek/元宝式"已深度思考（用时 X 秒）"）
+                    // v7.2.3-fix15：字数/用时缩小灰色——主文字橙色，数字部分 caption2 灰
                     if isStreaming {
                         Text(L10n.t("i18n_1071"))
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .foregroundColor(.orange)
                     } else if let s = seconds, s > 0 {
-                        Text(L10n.t("i18n_1072", text.count) + L10n.t("i18n_1248", Int(s.rounded())))
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.orange)
+                        HStack(spacing: 4) {
+                            Text(L10n.t("i18n_1072"))
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.orange)
+                            Text(L10n.t("i18n_1072_count", text.count))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Text(L10n.t("i18n_1248", Int(s.rounded())))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     } else {
-                        Text(L10n.t("i18n_1072", text.count))
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.orange)
+                        HStack(spacing: 4) {
+                            Text(L10n.t("i18n_1072"))
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.orange)
+                            Text(L10n.t("i18n_1072_count", text.count))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
                     Spacer()
                     if thinkingExpanded {
@@ -2413,10 +2427,18 @@ struct MessageBubble: View {
                     Image(systemName: "brain.head.profile")
                         .font(.system(size: 14))
                         .foregroundColor(.orange)
-                    Text(isStreaming ? L10n.t("i18n_1071") : L10n.t("i18n_1072", text.count))
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.orange)
+                    // v7.2.3-fix15：字数缩小灰色（与思考气泡一致）
+                    HStack(spacing: 4) {
+                        Text(isStreaming ? L10n.t("i18n_1071") : L10n.t("i18n_1072"))
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.orange)
+                        if !isStreaming {
+                            Text(L10n.t("i18n_1072_count", text.count))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
                     Spacer()
                 }
             }
