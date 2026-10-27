@@ -1316,6 +1316,15 @@ final class ConversationStore: ObservableObject {
         }
 
         let client = OpenAIClient(config)
+        // v7.2.3-fix6：鉴权智能试探成功 → 持久化纠正（对齐 OpenMinis BYOK 智能匹配）
+        client.onAuthCorrected = { [weak self] method in
+            guard let self = self else { return }
+            let cfg = config
+            var corrected = cfg
+            corrected.authMethod = method
+            ModelStore.shared.update(corrected)
+            self.statusText = L10n.t("status_auth_corrected", method)
+        }
         client.currentReasoningLevel = reasoningLevel
         currentClient = client
         let prepared = messagesForAPI(budget: config.effectiveContextTokens)

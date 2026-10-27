@@ -513,6 +513,11 @@ struct ModelEditorView: View {
                     editorRow("Base URL", text: $baseURL, placeholder: "https://botcf.com/v1")
                     editorRow(L10n.t("i18n_421"), text: $model, placeholder: "gpt-5.6-terra")
                     pickerRow(L10n.t("i18n_422"), selection: $authMethod, options: ModelConfig.authMethods)
+                    // v7.2.3-fix6：新手友好——预设供应商已自动带正确鉴权（选预设即自动填）；
+                    // 401 时会自动试探纠正，这里只作说明
+                    Text(L10n.t("ui_auth_method_hint"))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                     tokenRow
                     // v6.1.5-14bk：参数别名/分组 UI 移除（用户看不懂也不需要填）——
                     // 别名兼容由 OpenAIClient compatLevel 0-4 自动降级覆盖，分组默认"默认"即可

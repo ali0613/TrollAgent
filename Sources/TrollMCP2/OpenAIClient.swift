@@ -74,6 +74,12 @@ final class OpenAIClient {
     private var didAutoEscalateReasoning = false
     /// v7.1.98：本轮响应真实 usage（用量统计最近请求显示 token）——attempt 解析处捕获，end() 读取
     private var lastUsage: [String: Any]?
+    /// v7.2.3-fix6：鉴权智能试探（对齐 OpenMinis BYOK）——401/403 时按安全集合
+    /// (Bearer → API Key → Query api_key) 换鉴权方式重发，2xx 即纠正配置。
+    private var authProbeQueue: [String] = []
+    private var overrideAuthMethod: String?
+    /// 鉴权纠正回调（创建方注入，用于把识别到的 authMethod 持久化）
+    var onAuthCorrected: ((String) -> Void)?
     private var currentCompatLevel: Int;  // v6.0.30: 内存里的兼容级别，避免反复试探死循环
     /// v2.9.87：多级降级总预算——全链串行最坏 7 分钟+，用户感知"一直请求中"。
     /// v2.9.96：试探级 (L0-L4）超时已压到 25s，预算放宽到 220s 给 L5 流式留足时间。
@@ -161,6 +167,10 @@ final class OpenAIClient {
     }
 
     func send(messages: [ChatMessage], compactSource: [ChatMessage] = [], tools: [[String: Any]]? = nil, onStatus: ((String) -> Void)? = nil, onDelta: ((String) -> Void)? = nil, onThinking: ((String) -> Void)? = nil, onCompacted: ((String) -> Void)? = nil, completion: @escaping (Result<ChatResult, Error>) -> Void) {
+        // v7.2.3-fix6：鉴权智能试探队列——每次 send 重置候选（当前方式之外的安全集合）
+        let currentAuth = config.authMethod.trimmingCharacters(in: .whitespacesAndNewlines)
+        authProbeQueue = ["Bearer", "API Key", "Query api_key"].filter { $0 != currentAuth }
+        overrideAuthMethod = nil
         // v4.3.71：LLM Compaction 前置——先摘要被裁旧消息，替换启发式占位后再发主请求
         if !compactSource.isEmpty {
             summarize(compactSource) { [weak self] summary in
@@ -540,6 +550,13 @@ final class OpenAIClient {
             let http = response as? HTTPURLResponse
             let status = http?.statusCode ?? 0
 
+            // v7.2.3-fix6：鉴权试探成功（2xx）→ 纠正配置并清 override（下次请求用新方式）
+            if status >= 200 && status < 300, let alt = overrideAuthMethod {
+                overrideAuthMethod = nil
+                onAuthCorrected?(alt)
+                NetworkLog.shared.log("\(self.config.name) authMethod auto-corrected to \(alt)")
+            }
+
             // 部分中转站 HTTP 200 但 body 是 {"error": {...}}
             var errorPayload: String?
             if let json = try? JSONSerialization.jsonObject(with: data ?? Data()) as? [String: Any] {
@@ -623,6 +640,17 @@ final class OpenAIClient {
                     self.attempt(level: v.next, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                     return
                 }
+            }
+            // v7.2.3-fix6：鉴权智能试探（对齐 OpenMinis BYOK）——401/403 且候选未试完：
+            // 换鉴权方式重进 attempt（applyAuth 用 overrideAuthMethod），2xx 时纠正配置。
+            // 只试安全集合（Bearer/API Key/Query api_key），不试 Body/Query token（罕见且易误伤）。
+            if (status == 401 || status == 403) && !self.authProbeQueue.isEmpty {
+                let alt = self.authProbeQueue.removeFirst()
+                self.overrideAuthMethod = alt
+                NetworkLog.shared.log("\(self.config.name) HTTP \(status) → auto-probing authMethod as \(alt)")
+                onStatus?(L10n.t("status_auth_probing", alt))
+                self.attempt(level: level, isFirst: isFirst, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
+                return
             }
             let hint = errorPayload != nil ? "" : "\nHint: response isn't standard OpenAI format, check that baseURL points to a /v1-compatible endpoint."
             completion(.failure(NSError(domain: "OpenAIClient", code: status,
@@ -1596,7 +1624,8 @@ final class OpenAIClient {
 
     private func applyAuth(to request: inout URLRequest) {
         let key = config.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        let method = config.authMethod.trimmingCharacters(in: .whitespacesAndNewlines)
+        // v7.2.3-fix6：鉴权智能试探——401 试探期用 override 方式；平时用配置方式
+        let method = (overrideAuthMethod ?? config.authMethod).trimmingCharacters(in: .whitespacesAndNewlines)
         // v7.1.109-peers：协议级 header——
         // OpenRouter：X-Title + HTTP-Referer（官方要求，缺失会限流/不推荐）；
         // Gemini：x-goog-api-key header（Query key 走 URL 时不需要）
