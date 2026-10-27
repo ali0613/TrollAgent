@@ -24,14 +24,18 @@ struct ModelConfig: Codable, Identifiable, Hashable {
     var fallbackIDs: [UUID] = []
     /// v2.9.11：输入上下文预算 (token 估算）。发送前按预算自动裁剪最旧消息，
     /// 避免长会话请求体无限增长导致"一直请求中"。
-    var contextTokens: Int = 16000
+    /// v7.1.109-peers：默认值 16000 → 128000（2026 主流模型最小窗口档；16k 会让
+    /// 未匹配模型掉进 <32K 硬停档，是历史遗留坑）。
+    var contextTokens: Int = 128000
     /// v7.1.107：模型能力表匹配后的实际压缩预算——命中已知模型用真实 context window
-    /// （大窗口多留历史、小窗口不撑爆）；未知模型用用户配置值兜底（安全默认）。
+    /// （大窗口多留历史、小窗口不撑爆）。
+    /// v7.1.109-peers：兜底链升级——显式后缀 > 实测记录 > 静态表 > 代际推断 > 128k 安全默认。
+    /// contextTokens 默认值（128000/老默认 16000）视为"未配置"→ 用智能窗口；
+    /// 用户显式设置过 → 作为上限尊重（防止小窗口模型被撑爆）。
     var effectiveContextTokens: Int {
-        if let known = ModelCapability.contextWindow(for: model) {
-            return known
-        }
-        return contextTokens
+        let resolved = ModelCapability.resolvedWindow(for: model)
+        if contextTokens == 128_000 || contextTokens == 16_000 { return resolved }
+        return min(resolved, contextTokens)
     }
     /// v7.1.109-peers：OpenMinis ContextPolicy 分档阈值借鉴——按窗口大小分档自动压缩触发线：
     /// <32K 不自动压缩（压不起，超限硬停）；32K–128K 剩 10K 触发；≥128K 剩 20K 触发。
@@ -70,7 +74,7 @@ struct ModelConfig: Codable, Identifiable, Hashable {
     init(id: UUID = UUID(), name: String, provider: String, apiProtocol: String = "OpenAI Chat Completions",
          baseURL: String, apiKey: String, model: String, authMethod: String = "Bearer",
          isDefault: Bool = false, temperature: Double = 0.2, maxTokens: Int = 16384, compatLevel: Int = 0,
-         contextTokens: Int = 16000, group: String = "default", paramAliases: [String: String] = [:],
+         contextTokens: Int = 128000, group: String = "default", paramAliases: [String: String] = [:],
          fallbackIDs: [UUID] = []) {
         self.id = id
         self.name = name
@@ -106,7 +110,7 @@ struct ModelConfig: Codable, Identifiable, Hashable {
         isDefault = (try? c.decode(Bool.self, forKey: .isDefault)) ?? false
         temperature = (try? c.decode(Double.self, forKey: .temperature)) ?? 0.2
         maxTokens = (try? c.decode(Int.self, forKey: .maxTokens)) ?? 16384
-        contextTokens = (try? c.decode(Int.self, forKey: .contextTokens)) ?? 16000
+        contextTokens = (try? c.decode(Int.self, forKey: .contextTokens)) ?? 128000
         compatLevel = (try? c.decode(Int.self, forKey: .compatLevel)) ?? 0
         group = (try? c.decode(String.self, forKey: .group)) ?? "default"
         paramAliases = (try? c.decode([String: String].self, forKey: .paramAliases)) ?? [:]
@@ -207,6 +211,87 @@ enum ModelCapability {
         if m.contains("nemotron") { return 128_000 }
         if m.contains("sensechat") || m.contains("商量") { return 128_000 }
         return nil
+    }
+
+    /// v7.1.109-peers：显式长度后缀解析——模型名自带窗口（128k/256k/32k/16k/1m 等），
+    /// 比静态表更可靠（模型名是厂商自己标的），优先级最高。
+    static func explicitSuffix(for model: String) -> Int? {
+        let m = model.lowercased()
+        let patterns: [(String, Int)] = [
+            ("1048576", 1_048_576), ("1.048m", 1_048_576), ("1.05m", 1_050_000),
+            ("2m", 2_000_000), ("1m", 1_000_000), ("512k", 512_000), ("256k", 256_000),
+            ("200k", 200_000), ("131072", 131_072), ("128k", 128_000), ("64k", 64_000),
+            ("32k", 32_000), ("16k", 16_384), ("8k", 8_192)
+        ]
+        for (pat, val) in patterns where m.contains(pat) { return val }
+        return nil
+    }
+
+    /// v7.1.109-peers：代际推断——静态表未收录时按家族+版本号规律估窗口（保守档）。
+    /// 规律基于各厂公开历史：GPT-N 4→128k 5→400k 6+→1M；Claude 3+→200k；
+    /// Qwen 2→128k 3+→256k；GLM 4.5→128k 5+→256k；DeepSeek 2+→128k；
+    /// Kimi K2→256k K3+→1M；Gemini→1M；Llama/Mistral/Phi→128k
+    static func inferGeneration(for model: String) -> Int? {
+        let m = model.lowercased()
+        if let g = modelGenNumber(m, prefix: "gpt") {
+            if g >= 6 { return 1_000_000 }
+            if g >= 5 { return 400_000 }
+            if g >= 4 { return 128_000 }
+        }
+        if let g = modelGenNumber(m, prefix: "claude") { return g >= 3 ? 200_000 : 100_000 }
+        if let g = modelGenNumber(m, prefix: "qwen") { return g >= 3 ? 256_000 : 131_072 }
+        if let g = modelGenNumber(m, prefix: "glm") { return g >= 5 ? 256_000 : 128_000 }
+        if let g = modelGenNumber(m, prefix: "deepseek") { return g >= 2 ? 128_000 : 64_000 }
+        if m.contains("gemini") { return 1_000_000 }
+        if m.contains("llama") || m.contains("mistral") || m.contains("phi") || m.contains("ernie") { return 128_000 }
+        // Kimi K 系列（k2/k3…，字母+数字命名）
+        if let r = m.range(of: "k[0-9]", options: .regularExpression) {
+            let g = Int(String(m[r]).suffix(1)) ?? 0
+            if g >= 3 { return 1_000_000 }
+            if g >= 2 { return 256_000 }
+            return 128_000
+        }
+        return nil
+    }
+    private static func modelGenNumber(_ m: String, prefix: String) -> Int? {
+        guard let r = m.range(of: prefix + "-?[0-9]+", options: .regularExpression) else { return nil }
+        let digits = String(m[r]).filter { $0.isNumber }
+        return Int(digits)
+    }
+
+    /// v7.1.109-peers：最终兜底链——显式后缀 > 实测记录 > 静态表 > 代际推断 > 128k 安全默认。
+    /// 模型迭代太快静态表追不上：实测自适应（成功上调/超限下调）保证新模型逐步收敛真实窗口。
+    static func resolvedWindow(for model: String) -> Int {
+        if let explicit = explicitSuffix(for: model) { return explicit }
+        if let measured = RuntimeWindowTracker.shared.measuredWindow(for: model) { return measured }
+        if let known = contextWindow(for: model) { return known }
+        if let inferred = inferGeneration(for: model) { return inferred }
+        return 128_000
+    }
+}
+
+/// v7.1.109-peers：实测窗口自适应——模型迭代太快静态表追不上：
+/// 成功请求把窗口上调到实际用量以上（留 10k 余量），超限错误把窗口下调到实际用量以下，
+/// 持久化 UserDefaults（按模型名），未收录/新迭代模型也能逐步收敛到真实窗口。
+final class RuntimeWindowTracker {
+    static let shared = RuntimeWindowTracker()
+    private let key = "trollagent_measured_windows_v1"   // [String: Int]
+
+    func measuredWindow(for model: String) -> Int? {
+        UserDefaults.standard.dictionary(forKey: key)?[model.lowercased()] as? Int
+    }
+    func recordSuccess(model: String, promptTokens: Int) {
+        let m = model.lowercased()
+        let p = promptTokens + 10_000   // 成功 = 窗口至少这么大，留余量
+        guard p > 8_000 else { return }
+        var d = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
+        if (d[m] ?? 0) < p { d[m] = p; UserDefaults.standard.set(d, forKey: key) }
+    }
+    func recordExceeded(model: String, promptTokens: Int) {
+        let m = model.lowercased()
+        let p = max(4_000, promptTokens - 5_000)   // 超限 = 窗口没这么大，下调并留余量
+        var d = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
+        if (d[m] ?? Int.max) > p { d[m] = p; UserDefaults.standard.set(d, forKey: key) }
     }
 }
 

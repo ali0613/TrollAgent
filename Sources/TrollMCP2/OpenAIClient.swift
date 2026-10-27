@@ -341,13 +341,33 @@ final class OpenAIClient {
                 onStatus?(L10n.t("status_response_done", secs))
                 ModelStore.shared.breaker(for: self.config.id).recordSuccess(usedHalfOpenPermit: self.usedHalfOpenPermit)
                 UsageRecorder.shared.end(config: self.config, ok: true, elapsedMs: el, usage: self.lastUsage)
+                // v7.1.109-peers：实测自适应——成功请求把窗口上调（未收录/新迭代模型逐步收敛）
+                if let u = self.lastUsage, let p = u["prompt_tokens"] as? Int {
+                    RuntimeWindowTracker.shared.recordSuccess(model: self.config.model, promptTokens: p)
+                }
             case .failure(let e):
                 NetworkLog.shared.log("\(self.config.name) request failed (\(el)ms): \(e.localizedDescription)")
                 ModelStore.shared.breaker(for: self.config.id).recordFailure(usedHalfOpenPermit: self.usedHalfOpenPermit)
                 UsageRecorder.shared.end(config: self.config, ok: false, elapsedMs: el, error: e.localizedDescription)
+                // v7.1.109-peers：超限错误自动下调窗口（失败信号闭环——静态表追不上迭代时的保险）
+                if self.isContextOverflow(e) {
+                    RuntimeWindowTracker.shared.recordExceeded(model: self.config.model,
+                        promptTokens: UsageRecorder.shared.lastInputEstimate)
+                }
             }
         }
         attempt(level: start, isFirst: true, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: wrappedCompletion)
+    }
+
+    /// v7.1.109-peers：上下文超限错误检测——命中时下调该模型实测窗口
+    private func isContextOverflow(_ e: Error) -> Bool {
+        let s = e.localizedDescription.lowercased()
+        return s.contains("context_length_exceeded")
+            || s.contains("maximum context")
+            || s.contains("context window")
+            || s.contains("prompt is too long")
+            || s.contains("too many tokens")
+            || s.contains("exceeds the maximum")
     }
 
     /// 降级顺序：L0→L1→L2→ (带 tools 时优先 L5 Responses API，保住工具调用）→L3→L4→结束
@@ -1747,6 +1767,8 @@ final class UsageRecorder {
     private let lock = NSLock()
     private var lastStart = Date()
     private var lastInputEst = 0
+    // v7.1.109-peers：最近一次发送估算输入（供超限错误下调窗口用——失败时无真实 usage）
+    var lastInputEstimate: Int { lastInputEst }
     // v7.1.109-peers：OpenMinis calibration ratio 借鉴——最近一次真实 prompt_tokens/估算 的比值，
     // 供 messagesForAPI 校准上下文预算比较（clamp 0.5–2.5，防估算器偏差导致超发或过度压缩）
     private(set) var lastRealRatio: Double = 1.0
