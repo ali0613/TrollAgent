@@ -1269,14 +1269,14 @@ final class ConversationStore: ObservableObject {
         client.currentReasoningLevel = reasoningLevel
         currentClient = client
         let prepared = messagesForAPI(budget: config.effectiveContextTokens)
-        // v7.1.109-peers：OpenMinis 硬停借鉴——裁剪保底后仍超出模型窗口时，
-        // 不发一个必然失败的请求（提示新建会话）；仅"压缩也救不回"才触发。
+        // v7.1.109-peers：硬停不适配 Agent 长任务（OpenMinis 是消费级对话可卡住，
+        // 我们长任务/工具链会被硬停打断）——改为极限压缩后的非阻断提示：
+        // 即便仍超窗也继续发送（API 兜底 + 用户可见错误），不再 return 卡住。
         let window = config.effectiveContextTokens
         if window > 0 {
             let finalTotal = prepared.messages.reduce(0) { $0 + Self.estimateTokens($1) }
             if finalTotal > window {
-                self.statusText = "⚠️ 上下文已超出模型窗口(≈\(finalTotal)/\(window))，压缩无法回收——请新建会话或清空"
-                return
+                self.statusText = "⚠️ 上下文已极限压缩仍接近窗口上限(≈\(finalTotal)/\(window))，已继续发送——若失败请新建会话"
             }
         }
         var history = prepared.messages
@@ -2190,12 +2190,19 @@ final class ConversationStore: ObservableObject {
             return (short, [], 0)
         }
         // 长会话：从旧到新裁剪，但始终保留最后 N 条核心消息
-        let keepMin = 6
-        var kept: [ChatMessage] = []
-        // 先保留最新 keepMin 条 (含用户最新提问），其 token 计入预算
-        let suffix = Array(all.suffix(keepMin))
-        let prefix = Array(all.prefix(all.count - keepMin))
+        // v7.1.109-peers：极限压缩（对齐 OpenMinis 硬停思想但适配 Agent 长任务）——
+        // 保底 6 条仍超预算时降为 2 条（只留最新提问），宁可裁到极限也不硬停卡住任务。
+        var keepMin = 6
+        var suffix = Array(all.suffix(keepMin))
+        var prefix = Array(all.prefix(all.count - keepMin))
         var used = suffix.reduce(0) { $0 + Self.estimateTokens($1) }
+        if used > theBudget, all.count > 2 {
+            keepMin = 2
+            suffix = Array(all.suffix(keepMin))
+            prefix = Array(all.prefix(all.count - keepMin))
+            used = suffix.reduce(0) { $0 + Self.estimateTokens($1) }
+        }
+        var kept: [ChatMessage] = []
         // 从旧到新累计到「预算 - suffix」内 (v2.9.16：suffix 计入预算，避免超发）
         for m in prefix {
             let t = Self.estimateTokens(m)
