@@ -467,6 +467,8 @@ final class SystemPrompts {
       tools (apk-installed clang/git/python3...); system.exec_root executes iOS-side Mach-O binaries (jailbreak-native
       tools from jroot — ldid, clang, dpkg-deb, theos, /bin/ps, bundled ldid/otool). A Mach-O passed to shell.exec
       fails with ENOEXEC; an ELF passed to system.exec_root is rejected — route by file type.
+      ls/cat/grep/find/sed/awk/tar/git/python3/sqlite3/curl/ps/df etc. are all available in the container;
+      apk add installs anything (pip/git/build toolchain).
       LARGE DOWNLOADS (>20MB): prefer the `download` tool (url + optional path) — URLSession download with a live
       percent progress bar in the UI, no 120s cap. In shell, use `wget -c` / `curl -C -` (resume) for big files;
       download commands (curl -o/-O/--output, wget) get a 300s timeout, other commands cap at 120s.
