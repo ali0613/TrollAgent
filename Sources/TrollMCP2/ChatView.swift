@@ -1782,7 +1782,6 @@ struct MessageBubble: View {
     }
 
     // v7.2.2：来源卡浮层——底部卡片：host + URL + 打开按钮
-    @ViewBuilder
     /// v7.2.3-fix3：工具结果 JSON 格式化——解析成功 → 缩进 + key/字符串/数字语法色
     /// （等宽 plaintext 精神不变）；解析失败返回 nil → 调用方回退原文纯文本。
     /// 限长 20000 字符，超大 JSON 截断标注，避免渲染卡顿。
@@ -1833,6 +1832,8 @@ struct MessageBubble: View {
             || lower.contains(" curl ")
     }
 
+    // v7.2.2：来源卡浮层——底部卡片：host + URL + 打开按钮
+    @ViewBuilder
     private var sourceCardOverlay: some View {
         if showSourceCard, let url = sourceCardURL {
             ZStack {
