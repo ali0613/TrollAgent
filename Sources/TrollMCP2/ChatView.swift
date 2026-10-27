@@ -10,6 +10,8 @@ struct ChatView: View {
 
     @State private var inputText = ""
     @State private var inputHeight: CGFloat = 36
+    // v7.2.3-fix14：工具卡参数行折叠——默认一行+▽，点击展开完整命令/参数
+    @State private var toolArgsExpanded: Set<String> = []
     // v2.9.234：推理强度/智能搜索持久化(@AppStorage)——之前纯@State,关app重开必丢
     @AppStorage("chat_reasoning") private var reasoning = 0   // 0=低 1=中 2=高 3=最高(xhigh) 4=极限(max)
     @AppStorage("chat_smart_search") private var smartSearch = true
@@ -2358,13 +2360,33 @@ struct MessageBubble: View {
                         Spacer()
                     }
                     // v3.5.13：标题已是"工具名: 关键参数"机械短标签，无需再补一行副标题工具名。
-                    // v3.5.4：工具执行的命令/参数完整显示（5=A）——不再截 60 字符/单行，
-                    // 用等宽可换行，让用户看清这步到底执行了什么命令。
+                    // v7.2.3-fix14：参数行默认一行截断 + ▽，点击展开完整命令/参数
+                    // （工具多时参数堆太长，对齐折叠式工具结果体验）
                     if let args = message.toolArgs, !args.isEmpty {
-                        Text(args)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .textSelection(.enabled)
+                        let key = message.id.uuidString
+                        let expanded = toolArgsExpanded.contains(key)
+                        HStack(alignment: .top, spacing: 4) {
+                            Text(args)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .textSelection(.enabled)
+                                .lineLimit(expanded ? nil : 1)
+                                .truncationMode(.tail)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            if !expanded {
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.secondary)
+                                    .padding(.top, 2)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                if expanded { toolArgsExpanded.remove(key) }
+                                else { toolArgsExpanded.insert(key) }
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 10)
