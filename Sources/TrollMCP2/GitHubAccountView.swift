@@ -382,7 +382,6 @@ struct AddGitHubAccountView: View {
                 // 自动开始轮询 + 打开授权页
                 // fix: 本视图自身就在 sheet 里，同一帧内既改 deviceStep 又置 showSafari，
                 // iOS15 的 sheet 内二次呈现有概率被丢弃 → 授权页根本不弹，用户以为点了没反应。
-                // 延迟一拍再弹，确保 Safari 真的出现。
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     self.openVerification(code.verification_uri)
                 }

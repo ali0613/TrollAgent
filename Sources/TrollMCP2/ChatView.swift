@@ -10,6 +10,9 @@ struct ChatView: View {
 
     @State private var inputText = ""
     @State private var inputHeight: CGFloat = 36
+    // v7.2.3-fix14：工具卡参数行折叠——默认一行+▽，点击展开完整命令/参数
+    /// v7.2.3-fix20：连续工具折叠展开状态（按组 id）
+    @State private var toolsRunExpanded: Set<String> = []
     // v2.9.234：推理强度/智能搜索持久化(@AppStorage)——之前纯@State,关app重开必丢
     @AppStorage("chat_reasoning") private var reasoning = 0   // 0=低 1=中 2=高 3=最高(xhigh) 4=极限(max)
     @AppStorage("chat_smart_search") private var smartSearch = true
@@ -1286,6 +1289,73 @@ struct ChatView: View {
         inputText = inputText.replacingOccurrences(of: "@", with: "").trimmingCharacters(in: .whitespaces)
         showToast(L10n.t("i18n_1068", app.name))
     }
+    @ViewBuilder
+    private func toolsRunGroup(_ msgs: [ChatMessage]) -> some View {
+        let gid = "t-" + (msgs.first?.id.uuidString ?? "") + "-" + String(msgs.count)
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    if toolsRunExpanded.contains(gid) {
+                        toolsRunExpanded.remove(gid)
+                    } else {
+                        toolsRunExpanded.insert(gid)
+                    }
+                }
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "hammer.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                    Text(String(format: L10n.t("i18n_1260"), msgs.count))
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.primary)
+                    if let d = ChatListGrouping.Item.tools(msgs).totalDuration {
+                        Text(String(format: "%.1fs", d))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Image(systemName: toolsRunExpanded.contains(gid) ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                // v7.2.3-fix26：去 Spacer——此前 HStack 内 Spacer 把 Button 撑满整行，
+                // 灰色背景条贴屏幕两端；改内容自适应宽度（对齐灰色气泡/胶囊样式）
+                // v7.2.3-fix31：纯内容宽度太窄（≈150pt）+ footnote 小字 → 加最小宽度
+                // 160pt + 字号整体放大（footnote13→subheadline15、caption2 11→caption12）
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .frame(minWidth: 160)
+                .background(Color(.systemGray5).opacity(0.6))
+                .cornerRadius(14)
+            }
+            .buttonStyle(.plain)
+            if toolsRunExpanded.contains(gid) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(msgs) { msg in
+                        MessageBubble(
+                            message: msg,
+                            selectionMode: selectionMode,
+                            isSelected: selectedIds.contains(msg.id),
+                            onToggleSelect: { toggleSelect(msg.id) },
+                            onCopy: { copyMessage(msg) },
+                            onShare: { shareMessage(msg) },
+                            isStreaming: store.streamingMessageId == msg.id,
+                            forceType: store.liveProducedID == msg.id,
+                            thinkEnabled: thinkEnabled
+                        )
+                        .id(msg.id)
+                    }
+                }
+                .padding(.leading, 6)
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color(.systemGray4))
+                        .frame(width: 3)
+                        .cornerRadius(1.5)
+                }
+            }
+        }
+    }
 }
 
 struct ChatChip: View {
@@ -1534,6 +1604,9 @@ struct MessageBubble: View {
     let message: ChatMessage
     // v4.3.77：安装进度——工具"执行中"气泡渲染实时进度条（引用处位于本 struct）
     @ObservedObject private var installRegistry = InstallationRegistry.shared
+    // v7.2.3-fix23.1：参数展开状态每气泡自管（原 ChatView 级 @State 在独立 struct 内
+    // 无法访问——编译错误根因；每气泡独立布尔天然隔离）
+    @State private var argsExpanded = false
     var selectionMode: Bool = false
     var isSelected: Bool = false
     var onToggleSelect: (() -> Void)? = nil
@@ -1553,10 +1626,6 @@ struct MessageBubble: View {
     // v6.0.28：工具结果默认折叠，用户手动点才展开
     @State private var expanded = false
     @State private var expandedToolIds: Set<String> = []
-    // fix: fix20 把「连续工具折叠」「参数展开」的 UI 放进了本 struct，但状态留在 ChatView
-    // → 编译期 cannot find in scope。状态应跟着使用处走，移到这里。
-    @State private var toolsRunExpanded: Set<String> = []
-    @State private var toolArgsExpanded: Set<String> = []
     // v3.4.5：打字机效果——已显示字符数 + 定时器（显示与网络解耦，逐字稳定刷出）
     // v3.4.7：降速到 25 字/秒(0.04s/字)让打字感清晰可见；且不依赖 isStreaming——
     // 只要内容在增长就持续打字到完整，兼容"整段一次性到达"的中转
@@ -1837,66 +1906,6 @@ struct MessageBubble: View {
 
     /// v7.2.3-fix20：连续工具折叠组——默认一行胶囊（运行了 N 个工具 + 总耗时），
     /// 点击展开显示各工具卡（左侧竖线标示为折叠组）
-    @ViewBuilder
-    private func toolsRunGroup(_ msgs: [ChatMessage]) -> some View {
-        let gid = "t-" + (msgs.first?.id.uuidString ?? "") + "-" + String(msgs.count)
-        VStack(alignment: .leading, spacing: 8) {
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    if toolsRunExpanded.contains(gid) {
-                        toolsRunExpanded.remove(gid)
-                    } else {
-                        toolsRunExpanded.insert(gid)
-                    }
-                }
-            }) {
-                HStack(spacing: 8) {
-                    Image(systemName: "hammer.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                    Text(String(format: L10n.t("i18n_1260"), msgs.count))
-                        .font(.footnote.weight(.medium))
-                        .foregroundColor(.primary)
-                    if let d = ChatListGrouping.Item.tools(msgs).totalDuration {
-                        Text(String(format: "%.1fs", d))
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: toolsRunExpanded.contains(gid) ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(.systemGray5).opacity(0.6))
-                .cornerRadius(10)
-            }
-            .buttonStyle(.plain)
-            if toolsRunExpanded.contains(gid) {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(msgs) { msg in
-                        MessageBubble(
-                            message: msg,
-                            selectionMode: selectionMode,
-                            isSelected: false,
-                            isStreaming: ConversationStore.shared.streamingMessageId == msg.id,
-                            forceType: ConversationStore.shared.liveProducedID == msg.id,
-                            thinkEnabled: thinkEnabled
-                        )
-                        .id(msg.id)
-                    }
-                }
-                .padding(.leading, 6)
-                .overlay(alignment: .leading) {
-                    Rectangle()
-                        .fill(Color(.systemGray4))
-                        .frame(width: 3)
-                        .cornerRadius(1.5)
-                }
-            }
-        }
-    }
 
     // v7.2.2：来源卡浮层——底部卡片：host + URL + 打开按钮
     /// v7.2.3-fix11：ANSI 剥离（对齐 Open Minis 终端——"乱码少"的关键）——
@@ -1998,8 +2007,10 @@ struct MessageBubble: View {
         let mono = UIFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         ns.addAttribute(.font, value: mono, range: full)
         ns.addAttribute(.foregroundColor, value: UIColor.white, range: full)
-        // 顶层键（行首无缩进的 "key":）→ 绿色；嵌套键/字符串/数字全部保持白色
-        if let re = try? NSRegularExpression(pattern: #"(?m)^"((?:[^"\\]|\\.)*)"\s*:"#) {
+        // v7.2.3-fix27：顶层键绿色——此前正则 ^" 匹配行首引号，但 JSONSerialization
+        // prettyPrinted 的顶层键前有 2 空格缩进（"  key":），正则从未命中 → 全白。
+        // 改为 ^ {2}" 精确匹配顶层缩进（嵌套键 4+ 空格不命中，保持"头键绿"预期）
+        if let re = try? NSRegularExpression(pattern: #"(?m)^ {2}"((?:[^"\\]|\\.)*)"\s*:"#) {
             for m in re.matches(in: limited, range: full) {
                 ns.addAttribute(.foregroundColor, value: UIColor.systemGreen, range: m.range)
             }
@@ -2073,17 +2084,39 @@ struct MessageBubble: View {
     private func coloredBody(_ text: String) -> AttributedString {
         var out = AttributedString()
         // v7.1.109-peers：引用角标 [N] 蓝色上标（Perplexity/Kimi 式）——优先于反引号着色
-        // 顺序：反引号 > [N] 角标 > 加粗（在 styledBody 内做 [N]）
-        let pattern = "`([^`]+)`|(\\[(\\d+)\\])"
+        // 顺序：块公式 > 行内公式 > 反引号 > [N] 角标 > 加粗（在 styledBody 内做 [N]）
+        // v7.2.3-fix21：$...$/$$...$$ 数学公式等宽着色（LaTeX 源码保留可读，
+        // 与反引号代码区分：公式紫色、代码橙色；真 KaTeX 图像渲染需 TextKit 改造，留后续）
+        // v7.2.3-fix21.1：行内公式收紧为无空格/换行——`$100 和 $200` 这类货币
+        // 文本不再被误判为公式（含空格即非公式）；块级 $$...$$ 保持宽松
+        let pattern = "`([^`]+)`|(\\$\\$[^$]+\\$\\$)|(\\$[^ $\\n]+\\$)|(\\[(\\d+)\\])"
         var pos = text.startIndex
         while let range = text.range(of: pattern, options: .regularExpression, range: pos..<text.endIndex) {
             let seg = text[range]
             if pos < range.lowerBound { out += styledBody(text[pos..<range.lowerBound]) }
-            if seg.hasPrefix("`") {
+            if seg.hasPrefix("$$") {
+                // 块级公式 $$...$$ —— 等宽紫色
+                var inner = seg
+                inner.removeFirst(2)
+                inner.removeLast(2)
+                var c = AttributedString(inner)
+                c.foregroundColor = .purple
+                c.font = .system(.body, design: .monospaced)
+                out += c
+            } else if seg.hasPrefix("`") {
                 let inner = text[text.index(after: range.lowerBound)..<text.index(before: range.upperBound)]
                 var c = AttributedString(inner)
                 c.foregroundColor = .orange
                 c.font = .system(.body, design: .monospaced)
+                out += c
+            } else if seg.hasPrefix("$") {
+                // 行内公式 $...$ —— 等宽蓝色斜体
+                var inner = seg
+                inner.removeFirst()
+                inner.removeLast()
+                var c = AttributedString(inner)
+                c.foregroundColor = .blue
+                c.font = .system(.body, design: .monospaced).italic()
                 out += c
             } else if seg.hasPrefix("[") {
                 // [N] → 蓝色上标
@@ -2458,6 +2491,76 @@ struct MessageBubble: View {
         return L10n.t("i18n_244")
     }
 
+    /// v7.2.3-fix28/fix28b：工具卡图标按工具名映射（OpenMinis 风格，覆盖全部真实工具族）
+    /// 对齐 OpenMinis sfSymbol(forTool:) 表并扩展：photo/brain/bubble/lightbulb/pencil/code 等
+    /// 不再落默认灰图标。AI 只传 tool_name，图标与颜色全在客户端映射（与 OpenMinis 一致）。
+    private func toolCardSymbol(_ toolName: String?) -> String {
+        guard let name = toolName, !name.isEmpty else { return "wrench.and.screwdriver" }
+        if name == "shell.exec" || name == "shell_exec" || name == "bash" { return "terminal.fill" }
+        if name.hasPrefix("web.") || name == "web_search" { return "magnifyingglass" }
+        if name.hasPrefix("browser.") { return "safari" }
+        if name.hasPrefix("knowledge.") || name.hasPrefix("skills.") || name.hasPrefix("learn.") { return "book.closed" }
+        if name.hasPrefix("device.") { return "iphone" }
+        if name.hasPrefix("app.") { return "app.badge" }
+        if name.hasPrefix("inject") { return "wand.and.stars" }
+        if name.hasPrefix("control.") { return "hand.tap" }
+        if name.hasPrefix("container.") || name.hasPrefix("package.") || name.hasPrefix("build.") { return "shippingbox" }
+        if name.hasPrefix("file.read") || name.hasPrefix("fs.read") || name.hasPrefix("file.inspect") { return "doc.text" }
+        if name.hasPrefix("file.write") || name.hasPrefix("fs.write") { return "doc.text.fill" }
+        if name.hasPrefix("file.") || name.hasPrefix("fs.") || name.hasPrefix("artifact.") || name.hasPrefix("project.") { return "folder" }
+        if name.hasPrefix("vision.") || name == "read_image" || name == "image" { return "photo" }
+        // OpenMinis delegate=person.2（子agent是人形）；thinking 才是 brain——不撞
+        if name.hasPrefix("memory") { return "brain.head.profile" }
+        if name.hasPrefix("subagent.") || name == "agent" || name.hasPrefix("delegate") { return "person.2.fill" }
+        if name == "text" || name == "plaintext" || name.hasPrefix("model.") { return "bubble.left" }
+        if name == "think" || name == "thinking" { return "lightbulb.max" }
+        if name.hasPrefix("code") || name.hasPrefix("py3-native") || name.hasPrefix("node-native") { return "chevron.left.forwardslash.chevron.right" }
+        if name.hasPrefix("network.") { return "network" }
+        if name == "db" || name == "sqlite3" { return "cylinder.fill" }
+        if name.hasPrefix("system.") || name.hasPrefix("tools.") || name == "verify" { return "gearshape" }
+        if name.hasPrefix("cron.") || name.hasPrefix("reminder") || name.hasPrefix("calendar") { return "clock" }
+        if name.hasPrefix("location.") { return "location" }
+        if name.hasPrefix("rescue.") { return "cross.case" }
+        if name.hasPrefix("automation.") || name.hasPrefix("macro.") { return "play.circle" }
+        return "wrench.and.screwdriver"
+    }
+
+    /// v7.2.3-fix28/fix28b：图标配色（同工具名映射）
+    private func toolCardColor(_ toolName: String?) -> Color {
+        guard let name = toolName, !name.isEmpty else { return .gray }
+        if name == "shell.exec" || name == "shell_exec" || name == "bash" { return .blue }
+        if name.hasPrefix("web.") || name == "web_search" { return .blue }
+        if name.hasPrefix("browser.") { return .orange }
+        if name.hasPrefix("knowledge.") || name.hasPrefix("skills.") || name.hasPrefix("learn.") { return .green }
+        if name.hasPrefix("device.") || name.hasPrefix("network.") || name.hasPrefix("location.") { return .teal }
+        if name.hasPrefix("app.") || name.hasPrefix("inject") || name.hasPrefix("control.") { return .purple }
+        if name.hasPrefix("subagent.") || name == "agent" || name.hasPrefix("delegate") { return Self.agentAccent }
+        if name.hasPrefix("container.") || name.hasPrefix("package.") || name.hasPrefix("build.") { return .orange }
+        if name.hasPrefix("vision.") || name == "read_image" || name == "image" { return .blue }
+        if name.hasPrefix("memory") { return .purple }
+        if name == "text" || name == "plaintext" || name.hasPrefix("model.") { return .gray }
+        if name == "think" || name == "thinking" { return .orange }
+        if name.hasPrefix("code") || name.hasPrefix("py3-native") || name.hasPrefix("node-native") || name == "db" || name == "sqlite3" { return .blue }
+        if name.hasPrefix("cron.") || name.hasPrefix("reminder") || name.hasPrefix("calendar") { return .pink }
+        if name.hasPrefix("rescue.") { return .red }
+        if name.hasPrefix("automation.") || name.hasPrefix("macro.") { return .green }
+        return .gray
+    }
+
+    /// v7.2.3-fix28：副行族标签/工具名着色——Alpine 工具蓝色（用户要求），其余保持灰
+    private func toolFamilyTint(_ toolName: String?) -> Color {
+        if toolName == "shell.exec" || toolName == "shell_exec" { return .blue }
+        return .secondary
+    }
+
+    /// v7.2.3-fix30：子 agent/delegate 电紫 accent——OpenMinis HelperAccent 原色
+    /// （亮 #734DED / 暗 #A385FF，"AI/tech"语义色，不撞红=错误、绿=成功）
+    private static let agentAccent = Color(UIColor { tc in
+        tc.userInterfaceStyle == .dark
+            ? UIColor(red: 0.64, green: 0.52, blue: 1.00, alpha: 1)
+            : UIColor(red: 0.45, green: 0.30, blue: 0.93, alpha: 1)
+    })
+
     private var toolBubble: some View {
         VStack(alignment: .leading, spacing: 6) {
             // 📝 1. 思考过程（独立橙色气泡）
@@ -2472,9 +2575,11 @@ struct MessageBubble: View {
                 VStack(alignment: .leading, spacing: 3) {
                     // v7.2.3-fix16：主行=图标+大标题；状态徽章/耗时移到副行小字
                     HStack(spacing: 6) {
-                        Image(systemName: "terminal.fill")
+                        // v7.2.3-fix28：工具卡图标按工具族映射（对齐 OpenMinis 多彩）——
+                        // 此前全部写死 terminal.fill+蓝，不同工具无法一眼区分
+                        Image(systemName: toolCardSymbol(message.toolName))
                             .font(.system(size: 13))
-                            .foregroundColor(.blue)
+                            .foregroundColor(toolCardColor(message.toolName))
                         // v3.5.13：卡片标题=机械短标签(一短,像Minis)——从工具名+关键参数提炼(如
                         // "shell.exec: ls -la" / "browser: dnf.qq.com")，简短稳定、次次一致，客观陈述跑了哪个
                         // 工具干了什么，不代表模型说话；真正的解说由单独的 assistant 气泡(一长)承载。
@@ -2487,11 +2592,25 @@ struct MessageBubble: View {
                             .layoutPriority(1)
                         Spacer()
                     }
+                    // v7.2.3-fix23：点击标题区展开/收起参数（渲染传参默认隐藏后的入口）
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            if argsExpanded {
+                                argsExpanded = false
+                            } else {
+                                argsExpanded = true
+                            }
+                        }
+                    }
                     // v7.2.3-fix16：副行小字（括号信息）——工具族·工具名·状态·耗时
                     HStack(spacing: 5) {
+                        // v7.2.3-fix28：副行字号 10→12；Alpine 工具族标签+工具名蓝色（用户要求）
                         Text(toolFamilyLabel(for: message.toolName))
+                            .foregroundColor(toolFamilyTint(message.toolName))
                         if let tn = message.toolName, !tn.isEmpty {
                             Text(tn)
+                                .foregroundColor(toolFamilyTint(message.toolName))
                                 .textSelection(.enabled)
                         }
                         // v3.5.7：工具状态徽章（机制级：由真实执行结果渲染）——移到副行缩小
@@ -2507,35 +2626,33 @@ struct MessageBubble: View {
                             Text(String(format: "%.1fs", dur))
                         }
                     }
-                    .font(.system(size: 10))
+                    .font(.system(size: 12))
                     .foregroundColor(.secondary)
                     // v3.5.13：标题已是"工具名: 关键参数"机械短标签，无需再补一行副标题工具名。
-                    // v7.2.3-fix14：参数行默认一行截断 + ▽，点击展开完整命令/参数
-                    // （工具多时参数堆太长，对齐折叠式工具结果体验）
+                    // v7.2.3-fix23：渲染传参提示词默认完全隐藏（对齐用户诉求——标题已说明
+                    // 意图、显示的命令 AI 不一定真执行，界面渲染多余）。点击卡片标题区
+                    // 切换展开/收起完整命令/参数。
                     if let args = message.toolArgs, !args.isEmpty {
-                        let key = message.id.uuidString
-                        let expanded = toolArgsExpanded.contains(key)
-                        HStack(alignment: .top, spacing: 4) {
-                            Text(args)
-                                .font(.system(.caption2, design: .monospaced))
-                                .foregroundColor(.secondary)
-                                .textSelection(.enabled)
-                                .lineLimit(expanded ? nil : 1)
-                                .truncationMode(.tail)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            if !expanded {
-                                Image(systemName: "chevron.down")
+                        if argsExpanded {
+                            HStack(alignment: .top, spacing: 4) {
+                                Text(args)
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                    .textSelection(.enabled)
+                                    .lineLimit(nil)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Image(systemName: "chevron.up")
                                     .font(.system(size: 9, weight: .bold))
                                     .foregroundColor(.secondary)
                                     .padding(.top, 2)
                             }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                if expanded { toolArgsExpanded.remove(key) }
-                                else { toolArgsExpanded.insert(key) }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    argsExpanded = false
+                                }
                             }
+                            .transition(.opacity)
                         }
                     }
                 }
@@ -2627,13 +2744,14 @@ struct MessageBubble: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     } else {
+                        // v7.2.3-fix30：成功态蓝→绿（对齐 OpenMinis completed=green + 副行徽章已是绿）
                         Image(systemName: message.isError ? "exclamationmark.circle" : "checkmark.circle")
                             .font(.system(size: 14))
-                            .foregroundColor(message.isError ? .red : .blue)
+                            .foregroundColor(message.isError ? .red : .green)
                         Text(expanded ? L10n.t("i18n_1077") : L10n.t("i18n_1078"))
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundColor(message.isError ? .red : .blue)
+                            .foregroundColor(message.isError ? .red : .green)
                     }
                     Spacer()
                 }

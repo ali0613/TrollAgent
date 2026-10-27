@@ -773,6 +773,11 @@ public final class ToolRegistry: ObservableObject {
         }
         // v3.1.69：显式找 command/action 键 (见 enabledOpenAIToolSchema 注释——哈希顺序问题）
         let selectorKey = def.parameters.keys.first { $0 == "command" || $0 == "action" }
+        // v7.2.3-fix19.1：tool_title 统一注入——Anthropic 通道/动态披露的 schema
+        // 也走这里（OpenAI 全量在 enabledOpenAIToolSchema 注入，两套构造必须一致，
+        // 否则同一请求里部分工具带 tool_title、部分不带 → 模型行为不一致）
+        props["tool_title"] = ["type": "string",
+            "description": "A concise 5-10 word summary of what this tool call does, shown to the user (e.g. 'Test network connectivity', 'List files in home directory'). Use the same language as the user. MUST always output this field."]
         return [
             "type": "function",
             "function": [
@@ -957,7 +962,12 @@ public final class ToolRegistry: ObservableObject {
                 if let fullFlag = params["full"] as? Bool, fullFlag {
                     data = Self.slim(result)
                 } else if let lim = params["limit"] as? Int, lim > 0 {
-                    data = Self.compactResult(result, strLimit: min(lim, 100_000), keepHeadTail: true)
+                    // v7.2.3-fix25b：limit 同时放宽数组上限——此前 limit 只作用于字符串
+                    // 字段(strLimit)，arrLimit 固定 20：输出 1000 行数组时直接砍到 20 项 +
+                    // truncated:true，传 limit=50000 也无效（用户实测根因）。
+                    // 数组元素多时每项仍走 compactResult 单条压缩，总量受 strLimit 约束。
+                    data = Self.compactResult(result, arrLimit: min(lim, 1_000),
+                                              strLimit: min(lim, 100_000), keepHeadTail: true)
                 } else {
                     data = Self.compactResult(result)
                 }

@@ -119,10 +119,11 @@ enum ContentBlocks {
         let title = dict["tool_title"]
         var args: String?
         if !dict.isEmpty {
-            // fix: 原写法 dict.map { ...$0.key... }.sorted() 在 Swift 6 下报
-            // "closure argument list expects 1 argument"（字典 Element 元组隐式 $0 推断失败）。
-            // 改为先取 keys 排序再 map，语义等价且类型明确。
-            args = dict.keys.sorted().map { "\"\($0)\": \"\(dict[$0] ?? "")\"" }.joined(separator: ",\n")
+            let pairs = dict.keys.sorted().map { k -> String in
+                let v = dict[k] ?? ""
+                return "\"\(k)\": \"\(v)\""
+            }
+            args = pairs.joined(separator: ",\n")
         } else {
             let trimmed = segment.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { args = trimmed }
