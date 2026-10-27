@@ -833,7 +833,7 @@ final class OpenAIClient {
                           let fn = tc["function"] as? [String: Any],
                           let name = fn["name"] as? String,
                           let args = fn["arguments"] as? String else { return nil }
-                    return ToolCall(id: id, name: name, arguments: args)
+                    return ToolCall(id: id, name: name, arguments: args, toolTitle: ToolCall.extractTitle(from: args))
                 }
                 if !calls.isEmpty {
                     // v3.5.11：工具轮不再丢弃 reasoning——把 reasoning_content 存进 thinking(黄色思考气泡)。
@@ -1035,7 +1035,7 @@ final class OpenAIClient {
                                let callId = item["call_id"] as? String,
                                let name = item["name"] as? String,
                                let args = item["arguments"] as? String {
-                                calls.append(ToolCall(id: callId, name: name, arguments: args))
+                                calls.append(ToolCall(id: callId, name: name, arguments: args, toolTitle: ToolCall.extractTitle(from: args)))
                             }
                             if type == "reasoning" {
                                 if let summary = item["summary"] as? [[String: Any]] {
@@ -1403,7 +1403,7 @@ final class OpenAIClient {
                     let name = fn["name"] as? String ?? ""
                     let args = fn["args"] as? [String: Any] ?? [:]
                     let argsStr = (try? JSONSerialization.data(withJSONObject: args)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-                    toolCalls.append(ToolCall(id: "gemini-\(toolCalls.count)", name: name, arguments: argsStr))
+                    toolCalls.append(ToolCall(id: "gemini-\(toolCalls.count)", name: name, arguments: argsStr, toolTitle: ToolCall.extractTitle(from: argsStr)))
                 } else if let text = part["text"] as? String, !text.isEmpty {
                     if (part["thought"] as? Bool) == true {
                         fullThinking += text
@@ -1475,7 +1475,7 @@ final class OpenAIClient {
                     let name = fn["name"] as? String ?? ""
                     let args = fn["args"] as? [String: Any] ?? [:]
                     let argsStr = (try? JSONSerialization.data(withJSONObject: args)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-                    toolCalls.append(ToolCall(id: "gemini-\(toolCalls.count)", name: name, arguments: argsStr))
+                    toolCalls.append(ToolCall(id: "gemini-\(toolCalls.count)", name: name, arguments: argsStr, toolTitle: ToolCall.extractTitle(from: argsStr)))
                 } else if let t = part["text"] as? String { text += t }
             }
             if !toolCalls.isEmpty {
@@ -1899,7 +1899,7 @@ final class OpenAIClient {
                let item = ev.json["item"] as? [String: Any],
                item["type"] as? String == "function_call" {
                 if !currentCallId.isEmpty {
-                    toolCalls.append(ToolCall(id: currentCallId, name: currentCallName, arguments: currentCallArgs))
+                    toolCalls.append(ToolCall(id: currentCallId, name: currentCallName, arguments: currentCallArgs, toolTitle: ToolCall.extractTitle(from: currentCallArgs)))
                 }
                 currentCallId = ""
                 currentCallName = ""
@@ -1936,7 +1936,7 @@ final class OpenAIClient {
                        let callId = item["call_id"] as? String,
                        let name = item["name"] as? String,
                        let args = item["arguments"] as? String {
-                        calls.append(ToolCall(id: callId, name: name, arguments: args))
+                        calls.append(ToolCall(id: callId, name: name, arguments: args, toolTitle: ToolCall.extractTitle(from: args)))
                     }
                     if t == "reasoning" {
                         if let summary = item["summary"] as? [[String: Any]] {

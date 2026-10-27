@@ -885,6 +885,18 @@ struct ToolCall: Codable, Hashable, Identifiable {
     var id: String
     var name: String
     var arguments: String
+    /// v7.2.3-fix19：模型输出的 tool_title（5-10 字行为摘要，对齐 OpenMinis）——
+    /// 工具卡主标题优先用它；旧消息无该字段时 fallback 工具名
+    var toolTitle: String? = nil
+
+    /// v7.2.3-fix19：从 arguments JSON 提取 tool_title（模型每次调用输出）
+    static func extractTitle(from arguments: String) -> String? {
+        guard let data = arguments.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let t = obj["tool_title"] as? String else { return nil }
+        let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }
 
 struct ChatMessage: Codable, Identifiable, Hashable {
@@ -896,6 +908,8 @@ struct ChatMessage: Codable, Identifiable, Hashable {
     var toolCalls: [ToolCall]?
     var toolCallId: String?
     var toolName: String?
+    /// v7.2.3-fix19：模型输出的 tool_title——工具卡主标题优先用（fallback toolName）
+    var toolTitle: String? = nil
     /// v3.1.26：工具调用参数摘要 (tool 消息专用），UI 里用特殊颜色显示
     var toolArgs: String? = nil
     /// v3.3.4：工具执行耗时（秒），UI 气泡显示 (如 0.3s）
@@ -1816,7 +1830,7 @@ final class ConversationStore: ObservableObject {
                     "message": "Missing required params for \(call.name): \(missing.joined(separator: ", ")). Fill them in and call again."
                 ]
                 var failMsg = ChatMessage(role: "tool", content: Self.jsonString(body), isError: true,
-                                          toolCallId: call.id, toolName: call.name)
+                                          toolCallId: call.id, toolName: call.name, toolTitle: call.toolTitle)
                 failMsg.toolArgs = Self.summarizeArgs(call.arguments)
                 next.append(failMsg)
                 self.appendToCurrent(failMsg)   // 对话可见（缺参步骤卡）
@@ -1833,7 +1847,7 @@ final class ConversationStore: ObservableObject {
         // 先把真实工具名+命令+解说(若有)做成 isRunning=true 的占位卡立即上屏；
         // 结果回来后在 handleDispatchResult 原地更新成完成/出错卡（同一张，不新增第二条）。
         do {
-            var runMsg = ChatMessage(role: "tool", content: "", toolCallId: call.id, toolName: call.name)
+            var runMsg = ChatMessage(role: "tool", content: "", toolCallId: call.id, toolName: call.name, toolTitle: call.toolTitle)
             runMsg.toolArgs = Self.summarizeArgs(call.arguments)
             let nar = thinkText.trimmingCharacters(in: .whitespacesAndNewlines)
             runMsg.toolNarration = nar.isEmpty ? nil : thinkText
@@ -1897,7 +1911,7 @@ final class ConversationStore: ObservableObject {
                         "message": "Missing required params for \(call.name): \(missing.joined(separator: ", ")). Fill them in and call again."
                     ]
                     var failMsg = ChatMessage(role: "tool", content: Self.jsonString(body), isError: true,
-                                              toolCallId: call.id, toolName: call.name)
+                                              toolCallId: call.id, toolName: call.name, toolTitle: call.toolTitle)
                     failMsg.toolArgs = Self.summarizeArgs(call.arguments)
                     preErrors[i] = failMsg
                 }
@@ -1907,7 +1921,7 @@ final class ConversationStore: ObservableObject {
         self.runningTool = calls.first?.name
         let nar = thinkText.trimmingCharacters(in: .whitespacesAndNewlines)
         for call in calls {
-            var runMsg = ChatMessage(role: "tool", content: "", toolCallId: call.id, toolName: call.name)
+            var runMsg = ChatMessage(role: "tool", content: "", toolCallId: call.id, toolName: call.name, toolTitle: call.toolTitle)
             runMsg.toolArgs = Self.summarizeArgs(call.arguments)
             runMsg.toolNarration = nar.isEmpty ? nil : thinkText
             runMsg.isRunning = true
@@ -1992,7 +2006,7 @@ final class ConversationStore: ObservableObject {
                 content = rawContent
             }
             var next = toolMessages
-            var toolMsg = ChatMessage(role: "tool", content: content, toolCallId: call.id, toolName: call.name)
+            var toolMsg = ChatMessage(role: "tool", content: content, toolCallId: call.id, toolName: call.name, toolTitle: call.toolTitle)
             toolMsg.toolArgs = Self.summarizeArgs(call.arguments)
             toolMsg.toolDuration = toolDuration
             toolMsg.toolNarration = thinkText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : thinkText
@@ -2010,7 +2024,7 @@ final class ConversationStore: ObservableObject {
                 failureBody = ["ok": false, "message": err.description]
             }
             let content = Self.jsonString(failureBody)
-            var failMsg = ChatMessage(role: "tool", content: content, isError: true, toolCallId: call.id, toolName: call.name)
+            var failMsg = ChatMessage(role: "tool", content: content, isError: true, toolCallId: call.id, toolName: call.name, toolTitle: call.toolTitle)
             failMsg.toolDuration = toolDuration
             next.append(failMsg)
             self.resolvePendingTool(callId: call.id, content: content, toolDuration: toolDuration, isError: true, narration: nil)
@@ -2045,7 +2059,7 @@ final class ConversationStore: ObservableObject {
                 "next_step": nextStep
             ]
             var errMsg = ChatMessage(role: "tool", content: Self.jsonString(errBody),
-                                    isError: true, toolCallId: call.id, toolName: call.name)
+                                    isError: true, toolCallId: call.id, toolName: call.name, toolTitle: call.toolTitle)
             next.append(errMsg)
             self.resolvePendingTool(callId: call.id, content: Self.jsonString(errBody), toolDuration: toolDuration, isError: true, narration: nil)
             self.trailStep(.done(.result, call.name, detail: "❌ \(err.localizedDescription.prefix(200))", ok: false))
@@ -2074,7 +2088,7 @@ final class ConversationStore: ObservableObject {
                 content = rawContent
             }
             var next = toolMessages
-            var toolMsg = ChatMessage(role: "tool", content: content, toolCallId: call.id, toolName: call.name)
+            var toolMsg = ChatMessage(role: "tool", content: content, toolCallId: call.id, toolName: call.name, toolTitle: call.toolTitle)
             // v3.1.26：存参数摘要，UI 里用特殊颜色显示
             toolMsg.toolArgs = Self.summarizeArgs(call.arguments)
             // v3.3.4：耗时显示
@@ -2106,7 +2120,7 @@ final class ConversationStore: ObservableObject {
                 failureBody = ["ok": false, "message": err.description]
             }
             let content = Self.jsonString(failureBody)
-            var failMsg = ChatMessage(role: "tool", content: content, isError: true, toolCallId: call.id, toolName: call.name)
+            var failMsg = ChatMessage(role: "tool", content: content, isError: true, toolCallId: call.id, toolName: call.name, toolTitle: call.toolTitle)
             // v3.1.72：不再写 failMsg.thinking (思考只在 assistant 消息显示一次，避免重复）
             // v3.3.4：耗时显示
             failMsg.toolDuration = toolDuration
@@ -2150,7 +2164,7 @@ final class ConversationStore: ObservableObject {
                 "next_step": nextStep
             ]
             var errMsg = ChatMessage(role: "tool", content: Self.jsonString(errBody),
-                                    isError: true, toolCallId: call.id, toolName: call.name)
+                                    isError: true, toolCallId: call.id, toolName: call.name, toolTitle: call.toolTitle)
             // v3.1.72：不再写 errMsg.thinking (思考只在 assistant 消息显示一次，避免重复）
             next.append(errMsg)
             // v3.5.10：原地更新 running 步骤卡 → 出错卡

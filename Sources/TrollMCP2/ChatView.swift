@@ -2356,7 +2356,9 @@ struct MessageBubble: View {
     /// v3.5.16：卡片标题只显示工具名（去掉"命令符/命令"），像 Minis 步骤标签那样简洁。
     /// 具体命令/参数仍在卡片下方 args 等宽行完整显示，标题不再拼命令，避免命令符状态占据标题。
     private func toolShortLabel() -> String {
-        message.toolName ?? L10n.t("i18n_1073")
+        // v7.2.3-fix19：AI 传的 tool_title 优先（5-10 字行为摘要，不带工具名，
+        // 对齐 OpenMinis）；旧消息/模型未输出时 fallback 工具名
+        message.toolTitle ?? message.toolName ?? L10n.t("i18n_1073")
     }
 
     /// v7.2.3-fix16：工具族标签（对齐三层架构：封装/原生/Alpine）——

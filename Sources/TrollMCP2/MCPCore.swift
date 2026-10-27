@@ -539,6 +539,11 @@ public final class ToolRegistry: ObservableObject {
             for (k, v) in def.parameters {
                 props[k] = ["type": "string", "description": v]
             }
+            // v7.2.3-fix19：全工具统一注入 tool_title（对齐 OpenMinis）——模型每次调用
+            // 输出 5-10 字行为摘要，工具卡主标题用它（AI 传，不带工具名）。
+            // 不加 required：多供应商（deepseek 等）不遵守必填会触发参数校验纠正循环。
+            props["tool_title"] = ["type": "string",
+                "description": "A concise 5-10 word summary of what this tool call does, shown to the user (e.g. 'Test network connectivity', 'List files in home directory'). Use the same language as the user. MUST always output this field."]
             // v3.1.66：required 只保留子命令选择器 (command/action），其余参数按子命令按需提供。
             // v3.1.69：显式找 command/action 键——Dictionary.keys 是哈希顺序，prefix(1) 可能
             // 落到任意参数 (如 artifact 的 name），导致 AI 被迫填无关参数 (AI 反馈实锤）。
