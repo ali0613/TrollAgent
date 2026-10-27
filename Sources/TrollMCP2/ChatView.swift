@@ -1782,12 +1782,49 @@ struct MessageBubble: View {
     }
 
     // v7.2.2：来源卡浮层——底部卡片：host + URL + 打开按钮
+    /// v7.2.3-fix11：ANSI 剥离（对齐 Open Minis 终端——"乱码少"的关键）——
+    /// shell 工具输出常带 \x1b[...m 颜色码 / OSC 序列（\x1b]...\x07），纯文本
+    /// Text 直接渲染会显示成乱码/方块。显示层剥离，不写回 content——
+    /// 链接提取（LinkExtractor）仍用原始 content，功能不受影响。
+    private static func stripANSI(_ text: String) -> String {
+        let chars = Array(text)
+        var out = ""
+        var j = 0
+        while j < chars.count {
+            if chars[j] == "\u{1B}" {
+                if j + 1 < chars.count && chars[j + 1] == "[" {
+                    j += 2
+                    while j < chars.count {
+                        let c = chars[j]
+                        j += 1
+                        if c >= "@" && c <= "~" { break }
+                    }
+                } else if j + 1 < chars.count && chars[j + 1] == "]" {
+                    j += 2
+                    while j < chars.count {
+                        if chars[j] == "\u{07}" { j += 1; break }
+                        if chars[j] == "\u{1B}" && j + 1 < chars.count && chars[j + 1] == "\\" { j += 2; break }
+                        j += 1
+                    }
+                } else {
+                    j += 1
+                }
+            } else {
+                out.append(chars[j])
+                j += 1
+            }
+        }
+        return out
+    }
+
     /// v7.2.3-fix3：工具结果 JSON 格式化——解析成功 → prettyPrinted 缩进；
     /// v7.2.3-fix10：配色收敛——只要顶层"头"键（data/cwd 等）绿色，
     /// 其余全部白色（用户实测三色太花）。解析失败返回 nil → 调用方回退原文纯文本。
     /// 限长 20000 字符，超大 JSON 截断标注，避免渲染卡顿。
     private static func jsonHighlighted(from text: String) -> AttributedString? {
-        guard let data = text.data(using: .utf8),
+        // v7.2.3-fix11：先剥 ANSI——shell 输出带颜色码时 JSONSerialization 无法解析
+        let cleaned = Self.stripANSI(text)
+        guard let data = cleaned.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data),
               let prettyData = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
               let pretty = String(data: prettyData, encoding: .utf8) else { return nil }
@@ -2377,12 +2414,13 @@ struct MessageBubble: View {
             .buttonStyle(.plain)
             // v3.5.10：执行中不展示结果区（content 为空）
             if !message.isRunning && expanded {
-                // v7.2.3-fix3：JSON 结果 → 缩进+语法色；否则等宽纯文本
+                // v7.2.3-fix3：JSON 结果 → 缩进+头键着色；否则等宽纯文本
+                // v7.2.3-fix11：纯文本先剥 ANSI（乱码根因）
                 Group {
                     if let json = Self.jsonHighlighted(from: message.content) {
                         Text(json)
                     } else {
-                        Text(message.content)
+                        Text(Self.stripANSI(message.content))
                             .foregroundColor(.white)
                     }
                 }
