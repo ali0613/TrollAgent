@@ -1782,8 +1782,9 @@ struct MessageBubble: View {
     }
 
     // v7.2.2：来源卡浮层——底部卡片：host + URL + 打开按钮
-    /// v7.2.3-fix3：工具结果 JSON 格式化——解析成功 → 缩进 + key/字符串/数字语法色
-    /// （等宽 plaintext 精神不变）；解析失败返回 nil → 调用方回退原文纯文本。
+    /// v7.2.3-fix3：工具结果 JSON 格式化——解析成功 → prettyPrinted 缩进；
+    /// v7.2.3-fix10：配色收敛——只要顶层"头"键（data/cwd 等）绿色，
+    /// 其余全部白色（用户实测三色太花）。解析失败返回 nil → 调用方回退原文纯文本。
     /// 限长 20000 字符，超大 JSON 截断标注，避免渲染卡顿。
     private static func jsonHighlighted(from text: String) -> AttributedString? {
         guard let data = text.data(using: .utf8),
@@ -1798,22 +1799,10 @@ struct MessageBubble: View {
         let mono = UIFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         ns.addAttribute(.font, value: mono, range: full)
         ns.addAttribute(.foregroundColor, value: UIColor.white, range: full)
-        // key："xxx":
-        if let re = try? NSRegularExpression(pattern: #""((?:[^"\\]|\\.)*)"\s*:"#) {
-            for m in re.matches(in: limited, range: full) {
-                ns.addAttribute(.foregroundColor, value: UIColor.systemBlue, range: m.range)
-            }
-        }
-        // 字符串值："xxx"（: 之后）
-        if let re = try? NSRegularExpression(pattern: #":\s*"((?:[^"\\]|\\.)*)""#) {
+        // 顶层键（行首无缩进的 "key":）→ 绿色；嵌套键/字符串/数字全部保持白色
+        if let re = try? NSRegularExpression(pattern: #"(?m)^"((?:[^"\\]|\\.)*)"\s*:"#) {
             for m in re.matches(in: limited, range: full) {
                 ns.addAttribute(.foregroundColor, value: UIColor.systemGreen, range: m.range)
-            }
-        }
-        // 数字 / true / false / null
-        if let re = try? NSRegularExpression(pattern: #":\s*(-?\d+(\.\d+)?([eE][+-]?\d+)?|true|false|null)"#) {
-            for m in re.matches(in: limited, range: full) {
-                ns.addAttribute(.foregroundColor, value: UIColor.systemOrange, range: m.range)
             }
         }
         return AttributedString(ns)
