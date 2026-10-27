@@ -1666,8 +1666,12 @@ struct MessageBubble: View {
     /// 选择能力用 .textSelection(.enabled) 保留（v4.4.13 已验证 Text 拖选可用）。
     @ViewBuilder
     private func messageTextView(_ shown: String) -> some View {
-        if isStreaming || forceType || isUser {
-            Text(isUser ? AttributedString(shown) : coloredBody(shown))
+        // v7.1.109-peers：流式/打字机也走块渲染（消除"打完才渲染"跳变矛盾）——
+        // shown 是 revealedCount 截断文本：文本块随打字逐字增长（打字机保留）、
+        // 代码块黑底从 fence 出现即渲染并随打字增长、表格在分隔行打全后渲染完整行；
+        // 未闭合的 fence/表格自动回退纯文本。用户消息保持纯文本。
+        if isUser {
+            Text(AttributedString(shown))
                 .font(.body)
                 .textSelection(.enabled)
         } else {

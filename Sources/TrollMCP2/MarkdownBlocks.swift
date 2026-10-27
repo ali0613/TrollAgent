@@ -167,11 +167,12 @@ struct LinkCardView: View {
                     .font(.system(size: 12))
                     .foregroundColor(.blue)
                 Text(url.host ?? url.absoluteString)
-                    .font(.caption.weight(.medium))
+                    // v7.1.109-peers：链接卡字体 12→13pt（用户反馈链接文字较小）
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.blue)
                     .lineLimit(1)
                 Text(url.absoluteString)
-                    .font(.caption2)
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                 Spacer()
@@ -354,7 +355,8 @@ struct MarkdownCodeBlockView: View {
                 .background(Color.black)
             }
             Text(code)
-                .font(.system(.caption, design: .monospaced))
+                // v7.1.109-peers：代码块字体 12→14pt（用户反馈黑底渲染文字较小）
+                .font(.system(size: 14, design: .monospaced))
                 .foregroundColor(.white)
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -382,7 +384,8 @@ struct MarkdownTableView: View {
             LazyVGrid(columns: gridCols, spacing: 6) {
                 ForEach(0..<columns, id: \.self) { i in
                     Text(i < header.count ? header[i] : "")
-                        .font(.system(.caption2, design: .monospaced).weight(.semibold))
+                        // v7.1.109-peers：表格字体 11→13pt（用户反馈表格文字较小）
+                        .font(.system(size: 13, design: .monospaced).weight(.semibold))
                         .foregroundColor(.blue)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -393,7 +396,7 @@ struct MarkdownTableView: View {
                 LazyVGrid(columns: gridCols, spacing: 6) {
                     ForEach(0..<columns, id: \.self) { i in
                         Text(i < row.count ? row[i] : "")
-                            .font(.system(.caption2, design: .monospaced))
+                            .font(.system(size: 13, design: .monospaced))
                             .foregroundColor(.primary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
