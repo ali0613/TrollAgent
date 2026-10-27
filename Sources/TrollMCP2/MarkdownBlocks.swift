@@ -752,18 +752,18 @@ enum MathText {
             s = replaceSqrt(s)
         } while s != prev
         let cmds: [(String, String)] = [
-            (r"\infty", "∞"), (r"\pi", "π"), (r"\alpha", "α"), (r"\beta", "β"),
-            (r"\gamma", "γ"), (r"\delta", "δ"), (r"\theta", "θ"), (r"\lambda", "λ"),
-            (r"\mu", "μ"), (r"\sigma", "σ"), (r"\omega", "ω"), (r"\phi", "φ"),
-            (r"\epsilon", "ε"), (r"\Delta", "Δ"), (r"\Sigma", "Σ"), (r"\Omega", "Ω"),
-            (r"\sum", "∑"), (r"\int", "∫"), (r"\prod", "∏"), (r"\partial", "∂"),
-            (r"\nabla", "∇"), (r"\forall", "∀"), (r"\exists", "∃"), (r"\in", "∈"),
-            (r"\subset", "⊂"), (r"\cup", "∪"), (r"\cap", "∩"), (r"\cdot", "·"),
-            (r"\times", "×"), (r"\pm", "±"), (r"\leq", "≤"), (r"\geq", "≥"),
-            (r"\neq", "≠"), (r"\approx", "≈"), (r"\rightarrow", "→"), (r"\leftarrow", "←"),
-            (r"\dots", "…"), (r"\ldots", "…"), (r"\qquad", "   "), (r"\quad", "  "),
-            (r"\,", " "), (r"\ ", " "), (r"\left", ""), (r"\right", ""),
-            (r"\{", "{"), (r"\}", "}"),
+            (#"\infty"#, "∞"), (#"\pi"#, "π"), (#"\alpha"#, "α"), (#"\beta"#, "β"),
+            (#"\gamma"#, "γ"), (#"\delta"#, "δ"), (#"\theta"#, "θ"), (#"\lambda"#, "λ"),
+            (#"\mu"#, "μ"), (#"\sigma"#, "σ"), (#"\omega"#, "ω"), (#"\phi"#, "φ"),
+            (#"\epsilon"#, "ε"), (#"\Delta"#, "Δ"), (#"\Sigma"#, "Σ"), (#"\Omega"#, "Ω"),
+            (#"\sum"#, "∑"), (#"\int"#, "∫"), (#"\prod"#, "∏"), (#"\partial"#, "∂"),
+            (#"\nabla"#, "∇"), (#"\forall"#, "∀"), (#"\exists"#, "∃"), (#"\in"#, "∈"),
+            (#"\subset"#, "⊂"), (#"\cup"#, "∪"), (#"\cap"#, "∩"), (#"\cdot"#, "·"),
+            (#"\times"#, "×"), (#"\pm"#, "±"), (#"\leq"#, "≤"), (#"\geq"#, "≥"),
+            (#"\neq"#, "≠"), (#"\approx"#, "≈"), (#"\rightarrow"#, "→"), (#"\leftarrow"#, "←"),
+            (#"\dots"#, "…"), (#"\ldots"#, "…"), (#"\qquad"#, "   "), (#"\quad"#, "  "),
+            (#"\,"#, " "), (#"\ "#, " "), (#"\left"#, ""), (#"\right"#, ""),
+            (#"\{", "{"), (#"\}"#, "}"),
         ]
         for (k, v) in cmds { s = s.replacingOccurrences(of: k, with: v) }
         s = replaceSupSub(s)
