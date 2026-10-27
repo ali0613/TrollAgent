@@ -641,7 +641,12 @@ final class OpenAIClient {
                 return mm
             }
         } else {
-            sanitized = messages
+            // v7.2.3-audit4：运行时悬空 toolCalls 兜底——L5 Responses 回落 chat/completions、
+            // 流式中断等场景会在历史里残留 assistant.toolCalls 无配对 tool 结果，
+            // 服务端拒 400 ("assistant message with 'tool_calls' must be followed by tool
+            // messages responding to each 'tool_call_id'")。此处补 isError 伪 tool 消息
+            // 恢复序列合法（与 applyLoaded 启动恢复同法，覆盖运行中产生的悬空）。
+            sanitized = self.repairDanglingToolCalls(messages)
         }
 
         // OpenAI Chat Completions / Custom Endpoint
@@ -679,6 +684,40 @@ final class OpenAIClient {
             }
         }
         return body
+    }
+
+    /// v7.2.3-audit4：运行时悬空 toolCalls 修复——assistant.toolCalls 缺配对 tool 结果时
+    /// 补 isError 伪消息（服务端要求 tool_calls 后必须有对应 tool_call_id 的 tool 消息，
+    /// 且 tool 消息必须紧跟 assistant.toolCalls，不能插在末尾）。
+    private func repairDanglingToolCalls(_ msgs: [ChatMessage]) -> [ChatMessage] {
+        var out: [ChatMessage] = []
+        var pending: [(id: String, name: String)] = []
+        func flushPending() {
+            guard !pending.isEmpty else { return }
+            for p in pending {
+                var err = ChatMessage(role: "tool", content: "⚠️ Tool \(p.name) execution was interrupted by an app crash or protocol fallback (no result received).", isError: true)
+                err.toolCallId = p.id
+                err.toolName = p.name
+                out.append(err)
+            }
+            pending = []
+        }
+        for m in msgs {
+            if m.role == "assistant", let calls = m.toolCalls, !calls.isEmpty {
+                flushPending()  // 前一轮若残留先补（防御）
+                pending = calls.map { ($0.id, $0.name) }
+                out.append(m)
+            } else if m.role == "tool", let id = m.toolCallId {
+                pending.removeAll { $0.id == id }
+                out.append(m)
+                flushPending()  // 部分配对后仍有未配对 → 立即补（保持紧跟）
+            } else {
+                flushPending()  // user/assistant(无calls)/system 前补
+                out.append(m)
+            }
+        }
+        flushPending()
+        return out
     }
 
     /// 级别 0 用模型偏好的 key；级别 1 互换 (中转站可能只认其中一个）

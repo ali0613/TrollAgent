@@ -62,6 +62,23 @@ enum MarkdownBlocks {
                 blocks.append(.codeBlock(code: code.joined(separator: "\n"), language: language))
                 continue
             }
+            // v7.2.3-audit4：DSML/antml 工具调用文本块 → 代码块样式渲染。
+            // 模型误输出 <|DSML| invoke…> 而非结构化 function call 时，至少按代码块
+            // 显示（等宽+背景），避免一片纯文本难以阅读。注意：只渲染不执行。
+            if trimmed.hasPrefix("<|DSML|") || trimmed.hasPrefix("<antml:") || trimmed.hasPrefix("<antml ") || trimmed.hasPrefix("<invoke") {
+                flushText()
+                var code: [String] = [line]
+                i += 1
+                while i < lines.count {
+                    let dl = lines[i]
+                    code.append(dl)
+                    i += 1
+                    if dl.hasPrefix("</|DSML|") || dl.hasPrefix("</antml:") || dl.hasPrefix("</invoke")
+                        || dl.trimmingCharacters(in: .whitespaces).isEmpty { break }
+                }
+                blocks.append(.codeBlock(code: code.joined(separator: "\n"), language: "xml"))
+                continue
+            }
             // v7.1.109-peers：任务清单三态（Cursor To-dos / Manus 计数式）——
             // 连续 "- [ ]" / "- [x]" 行识别为任务块
             if trimmed.hasPrefix("- [") || trimmed.hasPrefix("* [") {

@@ -398,6 +398,9 @@ final class SystemPrompts {
     - The ONLY way to call a tool is an explicit structured function call (`{"name": <tool>, "arguments": {...}}`).
       NEVER write calls as plain text/code blocks (`shell.exec("...")` etc.) — text is never executed. Backticked
       examples here are illustrative only.
+    - NEVER emit tool calls as XML/DSML/antml-style text blocks (<|DSML| invoke …>, <antml:invoke>…,
+      <invoke name=…>…</invoke> or any XML variant). Such text is printed verbatim and never runs —
+      only structured function calls execute. If you want to run a tool, emit the structured function call.
     - Every tool has required params; omitting one is rejected (e.g. inject needs bundle_id; fs/artifact need path).
       On "invalid params ... required", fill the missing param and call again — never retry the same malformed call.
     - EXECUTION DISCIPLINE (non-negotiable): NEVER end your turn with a promise of future action
