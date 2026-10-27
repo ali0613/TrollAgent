@@ -316,10 +316,14 @@ final class VisionTracker {
 }
 
 extension ModelConfig {
+    /// v7.1.109-peers：协议面扩充——OpenRouter（OpenAI 兼容+专用 header/vendor 命名）、
+    /// Gemini（原生 generateContent，覆盖 Google 官方与 Gemini 中转）
     static let apiProtocols = [
         "OpenAI Chat Completions",
         "OpenAI Responses",
         "Anthropic Messages",
+        "OpenRouter",
+        "Gemini",
         "Custom Endpoint"
     ]
 
@@ -336,7 +340,16 @@ extension ModelConfig {
         ("通义千问(Qwen)", "qwen", "OpenAI Chat Completions", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen3.8-max", "Bearer"),
         ("MiniMax", "minimax", "OpenAI Chat Completions", "https://api.minimax.chat/v1", "MiniMax-Text-01", "Bearer"),
         ("阶跃星辰(Step)", "step", "OpenAI Chat Completions", "https://api.stepfun.com/v1", "step-2-mini", "Bearer"),
-        ("豆包(火山)", "doubao", "OpenAI Chat Completions", "https://ark.cn-beijing.volces.com/api/v3", "doubao-pro-32k", "Bearer")
+        ("豆包(火山)", "doubao", "OpenAI Chat Completions", "https://ark.cn-beijing.volces.com/api/v3", "doubao-pro-32k", "Bearer"),
+        // v7.1.109-peers：协议面扩充预设——OpenRouter / xAI / Groq / Mistral / Ollama / Azure / Gemini
+        // (OpenAI 兼容的配 Chat Completions 即用；Gemini 原生协议走 generateContent)
+        ("OpenRouter", "openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "deepseek/deepseek-chat", "Bearer"),
+        ("xAI", "xai", "OpenAI Chat Completions", "https://api.x.ai/v1", "grok-4", "Bearer"),
+        ("Groq", "groq", "OpenAI Chat Completions", "https://api.groq.com/openai/v1", "llama-4-70b", "Bearer"),
+        ("Mistral", "mistral", "OpenAI Chat Completions", "https://api.mistral.ai/v1", "mistral-large-latest", "Bearer"),
+        ("Ollama(本地)", "ollama", "OpenAI Chat Completions", "http://127.0.0.1:11434/v1", "llama3", "None"),
+        ("Azure OpenAI", "azure", "OpenAI Chat Completions", "https://YOUR-RESOURCE.openai.azure.com/openai/deployments/YOUR-DEPLOYMENT", "gpt-4o", "API Key"),
+        ("Gemini", "google", "Gemini", "https://generativelanguage.googleapis.com/v1beta", "gemini-2.5-pro", "Query key")
     ]
 
     /// v4.4.17：Base URL 规范化——OpenAI 格式端点 (Chat/Responses) 自动补 /v1，
@@ -388,6 +401,10 @@ extension ModelConfig {
         if current == "Custom Endpoint" { return current }
         // Anthropic 模型
         if p.contains("anthropic") || m.hasPrefix("claude") { return "Anthropic Messages" }
+        // Gemini 模型（原生 generateContent 协议）
+        if p.contains("google") || p.contains("gemini") || m.hasPrefix("gemini") { return "Gemini" }
+        // OpenRouter（vendor/model 命名 + 专用 header）
+        if p.contains("openrouter") { return "OpenRouter" }
         // 推理系列 (Codex 同款 responses 端点)
         let reasoningPrefixes = ["gpt-5.", "o1", "o3", "o4", "o1-", "o3-", "o4-"]
         if reasoningPrefixes.contains(where: { m.hasPrefix($0) }) || m.contains("reasoning") { return "OpenAI Responses" }

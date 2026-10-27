@@ -95,7 +95,8 @@ final class OpenAIClient {
             c.apiProtocol = corrected
         }
         // v4.4.17：OpenAI 格式端点自动补 /v1 (用户已填 v1/含版本路径则不补)
-        if c.apiProtocol == "OpenAI Chat Completions" || c.apiProtocol == "OpenAI Responses" {
+        // v7.1.109-peers：OpenRouter 同是 OpenAI 兼容路径，纳入自动补
+        if c.apiProtocol == "OpenAI Chat Completions" || c.apiProtocol == "OpenAI Responses" || c.apiProtocol == "OpenRouter" {
             let nb = ModelConfig.normalizeBaseURL(c.baseURL)
             if nb != c.baseURL {
                 NetworkLog.shared.log("\(c.name): Base URL auto-appended /v1: \(c.baseURL)→\(nb)")
@@ -396,6 +397,11 @@ final class OpenAIClient {
         }
         if config.apiProtocol == "Anthropic Messages" {
             performAnthropic(messages: messages, tools: tools, completion: completion)
+            return
+        }
+        // v7.1.109-peers：Gemini 原生协议（generateContent）——Google 官方与 Gemini 中转站
+        if config.apiProtocol == "Gemini" {
+            performGemini(messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, completion: completion)
             return
         }
         // v4.5.x：看门狗标志与任务须在 dataTask 闭包之前声明（Swift 禁止闭包捕获未声明局部变量）。
@@ -1166,6 +1172,234 @@ final class OpenAIClient {
         return chatTool
     }
 
+    // MARK: - Gemini (generateContent 原生协议)
+
+    /// v7.1.109-peers：Gemini 原生协议实现——
+    /// 端点 {base}/models/{model}:streamGenerateContent?alt=sse（流式）或 :generateContent（回落）
+    /// 认证：预设 Query key（?key=）或 applyAuth x-goog-api-key；
+    /// 请求体 contents/parts/inline_data/systemInstruction/functionDeclarations；
+    /// SSE 事件 candidates[0].content.parts（text / thought / functionCall）。
+    private func performGemini(messages: [ChatMessage], tools: [[String: Any]]? = nil,
+                               onStatus: ((String) -> Void)?,
+                               onDelta: ((String) -> Void)?,
+                               onThinking: ((String) -> Void)? = nil,
+                               completion: @escaping (Result<ChatResult, Error>) -> Void) {
+        let base = config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let encModel = config.model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? config.model
+        var urlStr = base + "/models/" + encModel + ":streamGenerateContent?alt=sse"
+        let method = config.authMethod.trimmingCharacters(in: .whitespacesAndNewlines)
+        if method == "Query key" || method == "Query api_key" {
+            let key = config.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !key.isEmpty { urlStr += "&key=" + key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)! }
+        }
+        guard let url = URL(string: urlStr) else {
+            completion(.failure(NSError(domain: "OpenAIClient", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid baseURL"])))
+            return
+        }
+        var request = URLRequest(url: url, timeoutInterval: 120)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        applyAuth(to: &request)
+
+        // v7.1.109-peers：消息转换——role user/model，图片 inline_data（base64），system → systemInstruction
+        var contents: [[String: Any]] = []
+        var systemText = ""
+        for m in messages {
+            if m.role == "system" {
+                if !m.content.isEmpty { systemText += (systemText.isEmpty ? "" : "\n") + m.content }
+                continue
+            }
+            var parts: [[String: Any]] = []
+            if !m.content.isEmpty { parts.append(["text": m.content]) }
+            for img in m.imageDataURLs ?? [] {
+                // data:image/jpeg;base64,xxx → inline_data
+                if let comma = img.firstIndex(of: ",") {
+                    let meta = String(img[..<comma])
+                    let mime = meta.replacingOccurrences(of: "data:", with: "").components(separatedBy: ";").first ?? "image/jpeg"
+                    let b64 = String(img[img.index(after: comma)...])
+                    parts.append(["inline_data": ["mime_type": mime, "data": b64]])
+                }
+            }
+            // 工具轮结果：tool 消息 → functionResponse part
+            if m.role == "tool", let name = m.toolName {
+                let resp: Any = m.content
+                parts.append(["functionResponse": ["name": name, "response": ["result": resp]]])
+            }
+            if !parts.isEmpty {
+                let role = (m.role == "assistant" || m.role == "model") ? "model" : "user"
+                contents.append(["role": role, "parts": parts])
+            }
+        }
+        var body: [String: Any] = [
+            "contents": contents,
+            "generationConfig": ["maxOutputTokens": config.maxTokens > 0 ? config.maxTokens : 4096]
+        ]
+        if !systemText.isEmpty { body["systemInstruction"] = ["parts": [["text": systemText]]] }
+        if let tools = tools, !tools.isEmpty {
+            // OpenAI function schema → Gemini functionDeclarations（name/description/parameters 同构）
+            body["tools"] = [["functionDeclarations": tools]]
+        }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        onStatus?(L10n.t("status_streaming_responses"))
+
+        var fullText = ""
+        var fullThinking = ""
+        var toolCalls: [ToolCall] = []
+        var firstByteReceived = false
+        var fellBackToNonStream = false
+        let completionLock = NSLock()
+        var completionCalled = false
+        let guardedCompletion: (Result<ChatResult, Error>) -> Void = { r in
+            completionLock.lock()
+            if completionCalled { completionLock.unlock(); return }
+            completionCalled = true
+            completionLock.unlock()
+            completion(r)
+        }
+
+        let delegate = SSEStreamDelegate()
+        let streamSession = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let firstByteTimer = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            if !firstByteReceived && !fellBackToNonStream {
+                fellBackToNonStream = true
+                NetworkLog.shared.log("\(self.config.name): Gemini 流式首字节超时 (10s)，回落非流式")
+                streamSession.invalidateAndCancel()
+                self.performGeminiNonStream(messages: messages, tools: tools, body: body, url: url, applyAuth: { [weak self] r in self?.applyAuth(to: &r) }, completion: guardedCompletion)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: firstByteTimer)
+
+        var idleTimer: DispatchWorkItem?
+        func resetIdleWatchdog() {
+            idleTimer?.cancel()
+            let t = DispatchWorkItem { [weak self] in
+                guard let self = self else { return }
+                if self.cancelled || fellBackToNonStream { return }
+                NetworkLog.shared.log("\(self.config.name): Gemini 流式 idle 超时 (30s)，掐断")
+                streamSession.invalidateAndCancel()
+                guardedCompletion(.failure(NSError(domain: "OpenAIClient", code: -3040,
+                    userInfo: [NSLocalizedDescriptionKey: "Stream stalled: no SSE event for 30s"])))
+            }
+            idleTimer = t
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30, execute: t)
+        }
+
+        delegate.onEvent = { [weak self] raw in
+            guard let self = self else { return }
+            if !firstByteReceived {
+                firstByteReceived = true
+                firstByteTimer.cancel()
+                resetIdleWatchdog()
+                onStatus?(L10n.t("status_connected", Double(Int(Date().timeIntervalSince(self.requestStart) * 1000)) / 1000.0))
+            }
+            resetIdleWatchdog()
+            if fellBackToNonStream { return }
+            guard let ev = self.parseSSEEvent(raw) else { return }
+            // Gemini SSE: {"candidates":[{"content":{"parts":[...]},"finishReason":"..."}],"usageMetadata":{...}}
+            guard let json = ev.json as? [String: Any] else { return }
+            if let um = json["usageMetadata"] as? [String: Any] {
+                let pt = um["promptTokenCount"] as? Int ?? 0
+                let ct = um["candidatesTokenCount"] as? Int ?? 0
+                self.lastUsage = ["prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct]
+            }
+            guard let candidates = json["candidates"] as? [[String: Any]],
+                  let first = candidates.first,
+                  let content = first["content"] as? [String: Any],
+                  let parts = content["parts"] as? [[String: Any]] else { return }
+            for part in parts {
+                if let fn = part["functionCall"] as? [String: Any] {
+                    let name = fn["name"] as? String ?? ""
+                    let args = fn["args"] as? [String: Any] ?? [:]
+                    let argsStr = (try? JSONSerialization.data(withJSONObject: args)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+                    toolCalls.append(ToolCall(id: "gemini-\(toolCalls.count)", name: name, arguments: argsStr))
+                } else if let text = part["text"] as? String, !text.isEmpty {
+                    if (part["thought"] as? Bool) == true {
+                        fullThinking += text
+                        let d = text
+                        DispatchQueue.main.async { onThinking?(d) }
+                    } else {
+                        fullText += text
+                        let d = text
+                        DispatchQueue.main.async { onDelta?(d) }
+                    }
+                }
+            }
+        }
+        delegate.onComplete = { [weak self] err in
+            guard let self = self else { return }
+            idleTimer?.cancel()
+            if fellBackToNonStream { return }
+            if let err = err {
+                NetworkLog.shared.log("\(self.config.name): Gemini 流式错误 \(err.localizedDescription)")
+                guardedCompletion(.failure(err))
+                return
+            }
+            if !toolCalls.isEmpty {
+                guardedCompletion(.success(.toolCalls(toolCalls, thinking: fullThinking.isEmpty ? nil : fullThinking, content: fullText.isEmpty ? nil : fullText)))
+            } else if !fullText.isEmpty {
+                guardedCompletion(.success(.text(fullText, thinking: fullThinking.isEmpty ? nil : fullThinking)))
+            } else {
+                guardedCompletion(.failure(NSError(domain: "OpenAIClient", code: -3001,
+                    userInfo: [NSLocalizedDescriptionKey: "Gemini 空响应"])))
+            }
+        }
+        let task = streamSession.dataTask(with: request)
+        activeTask = task
+        task.resume()
+    }
+
+    /// Gemini 非流式回落（首字节超时/中转不推 SSE 时）
+    private func performGeminiNonStream(messages: [ChatMessage], tools: [[String: Any]]?, body: [String: Any], url: URL, applyAuth: (inout URLRequest) -> Void, completion: @escaping (Result<ChatResult, Error>) -> Void) {
+        let urlStr = url.absoluteString.replacingOccurrences(of: ":streamGenerateContent?alt=sse", with: ":generateContent")
+        var request = URLRequest(url: URL(string: urlStr)!, timeoutInterval: 120)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        applyAuth(&request)
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        let task = URLSession.shared.dataTask(with: request) { [weak self] data, resp, err in
+            guard let self = self else { return }
+            if let err = err {
+                completion(.failure(err)); return
+            }
+            guard let data = data, let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+                completion(.failure(NSError(domain: "OpenAIClient", code: -3001, userInfo: [NSLocalizedDescriptionKey: "Gemini 响应解析失败"])))
+                return
+            }
+            if let um = json["usageMetadata"] as? [String: Any] {
+                let pt = um["promptTokenCount"] as? Int ?? 0
+                let ct = um["candidatesTokenCount"] as? Int ?? 0
+                self.lastUsage = ["prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct]
+            }
+            guard let candidates = json["candidates"] as? [[String: Any]], let first = candidates.first,
+                  let content = first["content"] as? [String: Any],
+                  let parts = content["parts"] as? [[String: Any]] else {
+                completion(.failure(NSError(domain: "OpenAIClient", code: -3001, userInfo: [NSLocalizedDescriptionKey: "Gemini 空响应"])))
+                return
+            }
+            var text = ""
+            var toolCalls: [ToolCall] = []
+            for part in parts {
+                if let fn = part["functionCall"] as? [String: Any] {
+                    let name = fn["name"] as? String ?? ""
+                    let args = fn["args"] as? [String: Any] ?? [:]
+                    let argsStr = (try? JSONSerialization.data(withJSONObject: args)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+                    toolCalls.append(ToolCall(id: "gemini-\(toolCalls.count)", name: name, arguments: argsStr))
+                } else if let t = part["text"] as? String { text += t }
+            }
+            if !toolCalls.isEmpty {
+                completion(.success(.toolCalls(toolCalls, thinking: nil, content: text.isEmpty ? nil : text)))
+            } else if !text.isEmpty {
+                completion(.success(.text(text, thinking: nil)))
+            } else {
+                completion(.failure(NSError(domain: "OpenAIClient", code: -3001, userInfo: [NSLocalizedDescriptionKey: "Gemini 空响应"])))
+            }
+        }
+        task.resume()
+    }
+
     // MARK: - Anthropic
 
     private func performAnthropic(messages: [ChatMessage], tools: [[String: Any]]? = nil, completion: @escaping (Result<ChatResult, Error>) -> Void) {
@@ -1302,6 +1536,19 @@ final class OpenAIClient {
     private func applyAuth(to request: inout URLRequest) {
         let key = config.apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let method = config.authMethod.trimmingCharacters(in: .whitespacesAndNewlines)
+        // v7.1.109-peers：协议级 header——
+        // OpenRouter：X-Title + HTTP-Referer（官方要求，缺失会限流/不推荐）；
+        // Gemini：x-goog-api-key header（Query key 走 URL 时不需要）
+        if config.apiProtocol == "OpenRouter" {
+            if !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+            request.setValue("TrollAgent", forHTTPHeaderField: "X-Title")
+            request.setValue("https://github.com", forHTTPHeaderField: "HTTP-Referer")
+            return
+        }
+        if config.apiProtocol == "Gemini" && method != "Query key" && method != "Query api_key" {
+            if !key.isEmpty { request.setValue(key, forHTTPHeaderField: "x-goog-api-key") }
+            return
+        }
         switch method {
         case "Bearer":
             if !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
