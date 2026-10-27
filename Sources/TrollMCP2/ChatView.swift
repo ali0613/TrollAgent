@@ -1800,18 +1800,42 @@ struct MessageBubble: View {
         return out
     }
 
-    // v7.1.109-peers：普通段内 [N] 角标 → 蓝色上标
+    // v7.2.1：段内富文本——~~删除线~~ / ==高亮== / *斜体* / $行内公式$ / [N] 角标（跨段）
     private func styledMarks(_ s: Substring) -> AttributedString {
         var out = AttributedString()
-        let markPat = "\\[(\\d+)\\]"
+        let richPat = #"~~([^~]+)~~|==([^=]+)==|\*([^*]+)\*|\$([^$\n]+)\$|\[(\d+)\]"#
         var pos = s.startIndex
-        while let r = s.range(of: markPat, options: .regularExpression, range: pos..<s.endIndex) {
+        while let r = s.range(of: richPat, options: .regularExpression, range: pos..<s.endIndex) {
             if pos < r.lowerBound { out += AttributedString(s[pos..<r.lowerBound]) }
-            var c = AttributedString(s[r])
-            c.foregroundColor = .blue
-            c.font = .system(size: 12, weight: .semibold)
-            c.baselineOffset = 6
-            out += c
+            let seg = String(s[r])
+            let innerStart = s.index(after: r.lowerBound)
+            let innerEnd = s.index(before: r.upperBound)
+            let inner = String(s[innerStart..<innerEnd])
+            if seg.hasPrefix("~~") {
+                var a = AttributedString(inner)
+                a.strikethroughStyle = .single
+                a.foregroundColor = .secondary
+                out += a
+            } else if seg.hasPrefix("==") {
+                var a = AttributedString(inner)
+                a.backgroundColor = Color.yellow.opacity(0.22)
+                out += a
+            } else if seg.hasPrefix("*") {
+                var a = AttributedString(inner)
+                a.font = .system(size: 17).italic()
+                out += a
+            } else if seg.hasPrefix("$") {
+                var a = AttributedString(MathText.render(inner))
+                a.font = .system(size: 17).italic()
+                out += a
+            } else {
+                // [N] → 蓝色上标
+                var c = AttributedString(seg)
+                c.foregroundColor = .blue
+                c.font = .system(size: 12, weight: .semibold)
+                c.baselineOffset = 6
+                out += c
+            }
             pos = r.upperBound
         }
         if pos < s.endIndex { out += AttributedString(s[pos..<s.endIndex]) }

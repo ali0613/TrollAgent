@@ -12,11 +12,23 @@ enum MarkdownBlocks {
         case codeBlock(code: String, language: String?)
         case table(header: [String], rows: [[String]])
         case tasks(items: [TaskItem])
+        case quote(String)
+        case hr
+        case list(items: [ListItem])
+        case image(alt: String, url: String)
+        case math(String)
     }
 
     /// v7.1.109-peers：任务清单项（tuple 数组不自动合成 Equatable，需 struct）
     struct TaskItem: Equatable {
         var done: Bool
+        var text: String
+    }
+
+    /// v7.2.1：有序/无序列表项
+    struct ListItem: Equatable {
+        var ordered: Bool
+        var marker: String   // "•"（无序）或 "1."（有序原文编号）
         var text: String
     }
 
@@ -90,11 +102,144 @@ enum MarkdownBlocks {
                 blocks.append(.table(header: header, rows: rows))
                 continue
             }
+            // v7.2.1：块级数学公式 $$...$$（同行或跨行闭合）
+            if trimmed.hasPrefix("$$") {
+                flushText()
+                var latexLines: [String] = []
+                var body = String(trimmed.dropFirst(2))
+                // 同行闭合 $$...$$
+                if body.hasSuffix("$$") {
+                    latexLines.append(String(body.dropLast(2)).trimmingCharacters(in: .whitespaces))
+                    i += 1
+                } else {
+                    // 跨行：$$ 开头行之后收集到 $$ 结束行
+                    i += 1
+                    var closed = false
+                    while i < lines.count {
+                        let dl = lines[i]
+                        let dlt = dl.trimmingCharacters(in: .whitespaces)
+                        if dlt.hasSuffix("$$") {
+                            let inner = String(dlt.dropLast(2))
+                            if !inner.isEmpty { latexLines.append(inner) }
+                            i += 1
+                            closed = true
+                            break
+                        }
+                        latexLines.append(dl)
+                        i += 1
+                    }
+                    _ = closed
+                }
+                if !latexLines.isEmpty {
+                    blocks.append(.math(latexLines.joined(separator: "\n")))
+                    continue
+                }
+            }
+            // v7.2.1：引用块——连续 > 前缀行（> 或 > 文本）
+            if trimmed.hasPrefix(">") {
+                flushText()
+                var quoteLines: [String] = []
+                while i < lines.count {
+                    let dl = lines[i].trimmingCharacters(in: .whitespaces)
+                    if dl.hasPrefix(">") {
+                        var rest = String(dl.dropFirst())
+                        if rest.hasPrefix(" ") { rest.removeFirst() }
+                        quoteLines.append(rest)
+                        i += 1
+                    } else { break }
+                }
+                if !quoteLines.isEmpty {
+                    blocks.append(.quote(quoteLines.joined(separator: "\n")))
+                    continue
+                }
+            }
+            // v7.2.1：有序/无序列表——连续 - / * / + / 1. 行首
+            if isListMarker(trimmed) {
+                flushText()
+                var items: [ListItem] = []
+                while i < lines.count {
+                    let dl = lines[i].trimmingCharacters(in: .whitespaces)
+                    guard let m = listMarker(of: dl) else { break }
+                    items.append(m)
+                    i += 1
+                }
+                if !items.isEmpty {
+                    blocks.append(.list(items: items))
+                    continue
+                }
+            }
+            // v7.2.1：分隔线 —— 单独一行全由 - / _ / * 组成（≥3 个）
+            if isHrLine(trimmed) {
+                flushText()
+                blocks.append(.hr)
+                i += 1
+                continue
+            }
+            // v7.2.1：行首图片 ![alt](url)
+            if let (alt, url) = imageMarkup(of: trimmed) {
+                flushText()
+                blocks.append(.image(alt: alt, url: url))
+                i += 1
+                continue
+            }
             textBuf.append(line)
             i += 1
         }
         flushText()
         return blocks
+    }
+
+    /// v7.2.1：无序（- / * / +）或有序（数字.）列表行首
+    private static func isListMarker(_ trimmed: String) -> Bool {
+        if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("+ ") { return true }
+        // 有序：数字 + "." + 空格
+        let pat = #"^\d+\.\s"#
+        if let regex = try? NSRegularExpression(pattern: pat),
+           regex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)) != nil {
+            return true
+        }
+        return false
+    }
+
+    private static func listMarker(of trimmed: String) -> ListItem? {
+        if trimmed.hasPrefix("- ") {
+            return ListItem(ordered: false, marker: "•", text: String(trimmed.dropFirst(2)))
+        }
+        if trimmed.hasPrefix("* ") {
+            return ListItem(ordered: false, marker: "•", text: String(trimmed.dropFirst(2)))
+        }
+        if trimmed.hasPrefix("+ ") {
+            return ListItem(ordered: false, marker: "•", text: String(trimmed.dropFirst(2)))
+        }
+        // 有序：数字. 原文编号
+        let pat = #"^(\d+)\.\s+(.*)$"#
+        if let regex = try? NSRegularExpression(pattern: pat),
+           let m = regex.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
+           let nR = Range(m.range(at: 1), in: trimmed),
+           let tR = Range(m.range(at: 2), in: trimmed) {
+            return ListItem(ordered: true, marker: String(trimmed[nR]) + ".", text: String(trimmed[tR]))
+        }
+        return nil
+    }
+
+    /// v7.2.1：分隔线——trimmed 非空且全由 - / _ / * 组成（≥3），且不是表格分隔行
+    private static func isHrLine(_ trimmed: String) -> Bool {
+        guard trimmed.count >= 3 else { return false }
+        let allowed: Set<Character> = ["-", "_", "*"]
+        return trimmed.allSatisfy { allowed.contains($0) }
+    }
+
+    /// v7.2.1：行首图片 ![alt](url)
+    private static func imageMarkup(of trimmed: String) -> (String, String)? {
+        guard trimmed.hasPrefix("!["), let close = trimmed.firstIndex(of: "]") else { return nil }
+        let alt = String(trimmed[trimmed.index(after: trimmed.startIndex)..<close])
+        let after = trimmed[trimmed.index(after: close)...]
+        guard after.hasPrefix("("), let urlEnd = after.firstIndex(of: ")") else { return nil }
+        let url = String(after[after.index(after: after.startIndex)..<urlEnd]).trimmingCharacters(in: .whitespaces)
+        // 只处理整行是图片的情况（行内图片留给行内解析）
+        let rest = after[after.index(after: urlEnd)...]
+        guard rest.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return (alt, url)
     }
 
     private static func isTableSeparator(_ line: String) -> Bool {
@@ -242,6 +387,49 @@ struct MarkdownBlocksView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color(.secondarySystemBackground))
                     .cornerRadius(8)
+                case .quote(let q):
+                    // v7.2.1：引用块——左侧竖线 + 缩进 + 浅色底（Kimi/豆包式）
+                    HStack(alignment: .top, spacing: 8) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.accentColor.opacity(0.55))
+                            .frame(width: 3)
+                        Text(coloredBody(q))
+                            .font(.body)
+                            .textSelection(.enabled)
+                    }
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemBackground).opacity(0.6))
+                    .cornerRadius(8)
+                case .hr:
+                    Divider()
+                        .overlay(Color(.separator))
+                        .padding(.vertical, 4)
+                case .list(let items):
+                    // v7.2.1：有序/无序列表——marker 列 + 正文（首行基线对齐）
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(item.marker)
+                                    .font(.body.weight(item.ordered ? .semibold : .bold))
+                                    .foregroundColor(.secondary)
+                                Text(coloredBody(item.text))
+                                    .font(.body)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                    }
+                case .image(let alt, let url):
+                    MarkdownInlineImageView(alt: alt, url: url)
+                case .math(let latex):
+                    // v7.2.1：块级公式——LaTeX → Unicode 近似渲染（居中斜体）
+                    Text(MathText.render(latex))
+                        .font(.system(size: 17).italic())
+                        .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 2)
+                        .textSelection(.enabled)
                 }
             }
             // 引用来源行：文末 [1]: URL 列表 → 来源卡（可点开）
@@ -425,5 +613,245 @@ struct MarkdownTableView: View {
             // v7.1.109-peers：行数多限高内部滚动（<4 行不触发，自适应高度）
             .frame(maxHeight: 300)
         }
+    }
+}
+
+/// v7.2.1：行内图片渲染——data URI（base64 直接解码）与 http(s)（异步加载 + 内存缓存）
+struct MarkdownInlineImageView: View {
+    let alt: String
+    let url: String
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let img = image {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 240)
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Color(.separator), lineWidth: 0.5)
+                    )
+            } else if failed {
+                HStack(spacing: 5) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    Text("\(alt)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(8)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(6)
+            } else {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("loading image…")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .onAppear { load() }
+    }
+
+    private func load() {
+        guard image == nil, !failed else { return }
+        if url.hasPrefix("data:image/") {
+            // data URI：data:image/png;base64,<payload>
+            if let comma = url.firstIndex(of: ",") {
+                let payload = String(url[url.index(after: comma)...])
+                if let data = Data(base64Encoded: payload, options: .ignoreUnknownCharacters),
+                   let img = UIImage(data: data) {
+                    image = img
+                    return
+                }
+            }
+            failed = true
+            return
+        }
+        guard let u = URL(string: url) else { failed = true; return }
+        // 内存缓存
+        if let cached = MarkdownImageCache.shared.image(for: url) {
+            image = cached
+            return
+        }
+        URLSession.shared.dataTask(with: u) { data, _, _ in
+            guard let data = data, let img = UIImage(data: data) else {
+                DispatchQueue.main.async { failed = true }
+                return
+            }
+            MarkdownImageCache.shared.set(img, for: url)
+            DispatchQueue.main.async { image = img }
+        }.resume()
+    }
+}
+
+/// v7.2.1：图片内存缓存（NSCache，避免同一 URL 重复下载）
+final class MarkdownImageCache {
+    static let shared = MarkdownImageCache()
+    private let cache = NSCache<NSString, UIImage>()
+    private init() {}
+
+    func image(for key: String) -> UIImage? { cache.object(forKey: key as NSString) }
+    func set(_ img: UIImage, for key: String) { cache.setObject(img, forKey: key as NSString) }
+}
+
+/// v7.2.1：LaTeX → Unicode 近似渲染（无第三方库、iOS 15 手动体系）
+/// 覆盖测试项 ⑧：常见命令映射 + 上标/下标 + \frac/\sqrt。
+enum MathText {
+
+    static func render(_ latex: String) -> String {
+        var s = latex
+        // 顺序：frac ↔ sqrt 交替循环（frac 的嵌套参数可能是 sqrt 产物，反之亦然）→
+        // 命令映射（\infty 等先变 Unicode，避免 ^\infty 残留）→ 上下标
+        var prev: String?
+        repeat {
+            prev = s
+            s = replaceFrac(s)
+            s = replaceSqrt(s)
+        } while s != prev
+        let cmds: [(String, String)] = [
+            (r"\infty", "∞"), (r"\pi", "π"), (r"\alpha", "α"), (r"\beta", "β"),
+            (r"\gamma", "γ"), (r"\delta", "δ"), (r"\theta", "θ"), (r"\lambda", "λ"),
+            (r"\mu", "μ"), (r"\sigma", "σ"), (r"\omega", "ω"), (r"\phi", "φ"),
+            (r"\epsilon", "ε"), (r"\Delta", "Δ"), (r"\Sigma", "Σ"), (r"\Omega", "Ω"),
+            (r"\sum", "∑"), (r"\int", "∫"), (r"\prod", "∏"), (r"\partial", "∂"),
+            (r"\nabla", "∇"), (r"\forall", "∀"), (r"\exists", "∃"), (r"\in", "∈"),
+            (r"\subset", "⊂"), (r"\cup", "∪"), (r"\cap", "∩"), (r"\cdot", "·"),
+            (r"\times", "×"), (r"\pm", "±"), (r"\leq", "≤"), (r"\geq", "≥"),
+            (r"\neq", "≠"), (r"\approx", "≈"), (r"\rightarrow", "→"), (r"\leftarrow", "←"),
+            (r"\dots", "…"), (r"\ldots", "…"), (r"\qquad", "   "), (r"\quad", "  "),
+            (r"\,", " "), (r"\ ", " "), (r"\left", ""), (r"\right", ""),
+            (r"\{", "{"), (r"\}", "}"),
+        ]
+        for (k, v) in cmds { s = s.replacingOccurrences(of: k, with: v) }
+        s = replaceSupSub(s)
+        // 清理残留反斜杠命令
+        s = s.replacingOccurrences(of: #"\\[a-zA-Z]+"#, with: "", options: .regularExpression)
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// \frac{a}{b} → (a)/(b)（嵌套逐步处理；iOS 15 用 enumerateMatches 手动重建）
+    private static func replaceFrac(_ s: String) -> String {
+        let pat = #"\\frac\{([^{}]*)\}\{([^{}]*)\}"#
+        guard let regex = try? NSRegularExpression(pattern: pat) else { return s }
+        var out = s
+        var prev: String?
+        repeat {
+            prev = out
+            let nsRange = NSRange(out.startIndex..., in: out)
+            var result = ""
+            var lastEnd = out.startIndex
+            regex.enumerateMatches(in: out, range: nsRange) { m, _, _ in
+                guard let m = m, let fr = Range(m.range, in: out) else { return }
+                result += String(out[lastEnd..<fr.lowerBound])
+                let num = (m.range(at: 1).location != NSNotFound && letRange(m.range(at: 1), in: out)) ? substring(out, m.range(at: 1)) : ""
+                let den = (m.range(at: 2).location != NSNotFound && letRange(m.range(at: 2), in: out)) ? substring(out, m.range(at: 2)) : ""
+                result += "(\(num))/(\(den))"
+                lastEnd = fr.upperBound
+            }
+            result += String(out[lastEnd..<out.endIndex])
+            out = result
+        } while out != prev
+        return out
+    }
+
+    /// \sqrt{...} → √(...)
+    private static func replaceSqrt(_ s: String) -> String {
+        let pat = #"\\sqrt\{([^{}]*)\}"#
+        guard let regex = try? NSRegularExpression(pattern: pat) else { return s }
+        var out = s
+        var prev: String?
+        repeat {
+            prev = out
+            let nsRange = NSRange(out.startIndex..., in: out)
+            var result = ""
+            var lastEnd = out.startIndex
+            regex.enumerateMatches(in: out, range: nsRange) { m, _, _ in
+                guard let m = m, let fr = Range(m.range, in: out) else { return }
+                result += String(out[lastEnd..<fr.lowerBound])
+                let inner = m.range(at: 1)
+                let body = (inner.location != NSNotFound && letRange(inner, in: out)) ? substring(out, inner) : ""
+                result += "√(\(body))"
+                lastEnd = fr.upperBound
+            }
+            result += String(out[lastEnd..<out.endIndex])
+            out = result
+        } while out != prev
+        return out
+    }
+
+    /// 上标 ^{...} / ^x 与下标 _{...} / _x → Unicode 近似
+    private static func replaceSupSub(_ s: String) -> String {
+        var out = s
+        let supPat = #"\^\{([^{}]*)\}|\^([^\s^])"#
+        let subPat = #"_\{([^{}]*)\}|_([^\s_])"#
+        if let regex = try? NSRegularExpression(pattern: supPat) {
+            let nsRange = NSRange(out.startIndex..., in: out)
+            var result = ""
+            var lastEnd = out.startIndex
+            regex.enumerateMatches(in: out, range: nsRange) { m, _, _ in
+                guard let m = m, let fr = Range(m.range, in: out) else { return }
+                result += String(out[lastEnd..<fr.lowerBound])
+                if m.range(at: 1).location != NSNotFound, letRange(m.range(at: 1), in: out) != nil {
+                    result += unicodeSup(substring(out, m.range(at: 1)))
+                } else if m.range(at: 2).location != NSNotFound, letRange(m.range(at: 2), in: out) != nil {
+                    result += unicodeSup(substring(out, m.range(at: 2)))
+                }
+                lastEnd = fr.upperBound
+            }
+            result += String(out[lastEnd..<out.endIndex])
+            out = result
+        }
+        if let regex = try? NSRegularExpression(pattern: subPat) {
+            let nsRange = NSRange(out.startIndex..., in: out)
+            var result = ""
+            var lastEnd = out.startIndex
+            regex.enumerateMatches(in: out, range: nsRange) { m, _, _ in
+                guard let m = m, let fr = Range(m.range, in: out) else { return }
+                result += String(out[lastEnd..<fr.lowerBound])
+                if m.range(at: 1).location != NSNotFound, letRange(m.range(at: 1), in: out) != nil {
+                    result += unicodeSub(substring(out, m.range(at: 1)))
+                } else if m.range(at: 2).location != NSNotFound, letRange(m.range(at: 2), in: out) != nil {
+                    result += unicodeSub(substring(out, m.range(at: 2)))
+                }
+                lastEnd = fr.upperBound
+            }
+            result += String(out[lastEnd..<out.endIndex])
+            out = result
+        }
+        return out
+    }
+
+    private static func unicodeSup(_ t: String) -> String {
+        let map: [Character: String] = ["0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
+                                        "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+                                        "+": "⁺", "-": "⁻", "(": "⁽", ")": "⁾", "=": "⁼"]
+        if t.count == 1, let u = map[t.first!] { return u }
+        return "^(\(t))"
+    }
+
+    private static func unicodeSub(_ t: String) -> String {
+        let map: [Character: String] = ["0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄",
+                                        "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉",
+                                        "+": "₊", "-": "₋", "(": "₍", ")": "₎", "=": "₌"]
+        if t.count == 1, let u = map[t.first!] { return u }
+        return "_(\(t))"
+    }
+
+    /// NSRange → Range 安全转换（NSNotFound 时返回 nil）
+    private static func letRange(_ r: NSRange, in s: String) -> Range<String.Index>? {
+        Range(r, in: s)
+    }
+    private static func substring(_ s: String, _ r: NSRange) -> String {
+        guard let rng = Range(r, in: s) else { return "" }
+        return String(s[rng])
     }
 }
