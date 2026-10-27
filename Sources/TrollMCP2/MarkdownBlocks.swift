@@ -341,12 +341,63 @@ struct MarkdownBlocksView: View {
     let text: String
     /// ChatView 的正则着色闭包（反引号橙色 + **粗体**），普通文本块复用
     let coloredBody: (String) -> AttributedString
+    /// v7.2.2：本条回复的联网搜索次数（assistant.toolCalls 里 web_search/web_fetch 计数）——"已联网搜索 N 次"
+    var webSearchCount: Int = 0
+    /// v7.2.2：资料折叠条展开态（"已参考 N 篇资料"点击展开来源列表）
+    @State private var sourcesExpanded = false
 
     var body: some View {
         let blocks = MarkdownBlocks.parse(text)
         // v7.1.109-peers：引用来源列表（Perplexity/Kimi 式）——正文里的 [N] 角标 + 文末 [N]: URL 来源行
         let citations = CitationExtractor.extract(text)
         VStack(alignment: .leading, spacing: 8) {
+            // v7.2.2：顶部资料折叠条——"已参考 N 篇资料 · 已联网搜索 M 次"（Kimi 式灰色可折叠条）
+            if !citations.sources.isEmpty || webSearchCount > 0 {
+                VStack(alignment: .leading, spacing: 0) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { sourcesExpanded.toggle() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "books.vertical")
+                                .font(.system(size: 11))
+                                .foregroundColor(.blue)
+                            if !citations.sources.isEmpty {
+                                Text(L10n.t("i18n_1257", citations.sources.count))
+                                    .font(.caption.weight(.medium))
+                                    .foregroundColor(.primary)
+                            }
+                            if !citations.sources.isEmpty && webSearchCount > 0 {
+                                Text("·")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            if webSearchCount > 0 {
+                                Text(L10n.t("i18n_1258", webSearchCount))
+                                    .font(.caption.weight(.medium))
+                                    .foregroundColor(.primary)
+                            }
+                            Spacer()
+                            Image(systemName: sourcesExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(Color(.secondarySystemBackground))
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                    if sourcesExpanded && !citations.sources.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(citations.sources, id: \.index) { src in
+                                LinkCardView(url: src.url)
+                            }
+                        }
+                        .padding(.top, 4)
+                        .transition(.opacity)
+                    }
+                }
+            }
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, b in
                 switch b {
                 case .text(let t):
@@ -431,23 +482,6 @@ struct MarkdownBlocksView: View {
                         .padding(.vertical, 2)
                         .textSelection(.enabled)
                 }
-            }
-            // 引用来源行：文末 [1]: URL 列表 → 来源卡（可点开）
-            if !citations.sources.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "books.vertical")
-                            .font(.system(size: 11))
-                            .foregroundColor(.blue)
-                        Text("Sources · \(citations.sources.count)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundColor(.blue)
-                    }
-                    ForEach(citations.sources, id: \.index) { src in
-                        LinkCardView(url: src.url)
-                    }
-                }
-                .padding(.top, 2)
             }
         }
     }

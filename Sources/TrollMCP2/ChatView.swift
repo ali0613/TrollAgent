@@ -25,6 +25,9 @@ struct ChatView: View {
     @State private var showVoicePicker = false  // v7.2.4：长按全局喇叭切音色（萝莉/猫娘御姐/兔娘）——聊天界面可改，HUD 角色音色固定不变
     @State private var showToolCenter = false  // v6.1.5-14bm：/tools 打开工具中心
     @State private var showTerminal = false  // v7.0.4：终端按钮 → 简易终端
+    // v7.2.2：引用角标 [N] 点击 → 来源卡浮层（Perplexity/Kimi 式点击跳原文）
+    @State private var sourceCardURL: URL?
+    @State private var showSourceCard = false
     // v3.3.4：输入框 + 号展开"应用/相册/文件/浏览器"快捷行（点 + 变 x 收起）
     @State private var attachExpanded = false
 
@@ -1749,7 +1752,78 @@ struct MessageBubble: View {
                 .font(.body)
                 .textSelection(.enabled)
         } else {
-            MarkdownBlocksView(text: shown, coloredBody: { self.coloredBody($0) })
+            MarkdownBlocksView(
+                text: shown,
+                coloredBody: { self.coloredBody($0) },
+                // v7.2.2：联网计数——本条 assistant 消息的 toolCalls 里 web_search/web_fetch 次数
+                webSearchCount: message.toolCalls?.filter {
+                    $0.name.contains("web_search") || $0.name.contains("web.search")
+                        || $0.name.contains("web_fetch") || $0.name.contains("web.fetch")
+                }.count ?? 0
+            )
+                // v7.2.2：引用角标 [N] 可点击 → 来源卡浮层（拦截 minis://source?n= 链接）
+                .environment(\.openURL, OpenURLAction { url in
+                    if url.scheme == "minis" && url.host == "source",
+                       let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                       let nItem = comps.queryItems?.first(where: { $0.name == "n" }),
+                       let n = Int(nItem.value ?? ""),
+                       let src = CitationExtractor.extract(shown).sources.first(where: { $0.index == n }) {
+                        sourceCardURL = src.url
+                        showSourceCard = true
+                        return .handled
+                    }
+                    return .systemAction
+                })
+                .overlay(sourceCardOverlay)
+        }
+    }
+
+    // v7.2.2：来源卡浮层——底部卡片：host + URL + 打开按钮
+    @ViewBuilder
+    private var sourceCardOverlay: some View {
+        if showSourceCard, let url = sourceCardURL {
+            ZStack {
+                Color.black.opacity(0.25)
+                    .ignoresSafeArea()
+                    .onTapGesture { withAnimation { showSourceCard = false } }
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Image(systemName: "link")
+                            .font(.system(size: 13))
+                            .foregroundColor(.blue)
+                        Text(url.host ?? url.absoluteString)
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Button {
+                            withAnimation { showSourceCard = false }
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    Text(url.absoluteString)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(3)
+                        .textSelection(.enabled)
+                    Button {
+                        BrowserManager.shared.open(url.absoluteString)
+                        withAnimation { showSourceCard = false }
+                    } label: {
+                        Label(L10n.t("i18n_1256"), systemImage: "safari")
+                            .font(.subheadline.weight(.medium))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.blue.opacity(0.12))
+                            .cornerRadius(10)
+                    }
+                }
+                .padding(16)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(14)
+                .padding(.horizontal, 40)
+            }
+            .transition(.opacity)
         }
     }
 
@@ -1829,11 +1903,14 @@ struct MessageBubble: View {
                 a.font = .system(size: 17).italic()
                 out += a
             } else {
-                // [N] → 蓝色上标
+                // [N] → 蓝色上标（可点击：minis://source?n=N 由 openURL 拦截弹出来源卡）
                 var c = AttributedString(seg)
                 c.foregroundColor = .blue
                 c.font = .system(size: 12, weight: .semibold)
                 c.baselineOffset = 6
+                if let n = Int(inner) {
+                    c.link = URL(string: "minis://source?n=\(n)")
+                }
                 out += c
             }
             pos = r.upperBound
