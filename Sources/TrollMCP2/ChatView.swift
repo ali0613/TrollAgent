@@ -1817,6 +1817,29 @@ struct MessageBubble: View {
         return out
     }
 
+    /// v7.2.3-fix13：终端 tab 展开（Open Minis 像素网格对齐的关键）——
+    /// \t → 补空格到 8 列边界（终端标准），中文按 2 列宽估算。
+    /// SwiftUI 的 Text 不保证渲染 tab 对齐，shell 表格输出（tabulate 等）
+    /// 的列会全乱——必须先展开成空格。
+    private static func expandTabs(_ text: String) -> String {
+        var out = ""
+        var col = 0
+        for ch in text {
+            if ch == "\t" {
+                let pad = 8 - (col % 8)
+                out.append(String(repeating: " ", count: pad))
+                col += pad
+            } else if ch == "\n" {
+                out.append(ch)
+                col = 0
+            } else {
+                out.append(ch)
+                col += ch.isASCII ? 1 : 2
+            }
+        }
+        return out
+    }
+
     /// v7.2.3-fix12：Open Minis 终端配色（attributedShellLine 对齐）——
     /// 纯文本工具结果：白字 + URL 蓝色下划线高亮（其余无色，终端风）。
     private static func terminalStyled(_ text: String) -> AttributedString {
@@ -2440,12 +2463,12 @@ struct MessageBubble: View {
             if !message.isRunning && expanded {
                 // v7.2.3-fix3：JSON 结果 → 缩进+头键着色；否则等宽纯文本
                 // v7.2.3-fix11：纯文本先剥 ANSI（乱码根因）
-                // v7.2.3-fix12：纯文本 URL 蓝色（Open Minis 终端配色）
+                // v7.2.3-fix13：tab 展开到 8 列（空格对齐根因）
                 Group {
                     if let json = Self.jsonHighlighted(from: message.content) {
                         Text(json)
                     } else {
-                        Text(Self.terminalStyled(Self.stripANSI(message.content)))
+                        Text(Self.terminalStyled(Self.expandTabs(Self.stripANSI(message.content))))
                     }
                 }
                 .font(.system(.caption, design: .monospaced))
