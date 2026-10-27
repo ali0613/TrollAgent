@@ -778,10 +778,10 @@ struct ChatView: View {
         let est = rec?["estInputTokens"] as? Int ?? 0
         ringTok = total > 0 ? total : est
     }
-    // v7.1.109-peers：当前模型实际上下文窗口（ModelCapability 静态表，未收录兜底 200k）
+    // v7.1.109-peers：上下文指示总量——与压缩预算同源（effectiveContextTokens：收录模型=真实窗口，
+    // 未收录=用户配置 contextTokens），避免"UI 显示 200k、实际预算 16k"的显示/行为矛盾
     private var currentContextWindow: Int {
-        let name = modelStore.defaultConfig?.model ?? ""
-        return ModelCapability.contextWindow(for: name) ?? 200_000
+        modelStore.defaultConfig?.effectiveContextTokens ?? 200_000
     }
     private func fmtTok(_ t: Int) -> String {
         if t >= 1_000_000 { return String(format: "%.1fM", Double(t) / 1_000_000) }

@@ -126,6 +126,9 @@ enum ModelCapability {
         if m.contains("claude") {
             return 200_000
         }
+        // OpenAI GPT-6.1 Sol（2026-10 发布）：API 原生 1.05M / ChatGPT 产品默认 500k；
+        // GPT-6 系列（astra/luna/sol）同为 1M 档。收录取保守 1M（对齐 gpt-4.1 口径）
+        if m.contains("gpt-6.1") || m.contains("gpt-6") { return 1_000_000 }
         // OpenAI GPT-5：400k；GPT-4.1：1M；GPT-4o / o1 / o3 / o4：200k；GPT-4：128k
         if m.contains("gpt-5") { return 400_000 }
         if m.contains("gpt-4.1") { return 1_000_000 }
