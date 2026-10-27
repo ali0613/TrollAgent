@@ -20,7 +20,9 @@ jobs:
     # fix: 原 needs 会让 build 等 5 个原生工具 job；它们排队超时被取消时
     # build 会被连带 skip。产物下载全部 continue-on-error，直接解耦。
     if: always()
-    runs-on: macos-latest
+    # fix: macos-latest 标签在这个账号上排队 15 分钟拿不到 runner 就被系统取消
+    # （实测 macos-15 明确标签秒分配，macos-latest 不行）
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
