@@ -2316,6 +2316,31 @@ struct MessageBubble: View {
         message.toolName ?? L10n.t("i18n_1073")
     }
 
+    /// v7.2.3-fix16：工具族标签（对齐三层架构：封装/原生/Alpine）——
+    /// 副行小字显示"封装工具/原生工具/Alpine 工具"。
+    /// 规则：shell.exec（默认 Alpine 环境）→ Alpine；原生 bin 清单 → 原生；
+    /// 其余 MCP 注册工具（web.*/device.*/app.* 等带点前缀）→ 封装。
+    private func toolFamilyLabel(for toolName: String?) -> String {
+        guard let name = toolName, !name.isEmpty else { return L10n.t("i18n_244") }
+        let nativeSet: Set<String> = ["sqlite3", "plutil", "ta", "jtool2", "py3-native",
+                                      "node-native", "git.py", "nscan.py", "ldid", "insert_dylib",
+                                      "optool", "ct_bypass", "opainject", "install_name_tool"]
+        let packagedPrefixes = ["web.", "device.", "app.", "container.", "injection.", "location.",
+                                "macro.", "knowledge.", "automation.", "model.", "reminder", "calendar",
+                                "contacts", "phone", "scan.", "skills.", "project.", "build.", "rescue.",
+                                "cron.", "file.", "network."]
+        if name == "shell.exec" || name == "shell_exec" {
+            return L10n.t("i18n_1177")      // Alpine 工具（默认 shell 环境）
+        }
+        if nativeSet.contains(name) {
+            return L10n.t("i18n_245")       // 原生工具
+        }
+        if packagedPrefixes.contains(where: { name.hasPrefix($0) }) {
+            return L10n.t("i18n_244")       // 封装工具
+        }
+        return L10n.t("i18n_244")
+    }
+
     private var toolBubble: some View {
         VStack(alignment: .leading, spacing: 6) {
             // 📝 1. 思考过程（独立橙色气泡）
@@ -2326,8 +2351,9 @@ struct MessageBubble: View {
 
             // 🔧✅ 2. 工具调用 + 工具结果（同一个灰色大气泡）
             VStack(alignment: .leading, spacing: 6) {
-                        // 工具调用胶囊（工具名 + 耗时 + 执行命令，边做边说可见；结果在下方展开）
+                        // 工具调用胶囊（工具名 + 执行命令，边做边说可见；结果在下方展开）
                 VStack(alignment: .leading, spacing: 3) {
+                    // v7.2.3-fix16：主行=图标+大标题；状态徽章/耗时移到副行小字
                     HStack(spacing: 6) {
                         Image(systemName: "terminal.fill")
                             .font(.system(size: 13))
@@ -2341,38 +2367,30 @@ struct MessageBubble: View {
                             .foregroundColor(.blue)
                             .lineLimit(2)
                             .layoutPriority(1)
-                        // v3.5.7：工具状态徽章（对齐 shadcn React AI Tool）——机制级：由真实执行结果渲染，
-                        // 不是模型说的话。v3.5.10：running 态显示"执行中…"转圈，完成=✓绿 / 出错=✗红。
-                        if message.isRunning {
-                            // v4.4.1：徽章只显示"执行中…"转圈——进度条只在工具结果迷你气泡内渲染，
-                            // 同一安装任务不再两处重复显示（此前 v4.3.75 双渲染导致"两个进度条"）。
-                            HStack(spacing: 4) {
-                                ProgressView().scaleEffect(0.7)
-                                Text(L10n.t("ui_64")).font(.caption2.bold())
-                            }
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.blue.opacity(0.15))
-                            .foregroundColor(.blue)
-                            .cornerRadius(6)
-                        } else {
-                            Text(message.isError ? L10n.t("i18n_1074") : L10n.t("i18n_1075"))
-                                .font(.caption2.bold())
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                // v4.4.11：完成绿→蓝(与执行中同色, 减颜色), 仅出错保留红
-                                .background(message.isError ? Color.red.opacity(0.15) : Color.blue.opacity(0.15))
-                                .foregroundColor(message.isError ? .red : .blue)
-                                .cornerRadius(6)
-                        }
-                        // v3.3.4：工具执行耗时（对齐 OpenMinis 步骤耗时样式）
-                        if let dur = message.toolDuration {
-                            Text(String(format: "%.1fs", dur))
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
                         Spacer()
                     }
+                    // v7.2.3-fix16：副行小字（括号信息）——工具族·工具名·状态·耗时
+                    HStack(spacing: 5) {
+                        Text(toolFamilyLabel(for: message.toolName))
+                        if let tn = message.toolName, !tn.isEmpty {
+                            Text(tn)
+                                .textSelection(.enabled)
+                        }
+                        // v3.5.7：工具状态徽章（机制级：由真实执行结果渲染）——移到副行缩小
+                        if message.isRunning {
+                            ProgressView().scaleEffect(0.55)
+                            Text(L10n.t("ui_64")).foregroundColor(.blue)
+                        } else {
+                            Text(message.isError ? L10n.t("i18n_1074") : L10n.t("i18n_1075"))
+                                .foregroundColor(message.isError ? .red : .green)
+                        }
+                        // v3.3.4：工具执行耗时
+                        if let dur = message.toolDuration {
+                            Text(String(format: "%.1fs", dur))
+                        }
+                    }
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
                     // v3.5.13：标题已是"工具名: 关键参数"机械短标签，无需再补一行副标题工具名。
                     // v7.2.3-fix14：参数行默认一行截断 + ▽，点击展开完整命令/参数
                     // （工具多时参数堆太长，对齐折叠式工具结果体验）
