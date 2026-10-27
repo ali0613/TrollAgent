@@ -284,8 +284,8 @@ final class WebSearchTool: MCPTool {
         var out: [[String: String]] = []
         var seen = Set<String>()
         for m in matches {
-            var url = ns.substring(with: m.range(at: 1)).replacingOccurrences(of: "&amp;", with: "&")
-            let title = ns.substring(with: m.range(at: 2)).stripHTMLTags()
+            var url = capture(ns, m.range(at: 1)).replacingOccurrences(of: "&amp;", with: "&")
+            let title = capture(ns, m.range(at: 2)).stripHTMLTags()
             if let real = Self.realBaiduURL(url) { url = real }
             guard !title.isEmpty, !url.isEmpty, seen.insert(url).inserted else { continue }
             let blockRange = NSRange(location: m.range.location, length: min(ns.length - m.range.location, 800))
@@ -372,7 +372,7 @@ final class WebSearchTool: MCPTool {
         let matches = regex.matches(in: html, range: NSRange(location: 0, length: ns.length))
         var out: [[String: String]] = []
         for m in matches {
-            let block = ns.substring(with: m.range(at: 1))
+            let block = capture(ns, m.range(at: 1))
             // 标题：<h2> 下第一个 <a>，容许多行/嵌套 span
             let head = block.firstMatch(pattern: "<h2[^>]*>[\\s\\S]*?<a[^>]*href=\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a>")
             // 摘要：取 b_caption 或第一个 <p> (去除标签）
@@ -400,8 +400,8 @@ final class WebSearchTool: MCPTool {
         var out: [[String: String]] = []
         var seen = Set<String>()
         for m in matches {
-            let url = ns.substring(with: m.range(at: 1))
-            let title = ns.substring(with: m.range(at: 2)).stripHTMLTags()
+            let url = capture(ns, m.range(at: 1))
+            let title = capture(ns, m.range(at: 2)).stripHTMLTags()
             guard !title.isEmpty, !url.hasPrefix("javascript:"), seen.insert(url).inserted else { continue }
             out.append(["title": title, "url": url, "snippet": "", "source_type": Self.sourceType(for: url)])
             if out.count >= limit { break }
@@ -415,8 +415,8 @@ final class WebSearchTool: MCPTool {
         let matches = re.matches(in: html, range: NSRange(location: 0, length: ns.length))
         var out: [[String: String]] = []
         for m in matches.prefix(limit) {
-            let url = ns.substring(with: m.range(at: 1)).replacingOccurrences(of: "&amp;", with: "&")
-            let title = ns.substring(with: m.range(at: 2)).stripHTMLTags()
+            let url = capture(ns, m.range(at: 1)).replacingOccurrences(of: "&amp;", with: "&")
+            let title = capture(ns, m.range(at: 2)).stripHTMLTags()
             if url.hasPrefix("//") { continue }
             // 摘要 (紧随其后的 result__snippet）
             let snipRange = NSRange(location: m.range.location, length: min(ns.length - m.range.location, 600))
@@ -537,13 +537,23 @@ final class WebFetchTool: MCPTool {
 }
 
 extension String {
-    /// 返回所有捕获组 (不含整串）
+    /// v7.2.1：NSRegularExpression 捕获组安全取值——range(at:) 可能返回 NSNotFound
+    /// （可选组未参与/交替未选中分支），NSString.substring(with:) 对 NSNotFound 越界
+    /// → EXC_BAD_ACCESS/SIGSEGV（崩溃日志 sig_1793071502 实证候选）。统一防护。
+    fileprivate func capture(_ ns: NSString, _ r: NSRange) -> String {
+        guard r.location != NSNotFound, r.location >= 0,
+              r.location + r.length <= ns.length else { return "" }
+        return ns.substring(with: r)
+    }
+
+    /// 返回所有捕获组 (不含整串）——带 NSNotFound 防护
     fileprivate func firstMatch(pattern: String) -> [String]? {
         guard let re = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]),
               let m = re.firstMatch(in: self, range: NSRange(location: 0, length: (self as NSString).length)) else { return nil }
         var groups: [String] = []
+        let ns = self as NSString
         for i in 1..<m.numberOfRanges {
-            groups.append((self as NSString).substring(with: m.range(at: i)))
+            groups.append(capture(ns, m.range(at: i)))
         }
         return groups
     }
