@@ -551,9 +551,9 @@ final class OpenAIClient {
             let status = http?.statusCode ?? 0
 
             // v7.2.3-fix6：鉴权试探成功（2xx）→ 纠正配置并清 override（下次请求用新方式）
-            if status >= 200 && status < 300, let alt = overrideAuthMethod {
-                overrideAuthMethod = nil
-                onAuthCorrected?(alt)
+            if status >= 200 && status < 300, let alt = self.overrideAuthMethod {
+                self.overrideAuthMethod = nil
+                self.onAuthCorrected?(alt)
                 NetworkLog.shared.log("\(self.config.name) authMethod auto-corrected to \(alt)")
             }
 
