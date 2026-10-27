@@ -536,16 +536,17 @@ final class WebFetchTool: MCPTool {
     }
 }
 
-extension String {
-    /// v7.2.1：NSRegularExpression 捕获组安全取值——range(at:) 可能返回 NSNotFound
-    /// （可选组未参与/交替未选中分支），NSString.substring(with:) 对 NSNotFound 越界
-    /// → EXC_BAD_ACCESS/SIGSEGV（崩溃日志 sig_1793071502 实证候选）。统一防护。
-    fileprivate func capture(_ ns: NSString, _ r: NSRange) -> String {
-        guard r.location != NSNotFound, r.location >= 0,
-              r.location + r.length <= ns.length else { return "" }
-        return ns.substring(with: r)
-    }
+/// v7.2.1：NSRegularExpression 捕获组安全取值——range(at:) 可能返回 NSNotFound
+/// （可选组未参与/交替未选中分支），NSString.substring(with:) 对 NSNotFound 越界
+/// → EXC_BAD_ACCESS/SIGSEGV（崩溃日志 sig_1793071502 实证候选）。统一防护。
+/// 全局函数：供 WebSearchTool 成员函数与 String extension 共用。
+fileprivate func capture(_ ns: NSString, _ r: NSRange) -> String {
+    guard r.location != NSNotFound, r.location >= 0,
+          r.location + r.length <= ns.length else { return "" }
+    return ns.substring(with: r)
+}
 
+extension String {
     /// 返回所有捕获组 (不含整串）——带 NSNotFound 防护
     fileprivate func firstMatch(pattern: String) -> [String]? {
         guard let re = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]),
