@@ -1783,6 +1783,43 @@ struct MessageBubble: View {
 
     // v7.2.2：来源卡浮层——底部卡片：host + URL + 打开按钮
     @ViewBuilder
+    /// v7.2.3-fix3：工具结果 JSON 格式化——解析成功 → 缩进 + key/字符串/数字语法色
+    /// （等宽 plaintext 精神不变）；解析失败返回 nil → 调用方回退原文纯文本。
+    /// 限长 20000 字符，超大 JSON 截断标注，避免渲染卡顿。
+    private static func jsonHighlighted(from text: String) -> AttributedString? {
+        guard let data = text.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              let prettyData = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
+              let pretty = String(data: prettyData, encoding: .utf8) else { return nil }
+        let limited = pretty.count > 20000
+            ? String(pretty.prefix(20000)) + "\n… (truncated)"
+            : pretty
+        let ns = NSMutableAttributedString(string: limited)
+        let full = NSRange(limited.startIndex..., in: limited)
+        let mono = UIFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        ns.addAttribute(.font, value: mono, range: full)
+        ns.addAttribute(.foregroundColor, value: UIColor.white, range: full)
+        // key："xxx":
+        if let re = try? NSRegularExpression(pattern: #""((?:[^"\\]|\\.)*)"\s*:"#) {
+            for m in re.matches(in: limited, range: full) {
+                ns.addAttribute(.foregroundColor, value: UIColor.systemBlue, range: m.range)
+            }
+        }
+        // 字符串值："xxx"（: 之后）
+        if let re = try? NSRegularExpression(pattern: #":\s*"((?:[^"\\]|\\.)*)""#) {
+            for m in re.matches(in: limited, range: full) {
+                ns.addAttribute(.foregroundColor, value: UIColor.systemGreen, range: m.range)
+            }
+        }
+        // 数字 / true / false / null
+        if let re = try? NSRegularExpression(pattern: #":\s*(-?\d+(\.\d+)?([eE][+-]?\d+)?|true|false|null)"#) {
+            for m in re.matches(in: limited, range: full) {
+                ns.addAttribute(.foregroundColor, value: UIColor.systemOrange, range: m.range)
+            }
+        }
+        return AttributedString(ns)
+    }
+
     /// v7.2.3-fix：shell_exec 命令里含 curl 拉取 → 计为联网（工具参数 JSON 解析，
     /// 识别 command 字段的 curl 调用；下载 -o/-O 也是联网行为，一并计入用户视角的"用了网络"）
     private static func toolCallIsCurlFetch(_ call: ToolCall) -> Bool {
@@ -2325,18 +2362,24 @@ struct MessageBubble: View {
             .buttonStyle(.plain)
             // v3.5.10：执行中不展示结果区（content 为空）
             if !message.isRunning && expanded {
-                Text(message.content)
-                    .font(.system(.caption, design: .monospaced))
-                    // v3.1.74：工具结果背景日/夜都改纯黑（用户要求），文字改白色保证黑底可读
-                    .foregroundColor(.white)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.black)
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Color(.separator), lineWidth: 0.5)
-                    )
+                // v7.2.3-fix3：JSON 结果 → 缩进+语法色；否则等宽纯文本
+                Group {
+                    if let json = Self.jsonHighlighted(from: message.content) {
+                        Text(json)
+                    } else {
+                        Text(message.content)
+                            .foregroundColor(.white)
+                    }
+                }
+                .font(.system(.caption, design: .monospaced))
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.black)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                )
 
                 // v3.1.6: 工具结果里的文件 → 可点击卡片
                 let files = FilePathExtractor.extractFiles(from: message.content)
