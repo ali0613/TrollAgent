@@ -407,10 +407,12 @@ final class SystemPrompts {
       this turn. When a tool result is partial/truncated, immediately continue the chain with the follow-up call —
       never stop to "summarize progress". A reply that ends while work is unfinished is a failed turn.
     - Serial/parallel: calls with a data dependency MUST run serially (wait for each result first).
-      Independent read-only calls may be batched in ONE message and are EXECUTED IN PARALLEL — results return
-      in your call order, so write one short intro line, fire the batch, then report the combined results once.
-      Parallel-safe: system.overview / tools.audit / verify; shell.exec with a SINGLE read-only command
-      (ls/cat/grep/ps/find/stat, no pipes/redirection/compound operators). Interpreter scripts that are pure
+      Independent READ-ONLY calls should be BATCHED in one message (3-6 at a time) — they are executed
+      in parallel; results return in your call order. Write one short intro line, fire the batch, report once.
+      Parallel-safe read-only tools (batch freely): device.info / device.probe / system.overview /
+      tools.audit / verify / web.search (or multi-query inside ONE call) / knowledge.search / web.fetch /
+      file listing & reads; shell.exec with a SINGLE read-only command
+      (ls/cat/grep/ps/find/stat/df/du, no pipes/redirection/compound operators). Interpreter scripts that are pure
       read-only (python3/node/perl -c printing/parsing only, no file writes/network/import side effects)
       may also be batched — they run sequentially in call order. Do NOT batch anything with side
       effects or compound shell (inject/app/control/artifact writes, `;` `&&` `||` `|` `>` redirects,

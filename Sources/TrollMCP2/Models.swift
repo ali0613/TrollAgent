@@ -2463,7 +2463,14 @@ final class ConversationStore: ObservableObject {
     static func isParallelSafeTool(_ call: ToolCall) -> Bool {
         let name = call.name
         // 纯只读/验证大工具（内部只读 ToolRegistry/Bundle，无共享可变状态）
-        let readOnlyTools: Set<String> = ["system_overview", "tools_audit", "verify"]
+        // v7.2.1：扩充白名单——web.search/web.fetch/knowledge.search/device.* 等
+        // 确定性只读工具加入可合批（此前模型按提示词批量发也会被强制一条条跑，
+        // 用户实测"AI 还是一条或两条发命令"）。browser 共享 WebView 仍串行。
+        let readOnlyTools: Set<String> = [
+            "system_overview", "tools_audit", "verify",
+            "web_search", "web_fetch", "knowledge_search",
+            "device_info", "device_probe"
+        ]
         if readOnlyTools.contains(name) { return true }
         // shell_exec：仅【单命令】纯只读命令可并行（ls/cat/grep/ps/find/stat...）。
         // v7.1.107：复合命令（; && || | > >> < 等）无法静态确认只读——例如
