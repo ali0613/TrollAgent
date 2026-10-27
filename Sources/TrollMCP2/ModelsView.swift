@@ -200,6 +200,14 @@ struct ModelRow: View {
                         .font(.body)
                         .foregroundColor(.primary)
                         .lineLimit(1)
+                    // v7.1.109-peers：视觉能力标记（对齐 OpenMinis 模型列表图片小图标）——
+                    // 数据源 supportsVision = 动态学习记录优先 + 静态规则兜底
+                    if config.supportsVision {
+                        Image(systemName: "photo")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.blue)
+                            .accessibilityLabel("Vision")
+                    }
                     if config.isDefault {
                         Text(L10n.t("ui_144"))
                             .font(.caption2)
