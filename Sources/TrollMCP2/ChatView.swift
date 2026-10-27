@@ -1756,10 +1756,13 @@ struct MessageBubble: View {
                 text: shown,
                 coloredBody: { self.coloredBody($0) },
                 // v7.2.2：联网计数——本条 assistant 消息的 toolCalls 里 web_search/web_fetch 次数
-                webSearchCount: message.toolCalls?.filter {
+                // v7.2.3-fix：shell_exec 里的 curl 拉取也算联网（用户实测多用 curl 而非 web 工具，
+                // 此前 curl 不计入导致"已联网搜索 N 次"永远不显示）
+                webSearchCount: (message.toolCalls ?? []).filter {
                     $0.name.contains("web_search") || $0.name.contains("web.search")
                         || $0.name.contains("web_fetch") || $0.name.contains("web.fetch")
-                }.count ?? 0
+                        || Self.toolCallIsCurlFetch($0)
+                }.count
             )
                 // v7.2.2：引用角标 [N] 可点击 → 来源卡浮层（拦截 minis://source?n= 链接）
                 .environment(\.openURL, OpenURLAction { url in
@@ -1780,6 +1783,19 @@ struct MessageBubble: View {
 
     // v7.2.2：来源卡浮层——底部卡片：host + URL + 打开按钮
     @ViewBuilder
+    /// v7.2.3-fix：shell_exec 命令里含 curl 拉取 → 计为联网（工具参数 JSON 解析，
+    /// 识别 command 字段的 curl 调用；下载 -o/-O 也是联网行为，一并计入用户视角的"用了网络"）
+    private static func toolCallIsCurlFetch(_ call: ToolCall) -> Bool {
+        guard call.name == "shell_exec",
+              let data = call.arguments.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let cmd = obj["command"] as? String else { return false }
+        let c = cmd.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = c.lowercased()
+        return lower.hasPrefix("curl") || lower.hasPrefix("env") && lower.contains(" curl ")
+            || lower.contains(" curl ")
+    }
+
     private var sourceCardOverlay: some View {
         if showSourceCard, let url = sourceCardURL {
             ZStack {
