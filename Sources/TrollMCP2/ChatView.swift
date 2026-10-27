@@ -1527,15 +1527,51 @@ struct MessageBubble: View {
     @State private var typeTimer: Timer?
     // v4.4.18：流式自动朗读——记录已朗读到的字符位置，content 增长时只把新增整句送 TTS
     @State private var autoSpokenUpTo = 0
+    // v7.1.109-peers：打字机"已打完"持久化标记（UserDefaults by messageId）——
+    // 修切后台/LazyVStack 重建后 forceType 消息 revealedCount 归 0 重新打字、
+    // 打完不渲染块（杀后台重进才正常）的问题。打过一次即永久视为已显示完整：
+    // 视图重建时直接全文渲染（表格/黑底立即可见），不再重打。
+    private static var doneTypingCache: [String: Bool] = [:]
+    private static func doneTyping(for id: UUID) -> Bool {
+        let key = id.uuidString
+        if let v = doneTypingCache[key] { return v }
+        let v = (UserDefaults.standard.dictionary(forKey: "ui.doneTyping")?[key] as? Bool) ?? false
+        doneTypingCache[key] = v
+        return v
+    }
+    private static func markDoneTyping(_ id: UUID) {
+        let key = id.uuidString
+        doneTypingCache[key] = true
+        var d = UserDefaults.standard.dictionary(forKey: "ui.doneTyping") ?? [:]
+        d[key] = true
+        UserDefaults.standard.set(d, forKey: "ui.doneTyping")
+    }
+    private static func clearDoneTyping(_ id: UUID) {
+        let key = id.uuidString
+        doneTypingCache[key] = false
+        var d = UserDefaults.standard.dictionary(forKey: "ui.doneTyping") ?? [:]
+        d[key] = false
+        UserDefaults.standard.set(d, forKey: "ui.doneTyping")
+    }
 
     // v3.5.4：自适应打字机（业界：平时 ~50 字/秒舒适，积压多自动提速追平网络，标点/换行稍停顿更自然）。
     // 不像固定 133 字/秒那样一快到底；也不像 25 字/秒那样拖沓。
     private func startTypeTimer() {
         guard typeTimer == nil else { return }
+        // v7.1.109-peers：非流式(forceType)消息且已打完过 → 直接显示全文，不重打
+        if !isStreaming, Self.doneTyping(for: message.id) {
+            revealedCount = message.content.count
+            return
+        }
         // v3.5.4：MessageBubble 是 SwiftUI 结构体(值类型)，不能用 [weak self]；定时器 onDisappear 会 invalidate
         typeTimer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { _ in
             DispatchQueue.main.async {
-                guard self.revealedCount < self.message.content.count else { self.stopTypeTimer(); return }
+                guard self.revealedCount < self.message.content.count else {
+                    self.stopTypeTimer()
+                    // v7.1.109-peers：打完了——持久化标记（流式消息不标记，流式由内容增长驱动）
+                    if !self.isStreaming { Self.markDoneTyping(self.message.id) }
+                    return
+                }
                 let total = self.message.content.count
                 let backlog = total - self.revealedCount
                 let idx = self.message.content.index(self.message.content.startIndex, offsetBy: self.revealedCount)
@@ -1638,12 +1674,17 @@ struct MessageBubble: View {
         // 此前外层 contextMenu(复制全文/分享)抢占长按, 导致内层 Text 的 .textSelection(.enabled) 永远触发不了
         // 文字选择。全量复制/分享走多选工具栏(selectionMode: copySelected/shareMessage)。
         // v3.4.5：打字机效果——内容增长即逐字显示，直到完整
+        // v7.1.109-peers：forceType 已完成消息视图重建时直接全文（不重打）；
+        // 流式消息若之前打完过但内容又增长（续写），清除标记重新打
         .onAppear {
+            if isStreaming { Self.clearDoneTyping(message.id) }
             if (isStreaming || forceType), revealedCount < message.content.count { startTypeTimer() }
         }
         .onDisappear { stopTypeTimer() }
         .onChange(of: isStreaming) { streaming in
             if streaming, revealedCount < message.content.count { startTypeTimer() }
+            // v7.1.109-peers：流式结束且已显示完整 → 标记已打完（防切后台回来重打）
+            else if !streaming, revealedCount >= message.content.count { Self.markDoneTyping(message.id) }
         }
         .onChange(of: message.content) { _ in
             if revealedCount < message.content.count { startTypeTimer() }
@@ -1803,11 +1844,14 @@ struct MessageBubble: View {
             // 显示在工具卡上方；工具卡标题=机械短标签(一短,见 toolShortLabel)，两者分开、不重复。
             // 模型本轮没写解说(content空)则无气泡，卡片标题仍显示机械短标签，不落空。
             if !message.content.isEmpty {
-                // v3.4.5：打字机——流式中按 revealedCount 逐字显示；完成后显示全文
-                // v3.5.4：打字机——isStreaming 或 forceType 都按 revealedCount 逐字显示；
+                // v7.1.109-peers：打字机——isStreaming 或 forceType 都按 revealedCount 逐字显示；
                 // 此前只有 isStreaming 才走前缀，forceType(内容在出现前已定好、isStreaming=false)走了全文分支，
                 // 导致"打字机一下有一下没有"(用户实测反馈)。修复后非流式完成的消息也逐字打出来。
-                let shown = (isStreaming || forceType) ? String(message.content.prefix(revealedCount)) : message.content
+                // v7.1.109-peers：已打完标记(doneTyping)的消息——即使 forceType 仍 true、revealedCount
+                // 视图重建归 0，也直接渲染全文（切后台回来不重打、表格/黑底立即可见）
+                let typedDone = !isStreaming && Self.doneTyping(for: message.id)
+                let shown = (isStreaming || forceType) && !typedDone
+                    ? String(message.content.prefix(revealedCount)) : message.content
                 // v4.4.11：assistant 行内代码橙色高亮, user 纯文本
                 VStack(alignment: .leading, spacing: 3) {
                     // v4.4.21：完成消息用 SelectableText(UITextView) 长按划词/复制；流式打字机+用户消息用 Text(轻量)
