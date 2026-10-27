@@ -1747,6 +1747,9 @@ final class UsageRecorder {
     private let lock = NSLock()
     private var lastStart = Date()
     private var lastInputEst = 0
+    // v7.1.109-peers：OpenMinis calibration ratio 借鉴——最近一次真实 prompt_tokens/估算 的比值，
+    // 供 messagesForAPI 校准上下文预算比较（clamp 0.5–2.5，防估算器偏差导致超发或过度压缩）
+    private(set) var lastRealRatio: Double = 1.0
 
     init() {
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
@@ -1784,6 +1787,10 @@ final class UsageRecorder {
             rec["promptTokens"] = u["prompt_tokens"] ?? 0
             rec["completionTokens"] = u["completion_tokens"] ?? 0
             rec["totalTokens"] = u["total_tokens"] ?? 0
+            // v7.1.109-peers：OpenMinis calibration ratio——真实/估算比值即时更新（lock 内，线程安全）
+            if let p = rec["promptTokens"] as? Int, p > 0, lastInputEst > 0 {
+                lastRealRatio = min(2.5, max(0.5, Double(p) / Double(lastInputEst)))
+            }
         }
         guard let d = try? JSONSerialization.data(withJSONObject: rec) else { return }
         if let fh = try? FileHandle(forWritingTo: fileURL) {

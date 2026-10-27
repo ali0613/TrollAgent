@@ -33,6 +33,14 @@ struct ModelConfig: Codable, Identifiable, Hashable {
         }
         return contextTokens
     }
+    /// v7.1.109-peers：OpenMinis ContextPolicy 分档阈值借鉴——按窗口大小分档自动压缩触发线：
+    /// <32K 不自动压缩（压不起，超限硬停）；32K–128K 剩 10K 触发；≥128K 剩 20K 触发。
+    /// 相比旧"70%×窗口"一刀切：小窗口不硬压、大窗口多留历史余量。
+    static func contextCompactLine(for window: Int) -> Int {
+        if window < 32_000 { return 0 }              // 硬停档
+        if window < 128_000 { return window - 10_000 }
+        return window - 20_000
+    }
     /// v2.8.4：中转站兼容级别 (由 OpenAIClient 自适应降级时写入并持久化）
     /// 0=完整载荷 1=互换token参数名 2=去掉tool_choice 3=去掉tools纯对话 4=最小载荷
     var compatLevel: Int = 0
@@ -1127,6 +1135,16 @@ final class ConversationStore: ObservableObject {
         client.currentReasoningLevel = reasoningLevel
         currentClient = client
         let prepared = messagesForAPI(budget: config.effectiveContextTokens)
+        // v7.1.109-peers：OpenMinis 硬停借鉴——裁剪保底后仍超出模型窗口时，
+        // 不发一个必然失败的请求（提示新建会话）；仅"压缩也救不回"才触发。
+        let window = config.effectiveContextTokens
+        if window > 0 {
+            let finalTotal = prepared.messages.reduce(0) { $0 + Self.estimateTokens($1) }
+            if finalTotal > window {
+                self.statusText = "⚠️ 上下文已超出模型窗口(≈\(finalTotal)/\(window))，压缩无法回收——请新建会话或清空"
+                return
+            }
+        }
         var history = prepared.messages
         // v2.9.138：模块化 system prompt 组装 (稳定前缀工程）——
         // 稳定块 (系统指令→开发者指令）在前、动态状态块 (设备/App/工作区/会话）在后，
@@ -2000,6 +2018,7 @@ final class ConversationStore: ObservableObject {
     /// 供 OpenAIClient 在发送主请求前交给模型生成结构化摘要 (LLM Compaction)。
     /// v7.1.41：旧摘要（[Long-conversation summary 前缀）单独拎出——不参与裁剪、永远保留在结果最前；
     /// 压缩时旧摘要作为 compactSource 的第一条输入（增量演进：合并更新而非重复压缩）。
+    /// v7.1.109-peers：分档预算（OpenMinis ContextPolicy）+ 校准系数（calibration ratio）。
     private func messagesForAPI(budget: Int) -> (messages: [ChatMessage], compactSource: [ChatMessage], droppedCount: Int) {
         var all = currentMessages.filter { !$0.isError }
         guard !all.isEmpty else { return ([], [], 0) }
@@ -2022,12 +2041,15 @@ final class ConversationStore: ObservableObject {
             nm.content = "[Tool result trimmed: \(toolName), original \(m.content.count) chars, head below]\n\(head)\n…for the full result re-call the tool with limit=20000 or full=true"
             all[i] = nm
         }
-        // v2.9.87：预算预留 30% 给 tools schema + 系统/开发者指令 + 请求开销。
-        // 之前只按消息估算，tools (可能几十 KB JSON）+ 两条 system 前缀没算，
-        // 长会话+多工具时实际请求体远超预算 → 中转处理慢 ("一直请求中"）。
-        let theBudget = max(Int(Double(budget) * 0.7), 2000)
-        // 估算总 token；低于预算直接返回 (短会话，无需压缩）
-        let total = all.reduce(0) { $0 + Self.estimateTokens($1) }
+        // v7.1.109-peers：分档压缩线（OpenMinis ContextPolicy 借鉴）+ 校准系数——
+        // compactLine = 窗口按档位减余量（<32K=0 硬停档；32-128K 减 10K；≥128K 减 20K）；
+        // 校准：估算总 token 乘最近真实 usage 的 ratio（clamp 0.5–2.5），防估算器偏差。
+        let compactLine = ModelConfig.contextCompactLine(for: budget)
+        let ratio = UsageRecorder.shared.lastRealRatio
+        // 预算预留 20% 给 tools schema + 系统/开发者指令 + 请求开销（分档线已含余量，0.7→0.8）
+        let theBudget = max(Int(Double(compactLine) * 0.8), 2000)
+        // 估算总 token（校准后）；低于预算直接返回 (短会话，无需压缩）
+        let total = Int(Double(all.reduce(0) { $0 + Self.estimateTokens($1) }) * ratio)
         if total <= theBudget {
             var short = all
             if let s = priorSummary { short.insert(s, at: 0) }   // 旧摘要永远保留
@@ -2130,6 +2152,16 @@ final class ConversationStore: ObservableObject {
         conv.updatedAt = Date()
         conversations[idx] = conv
         sortAndSave()
+        // v7.1.109-peers：OpenMinis 压缩后重测借鉴——摘要写回后重算（用校准系数），
+        // 仍超窗则提示（防"压缩白做"导致的连环压缩误读）
+        if let cfg = ConversationStore.currentModelConfig() {
+            let win = cfg.effectiveContextTokens
+            let ratio = UsageRecorder.shared.lastRealRatio
+            let after = Int(Double(conv.messages.reduce(0) { $0 + Self.estimateTokens($1) }) * ratio)
+            if win > 0, after > win {
+                self.statusText = "⚠️ 压缩后仍超出窗口(≈\(after)/\(win))——建议新建会话"
+            }
+        }
     }
 
     /// v7.1.41：手动压缩当前会话（对齐 Claude Code /compact）——只生成摘要并持久化，不发主请求
