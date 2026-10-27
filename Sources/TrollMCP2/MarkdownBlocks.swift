@@ -159,22 +159,27 @@ enum MarkdownBlocks {
                 }
             }
             // v7.2.1：引用块——连续 > 前缀行（> 或 > 文本）
+            // v7.2.3-fix：按引用内空行分段——单引用特别长时避免拼成
+            // 一个巨型块（LazyVStack 单 cell 过高/滚动卡），空行切分语义不变
             if trimmed.hasPrefix(">") {
                 flushText()
-                var quoteLines: [String] = []
+                var segments: [[String]] = [[]]
                 while i < lines.count {
                     let dl = lines[i].trimmingCharacters(in: .whitespaces)
                     if dl.hasPrefix(">") {
                         var rest = String(dl.dropFirst())
                         if rest.hasPrefix(" ") { rest.removeFirst() }
-                        quoteLines.append(rest)
+                        segments[segments.count - 1].append(rest)
+                        i += 1
+                    } else if dl.isEmpty {
+                        segments.append([])
                         i += 1
                     } else { break }
                 }
-                if !quoteLines.isEmpty {
-                    blocks.append(.quote(quoteLines.joined(separator: "\n")))
-                    continue
+                for seg in segments where !seg.isEmpty {
+                    blocks.append(.quote(seg.joined(separator: "\n")))
                 }
+                continue
             }
             // v7.2.1：有序/无序列表——连续 - / * / + / 1. 行首
             if isListMarker(trimmed) {

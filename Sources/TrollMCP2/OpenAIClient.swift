@@ -384,6 +384,14 @@ final class OpenAIClient {
         return level + 1
     }
 
+    /// v7.2.3-fix：降级决策统一出口（病灶② 收敛）——"该不该降级/降到哪级/是否穷尽"
+    /// 集中到此纯函数，watchdog/超时/retryable/回落各分支共用（此前各自 if，路径分散）。
+    /// 行为与旧逻辑完全一致，只是判定单点化，便于枚举与测试。
+    private func fallbackVerdict(level: Int, hasTools: Bool, avoidL5: Bool) -> (next: Int, exhausted: Bool) {
+        let next = self.nextLevel(after: level, hasTools: hasTools, avoidL5: avoidL5)
+        return (next, next > self.maxLevel)
+    }
+
     // MARK: - 逐级试探
 
     private func attempt(level: Int, isFirst: Bool, messages: [ChatMessage], tools: [[String: Any]]?, onStatus: ((String) -> Void)?, onDelta: ((String) -> Void)?, onThinking: ((String) -> Void)? = nil, avoidL5: Bool = false, completion: @escaping (Result<ChatResult, Error>) -> Void) {
@@ -486,12 +494,12 @@ final class OpenAIClient {
                 // v4.5.x：看门狗触发（响应挂起——中转返回部分响应后无更多数据，
                 // URLSession timeoutInterval 不再触发 -1001）→ 与用户取消区分，走降级链
                 if watchdogFired {
-                    let next = self.nextLevel(after: level, hasTools: tools != nil && !(tools?.isEmpty ?? true), avoidL5: avoidL5)
-                    if next <= self.maxLevel {
+                    let v = self.fallbackVerdict(level: level, hasTools: tools != nil && !(tools?.isEmpty ?? true), avoidL5: avoidL5)
+                    if !v.exhausted {
                         let remain = max(0, Int(self.overallDeadline.timeIntervalSinceNow))
-                        NetworkLog.shared.log("\(self.config.name) L\(level) response stalled (watchdog \(Int(Self.watchdogSeconds(for: self.currentReasoningLevel)))s) → auto-fallback to L\(next) (\(self.levelName(next)))")
-                        onStatus?(L10n.t("status_timeout_simplify", next, self.maxLevel, remain))
-                        self.attempt(level: next, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
+                        NetworkLog.shared.log("\(self.config.name) L\(level) response stalled (watchdog \(Int(Self.watchdogSeconds(for: self.currentReasoningLevel)))s) → auto-fallback to L\(v.next) (\(self.levelName(v.next)))")
+                        onStatus?(L10n.t("status_timeout_simplify", v.next, self.maxLevel, remain))
+                        self.attempt(level: v.next, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                         return
                     }
                     let el = Int(Date().timeIntervalSince(self.requestStart) * 1000)
@@ -512,12 +520,12 @@ final class OpenAIClient {
                     || error.localizedDescription.contains("timeout")
                     || error.localizedDescription.localizedLowercase.contains("timed out"))
                 if isTimeout {
-                    let next = self.nextLevel(after: level, hasTools: tools != nil && !(tools?.isEmpty ?? true), avoidL5: avoidL5)
-                    if next <= self.maxLevel {
+                    let v = self.fallbackVerdict(level: level, hasTools: tools != nil && !(tools?.isEmpty ?? true), avoidL5: avoidL5)
+                    if !v.exhausted {
                         let remain = max(0, Int(self.overallDeadline.timeIntervalSinceNow))
-                        NetworkLog.shared.log("\(self.config.name) L\(level) request timeout → auto-fallback to L\(next) (\(self.levelName(next)))")
-                        onStatus?(L10n.t("status_timeout_simplify", next, self.maxLevel, remain))
-                        self.attempt(level: next, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
+                        NetworkLog.shared.log("\(self.config.name) L\(level) request timeout → auto-fallback to L\(v.next) (\(self.levelName(v.next)))")
+                        onStatus?(L10n.t("status_timeout_simplify", v.next, self.maxLevel, remain))
+                        self.attempt(level: v.next, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                         return
                     }
                 }
@@ -609,10 +617,10 @@ final class OpenAIClient {
             }
 
             if retryable {
-                let next = self.nextLevel(after: level, hasTools: tools != nil && !(tools?.isEmpty ?? true), avoidL5: avoidL5)
-                if next <= self.maxLevel {
-                    NetworkLog.shared.log("\(self.config.name) auto-fallback → level \(next) (\(self.levelName(next)))")
-                    self.attempt(level: next, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
+                let v = self.fallbackVerdict(level: level, hasTools: tools != nil && !(tools?.isEmpty ?? true), avoidL5: avoidL5)
+                if !v.exhausted {
+                    NetworkLog.shared.log("\(self.config.name) auto-fallback → level \(v.next) (\(self.levelName(v.next)))")
+                    self.attempt(level: v.next, isFirst: false, messages: messages, tools: tools, onStatus: onStatus, onDelta: onDelta, onThinking: onThinking, avoidL5: avoidL5, completion: completion)
                     return
                 }
             }
