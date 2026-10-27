@@ -345,6 +345,10 @@ final class OpenAIClient {
                 if let u = self.lastUsage, let p = u["prompt_tokens"] as? Int {
                     RuntimeWindowTracker.shared.recordSuccess(model: self.config.model, promptTokens: p)
                 }
+                // v7.1.109-peers：动态监测——带图请求成功 → 持久化标记支持视觉
+                if messages.contains(where: { !($0.imageDataURLs ?? []).isEmpty }) {
+                    VisionTracker.shared.record(model: self.config.model, supports: true)
+                }
             case .failure(let e):
                 NetworkLog.shared.log("\(self.config.name) request failed (\(el)ms): \(e.localizedDescription)")
                 ModelStore.shared.breaker(for: self.config.id).recordFailure(usedHalfOpenPermit: self.usedHalfOpenPermit)
@@ -576,6 +580,9 @@ final class OpenAIClient {
             let isVLMError = lowerErr.contains("not a vlm") || lowerErr.contains("vision language model") || lowerErr.contains("vlm")
             if isVLMError, !self.imagesStrippedForVLM, messages.contains(where: { !($0.imageDataURLs ?? []).isEmpty }) {
                 self.imagesStrippedForVLM = true
+                // v7.1.109-peers：动态监测——模型非视觉错误 → 持久化标记不支持，
+                // 下次 UI 不再让用户发图/发图前自动剥离（对齐 OpenMinis models.dev 能力表）
+                VisionTracker.shared.record(model: self.config.model, supports: false)
                 var stripped = messages
                 for i in stripped.indices {
                     if !(stripped[i].imageDataURLs ?? []).isEmpty {

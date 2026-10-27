@@ -54,8 +54,11 @@ struct ModelConfig: Codable, Identifiable, Hashable {
     /// {"max_tokens":"max_completion_tokens", "reasoning_effort":"reasoning"}。
     /// 覆盖"不同中转对同一参数名接受度不同"的场景，不只内置 max_tokens 互换。
     var paramAliases: [String: String] = [:]
-    /// v3.1.1：是否支持视觉 (VLM），自动根据模型名判断
+    /// v3.1.1：是否支持视觉 (VLM）——v7.1.109-peers 动态监测优先
+    /// （对齐 OpenMinis models.dev 能力表思路，本地学习版）：发图请求成功 → 标记支持，
+    /// 模型非视觉错误 → 标记不支持（持久化）；未知才走静态模型名规则。
     var supportsVision: Bool {
+        if let learned = VisionTracker.shared.learned(for: model) { return learned }
         let m = model.lowercased()
         // 明确支持视觉的模型
         if m.contains("gpt-4o") || m.contains("gpt-4-vision") || m.contains("gpt-4v") { return true }
@@ -292,6 +295,23 @@ final class RuntimeWindowTracker {
         let p = max(4_000, promptTokens - 5_000)   // 超限 = 窗口没这么大，下调并留余量
         var d = UserDefaults.standard.dictionary(forKey: key) as? [String: Int] ?? [:]
         if (d[m] ?? Int.max) > p { d[m] = p; UserDefaults.standard.set(d, forKey: key) }
+    }
+}
+
+/// v7.1.109-peers：视觉能力动态监测（对齐 OpenMinis models.dev 能力表思路，本地学习版）——
+/// 发图请求成功 → 标记支持；模型非视觉错误 → 标记不支持。持久化 UserDefaults 按模型名，
+/// 优先于静态规则：新迭代模型/自建模型自动收敛真实视觉能力，不靠猜。
+final class VisionTracker {
+    static let shared = VisionTracker()
+    private let key = "trollagent_vision_caps_v1"   // [String: Bool]
+
+    func learned(for model: String) -> Bool? {
+        UserDefaults.standard.dictionary(forKey: key)?[model.lowercased()] as? Bool
+    }
+    func record(model: String, supports: Bool) {
+        var d = UserDefaults.standard.dictionary(forKey: key) as? [String: Bool] ?? [:]
+        d[model.lowercased()] = supports
+        UserDefaults.standard.set(d, forKey: key)
     }
 }
 
