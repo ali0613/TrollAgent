@@ -15,8 +15,6 @@ struct ChatView: View {
     @AppStorage("chat_smart_search") private var smartSearch = true
     // v3.1.25：思考模型总开关——关闭时完全不思考，直接回复（reasoning_effort=none）
     @AppStorage("chat_think_enabled") private var thinkEnabled = true
-    // v7.1.109-peers：输出模式（豆包式胶囊条）0=标准 1=快速 2=专家 3=深度思考
-    @AppStorage("chat_output_mode") private var outputMode = 0
     @State private var keyboardHeight: CGFloat = 0   // v2.9.234：键盘高度(消息列表跟随上移)
     @State private var attachmentSheet: AttachmentSheet?
     // v3.1.67：文件选择改用 UIKit UIDocumentPickerViewController（asCopy: true）从顶层 VC present——
@@ -649,6 +647,9 @@ struct ChatView: View {
                 QuickTabButton(icon: "folder", label: L10n.t("i18n_1040")) {
                     AppUIState.shared.quickFilesPresented = true
                 }.frame(height: 36)
+                // v7.1.109-peers：上下文环形指示器（Cursor 式 token 占用）——行尾，不占胶囊位
+                contextRing
+                    .padding(.leading, 2)
             }
         }
     }
@@ -659,25 +660,9 @@ struct ChatView: View {
             AttachmentPreviewStrip(attachments: pendingAttachments) { att in
                 withAnimation { pendingAttachments.removeAll { $0.id == att.id } }
             }
-            // v7.1.109-peers：输出模式胶囊条（豆包式）+ 上下文环形指示器（Cursor 式）——
-            // 模式：标准/快速/专家/深度思考（注入提示词段）；环形：最近请求 token 占上下文比例
-            HStack(spacing: 8) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        outputModePill(0, L10n.t("i18n_1250"))
-                        outputModePill(1, L10n.t("i18n_1251"))
-                        outputModePill(2, L10n.t("i18n_1252"))
-                        outputModePill(3, L10n.t("i18n_1253"))
-                    }
-                }
-                contextRing
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
-            .padding(.bottom, 6)
-
             // v3.4.5：功能行（推理/思考/搜索/系统指令/技能/工作区）——胶囊与输入框、与上方都留
             // 等距 16pt 间隙（上下对称，间距比之前加大）
+            // v7.1.109-peers：环形指示器并入行尾（用户去掉了输出模式胶囊条，保留 token 占用环）
             chatModeBar
                 // v4.4.11：左边距 12→16（用户反馈推理贴左无空格）
                 .padding(.horizontal, 16)
@@ -779,22 +764,6 @@ struct ChatView: View {
         // v4.3.40：档位扩为 低/中/高/最高/极限——最高档=xhigh, 极限档=max (破甲站 gpt-6.1-sol 实测支持 low/medium/high/xhigh/max)
         let labels = [L10n.t("i18n_1041"), L10n.t("i18n_1042"), L10n.t("i18n_1043"), L10n.t("i18n_1044"), L10n.t("i18n_1045")]
         return reasoning >= 0 && reasoning < labels.count ? labels[reasoning] : L10n.t("i18n_1043")
-    }
-
-    // v7.1.109-peers：输出模式胶囊（豆包式）——选中蓝底白字
-    private func outputModePill(_ mode: Int, _ label: String) -> some View {
-        Button {
-            withAnimation(.easeOut(duration: 0.15)) { outputMode = mode }
-        } label: {
-            Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(outputMode == mode ? .white : .primary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(outputMode == mode ? Color.blue : Color(.systemGray5))
-                .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
     }
 
     // v7.1.109-peers：上下文环形指示器（Cursor 式）——最近请求真实/估算 token 占 200k 上下文比例
@@ -957,7 +926,7 @@ struct ChatView: View {
         pendingAttachments = []
         let finalImgs = attImgs.isEmpty ? imagesToSend : attImgs
         // v3.4.1：思考总开关接入主发送路径（此前漏传，思考·开/关在输入框无效）
-        store.send(text, using: cfg, imageDataURLs: finalImgs, reasoningLevel: thinkEnabled ? reasoning : 3, smartSearch: smartSearch, outputMode: outputMode)
+        store.send(text, using: cfg, imageDataURLs: finalImgs, reasoningLevel: thinkEnabled ? reasoning : 3, smartSearch: smartSearch)
         AuditLog.shared.log("chat", detail: L10n.t("i18n_1056"))
     }
 
