@@ -25,9 +25,6 @@ struct ChatView: View {
     @State private var showVoicePicker = false  // v7.2.4：长按全局喇叭切音色（萝莉/猫娘御姐/兔娘）——聊天界面可改，HUD 角色音色固定不变
     @State private var showToolCenter = false  // v6.1.5-14bm：/tools 打开工具中心
     @State private var showTerminal = false  // v7.0.4：终端按钮 → 简易终端
-    // v7.2.2：引用角标 [N] 点击 → 来源卡浮层（Perplexity/Kimi 式点击跳原文）
-    @State private var sourceCardURL: URL?
-    @State private var showSourceCard = false
     // v3.3.4：输入框 + 号展开"应用/相册/文件/浏览器"快捷行（点 + 变 x 收起）
     @State private var attachExpanded = false
 
@@ -1542,6 +1539,9 @@ struct MessageBubble: View {
     var forceType: Bool = false
     // v3.5.31：思考开关——思考关时隐藏思考块（API 仍可能返回 thinking，UI 一律不显示）
     var thinkEnabled: Bool = true
+    // v7.2.2：引用角标 [N] 点击 → 来源卡浮层（Perplexity/Kimi 式点击跳原文）
+    @State private var sourceCardURL: URL?
+    @State private var showSourceCard = false
 
     // v6.0.28：工具结果默认折叠，用户手动点才展开
     @State private var expanded = false
