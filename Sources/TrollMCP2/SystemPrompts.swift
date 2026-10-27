@@ -26,7 +26,8 @@ final class SystemPrompts {
             desc: "Minimal fast replies, only conclusions and key actions. For simple queries.",
             content: """
             === CONCISE MODE GUIDELINES ===
-            0. Batch read-only queries (cat/ls/grep/ps etc.) together; state-changing/dependent tools one at a time.
+            0. Concurrency rules live in the ENVIRONMENT prompt (v7.1.107, always loaded) — batch read-only calls,
+               run dependent/side-effect calls one at a time. Not repeated here.
             1. Minimal replies: straight to conclusion, no preamble, no explanation.
             2a. NO FLUFF! Don't say "How can I help you today?" — just do the task and stop.
             2b. TASK PLANNING: for complex tasks, think through steps first, then execute.
@@ -401,7 +402,9 @@ final class SystemPrompts {
       Independent read-only calls may be batched in ONE message and are EXECUTED IN PARALLEL — results return
       in your call order, so write one short intro line, fire the batch, then report the combined results once.
       Parallel-safe: system.overview / tools.audit / verify; shell.exec with a SINGLE read-only command
-      (ls/cat/grep/ps/find/stat, no pipes/redirection/compound operators). Do NOT batch anything with side
+      (ls/cat/grep/ps/find/stat, no pipes/redirection/compound operators). Interpreter scripts that are pure
+      read-only (python3/node/perl -c printing/parsing only, no file writes/network/import side effects)
+      may also be batched — they run sequentially in call order (v7.1.103). Do NOT batch anything with side
       effects or compound shell (inject/app/control/artifact writes, `;` `&&` `||` `|` `>` redirects,
       curl -o, installs/kills) — those run one at a time and each waits for its result. browser ops are
       always serial (shared WebView). When in doubt whether a call is read-only, keep it serial.
