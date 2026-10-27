@@ -1885,14 +1885,10 @@ struct MessageBubble: View {
                 // v7.1.109-peers：流式跟随网络实时渲染（大厂式：delta 到哪渲染哪，代码块/表格/
                 // 链接结构到达即出现，不再字符限速）；forceType(整段到达)保留逐字打字机+结构即时化
                 let typedDone = !isStreaming && Self.doneTyping(for: message.id)
-                let shown: String
-                if isStreaming {
-                    shown = message.content
-                } else if forceType && !typedDone {
-                    shown = String(message.content.prefix(revealedCount))
-                } else {
-                    shown = message.content
-                }
+                // v7.1.109-peers：ViewBuilder 不允许赋值语句（a9ac7ea 引入的
+                // let shown + 三路赋值导致 CI 编译失败）→ 改声明式表达式
+                let shown = isStreaming ? message.content
+                    : (forceType && !typedDone ? String(message.content.prefix(revealedCount)) : message.content)
                 // v4.4.11：assistant 行内代码橙色高亮, user 纯文本
                 VStack(alignment: .leading, spacing: 3) {
                     // v4.4.21：完成消息用 SelectableText(UITextView) 长按划词/复制；流式打字机+用户消息用 Text(轻量)
