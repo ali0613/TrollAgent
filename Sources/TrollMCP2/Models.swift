@@ -2614,6 +2614,29 @@ final class ConversationStore: ObservableObject {
                 }
                 cleaned = true
             }
+            // v7.2.1：崩溃残留非法序列——assistant 带 toolCalls 但对应 tool 结果缺失
+            // （崩溃发生在 tool 卡异步写盘前，盘上只剩 assistant toolCalls）。
+            // 后续请求把 [assistant(toolCalls), user] 直接发给 API → toolCalls 无配对
+            // tool 结果 = 非法序列 → 中转 400 或挂起 → 表现"无论发什么 AI 都不回复"。
+            // 补一条中断伪 tool 结果，恢复序列合法（对齐 OpenAI tool_calls 配对约束）。
+            var seqFixed = false
+            for mi in convs[ci].messages.indices {
+                guard convs[ci].messages[mi].role == "assistant",
+                      let tcs = convs[ci].messages[mi].toolCalls, !tcs.isEmpty else { continue }
+                for tc in tcs {
+                    let hasResult = convs[ci].messages.contains { $0.role == "tool" && $0.toolCallId == tc.id }
+                    if !hasResult {
+                        var im = ChatMessage(role: "tool",
+                                             content: "⚠️ Tool \(tc.name) execution was interrupted by an app crash; result unavailable. You may retry this tool call.",
+                                             isError: true, toolCallId: tc.id, toolName: tc.name)
+                        convs[ci].messages.insert(im, at: mi + 1)
+                        seqFixed = true
+                        break
+                    }
+                }
+                if seqFixed { break }
+            }
+            if seqFixed { cleaned = true }
         }
         conversations = convs
         selectedId = conversations.first?.id
