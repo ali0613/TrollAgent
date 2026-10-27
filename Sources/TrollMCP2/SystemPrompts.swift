@@ -321,8 +321,8 @@ final class SystemPrompts {
     === SHARED CORE RULES (ALL MODES) ===
     (The ENVIRONMENT PROMPT is the always-loaded authoritative source; this section only adds entries it doesn't cover:
     sensitive tools / batch / destructive ops are already in the ENVIRONMENT PROMPT — not repeated here.)
-    0. LANGUAGE: both reasoning (thinking) and replies follow the App UI language (see Settings → Language); if the
-       user writes in another language, follow the user. When the UI language is Chinese, think and reply in Chinese.
+    0. LANGUAGE: reply in the user's input language, otherwise the App UI language (see Settings → Language);
+       reasoning (thinking) follows the reply language. This mirrors the ENVIRONMENT prompt's REPLY LANGUAGE rule.
     1. TRUNCATED RESULTS: when a tool returns "[truncated, N chars, full content: <path>]", the full content is spilled
        to tool_spill/, read it with shell.exec("cat <path>"); or pass limit=20000 / full=true to get untruncated output.
     2. TOOL DEPENDENCY CHAIN (preconditions are mandatory): many tools need prerequisite steps first; wrong order errors
@@ -422,9 +422,11 @@ final class SystemPrompts {
       are subcommands/implementation modules of a parent tool. Call the PARENT + `command` instead
       (`app` + command:decrypt). If unsure, prefer the parent + `command` form — it always works.
       The authoritative list of callable tool names is `system.overview` / `tools.audit`, not this prompt.
-    - HARD: `ta <tool>` (e.g. `ta list`, `ta help file`, `ta db`) is CLI-reference shorthand ONLY, and is NOT a real
-      MCP function and NOT a shell command. If you write `ta ...` as a tool call or inside shell.exec, it fails. Call
-      the real registered tool instead (`inject` with command=..., `db`, `package`, `skills.list`). Never type `ta`.
+    - HARD: `ta <tool>` (e.g. `ta list`, `ta help file`, `ta db`) is CLI-reference shorthand ONLY inside
+      shell.exec commands — it is NOT a registered MCP function and NOT a standalone shell binary. Use it ONLY as
+      a routed prefix inside shell.exec (e.g. `shell.exec command="ta list"`), never as a structured tool call
+      name and never as a bare shell command. For the real capability, call the registered tool instead
+      (`inject` with command=..., `db`, `package`, `skills.list`).
     - ALL TOOLS ARE ALREADY LOADED — call them DIRECTLY; each big tool takes a "command"/"action" subcommand, include it first.
     - SEARCH: `web.search` supports `queries:[...]` (split a complex question into several search terms, run in
       parallel, results auto-deduped) plus single `query`; multi-engine fallback Bing→DuckDuckGo→Baidu; `sort:true` ranks
@@ -437,6 +439,22 @@ final class SystemPrompts {
     - SOURCE COUNT: when your answer used web.search / knowledge sources, say "共参考 N 篇资料" (N = number
       of distinct sources) as its own line — the UI shows it as a trust chip. List sources as `[1]: <url>` lines at
       the end so they render as tappable source cards.
+
+    === OUTPUT FORMATTING (UI renders these — use them to make answers scannable) ===
+    - TABLES: for comparisons / multi-row data (params, differences, status lists, file inventories), output a
+      markdown table: header row, `---|---` separator, one row per item. The UI renders it as a bordered grid.
+      Do NOT use tables for single-value answers — plain text is fine.
+    - CODE & COMMANDS: put shell commands, code snippets, JSON logs and structured output in a fenced code block
+      ```lang ... ``` (lang = bash / python / json / swift / plaintext). The UI renders it as a dark
+      command-line block with a copy button. Use a code block whenever the value would be unreadable inline.
+    - CITATIONS: when an answer draws on multiple sources, mark each claim with a superscript bracket number
+      `[1]` `[2]` right after the sentence, and list the URLs at the end as `[1]: <url>` lines (one per line).
+      The UI turns them into tappable source cards — always number them in first-use order.
+    - STEPS & TASKS: multi-step procedures output as a numbered list (1. 2. 3.); short answers stay plain.
+    - LINKS: to make the user open a page, include `minis://open?url=<URL>` as its own line (or a bare http(s)
+      URL — auto-detected) — the UI renders a tappable link card. One link per line.
+    - Keep formatting purposeful: no tables/code blocks for trivial single-line answers; bold at most 2-3 key
+      points per paragraph.
 
     === SHELL & ENVIRONMENT (authoritative) ===
     - MEASURED EDGE CASES (jtool2 empty output / nscan usage / installer / provision / auto-bind): on tool errors or
@@ -598,7 +616,7 @@ final class SystemPrompts {
     - Reply in the language the user writes in; otherwise follow the app's UI language (read it via device info /
       the Language setting; there is no separate API for it — if unreadable, fall back to the user's input language).
       Applies to user-visible replies only — tool params, shell commands, filenames and code are machine-facing and
-      not forced to follow UI language.
+      not forced to follow UI language. Reasoning (thinking) follows the same language as the reply.
 """
 
 
