@@ -374,45 +374,56 @@ struct MarkdownCodeBlockView: View {
 }
 
 /// Markdown 表格渲染（LazyVGrid，iOS 14+ 兼容；部署目标 iOS 15 不能使用 Grid）
+/// v7.1.109-peers：大厂式滚动——列均分屏宽（≤3 列满宽自适应，>3 列固定 3 列宽 → 横向可滑）、
+/// 内容多时限高垂直内部滚动（不再把气泡撑无限高），对齐豆包/Kimi 表格交互
 struct MarkdownTableView: View {
     let header: [String]
     let rows: [[String]]
 
     var body: some View {
         let columns = max(1, header.count)
-        let gridCols = (0..<columns).map { _ in GridItem(.flexible(minimum: 40), spacing: 8) }
-        VStack(alignment: .leading, spacing: 0) {
-            // 表头（蓝 + 半粗等宽）
-            LazyVGrid(columns: gridCols, spacing: 6) {
-                ForEach(0..<columns, id: \.self) { i in
-                    Text(i < header.count ? header[i] : "")
-                        // v7.1.109-peers：表格字体 11→13pt（用户反馈表格文字较小）
-                        .font(.system(size: 13, design: .monospaced).weight(.semibold))
-                        .foregroundColor(.blue)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .padding(.bottom, 4)
-            // 数据行
-            ForEach(rows, id: \.self) { row in
-                LazyVGrid(columns: gridCols, spacing: 6) {
-                    ForEach(0..<columns, id: \.self) { i in
-                        Text(i < row.count ? row[i] : "")
-                            .font(.system(size: 13, design: .monospaced))
-                            .foregroundColor(.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
+        // 列宽：≤3 列均分可用宽度满宽；>3 列按 3 列均分宽度 → 总宽溢出 → 横向滑动
+        let screenW = UIScreen.main.bounds.width
+        let colWidth: CGFloat = max(96, (screenW - 64) / CGFloat(min(columns, 3)))
+        let gridCols = (0..<columns).map { _ in GridItem(.fixed(colWidth), spacing: 8) }
+        ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.vertical, showsIndicators: rows.count > 4) {
+                VStack(alignment: .leading, spacing: 0) {
+                    // 表头（蓝 + 半粗等宽）
+                    LazyVGrid(columns: gridCols, spacing: 6) {
+                        ForEach(0..<columns, id: \.self) { i in
+                            Text(i < header.count ? header[i] : "")
+                                // v7.1.109-peers：表格字体 11→13pt（用户反馈表格文字较小）
+                                .font(.system(size: 13, design: .monospaced).weight(.semibold))
+                                .foregroundColor(.blue)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(.bottom, 4)
+                    // 数据行
+                    ForEach(rows, id: \.self) { row in
+                        LazyVGrid(columns: gridCols, spacing: 6) {
+                            ForEach(0..<columns, id: \.self) { i in
+                                Text(i < row.count ? row[i] : "")
+                                    .font(.system(size: 13, design: .monospaced))
+                                    .foregroundColor(.primary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        .padding(.vertical, 2)
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(8)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color(.separator), lineWidth: 0.5)
+                )
             }
+            // v7.1.109-peers：行数多限高内部滚动（<4 行不触发，自适应高度）
+            .frame(maxHeight: 300)
         }
-        .padding(8)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(8)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color(.separator), lineWidth: 0.5)
-        )
     }
 }
