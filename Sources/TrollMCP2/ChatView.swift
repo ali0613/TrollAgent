@@ -2364,7 +2364,8 @@ struct MessageBubble: View {
                         Text(toolShortLabel())
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundColor(.blue)
+                            // v7.2.3-fix17：主标题日间黑/夜间白（自适应），不再固定蓝
+                            .foregroundColor(.primary)
                             .lineLimit(2)
                             .layoutPriority(1)
                         Spacer()
