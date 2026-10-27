@@ -501,8 +501,14 @@ final class OpenAIClient {
                 }
                 // v2.8.6：网络超时 (不是 408 HTTP 状态，而是 URLSession 的 -1001）
                 // 也可能是中转对完整载荷处理太慢/卡死，降级到轻量载荷很可能OK。
+                // v7.2.3-audit2：坏体响应也纳入降级——中转 60s 内返回损坏响应体时
+                // URLSession 报 CannotDecodeContentData(-1016)/CannotParseResponse(-1017)，
+                // 中文即"无法解析响应"。此前不降级→单次 L0 死等 60s 后 failed。
+                // 同一载荷偶发成功（如 Botcf 4653ms）证明是上游不稳定，轻量载荷大概率能过。
                 let isTimeout = (err.code == NSURLErrorTimedOut
                     || err.domain == NSURLErrorDomain && err.code == -1001
+                    || err.code == NSURLErrorCannotDecodeContentData
+                    || err.code == NSURLErrorCannotParseResponse
                     || error.localizedDescription.contains("timeout")
                     || error.localizedDescription.localizedLowercase.contains("timed out"))
                 if isTimeout {
@@ -734,6 +740,9 @@ final class OpenAIClient {
                             "unknown parameter", "extra inputs", "参数", "invalid request"]
             return keywords.contains { msg.contains($0) }
         }
+        // v7.2.3-audit2：HTTP 成功(<400)但 body 无法解析成 OpenAI 格式（中转坏体/空体/截断）→ 也降级。
+        // 到此处说明 JSON 解析已失败且无 error 字段，轻量载荷大概率能绕开上游不稳定。
+        if status < 400 { return true }
         return false
     }
 
@@ -858,8 +867,10 @@ final class OpenAIClient {
         func shouldRetry(_ err: NSError, _ statusCode: Int) -> Bool {
             if err.domain == NSURLErrorDomain {
                 let c = err.code
+                // v7.2.3-audit2：+坏体响应码（中转返回损坏响应体 → 重试/降级）
                 return c == NSURLErrorTimedOut || c == NSURLErrorNetworkConnectionLost
                     || c == NSURLErrorCannotConnectToHost || c == NSURLErrorNotConnectedToInternet
+                    || c == NSURLErrorCannotDecodeContentData || c == NSURLErrorCannotParseResponse
             }
             if statusCode >= 500 { return true }
             let d = err.localizedDescription
