@@ -400,16 +400,29 @@ extension ModelConfig {
         // 显式选的自定义端点尊重用户, 不自动纠正
         if current == "Custom Endpoint" { return current }
         // Anthropic 模型
-        if p.contains("anthropic") || m.hasPrefix("claude") { return "Anthropic Messages" }
+        if p.contains("anthropic") || m.hasPrefix("claude") || m.contains("claude") { return "Anthropic Messages" }
         // Gemini 模型（原生 generateContent 协议）
-        if p.contains("google") || p.contains("gemini") || m.hasPrefix("gemini") { return "Gemini" }
-        // OpenRouter（vendor/model 命名 + 专用 header）
+        if p.contains("google") || p.contains("gemini") || m.hasPrefix("gemini") || m.contains("gemini") { return "Gemini" }
+        // OpenRouter（vendor/model 命名 + 专用 header）——仅限供应商匹配，避免误伤
+        // 普通中转站的 vendor/model 命名模型
         if p.contains("openrouter") { return "OpenRouter" }
         // 推理系列 (Codex 同款 responses 端点)
-        let reasoningPrefixes = ["gpt-5.", "o1", "o3", "o4", "o1-", "o3-", "o4-"]
+        let reasoningPrefixes = ["gpt-5.", "gpt-6.", "o1", "o3", "o4", "o1-", "o3-", "o4-"]
         if reasoningPrefixes.contains(where: { m.hasPrefix($0) }) || m.contains("reasoning") { return "OpenAI Responses" }
-        // deepseek 对话模型 → Chat Completions
-        if p.contains("deepseek") || m.contains("deepseek") { return "OpenAI Chat Completions" }
+        // v7.1.109-peers：智能匹配全覆盖——以下 OpenAI 兼容系一律 Chat Completions
+        let chatPrefixes = [
+            "deepseek", "grok-", "llama", "mixtral", "mistral", "codestral",
+            "qwen", "glm", "chatglm", "kimi", "moonshot", "minimax",
+            "step-", "doubao", "ernie", "hunyuan", "spark", "baichuan",
+            "yi-", "internlm", "command", "phi-", "nemotron", "sensechat",
+            "gpt-4", "gpt-4o", "gpt-4.1", "gpt-5", "gpt-6", "o3-mini", "o4-mini"
+        ]
+        if chatPrefixes.contains(where: { m.hasPrefix($0) }) { return "OpenAI Chat Completions" }
+        let chatProviders = ["deepseek", "xai", "groq", "mistral", "ollama", "azure",
+                             "moonshot", "kimi", "zhipu", "glm", "minimax", "stepfun",
+                             "doubao", "ark", "baidu", "qwen", "aliyun", "volcengine",
+                             "openai", "together", "fireworks", "novita", "siliconflow"]
+        if chatProviders.contains(where: { p.contains($0) }) { return "OpenAI Chat Completions" }
         // 其余尊重当前
         return current
     }
