@@ -273,7 +273,9 @@ final class WebSearchTool: MCPTool {
     }
 
     /// v4.3.65：Baidu 结果解析——h3.t + a 标题 + c-abstract 摘要；跳转链接剥回真实 URL
+    /// v7.2.1：解析前截断（>800KB），防超大 GBK 页正则回溯/内存压力
     private func parseBaidu(html: String, limit: Int) -> [[String: String]] {
+        let html = html.count > 800_000 ? String(html.prefix(800_000)) : html
         guard let re = try? NSRegularExpression(
             pattern: "<h3[^>]*class=\"[^\"]*t[^\"]*\"[^>]*>[\\s\\S]*?<a[^>]*href=\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a>[\\s\\S]*?</h3>",
             options: [.dotMatchesLineSeparators]) else { return [] }
@@ -312,19 +314,29 @@ final class WebSearchTool: MCPTool {
     }
 
     /// 同步抓取原始数据 (15 秒超时，桌面 Chrome UA）
+    /// v7.2.1：崩溃加固——① URLSession.shared 回调派发主队列，改自定义后台队列 session
+    /// （不依赖主线程，切后台/主线程忙碌时回调也能进）；② 响应上限 2MB，超大 HTML
+    /// （百度反爬页/异常页）防内存暴涨触发 jetsam 杀进程；③ wait 加超时，杜绝永久阻塞。
     private func fetchData(_ url: URL) -> Data? {
         var data: Data?
         let sem = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
-            var req = URLRequest(url: url, timeoutInterval: 15)
-            req.setValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-            let task = URLSession.shared.dataTask(with: req) { d, _, _ in
-                data = d
-                sem.signal()
+        let session = URLSession(configuration: .ephemeral, delegate: nil, delegateQueue: OperationQueue())
+        var req = URLRequest(url: url, timeoutInterval: 15)
+        req.setValue("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        let task = session.dataTask(with: req) { d, resp, _ in
+            if let d = d {
+                // 响应上限 2MB：超出丢弃（大页面对解析无增益，防内存）
+                if d.count <= 2_000_000 {
+                    data = d
+                } else if let resp = resp as? HTTPURLResponse {
+                    AuditLog.shared.log("web.search", detail: "response too large: \(d.count)B from \(resp.url?.host ?? "") (\(resp.statusCode))")
+                }
             }
-            task.resume()
+            sem.signal()
         }
-        sem.wait()
+        task.resume()
+        _ = sem.wait(timeout: .now() + 20)
+        session.invalidateAndCancel()
         return data
     }
 
@@ -341,7 +353,9 @@ final class WebSearchTool: MCPTool {
 
     /// v2.9.129：Bing 解析增强——三级兜底，不再"只出一条"
     /// 1) 严格 b_algo 块  2) 宽松 b_algo 块(class 带附加项)  3) 通用 h2>a 兜底
+    /// v7.2.1：解析前截断（>800KB 只取头部，防超大 HTML 正则回溯/内存压力）
     private func parseBing(html: String, limit: Int) -> [[String: String]] {
+        let html = html.count > 800_000 ? String(html.prefix(800_000)) : html
         var out = parseBingBlocks(html: html, pattern: "<li class=\"b_algo\">(.*?)</li>", limit: limit)
         if out.count < limit {
             out += parseBingBlocks(html: html, pattern: "<li class=\"b_algo[^\"]*\">(.*?)</li>", limit: limit - out.count)
@@ -429,18 +443,19 @@ final class WebFetchTool: MCPTool {
         }
         let maxChars = params["maxChars"] as? Int ?? 4000
         var html: String?
+        // v7.2.1：崩溃加固同 web.search——后台队列 session + 响应上限 4MB + wait 超时
         let sem = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
-            var req = URLRequest(url: url, timeoutInterval: 20)
-            req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
-            let task = URLSession.shared.dataTask(with: req) { data, _, err in
-                defer { sem.signal() }
-                guard err == nil, let data = data else { return }
-                html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)?.description
-            }
-            task.resume()
+        let session = URLSession(configuration: .ephemeral, delegate: nil, delegateQueue: OperationQueue())
+        var req = URLRequest(url: url, timeoutInterval: 20)
+        req.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
+        let task = session.dataTask(with: req) { data, _, err in
+            defer { sem.signal() }
+            guard err == nil, let data = data, data.count <= 4_000_000 else { return }
+            html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)?.description
         }
-        sem.wait()
+        task.resume()
+        _ = sem.wait(timeout: .now() + 25)
+        session.invalidateAndCancel()
         
         // v3.1.21: web.fetch failed自动 fallback 到内置浏览器
         // AI 根本不需要知道这个逻辑，直接调用 web.fetch 就能得到结果

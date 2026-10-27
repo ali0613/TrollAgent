@@ -2601,6 +2601,7 @@ final class ConversationStore: ObservableObject {
         var convs = decoded.sorted { $0.updatedAt > $1.updatedAt }
         // v6.1.5-14bp3：App 被系统终止（闪退）时工具调用卡"执行中…"且永不返回——
         // 重启加载后把残留 running 工具消息统一标记为中断失败，避免 UI 永远挂着无结果。
+        // v7.2.1：恢复文案通用化（不再特指 git/vim/curl 历史崩溃），并记录崩溃时正在跑的工具名
         var cleaned = false
         for ci in convs.indices {
             for mi in convs[ci].messages.indices where convs[ci].messages[mi].isRunning {
@@ -2608,7 +2609,8 @@ final class ConversationStore: ObservableObject {
                 convs[ci].messages[mi].isError = true
                 let c = convs[ci].messages[mi].content
                 if c.isEmpty || c == "…" {
-                    convs[ci].messages[mi].content = "⚠️ Execution interrupted: the app was terminated by the system (crash) while a tool was running. Please resend the command; version checks for git/vim/curl now use native probing and won't trigger crashes."
+                    let toolName = convs[ci].messages[mi].toolName ?? ""
+                    convs[ci].messages[mi].content = "⚠️ Execution interrupted: the app was terminated by the system (crash) while tool \(toolName.isEmpty ? "was running" : "「\(toolName)」was running"). Please resend the command."
                 }
                 cleaned = true
             }
