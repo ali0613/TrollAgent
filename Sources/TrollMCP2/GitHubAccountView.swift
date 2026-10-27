@@ -23,7 +23,10 @@ struct GitHubAccountView: View {
         .navigationTitle(L10n.t("i18n_1123"))
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showAdd) {
-            AddGitHubAccountView()
+            // fix: 之前直接呈现 AddGitHubAccountView()，视图内 .toolbar/.navigationTitle
+            // 没有 NavigationView 提供容器 → "手动登录"按钮根本不渲染，用户输完 PAT 无处提交。
+            NavigationView { AddGitHubAccountView() }
+                .navigationViewStyle(.stack)
         }
         .onAppear {
             store.fetchRuns { _ in }
@@ -377,7 +380,12 @@ struct AddGitHubAccountView: View {
                 UIPasteboard.general.string = code.user_code
                 self.copied = true
                 // 自动开始轮询 + 打开授权页
-                self.openVerification(code.verification_uri)
+                // fix: 本视图自身就在 sheet 里，同一帧内既改 deviceStep 又置 showSafari，
+                // iOS15 的 sheet 内二次呈现有概率被丢弃 → 授权页根本不弹，用户以为点了没反应。
+                // 延迟一拍再弹，确保 Safari 真的出现。
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    self.openVerification(code.verification_uri)
+                }
                 store.pollDeviceToken(deviceCode: code) { ok, msg in
                     if ok {
                         // v2.9.110：授权成功必须反馈——显示成功、自动关浏览器、返回账号页

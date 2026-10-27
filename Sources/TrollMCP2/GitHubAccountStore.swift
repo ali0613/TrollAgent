@@ -60,6 +60,7 @@ final class GitHubAccountStore: ObservableObject {
     @Published var deviceFlowState: String?   // 提示文案 (含 user_code）
     @Published var isDevicePolling = false
     private var pollTimer: DispatchSourceTimer?   // 持有强引用，防止局部变量被释放导致轮询停止
+    private var consecutivePollErrors = 0          // fix: 连续非等待态错误计数，用于结束无限轮询
 
     private let accountsKey = "trollmcp2.github_accounts"
     private let activeKey = "trollmcp2.github_active"
@@ -201,6 +202,7 @@ final class GitHubAccountStore: ObservableObject {
     func pollDeviceToken(deviceCode: DeviceCode, completion: @escaping (Bool, String?) -> Void) {
         isDevicePolling = true
         deviceFlowState = L10n.t("i18n_812", deviceCode.user_code)
+        consecutivePollErrors = 0
 
         let deadline = Date().addingTimeInterval(Double(deviceCode.expires_in))
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
@@ -235,13 +237,22 @@ final class GitHubAccountStore: ObservableObject {
                     // 一律继续等下一次——之前网络错误会 cancel timer，移动网络一抖授权流程就死，卡"等待授权"。
                     let terminalErrors = ["access_denied", "expired_token",
                                           "incorrect_client_credentials", "invalid_grant"]
-                    if terminalErrors.contains(error) {
-                        timer.cancel()
-                        self.pollTimer = nil
-                        DispatchQueue.main.async {
-                            self.isDevicePolling = false
-                            self.deviceFlowState = nil
-                            completion(false, error)
+                    // fix: 正常等待态（authorization_pending / slow_down）不计错；
+                    // 其余（网络错误、JSON 解析失败）连续 6 次仍拿不到 token 就明确报错收尾——
+                    // 否则界面永远停在"等待授权中"直到 899s 过期，用户看到的就是"没反应"。
+                    let isPending = (error == "authorization_pending" || error == "slow_down")
+                    if isPending {
+                        self.consecutivePollErrors = 0
+                    } else {
+                        self.consecutivePollErrors += 1
+                        if terminalErrors.contains(error) || self.consecutivePollErrors >= 6 {
+                            timer.cancel()
+                            self.pollTimer = nil
+                            DispatchQueue.main.async {
+                                self.isDevicePolling = false
+                                self.deviceFlowState = nil
+                                completion(false, error)
+                            }
                         }
                     }
                     // 可重试错误：继续轮询 (timer 按 interval 再次触发）
@@ -253,7 +264,11 @@ final class GitHubAccountStore: ObservableObject {
 
     private func exchangeDeviceToken(deviceCode: DeviceCode,
                                      completion: @escaping (String?, String?) -> Void) {
-        let cid = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        // fix: 换 token 同样要回退内置默认 Client ID——startDeviceFlow 有、这里漏了。
+        // 清空过 Client ID 的用户能拿到授权码、能授权，但换 token 时 client_id 为空
+        // → GitHub 返回 incorrect_client_credentials（终止性错误）→ 轮询直接死，界面无反馈。
+        let rawCID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cid = rawCID.isEmpty ? Self.defaultClientID : rawCID
         var req = URLRequest(url: URL(string: "\(loginBase)/login/oauth/access_token")!, timeoutInterval: 20)
         setHTTPMethod("POST", on: &req)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
