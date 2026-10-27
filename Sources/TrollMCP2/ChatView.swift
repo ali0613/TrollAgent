@@ -12,6 +12,8 @@ struct ChatView: View {
     @State private var inputHeight: CGFloat = 36
     // v7.2.3-fix14：工具卡参数行折叠——默认一行+▽，点击展开完整命令/参数
     @State private var toolArgsExpanded: Set<String> = []
+    /// v7.2.3-fix20：连续工具折叠展开状态（按组 id）
+    @State private var toolsRunExpanded: Set<String> = []
     // v2.9.234：推理强度/智能搜索持久化(@AppStorage)——之前纯@State,关app重开必丢
     @AppStorage("chat_reasoning") private var reasoning = 0   // 0=低 1=中 2=高 3=最高(xhigh) 4=极限(max)
     @AppStorage("chat_smart_search") private var smartSearch = true
@@ -509,19 +511,26 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(store.currentMessages) { msg in
-                        MessageBubble(
-                            message: msg,
-                            selectionMode: selectionMode,
-                            isSelected: selectedIds.contains(msg.id),
-                            onToggleSelect: { toggleSelect(msg.id) },
-                            onCopy: { copyMessage(msg) },
-                            onShare: { shareMessage(msg) },
-                            isStreaming: store.streamingMessageId == msg.id,
-                            forceType: store.liveProducedID == msg.id,
-                            thinkEnabled: thinkEnabled
-                        )
-                        .id(msg.id)
+                    // v7.2.3-fix20：连续工具折叠——相邻已完成工具消息聚合成组，
+                    // 组默认一行"运行了 N 个工具"，展开显示各工具卡
+                    ForEach(ChatListGrouping.group(store.currentMessages), id: \.id) { item in
+                        switch item {
+                        case .msg(let msg):
+                            MessageBubble(
+                                message: msg,
+                                selectionMode: selectionMode,
+                                isSelected: selectedIds.contains(msg.id),
+                                onToggleSelect: { toggleSelect(msg.id) },
+                                onCopy: { copyMessage(msg) },
+                                onShare: { shareMessage(msg) },
+                                isStreaming: store.streamingMessageId == msg.id,
+                                forceType: store.liveProducedID == msg.id,
+                                thinkEnabled: thinkEnabled
+                            )
+                            .id(msg.id)
+                        case .tools(let msgs):
+                            toolsRunGroup(msgs)
+                        }
                     }
                     if store.isLoading {
                         // v2.9.34：请求过程可视化（对齐老 MCP 的"正在思考"面板）
@@ -1824,6 +1833,72 @@ struct MessageBubble: View {
         .padding(8)
         .background(Color.blue.opacity(0.08))
         .cornerRadius(8)
+    }
+
+    /// v7.2.3-fix20：连续工具折叠组——默认一行胶囊（运行了 N 个工具 + 总耗时），
+    /// 点击展开显示各工具卡（左侧竖线标示为折叠组）
+    @ViewBuilder
+    private func toolsRunGroup(_ msgs: [ChatMessage]) -> some View {
+        let gid = "t-" + (msgs.first?.id.uuidString ?? "") + "-" + String(msgs.count)
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    if toolsRunExpanded.contains(gid) {
+                        toolsRunExpanded.remove(gid)
+                    } else {
+                        toolsRunExpanded.insert(gid)
+                    }
+                }
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "hammer.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    Text(String(format: L10n.t("i18n_1260"), msgs.count))
+                        .font(.footnote.weight(.medium))
+                        .foregroundColor(.primary)
+                    if let d = ChatListGrouping.Item.tools(msgs).totalDuration {
+                        Text(String(format: "%.1fs", d))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: toolsRunExpanded.contains(gid) ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(.systemGray5).opacity(0.6))
+                .cornerRadius(10)
+            }
+            .buttonStyle(.plain)
+            if toolsRunExpanded.contains(gid) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(msgs) { msg in
+                        MessageBubble(
+                            message: msg,
+                            selectionMode: selectionMode,
+                            isSelected: selectedIds.contains(msg.id),
+                            onToggleSelect: { toggleSelect(msg.id) },
+                            onCopy: { copyMessage(msg) },
+                            onShare: { shareMessage(msg) },
+                            isStreaming: store.streamingMessageId == msg.id,
+                            forceType: store.liveProducedID == msg.id,
+                            thinkEnabled: thinkEnabled
+                        )
+                        .id(msg.id)
+                    }
+                }
+                .padding(.leading, 6)
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color(.systemGray4))
+                        .frame(width: 3)
+                        .cornerRadius(1.5)
+                }
+            }
+        }
     }
 
     // v7.2.2：来源卡浮层——底部卡片：host + URL + 打开按钮
