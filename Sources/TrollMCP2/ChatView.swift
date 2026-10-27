@@ -1817,6 +1817,28 @@ struct MessageBubble: View {
         return out
     }
 
+    /// v7.2.3-fix12：Open Minis 终端配色（attributedShellLine 对齐）——
+    /// 纯文本工具结果：白字 + URL 蓝色下划线高亮（其余无色，终端风）。
+    private static func terminalStyled(_ text: String) -> AttributedString {
+        let ns = NSMutableAttributedString(string: text)
+        let full = NSRange(text.startIndex..., in: text)
+        ns.addAttribute(.foregroundColor, value: UIColor.white, range: full)
+        Self.blueURLs(in: ns, string: text)
+        return AttributedString(ns)
+    }
+
+    /// URL → 蓝 + 下划线（Open Minis 唯一高亮；fix4 裸 URL 规则复用）
+    private static func blueURLs(in ns: NSMutableAttributedString, string: String) {
+        let pattern = #"https?://[^\s"'\(\)\]\}，。；：,;]+"#
+        if let re = try? NSRegularExpression(pattern: pattern) {
+            let full = NSRange(string.startIndex..., in: string)
+            for m in re.matches(in: string, range: full) {
+                ns.addAttribute(.foregroundColor, value: UIColor.systemBlue, range: m.range)
+                ns.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: m.range)
+            }
+        }
+    }
+
     /// v7.2.3-fix3：工具结果 JSON 格式化——解析成功 → prettyPrinted 缩进；
     /// v7.2.3-fix10：配色收敛——只要顶层"头"键（data/cwd 等）绿色，
     /// 其余全部白色（用户实测三色太花）。解析失败返回 nil → 调用方回退原文纯文本。
@@ -1842,6 +1864,8 @@ struct MessageBubble: View {
                 ns.addAttribute(.foregroundColor, value: UIColor.systemGreen, range: m.range)
             }
         }
+        // v7.2.3-fix12：JSON 内的 URL 值 → 蓝色（Open Minis 终端配色）
+        Self.blueURLs(in: ns, string: limited)
         return AttributedString(ns)
     }
 
@@ -2416,12 +2440,12 @@ struct MessageBubble: View {
             if !message.isRunning && expanded {
                 // v7.2.3-fix3：JSON 结果 → 缩进+头键着色；否则等宽纯文本
                 // v7.2.3-fix11：纯文本先剥 ANSI（乱码根因）
+                // v7.2.3-fix12：纯文本 URL 蓝色（Open Minis 终端配色）
                 Group {
                     if let json = Self.jsonHighlighted(from: message.content) {
                         Text(json)
                     } else {
-                        Text(Self.stripANSI(message.content))
-                            .foregroundColor(.white)
+                        Text(Self.terminalStyled(Self.stripANSI(message.content)))
                     }
                 }
                 .font(.system(.caption, design: .monospaced))
