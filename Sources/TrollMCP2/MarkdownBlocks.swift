@@ -792,8 +792,9 @@ enum MathText {
             regex.enumerateMatches(in: out, range: nsRange) { m, _, _ in
                 guard let m = m, let fr = Range(m.range, in: out) else { return }
                 result += String(out[lastEnd..<fr.lowerBound])
-                let num = (m.range(at: 1).location != NSNotFound && letRange(m.range(at: 1), in: out)) ? substring(out, m.range(at: 1)) : ""
-                let den = (m.range(at: 2).location != NSNotFound && letRange(m.range(at: 2), in: out)) ? substring(out, m.range(at: 2)) : ""
+                // substring 内部已对 NSNotFound/越界容错返回 ""
+                let num = substring(out, m.range(at: 1))
+                let den = substring(out, m.range(at: 2))
                 result += "(\(num))/(\(den))"
                 lastEnd = fr.upperBound
             }
@@ -817,8 +818,7 @@ enum MathText {
             regex.enumerateMatches(in: out, range: nsRange) { m, _, _ in
                 guard let m = m, let fr = Range(m.range, in: out) else { return }
                 result += String(out[lastEnd..<fr.lowerBound])
-                let inner = m.range(at: 1)
-                let body = (inner.location != NSNotFound && letRange(inner, in: out)) ? substring(out, inner) : ""
+                let body = substring(out, m.range(at: 1))  // substring 内部容错 NSNotFound
                 result += "√(\(body))"
                 lastEnd = fr.upperBound
             }
@@ -840,9 +840,9 @@ enum MathText {
             regex.enumerateMatches(in: out, range: nsRange) { m, _, _ in
                 guard let m = m, let fr = Range(m.range, in: out) else { return }
                 result += String(out[lastEnd..<fr.lowerBound])
-                if m.range(at: 1).location != NSNotFound, letRange(m.range(at: 1), in: out) != nil {
+                if m.range(at: 1).location != NSNotFound {
                     result += unicodeSup(substring(out, m.range(at: 1)))
-                } else if m.range(at: 2).location != NSNotFound, letRange(m.range(at: 2), in: out) != nil {
+                } else if m.range(at: 2).location != NSNotFound {
                     result += unicodeSup(substring(out, m.range(at: 2)))
                 }
                 lastEnd = fr.upperBound
@@ -857,9 +857,9 @@ enum MathText {
             regex.enumerateMatches(in: out, range: nsRange) { m, _, _ in
                 guard let m = m, let fr = Range(m.range, in: out) else { return }
                 result += String(out[lastEnd..<fr.lowerBound])
-                if m.range(at: 1).location != NSNotFound, letRange(m.range(at: 1), in: out) != nil {
+                if m.range(at: 1).location != NSNotFound {
                     result += unicodeSub(substring(out, m.range(at: 1)))
-                } else if m.range(at: 2).location != NSNotFound, letRange(m.range(at: 2), in: out) != nil {
+                } else if m.range(at: 2).location != NSNotFound {
                     result += unicodeSub(substring(out, m.range(at: 2)))
                 }
                 lastEnd = fr.upperBound
@@ -887,9 +887,6 @@ enum MathText {
     }
 
     /// NSRange → Range 安全转换（NSNotFound 时返回 nil）
-    private static func letRange(_ r: NSRange, in s: String) -> Range<String.Index>? {
-        Range(r, in: s)
-    }
     private static func substring(_ s: String, _ r: NSRange) -> String {
         guard let rng = Range(r, in: s) else { return "" }
         return String(s[rng])
