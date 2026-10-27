@@ -10,10 +10,6 @@ struct ChatView: View {
 
     @State private var inputText = ""
     @State private var inputHeight: CGFloat = 36
-    // v7.2.3-fix14：工具卡参数行折叠——默认一行+▽，点击展开完整命令/参数
-    @State private var toolArgsExpanded: Set<String> = []
-    /// v7.2.3-fix20：连续工具折叠展开状态（按组 id）
-    @State private var toolsRunExpanded: Set<String> = []
     // v2.9.234：推理强度/智能搜索持久化(@AppStorage)——之前纯@State,关app重开必丢
     @AppStorage("chat_reasoning") private var reasoning = 0   // 0=低 1=中 2=高 3=最高(xhigh) 4=极限(max)
     @AppStorage("chat_smart_search") private var smartSearch = true
@@ -1557,6 +1553,10 @@ struct MessageBubble: View {
     // v6.0.28：工具结果默认折叠，用户手动点才展开
     @State private var expanded = false
     @State private var expandedToolIds: Set<String> = []
+    // fix: fix20 把「连续工具折叠」「参数展开」的 UI 放进了本 struct，但状态留在 ChatView
+    // → 编译期 cannot find in scope。状态应跟着使用处走，移到这里。
+    @State private var toolsRunExpanded: Set<String> = []
+    @State private var toolArgsExpanded: Set<String> = []
     // v3.4.5：打字机效果——已显示字符数 + 定时器（显示与网络解耦，逐字稳定刷出）
     // v3.4.7：降速到 25 字/秒(0.04s/字)让打字感清晰可见；且不依赖 isStreaming——
     // 只要内容在增长就持续打字到完整，兼容"整段一次性到达"的中转
@@ -1879,12 +1879,9 @@ struct MessageBubble: View {
                         MessageBubble(
                             message: msg,
                             selectionMode: selectionMode,
-                            isSelected: selectedIds.contains(msg.id),
-                            onToggleSelect: { toggleSelect(msg.id) },
-                            onCopy: { copyMessage(msg) },
-                            onShare: { shareMessage(msg) },
-                            isStreaming: store.streamingMessageId == msg.id,
-                            forceType: store.liveProducedID == msg.id,
+                            isSelected: false,
+                            isStreaming: ConversationStore.shared.streamingMessageId == msg.id,
+                            forceType: ConversationStore.shared.liveProducedID == msg.id,
                             thinkEnabled: thinkEnabled
                         )
                         .id(msg.id)
