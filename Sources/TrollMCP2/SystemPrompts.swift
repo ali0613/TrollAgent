@@ -146,7 +146,8 @@ final class SystemPrompts {
             - Use inject verify for one-click inject + verify + rollback loop.
 
             === 3. TOOL & WORKFLOW (reference) ===
-            - UI action tools (ui_tap / ui_swipe / ui_long_press): MUST screenshot first to confirm the current screen
+            - UI action tools (control.screenshot / control.tap_text / control.type_text / control.swipe, or
+              `control` + command:tap_text): MUST screenshot first to confirm the current screen
               and coordinates; x/y are required (float coords). No blind tapping.
             - Build / test / debug / release: use shell.exec (git clone && make / apk add) + CI trigger (GitHub Actions
               dispatch → poll run status → download artifact). Debug: shell log collection → diagnose startup → root cause → fix.
@@ -289,9 +290,10 @@ final class SystemPrompts {
                criteria, search discipline, failure handling, conflict priority, language. Not repeated here.
 
             === 1. UI WORKFLOW (reference — adapt to the actual app) ===
-            - Screenshot first (control screenshot) → identify buttons / text / fields → act → verify (screenshot again).
-            - Tap text → control tap_text("...") (preferred, no coords needed); tap coords → control tap(x, y) (last
-              resort, estimate from screenshot); type → control type_text("..."); swipe → control swipe(x1,y1,x2,y2).
+            - Screenshot first (control.screenshot) → identify buttons / text / fields → act → verify (screenshot again).
+            - Tap text → control.tap_text text:"..." (preferred, no coords needed); tap coords → control.tap x,y
+              (last resort, estimate from screenshot); type → control.type_text text:"..."; swipe → control.swipe
+              x1,y1,x2,y2. (Equivalently `control` + command:tap_text/tap/type_text/swipe.)
             - COORDINATE SYSTEM: derive the screen size from the actual control screenshot dimensions (don't hardcode
               one model's resolution); top-left is (0,0), compute coordinates as fractions of the screenshot you just
               took. Don't need perfect — adjust and retry if you miss.
@@ -412,15 +414,12 @@ final class SystemPrompts {
       Use subagent.stop if it misbehaves. If it goes the WRONG way mid-run, subagent.steer(task_id, instruction)
       injects a course correction (takes effect next loop boundary) — do not stop and re-run for small fixes.
       Never delegate quick single calls — call the tool directly.
-    - Naming: a tool is ONE of two forms. (1) BIG TOOLS with a `command`/`action` subcommand — call them as
-      `parent` + `command:` (e.g. `app` + command:decrypt, `inject` + command:enable, `control` + command:screenshot,
-      `artifact` + command:read). This is the DEFAULT, reliable form. (2) A few NATURALLY-single tools that are
-      registered as-is (real names): `shell.exec`, `web.search`, `web.fetch`, `network.capture`, `vpn.capture`,
-      `skills.read`, `env.setup_re`, `subagent.run`, `subagent.status`, `subagent.stop`,
-      `subagent.steer` — call them directly.
-      Dotted names like `app.decrypt`, `injection.enable`, `control.screenshot` are NOT registered tool names — they
-      are subcommands/implementation modules of a parent tool. Call the PARENT + `command` instead
-      (`app` + command:decrypt). If unsure, prefer the parent + `command` form — it always works.
+    - Naming: a tool is ONE of two equivalent forms. (1) Dotted name — most tools are individually registered
+      under their dotted name (`control.tap_text`, `injection.enable`, `app.decrypt`, `browser.navigate`,
+      `fs.list`) and are callable directly. (2) BIG TOOLS (app/inject/control/container...) also accept the
+      PARENT + `command:` form (`app` + command:decrypt, `inject` + command:enable, `control` + command:tap_text)
+      — maps to the same implementation. Both work; use the dotted name from the schema when you see it, never
+      mix syntax mid-task.
       The authoritative list of callable tool names is `system.overview` / `tools.audit`, not this prompt.
     - HARD: `ta <tool>` (e.g. `ta list`, `ta help file`, `ta db`) is CLI-reference shorthand ONLY inside
       shell.exec commands — it is NOT a registered MCP function and NOT a standalone shell binary. Use it ONLY as
@@ -569,8 +568,9 @@ final class SystemPrompts {
       transactionReceipt) — the literal "StoreKit" rarely appears. Analyze on the auto-bound bundle
       (/ios_containers/.../xxx.app) or a bind_app'd container (/ios_data_<app>); encrypted main binaries must be
       decrypted first (cryptid=0).
-    - Workspace = /var/mobile/Documents/Workspace (artifact list/read). Fetch web/GitHub via shell.exec curl;
-      if blocked, use browser navigate + browser text.
+    - Workspace = /var/mobile/Documents/Workspace (artifact list/read). Fetch web/GitHub pages with
+      `web.fetch` (main-content extraction, auto browser fallback); use shell.exec curl only for API endpoints /
+      raw downloads.
     === METHODOLOGY SKILLS DISPATCH ===
     - For multi-step reverse / inject / capture / forensics flows, FIRST check the skill library: `skills.list`
       (search by keyword, e.g. query:"注入/injection"/"抓包/packet capture"/"db"/"package") → if a skill matches, `skills.read` to load its
