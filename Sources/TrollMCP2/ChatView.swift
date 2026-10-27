@@ -1754,33 +1754,76 @@ struct MessageBubble: View {
                 .font(.body)
                 .textSelection(.enabled)
         } else {
-            MarkdownBlocksView(
-                text: shown,
-                coloredBody: { self.coloredBody($0) },
-                // v7.2.2：联网计数——本条 assistant 消息的 toolCalls 里 web_search/web_fetch 次数
-                // v7.2.3-fix：shell_exec 里的 curl 拉取也算联网（用户实测多用 curl 而非 web 工具，
-                // 此前 curl 不计入导致"已联网搜索 N 次"永远不显示）
-                webSearchCount: (message.toolCalls ?? []).filter {
-                    $0.name.contains("web_search") || $0.name.contains("web.search")
-                        || $0.name.contains("web_fetch") || $0.name.contains("web.fetch")
-                        || Self.toolCallIsCurlFetch($0)
-                }.count
-            )
-                // v7.2.2：引用角标 [N] 可点击 → 来源卡浮层（拦截 minis://source?n= 链接）
-                .environment(\.openURL, OpenURLAction { url in
-                    if url.scheme == "minis" && url.host == "source",
-                       let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
-                       let nItem = comps.queryItems?.first(where: { $0.name == "n" }),
-                       let n = Int(nItem.value ?? ""),
-                       let src = CitationExtractor.extract(shown).sources.first(where: { $0.index == n }) {
-                        sourceCardURL = src.url
-                        showSourceCard = true
-                        return .handled
+            // v7.2.3-fix18：正文 block 化——文本/工具强隔离（对齐 OpenMinis block 模型）。
+            // 模型误输出 DSML/antml 文本调用时，剥出工具段渲染为内联胶囊，
+            // 工具调用绝不混进 AI 正文（原样文本只按代码块显示的旧行为废除）。
+            let blocks = ContentBlocks.split(shown)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                    if block.kind == .text {
+                        MarkdownBlocksView(
+                            text: block.text,
+                            coloredBody: { self.coloredBody($0) },
+                            // v7.2.2：联网计数——本条 assistant 消息的 toolCalls 里 web_search/web_fetch 次数
+                            // v7.2.3-fix：shell_exec 里的 curl 拉取也算联网
+                            webSearchCount: (message.toolCalls ?? []).filter {
+                                $0.name.contains("web_search") || $0.name.contains("web.search")
+                                    || $0.name.contains("web_fetch") || $0.name.contains("web.fetch")
+                                    || Self.toolCallIsCurlFetch($0)
+                            }.count
+                        )
+                            // v7.2.2：引用角标 [N] 可点击 → 来源卡浮层（拦截 minis://source?n= 链接）
+                            .environment(\.openURL, OpenURLAction { url in
+                                if url.scheme == "minis" && url.host == "source",
+                                   let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                                   let nItem = comps.queryItems?.first(where: { $0.name == "n" }),
+                                   let n = Int(nItem.value ?? ""),
+                                   let src = CitationExtractor.extract(block.text).sources.first(where: { $0.index == n }) {
+                                    sourceCardURL = src.url
+                                    showSourceCard = true
+                                    return .handled
+                                }
+                                return .systemAction
+                            })
+                    } else {
+                        inlineToolCapsule(block)
                     }
-                    return .systemAction
-                })
-                .overlay(sourceCardOverlay)
+                }
+            }
+            .overlay(sourceCardOverlay)
         }
+    }
+
+    /// v7.2.3-fix18：内联工具胶囊——DSML/antml 文本调用段渲染
+    /// （只渲染不执行，明确标注未执行，避免"看起来调用了"的假象）
+    @ViewBuilder
+    private func inlineToolCapsule(_ block: ContentBlock) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.blue)
+                Text(block.toolTitle ?? block.toolName ?? "tool")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                Spacer()
+                Text(L10n.t("i18n_1259"))
+                    .font(.caption2)
+                    .foregroundColor(.orange)
+            }
+            if let args = block.toolArgs, !args.isEmpty {
+                Text(args)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(8)
+        .background(Color.blue.opacity(0.08))
+        .cornerRadius(8)
     }
 
     // v7.2.2：来源卡浮层——底部卡片：host + URL + 打开按钮

@@ -971,6 +971,7 @@ enum L10n {
             tbl["i18n_1256"] = ["zh": "打开", "en": "Open"]
             tbl["i18n_1257"] = ["zh": "已参考 %d 篇资料", "en": "Referenced %d sources"]
             tbl["i18n_1258"] = ["zh": "已联网搜索 %d 次", "en": "Web search ×%d"]
+            tbl["i18n_1259"] = ["zh": "未执行", "en": "Not executed"]
             tbl["i18n_973"] = ["zh": "用户", "en": "User"]
             tbl["i18n_979"] = ["zh": "系统", "en": "System"]
             tbl["i18n_672"] = ["zh": "缓存 · 钥匙串 · 广告符 · 数据容器 · AI 清理", "en": "Caches · keychain · IDFA · containers · AI cleanup"]
