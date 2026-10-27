@@ -557,7 +557,10 @@ final class ShellExecTool: MCPTool {
         }
         guard !blocked.isEmpty else { return nil }
         return "This command runs in Alpine but references iOS files Alpine can't read (check added to prevent false-zero results):\n" + blocked.joined(separator: "\n") +
-               "\nFix: ① confirm the path is within auto-bind scope (/var/mobile/Documents/Workspace, /var/containers, /System); ② app data container paths (/var/mobile/Containers/...) — don't use Alpine, use native iOS commands directly (ls/cat/du/df); ③ for other paths cp to Workspace first, then analyze in Alpine."
+               "\nFix: ① confirm the path is within auto-bind scope (/var/mobile/Documents/Workspace, /var/containers, /System); ② app data container paths (/var/mobile/Containers/...) — don't use Alpine, use native iOS commands directly (ls/cat/du/df); ③ for other paths cp to Workspace first, then analyze in Alpine." +
+               // v7.2.1：媒体库/相册目录（PhotoData 等）任何桥接都读不到——直接告知用户走系统相册/PhotoKit，
+               // 避免 AI 反复拿 Alpine/exec_root 试路径死循环
+               "\nNote: /var/mobile/Media (photo library / PhotoData thumbnails) is NEVER bridgeable — not via Alpine, not via cp. Use PhotoKit/PhotosPicker in the app, or tell the user this path is protected and cannot be read from the sandbox."
     }
     
     /// 按管道/分号/逻辑符拆分命令 (尊重引号），返回 [(命令段, 连接符)]，连接符: | ; && ||
@@ -2115,6 +2118,13 @@ final class SystemExecRootTool: MCPTool {
 
     // MARK: - v7.1.42 签名自动化——AMFI 代码签名强制：Mach-O 必须有效签名（越狱也走 trust cache/签名，下载的裸二进制无 LC_CODE_SIGNATURE 会被系统拒绝执行）。exec_root 执行前自动检测、缺失自动 ldid -S 补签。
 
+    /// v7.2.1：系统路径白名单——沙箱 FileManager 不可见但 root posix_spawn 可执行的目录；
+    /// 这些目录内的工具必为 iOS Mach-O（跳过存在性/Mach-O 头沙箱校验，走 root 视角探测）
+    private static func isSystemPath(_ path: String) -> Bool {
+        let prefixes = ["/bin/", "/usr/bin/", "/usr/sbin/", "/usr/libexec/", "/usr/lib/", "/sbin/", "/var/jb/", "/System/"]
+        return prefixes.contains { path.hasPrefix($0) }
+    }
+
     /// 是否在沙箱可写区（只对这些路径自动补签——系统路径 /usr/bin、/var/jb 不动，那些要么已签、要么越狱 trust cache 管）
     private static func isAutoSignablePath(_ path: String) -> Bool {
         let home = NSHomeDirectory()
@@ -2202,21 +2212,40 @@ final class SystemExecRootTool: MCPTool {
         let extraEnv = params["env"] as? [String: String]
         let signEntitlements = params["signEntitlements"] as? String   // v7.1.42：可选，ldid -S<file> 用
 
-        // 1) 文件必须存在
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir) else {
-            throw MCPError.invalidParams("path not found: \(path) — if this device is non-jailbroken (TrollStore only), /var/jb does not exist; locate the bundled tool first with shell.exec \"find /ios_containers -name ldid\" (try /ios_system, /ios_workspace too) and pass the real path. If jailbroken, confirm the path with shell.exec \"ls\".")
-        }
-        if isDir.boolValue {
-            throw MCPError.invalidParams("path is a directory: \(path) — pass the binary file path")
-        }
-        // 2) 必须真是 Mach-O（ELF/脚本 → 指回 shell.exec，防误用）
-        let kind = SystemExecRootTool.machOType(of: path)
-        if kind == "elf" {
-            throw MCPError.invalidParams("\(path) is a Linux ELF binary — run it with shell.exec, NOT system.exec_root (system.exec_root only executes Apple Mach-O)")
-        }
-        if kind != "macho" {
-            throw MCPError.invalidParams("\(path) is not a Mach-O binary (script/unknown format) — system.exec_root executes Mach-O only; scripts go through shell.exec")
+        // v7.2.1：系统路径（/bin、/usr/bin 等）沙箱 FileManager 不可见但 root posix_spawn 可执行——
+        // 之前一律 PARAM_INVALID 死循环（用户实测 system.exec_root 传 /bin/ls、/usr/bin/find
+        // 连败 3 次）。系统路径走 root 视角 /bin/sh test 探测 + 跳过 Mach-O 头检查（系统目录必为 Mach-O）。
+        let sysPath = SystemExecRootTool.isSystemPath(path)
+        var isDir = false
+        if sysPath {
+            let probe = InjectionManager.shared.spawnRootDetailed("/bin/sh",
+                args: ["-c", "if test -d \"$1\"; then echo DIR; elif test -x \"$1\"; then echo EXEC; else echo NO; fi", "probe", path],
+                timeout: 8)
+            let kind = probe.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if kind == "DIR" {
+                throw MCPError.invalidParams("path is a directory: \(path) — pass the binary file path")
+            }
+            guard kind == "EXEC" else {
+                throw MCPError.invalidParams("path not found: \(path) — if this device is non-jailbroken (TrollStore only), /var/jb does not exist; locate the app-bundled tool first with shell.exec \"find /ios_containers -name ldid\" (try /ios_system, /ios_workspace too) and pass the real path. If jailbroken, confirm the path with shell.exec \"ls\".")
+            }
+        } else {
+            // 1) 文件必须存在（沙箱可见区，FileManager 视角正确）
+            var isDirCB: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirCB) else {
+                throw MCPError.invalidParams("path not found: \(path) — if this device is non-jailbroken (TrollStore only), /var/jb does not exist; locate the app-bundled tool first with shell.exec \"find /ios_containers -name ldid\" (try /ios_system, /ios_workspace too) and pass the real path. If jailbroken, confirm the path with shell.exec \"ls\".")
+            }
+            isDir = isDirCB.boolValue
+            if isDir {
+                throw MCPError.invalidParams("path is a directory: \(path) — pass the binary file path")
+            }
+            // 2) 必须真是 Mach-O（ELF/脚本 → 指回 shell.exec，防误用）
+            let kind = SystemExecRootTool.machOType(of: path)
+            if kind == "elf" {
+                throw MCPError.invalidParams("\(path) is a Linux ELF binary — run it with shell.exec, NOT system.exec_root (system.exec_root only executes Apple Mach-O)")
+            }
+            if kind != "macho" {
+                throw MCPError.invalidParams("\(path) is not a Mach-O binary (script/unknown format) — system.exec_root executes Mach-O only; scripts go through shell.exec")
+            }
         }
         // 3) 危险参数检测（root 权限直接拒绝）
         let joinedArgs = args.joined(separator: " ")
