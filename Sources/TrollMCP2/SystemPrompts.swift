@@ -24,7 +24,8 @@ final class SystemPrompts {
             id: "concise",
             name: L10n.t("i18n_1017"),
             desc: "Minimal fast replies, only conclusions and key actions. For simple queries.",
-            content: """            === CONCISE MODE GUIDELINES ===
+            content: """
+            === CONCISE MODE GUIDELINES ===
             0. Concurrency rules live in the ENVIRONMENT prompt (always loaded) — batch read-only calls,
                run dependent/side-effect calls one at a time. Not repeated here.
             1. Minimal replies: straight to conclusion, no preamble, no explanation.
@@ -112,7 +113,8 @@ final class SystemPrompts {
             - Self-evolution: can load external dylibs via inject load_dylib (names start custom. / user.); cannot write
               shell/root/inject/delete dangerous operations.
             - Workspace: /var/mobile/Documents/Workspace — see ENVIRONMENT prompt for artifact / shell conventions.
-            "",
+            """
+            ,
             extraCoreTools: []),
         Prompt(
             id: "developer",
@@ -161,7 +163,8 @@ final class SystemPrompts {
               the toolchain) is allowed. Only reverse-engineer apps the user owns.
             - Sensitive tools (location / device IDs): only when the user explicitly names them.
             - Destructive ops (delete / overwrite / data wipe / device fake): explain + get consent first.
-            ",
+            """
+            ,
             extraCoreTools: ["shell.exec", "app", "inject"]),
         Prompt(
             id: "reverse",
@@ -193,6 +196,7 @@ final class SystemPrompts {
                user names them; state the boundary + one compliant alternative once, don't lecture repeatedly.
                (structured tool_call / failure handling / edit discipline / verify-before-done are enforced by the
                ENVIRONMENT PROMPT + SHARED CORE — not repeated here)
+            """
             ,
             extraCoreTools: ["inject", "app", "diagnose"]),
         Prompt(
@@ -240,7 +244,8 @@ final class SystemPrompts {
             - The workflows above use on-device tools (inject / network.capture / memory / device fake / artifact /
               shell). Tools like MobSF / Hopper / Ghidra / Burp / LLDB / Frida are external methodology references —
               they are NOT runnable in this on-phone environment; don't promise results from them.
-            
+            """
+            ,
             extraCoreTools: ["memory", "assistant_memory", "app", "inject", "app encrypt_info", "inject diagnose"]),
         Prompt(
             id: "gamehacker",
@@ -277,6 +282,8 @@ final class SystemPrompts {
               content, on-device debugging is fine.
             - Sensitive tools (location / device fake / keychain_wipe): only when the user explicitly names them, and
               only for the stated purpose.
+            """
+            ,
                         extraCoreTools: ["memory", "assistant_memory", "app", "inject"]),
         Prompt(
             id: "uicontrol",
@@ -314,6 +321,8 @@ final class SystemPrompts {
               don't work). Some apps have anti-automation detection — may not work.
             - tap_text may fail if text is small / blurry → fall back to tap coordinates.
             - Keyboard may not dismiss automatically → tap an empty area.
+            """
+            ,
                        extraCoreTools: ["control", "app"]),
     ]
 
