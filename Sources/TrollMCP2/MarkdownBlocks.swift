@@ -105,16 +105,18 @@ enum MarkdownBlocks {
             // v7.2.1：块级数学公式 $$...$$（同行或跨行闭合）
             if trimmed.hasPrefix("$$") {
                 flushText()
+                let startLine = line
                 var latexLines: [String] = []
                 var body = String(trimmed.dropFirst(2))
+                var closed = false
                 // 同行闭合 $$...$$
                 if body.hasSuffix("$$") {
                     latexLines.append(String(body.dropLast(2)).trimmingCharacters(in: .whitespaces))
                     i += 1
+                    closed = true
                 } else {
                     // 跨行：$$ 开头行之后收集到 $$ 结束行
                     i += 1
-                    var closed = false
                     while i < lines.count {
                         let dl = lines[i]
                         let dlt = dl.trimmingCharacters(in: .whitespaces)
@@ -128,10 +130,14 @@ enum MarkdownBlocks {
                         latexLines.append(dl)
                         i += 1
                     }
-                    _ = closed
                 }
-                if !latexLines.isEmpty {
+                // v7.2.2-audit：未闭合 $$ 回退纯文本（打字机中途 $$ 出现不能吞掉剩余内容）
+                if closed, !latexLines.isEmpty {
                     blocks.append(.math(latexLines.joined(separator: "\n")))
+                    continue
+                } else if !closed {
+                    textBuf.append(startLine)
+                    textBuf.append(contentsOf: latexLines)
                     continue
                 }
             }

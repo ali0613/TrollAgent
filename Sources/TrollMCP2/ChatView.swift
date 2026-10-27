@@ -1784,7 +1784,6 @@ struct MessageBubble: View {
         if showSourceCard, let url = sourceCardURL {
             ZStack {
                 Color.black.opacity(0.25)
-                    .ignoresSafeArea()
                     .onTapGesture { withAnimation { showSourceCard = false } }
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -1899,9 +1898,16 @@ struct MessageBubble: View {
                 a.font = .system(size: 17).italic()
                 out += a
             } else if seg.hasPrefix("$") {
-                var a = AttributedString(MathText.render(inner))
-                a.font = .system(size: 17).italic()
-                out += a
+                // v7.2.2-audit：仅当内部含 LaTeX 特征（\ ^ _ { }）才当公式——
+                // 否则"$5 and $10"等货币会被误判成斜体公式、$ 符号丢失
+                if inner.contains("\\") || inner.contains("^") || inner.contains("_")
+                    || inner.contains("{") || inner.contains("}") {
+                    var a = AttributedString(MathText.render(inner))
+                    a.font = .system(size: 17).italic()
+                    out += a
+                } else {
+                    out += AttributedString(seg)
+                }
             } else {
                 // [N] → 蓝色上标（可点击：minis://source?n=N 由 openURL 拦截弹出来源卡）
                 var c = AttributedString(seg)
