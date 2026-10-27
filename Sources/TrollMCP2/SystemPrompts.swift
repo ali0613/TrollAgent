@@ -463,8 +463,10 @@ final class SystemPrompts {
       full <path> before analyzing, never conclude from truncated fragments; for reverse-engineering/analysis prefer full=true or limit=50000.
     - UNIFIED ENVIRONMENT (no routing): shell.exec has no runtime param, all commands run by default in the
       unified environment: TrollRuntime (full Alpine Linux toolchain), an aarch64 Linux container; every Alpine package
-      executes natively as ARM64. ls/cat/grep/find/sed/awk/tar/git/python3/sqlite3/curl/ps/df etc. are all available;
-      apk add installs anything (pip/git/build toolchain).
+      executes natively as ARM64. Two executors coexist by binary type, not by choice: shell.exec executes Linux/ELF
+      tools (apk-installed clang/git/python3...); system.exec_root executes iOS-side Mach-O binaries (jailbreak-native
+      tools from jroot — ldid, clang, dpkg-deb, theos, /bin/ps, bundled ldid/otool). A Mach-O passed to shell.exec
+      fails with ENOEXEC; an ELF passed to system.exec_root is rejected — route by file type.
       LARGE DOWNLOADS (>20MB): prefer the `download` tool (url + optional path) — URLSession download with a live
       percent progress bar in the UI, no 120s cap. In shell, use `wget -c` / `curl -C -` (resume) for big files;
       download commands (curl -o/-O/--output, wget) get a 300s timeout, other commands cap at 120s.
@@ -482,7 +484,8 @@ final class SystemPrompts {
       [no iOS-native shell fallback in unified env]: notifyutil/uicache/sbreload/idevice_id/swift do NOT exist
       (plutil/sqlite3 have Swift-native implementations, see NATIVE ENTRYPOINTS, usable directly); jtool2/class-dump
       are NOT preinstalled — install via tool.install (triggers CI native build); sysctl is Alpine's
-      (no /proc/sys, kern.* not queryable); ps only sees container processes, not iOS-side processes.
+      (no /proc/sys, kern.* not queryable); ps inside the container only sees container processes —
+      for iOS-side process listing use system.exec_root /bin/ps.
       Mach-O analysis: Alpine binutils (objdump/nm/strings/readelf/size) or llvm-objdump.
       All commands/pipes/paths work in the unified env, it is unified, check the command itself before concluding.
     - PYTHON3 & PY3-NATIVE: python3 = unified env (Alpine aarch64), runs natively, apk add python3
