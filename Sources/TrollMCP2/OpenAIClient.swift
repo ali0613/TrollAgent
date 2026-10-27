@@ -646,17 +646,20 @@ final class OpenAIClient {
             // 服务端拒 400 ("assistant message with 'tool_calls' must be followed by tool
             // messages responding to each 'tool_call_id'")。此处补 isError 伪 tool 消息
             // 恢复序列合法（与 applyLoaded 启动恢复同法，覆盖运行中产生的悬空）。
-            sanitized = self.repairDanglingToolCalls(messages)
+            // v7.2.3-audit5：修复在 trimmedMessages 之后执行（裁剪会优先丢 tool 消息，
+            // 先 repair 再裁剪会把刚补的伪消息裁掉又悬空）。
+            sanitized = messages
         }
 
         // OpenAI Chat Completions / Custom Endpoint
         if level >= 4 {
-            return ["model": config.model, "messages": trimmedMessages(sanitized).map { messageDict($0) }]
+            return ["model": config.model,
+                    "messages": repairDanglingToolCalls(trimmedMessages(sanitized)).map { messageDict($0) }]
         }
 
         var body: [String: Any] = [
             "model": config.model,
-            "messages": trimmedMessages(sanitized).map { messageDict($0) },
+            "messages": repairDanglingToolCalls(trimmedMessages(sanitized)).map { messageDict($0) },
             tokenKey(level: level): config.maxTokens
         ]
         if level < 3, config.sendsTemperature {
